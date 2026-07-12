@@ -25,6 +25,28 @@
     <string name="channels_title">Canales</string>
     <string name="channels_empty_message">Todavía no hay canales</string>
     <string name="channels_search_hint">Buscar canales</string>
+    <string name="playlist_url_hint">URL de la lista (m3u/m3u8)</string>
+    <string name="playlist_load_button">Cargar lista</string>
+    <string name="playlist_browse_file">Elegir archivo</string>
+    <string name="playlist_loading">Cargando lista…</string>
+    <string name="playlist_error_size_limit">La lista supera el límite de 8 MB</string>
+    <string name="playlist_error_http">Error del servidor (código %1$d)</string>
+    <string name="playlist_error_network">Error de red, inténtalo de nuevo</string>
+    <string name="playlist_skipped_lines">Se omitieron %1$d entradas al analizar</string>
+
+    <!-- Channel group names -->
+    <string name="group_ungrouped">Sin grupo</string>
+    <string name="group_movies">Películas</string>
+    <string name="group_series">Series</string>
+    <string name="group_news">Noticias</string>
+    <string name="group_sports">Deportes</string>
+    <string name="group_kids">Infantil</string>
+    <string name="group_music">Música</string>
+    <string name="group_documentary">Documentales</string>
+    <string name="group_entertainment">Entretenimiento</string>
+    <string name="group_science">Ciencia</string>
+    <string name="group_religion">Religión</string>
+    <string name="group_regional">Regional</string>
 
     <!-- Favorites screen -->
     <string name="favorites_title">Favoritos</string>

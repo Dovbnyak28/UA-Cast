@@ -25,6 +25,28 @@
     <string name="channels_title">Каналы</string>
     <string name="channels_empty_message">Пока нет каналов</string>
     <string name="channels_search_hint">Поиск каналов</string>
+    <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
+    <string name="playlist_load_button">Загрузить плейлист</string>
+    <string name="playlist_browse_file">Выбрать файл</string>
+    <string name="playlist_loading">Загрузка плейлиста…</string>
+    <string name="playlist_error_size_limit">Плейлист превышает лимит 8 МБ</string>
+    <string name="playlist_error_http">Ошибка сервера (код %1$d)</string>
+    <string name="playlist_error_network">Ошибка сети, попробуйте снова</string>
+    <string name="playlist_skipped_lines">Пропущено %1$d записей при разборе</string>
+
+    <!-- Channel group names -->
+    <string name="group_ungrouped">Без группы</string>
+    <string name="group_movies">Фильмы</string>
+    <string name="group_series">Сериалы</string>
+    <string name="group_news">Новости</string>
+    <string name="group_sports">Спорт</string>
+    <string name="group_kids">Детские</string>
+    <string name="group_music">Музыка</string>
+    <string name="group_documentary">Документальные</string>
+    <string name="group_entertainment">Развлекательные</string>
+    <string name="group_science">Наука</string>
+    <string name="group_religion">Религия</string>
+    <string name="group_regional">Региональные</string>
 
     <!-- Favorites screen -->
     <string name="favorites_title">Избранное</string>

@@ -25,6 +25,28 @@
     <string name="channels_title">Канали</string>
     <string name="channels_empty_message">Поки що немає каналів</string>
     <string name="channels_search_hint">Пошук каналів</string>
+    <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
+    <string name="playlist_load_button">Завантажити плейлист</string>
+    <string name="playlist_browse_file">Обрати файл</string>
+    <string name="playlist_loading">Завантаження плейлиста…</string>
+    <string name="playlist_error_size_limit">Плейлист перевищує ліміт 8 МБ</string>
+    <string name="playlist_error_http">Помилка сервера (код %1$d)</string>
+    <string name="playlist_error_network">Помилка мережі, спробуйте ще раз</string>
+    <string name="playlist_skipped_lines">Пропущено %1$d записів під час розбору</string>
+
+    <!-- Channel group names -->
+    <string name="group_ungrouped">Без групи</string>
+    <string name="group_movies">Фільми</string>
+    <string name="group_series">Серіали</string>
+    <string name="group_news">Новини</string>
+    <string name="group_sports">Спорт</string>
+    <string name="group_kids">Дитячі</string>
+    <string name="group_music">Музика</string>
+    <string name="group_documentary">Документальні</string>
+    <string name="group_entertainment">Розважальні</string>
+    <string name="group_science">Наука</string>
+    <string name="group_religion">Релігія</string>
+    <string name="group_regional">Регіональні</string>
 
     <!-- Favorites screen -->
     <string name="favorites_title">Обране</string>

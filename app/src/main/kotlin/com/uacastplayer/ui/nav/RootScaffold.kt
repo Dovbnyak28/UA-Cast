@@ -22,6 +22,7 @@ import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.core.nav.BottomNavEvent
 import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
+import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeScreen
@@ -37,6 +38,9 @@ fun RootScaffold(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     onExitApp: () -> Unit,
+    playlistState: PlaylistUiState,
+    onLoadPlaylistUrl: (String) -> Unit,
+    onPickPlaylistFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -71,7 +75,12 @@ fun RootScaffold(
             val content = Modifier.padding(innerPadding)
             when (navState.current) {
                 BottomDestination.HOME -> HomeScreen(modifier = content)
-                BottomDestination.CHANNELS -> ChannelsScreen(modifier = content)
+                BottomDestination.CHANNELS -> ChannelsScreen(
+                    playlistState = playlistState,
+                    onLoadUrl = onLoadPlaylistUrl,
+                    onPickFile = onPickPlaylistFile,
+                    modifier = content,
+                )
                 BottomDestination.FAVORITES -> FavoritesScreen(modifier = content)
                 BottomDestination.SETTINGS -> SettingsScreen(
                     currentLanguage = currentLanguage,

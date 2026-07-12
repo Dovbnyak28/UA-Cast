@@ -1,0 +1,194 @@
+package com.uacastplayer.playlist
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class M3uParserTest {
+
+    @Test
+    fun `parses a basic entry with quoted attributes`() {
+        val result = M3uParser.parse(
+            """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="ch1" tvg-name="Channel One" tvg-logo="http://x/1.png" group-title="News",Channel One
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(1, result.channels.size)
+        val channel = result.channels[0]
+        assertEquals("Channel One", channel.displayName)
+        assertEquals("http://example.com/1.m3u8", channel.streamUrl)
+        assertEquals("ch1", channel.tvgId)
+        assertEquals("Channel One", channel.tvgName)
+        assertEquals("http://x/1.png", channel.tvgLogo)
+        assertEquals("News", channel.groupTitle)
+        assertEquals(0, result.skippedLineCount)
+    }
+
+    @Test
+    fun `strips a leading UTF-8 BOM`() {
+        val result = M3uParser.parse(
+            "﻿#EXTM3U\n#EXTINF:-1,Channel\nhttp://example.com/1.m3u8"
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals("Channel", result.channels[0].displayName)
+    }
+
+    @Test
+    fun `parses unquoted attribute values`() {
+        val result = M3uParser.parse(
+            "#EXTINF:-1 tvg-id=ch1 group-title=News,Channel One\nhttp://example.com/1.m3u8"
+        )
+        val channel = result.channels[0]
+        assertEquals("ch1", channel.tvgId)
+        assertEquals("News", channel.groupTitle)
+    }
+
+    @Test
+    fun `comma inside a quoted attribute does not split the display name`() {
+        val result = M3uParser.parse(
+            """#EXTINF:-1 group-title="Kids, Family",Channel One""" + "\nhttp://example.com/1.m3u8"
+        )
+        val channel = result.channels[0]
+        assertEquals("Kids, Family", channel.groupTitle)
+        assertEquals("Channel One", channel.displayName)
+    }
+
+    @Test
+    fun `EXTGRP provides a fallback group when group-title attribute is absent`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,Channel One
+            #EXTGRP:Movies
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals("Movies", result.channels[0].groupTitle)
+    }
+
+    @Test
+    fun `group-title attribute takes priority over EXTGRP`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1 group-title="News",Channel One
+            #EXTGRP:Movies
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals("News", result.channels[0].groupTitle)
+    }
+
+    @Test
+    fun `falls back to tvg-name when the display name is missing`() {
+        val result = M3uParser.parse(
+            """#EXTINF:-1 tvg-name="Fallback Name",""" + "\nhttp://example.com/1.m3u8"
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals("Fallback Name", result.channels[0].displayName)
+    }
+
+    @Test
+    fun `falls back to tvg-id when both display name and tvg-name are missing`() {
+        val result = M3uParser.parse(
+            """#EXTINF:-1 tvg-id="ch-42",""" + "\nhttp://example.com/1.m3u8"
+        )
+        assertEquals("ch-42", result.channels[0].displayName)
+    }
+
+    @Test
+    fun `skips an entry with no usable title at all`() {
+        val result = M3uParser.parse("#EXTINF:-1,\nhttp://example.com/1.m3u8")
+        assertEquals(0, result.channels.size)
+        assertEquals(1, result.skippedLineCount)
+    }
+
+    @Test
+    fun `counts an orphan URL line with no preceding EXTINF as skipped`() {
+        val result = M3uParser.parse(
+            """
+            #EXTM3U
+            http://example.com/orphan.m3u8
+            #EXTINF:-1,Channel One
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals(1, result.skippedLineCount)
+    }
+
+    @Test
+    fun `counts a trailing EXTINF with no following URL as skipped`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,Channel One
+            http://example.com/1.m3u8
+            #EXTINF:-1,Orphan Extinf
+            """.trimIndent()
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals(1, result.skippedLineCount)
+    }
+
+    @Test
+    fun `two consecutive EXTINF lines count the first as skipped`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,First
+            #EXTINF:-1,Second
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals("Second", result.channels[0].displayName)
+        assertEquals(1, result.skippedLineCount)
+    }
+
+    @Test
+    fun `unrecognized comment tags are ignored without affecting the skip count`() {
+        val result = M3uParser.parse(
+            """
+            #EXTM3U
+            #EXTVLCOPT:network-caching=1000
+            #EXTINF:-1,Channel One
+            #KODIPROP:inputstream=x
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals(0, result.skippedLineCount)
+    }
+
+    @Test
+    fun `parses multiple channels in order`() {
+        val result = M3uParser.parse(
+            """
+            #EXTM3U
+            #EXTINF:-1,First
+            http://example.com/1.m3u8
+            #EXTINF:-1,Second
+            http://example.com/2.m3u8
+            """.trimIndent()
+        )
+        assertEquals(listOf("First", "Second"), result.channels.map { it.displayName })
+    }
+
+    @Test
+    fun `missing attributes resolve to null rather than empty strings`() {
+        val result = M3uParser.parse("#EXTINF:-1,Channel\nhttp://example.com/1.m3u8")
+        val channel = result.channels[0]
+        assertNull(channel.tvgId)
+        assertNull(channel.tvgName)
+        assertNull(channel.tvgLogo)
+        assertNull(channel.groupTitle)
+    }
+
+    @Test
+    fun `blank lines between entries are ignored`() {
+        val result = M3uParser.parse(
+            "\n\n#EXTINF:-1,Channel\n\nhttp://example.com/1.m3u8\n\n"
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals(0, result.skippedLineCount)
+    }
+}

@@ -1,7 +1,9 @@
 package com.uacastplayer
 
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +33,11 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
+
+            val pickPlaylistFile = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri -> uri?.let(viewModel::loadPlaylistFromFile) }
 
             LaunchedEffect(uiState.language) {
                 val previous = activeLanguage
@@ -48,6 +55,9 @@ class MainActivity : FragmentActivity() {
                         currentLanguage = uiState.language,
                         onLanguageSelected = viewModel::selectLanguage,
                         onExitApp = { finish() },
+                        playlistState = playlistState,
+                        onLoadPlaylistUrl = viewModel::loadPlaylistFromUrl,
+                        onPickPlaylistFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
                     )
                 }
             }
