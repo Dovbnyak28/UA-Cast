@@ -42,6 +42,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
+            val epgState by viewModel.epgState.collectAsStateWithLifecycle()
 
             val pickPlaylistFile = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
@@ -82,6 +83,8 @@ class MainActivity : FragmentActivity() {
                         onChannelSelected = { channels, startIndex ->
                             playerRequest = PlayerRequest(channels, startIndex)
                         },
+                        epgState = epgState,
+                        onEpgSourceSelected = viewModel::selectEpgSource,
                     )
                 }
             }

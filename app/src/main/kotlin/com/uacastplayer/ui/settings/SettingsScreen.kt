@@ -18,11 +18,14 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
 import com.uacastplayer.core.i18n.AppLanguage
+import com.uacastplayer.epg.EpgSource
 
 @Composable
 fun SettingsScreen(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
+    currentEpgSource: EpgSource,
+    onEpgSourceSelected: (EpgSource) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
@@ -40,10 +43,25 @@ fun SettingsScreen(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppLanguage.entries.forEach { language ->
-                LanguageChip(
+                SettingsChip(
                     label = stringResource(language.nativeNameRes()),
                     isSelected = language == currentLanguage,
                     onClick = { onLanguageSelected(language) },
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.settings_epg_source_label),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EpgSource.entries.forEachIndexed { index, source ->
+                SettingsChip(
+                    label = stringResource(R.string.settings_epg_source_variant, index + 1),
+                    isSelected = source == currentEpgSource,
+                    onClick = { onEpgSourceSelected(source) },
                 )
             }
         }
@@ -57,7 +75,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun LanguageChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+private fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
     val borderColor = if (isSelected) {
         MaterialTheme.colorScheme.primary
     } else {

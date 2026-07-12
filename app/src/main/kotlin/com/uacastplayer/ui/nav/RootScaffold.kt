@@ -22,6 +22,8 @@ import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.core.nav.BottomNavEvent
 import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
+import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.ui.channels.ChannelsScreen
@@ -43,6 +45,8 @@ fun RootScaffold(
     onLoadPlaylistUrl: (String) -> Unit,
     onPickPlaylistFile: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
+    epgState: EpgUiState,
+    onEpgSourceSelected: (EpgSource) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -82,12 +86,15 @@ fun RootScaffold(
                     onLoadUrl = onLoadPlaylistUrl,
                     onPickFile = onPickPlaylistFile,
                     onChannelSelected = onChannelSelected,
+                    epgState = epgState,
                     modifier = content,
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(modifier = content)
                 BottomDestination.SETTINGS -> SettingsScreen(
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
+                    currentEpgSource = epgState.selectedSource,
+                    onEpgSourceSelected = onEpgSourceSelected,
                     modifier = content,
                 )
             }

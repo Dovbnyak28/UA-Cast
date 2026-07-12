@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.epg.CurrentNextProgrammes
+import com.uacastplayer.epg.EpgLookup
+import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.epg.ProgrammeProgress
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
@@ -40,6 +46,7 @@ fun ChannelsScreen(
     onLoadUrl: (String) -> Unit,
     onPickFile: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
+    epgState: EpgUiState,
     modifier: Modifier = Modifier,
 ) {
     var urlInput by rememberSaveable { mutableStateOf("") }
@@ -72,6 +79,7 @@ fun ChannelsScreen(
             playlistState.error != null -> ErrorState(playlistState.error)
             playlistState.hasChannels -> ChannelGroupList(
                 groups = playlistState.groups,
+                epgState = epgState,
                 onChannelClick = { channel ->
                     val index = flatChannels.indexOf(channel)
                     if (index >= 0) onChannelSelected(flatChannels, index)
@@ -120,7 +128,11 @@ private fun EmptyState() {
 }
 
 @Composable
-private fun ChannelGroupList(groups: List<GroupedChannels>, onChannelClick: (M3uChannel) -> Unit) {
+private fun ChannelGroupList(
+    groups: List<GroupedChannels>,
+    epgState: EpgUiState,
+    onChannelClick: (M3uChannel) -> Unit,
+) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
         for (grouped in groups) {
             item(key = "header-${groupDisplayKey(grouped.group)}") {
@@ -132,32 +144,53 @@ private fun ChannelGroupList(groups: List<GroupedChannels>, onChannelClick: (M3u
                 )
             }
             items(grouped.channels, key = { it.streamUrl }) { channel ->
-                ChannelRow(channel, onClick = { onChannelClick(channel) })
+                val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
+                ChannelRow(channel, programme, epgState.nowMillis, onClick = { onChannelClick(channel) })
             }
         }
     }
 }
 
 @Composable
-private fun ChannelRow(channel: M3uChannel, onClick: () -> Unit) {
-    Row(
+private fun ChannelRow(
+    channel: M3uChannel,
+    programme: CurrentNextProgrammes?,
+    nowMillis: Long,
+    onClick: () -> Unit,
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = channel.displayName,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        NameQualityBadge.detect(channel.displayName)?.let { badge ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = badge,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                text = channel.displayName,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            NameQualityBadge.detect(channel.displayName)?.let { badge ->
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        val current = programme?.current
+        val effectiveStop = programme?.effectiveStopMillis
+        if (current != null && effectiveStop != null) {
+            Text(
+                text = current.title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            LinearProgressIndicator(
+                progress = { ProgrammeProgress.progress(current.startMillis, effectiveStop, nowMillis) },
+                modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 4.dp),
             )
         }
     }

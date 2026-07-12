@@ -56,6 +56,8 @@
     <string name="settings_title">Settings</string>
     <string name="settings_section_general">General</string>
     <string name="settings_language_label">Language</string>
+    <string name="settings_epg_source_label">TV guide source</string>
+    <string name="settings_epg_source_variant">Source %1$d</string>
     <string name="settings_app_version">App version</string>
     <string name="settings_help">Help</string>
 

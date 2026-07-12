@@ -56,6 +56,8 @@
     <string name="settings_title">Налаштування</string>
     <string name="settings_section_general">Загальні</string>
     <string name="settings_language_label">Мова</string>
+    <string name="settings_epg_source_label">Джерело телепрограми</string>
+    <string name="settings_epg_source_variant">Джерело %1$d</string>
     <string name="settings_app_version">Версія застосунку</string>
     <string name="settings_help">Довідка</string>
 
