@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.uacastplayer.cast.CastPlaybackState
+import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.epg.EpgOutcome
 import com.uacastplayer.data.epg.EpgRepository
@@ -48,6 +50,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val iconRepository = IconRepository(application)
     private val iconPrefetcher = IconPrefetcher(application, iconRepository)
     private var unmeteredNetworkWatcher: AutoCloseable? = null
+
+    val castState: StateFlow<CastPlaybackState> = CastSessionRepository.getInstance(application).state
 
     private val _uiState = MutableStateFlow(
         AppUiState(

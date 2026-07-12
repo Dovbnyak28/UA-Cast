@@ -1,8 +1,12 @@
 package com.uacastplayer.ui.nav
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -17,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.uacastplayer.R
+import com.uacastplayer.cast.CastPlaybackState
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.core.nav.BottomNavEvent
@@ -27,6 +32,7 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeScreen
@@ -38,6 +44,7 @@ private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
     restore = { saved -> BottomNavState(saved.map(BottomDestination::valueOf)) },
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RootScaffold(
     currentLanguage: AppLanguage,
@@ -52,6 +59,7 @@ fun RootScaffold(
     iconPrefetchState: IconPrefetchUiState,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
+    castState: CastPlaybackState,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -64,6 +72,23 @@ fun RootScaffold(
 
     Scaffold(
         modifier = modifier,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Column {
+                        Text(stringResource(R.string.app_name))
+                        if (castState.isSessionConnected) {
+                            Text(
+                                text = stringResource(R.string.cast_status_connected),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                },
+                actions = { CastButton() },
+            )
+        },
         bottomBar = {
             NavigationBar {
                 BottomDestination.entries.forEach { destination ->

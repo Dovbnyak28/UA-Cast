@@ -70,6 +70,7 @@
     <string name="player_fullscreen">Pantalla completa</string>
     <string name="player_exit_fullscreen">Salir de pantalla completa</string>
     <string name="player_picture_in_picture">Imagen en imagen</string>
+    <string name="cast_status_connected">Transmitiendo</string>
     <string name="player_audio_track">Audio</string>
     <string name="player_subtitle_track">Subtítulos</string>
     <string name="player_subtitle_off">Desactivados</string>

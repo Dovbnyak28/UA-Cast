@@ -70,6 +70,7 @@
     <string name="player_fullscreen">На весь екран</string>
     <string name="player_exit_fullscreen">Вийти з повноекранного режиму</string>
     <string name="player_picture_in_picture">Картинка в картинці</string>
+    <string name="cast_status_connected">Трансляція</string>
     <string name="player_audio_track">Аудіо</string>
     <string name="player_subtitle_track">Субтитри</string>
     <string name="player_subtitle_off">Вимкнено</string>

@@ -11,6 +11,9 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.uacastplayer.cast.CastSessionRepository
+import com.uacastplayer.cast.CastSideEffect
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.M3uChannel
 import java.util.Locale
 import kotlinx.coroutines.Job
@@ -44,8 +47,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     var wrapAroundEnabled: Boolean = true
     var autoSkipDeadEnabled: Boolean = true
-    /** Overridden from Stage 6 onward once real Cast session state exists. */
-    var isCasting: Boolean = false
+
+    private val castRepository = CastSessionRepository.getInstance(application)
+    private var isCasting: Boolean = false
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -73,6 +77,27 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     init {
         exoPlayer.addListener(listener)
         exoPlayer.playWhenReady = true
+
+        viewModelScope.launch {
+            castRepository.state.collect { state ->
+                isCasting = state.isSessionConnected
+                updateSeekability()
+            }
+        }
+        viewModelScope.launch {
+            castRepository.sideEffects.collect { effect -> handleCastSideEffect(effect) }
+        }
+    }
+
+    private fun handleCastSideEffect(effect: CastSideEffect) {
+        when (effect) {
+            CastSideEffect.PauseLocalPlayer -> exoPlayer.pause()
+            CastSideEffect.ResumeLocalPlayer -> exoPlayer.play()
+            is CastSideEffect.ApplyPendingChannelSwitch -> switchToIndexImmediate(effect.index)
+            is CastSideEffect.RecordIncompatibility ->
+                AppLog.d(TAG) { "Cast incompatibility recorded: ${effect.reason}" }
+            CastSideEffect.CloseProxySession -> Unit // No proxy session exists until Stage 7.
+        }
     }
 
     fun start(channels: List<M3uChannel>, startIndex: Int) {
@@ -131,6 +156,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val channel = channels[index]
         exoPlayer.setMediaItem(MediaItemFactory.forChannel(channel.streamUrl))
         exoPlayer.prepare()
+        castRepository.setActiveChannel(index, channel.streamUrl, channel.displayName)
         _uiState.update {
             it.copy(
                 currentChannel = channel,
@@ -264,6 +290,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private companion object {
+        const val TAG = "PlayerViewModel"
         const val CHANNEL_SWITCH_DEBOUNCE_MILLIS = 220L
         const val MAX_PREVIEW_SIZE = 20
     }
