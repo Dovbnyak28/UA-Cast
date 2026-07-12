@@ -14,7 +14,7 @@ import com.uacastplayer.epg.EpgSource
 class AppPreferences(context: Context) {
 
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     var language: AppLanguage
         get() = LanguageResolver.fromStoredCode(prefs.getString(KEY_LANGUAGE, null))
