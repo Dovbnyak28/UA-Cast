@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="uacast_background">#070A12</color>
+    <color name="uacast_surface">#111827</color>
+    <color name="uacast_surface_variant">#1B2333</color>
+    <color name="uacast_primary">#3B82F6</color>
+    <color name="uacast_cyan">#22D3EE</color>
+    <color name="uacast_border">#243044</color>
+    <color name="uacast_on_surface">#E5E7EB</color>
+    <color name="uacast_on_surface_muted">#8B96A8</color>
+    <color name="uacast_error">#F87171</color>
+</resources>

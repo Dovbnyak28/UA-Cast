@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UA Cast Player</string>
+
+    <!-- Language picker (first run) -->
+    <string name="language_picker_title">Оберіть мову</string>
+    <string name="language_picker_subtitle">Ви можете змінити це пізніше в налаштуваннях</string>
+    <string name="language_picker_continue">Продовжити</string>
+    <string name="language_name_uk">Українська</string>
+    <string name="language_name_en">English</string>
+    <string name="language_name_ru">Русский</string>
+    <string name="language_name_es">Español</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Головна</string>
+    <string name="nav_channels">Канали</string>
+    <string name="nav_favorites">Обране</string>
+    <string name="nav_settings">Налаштування</string>
+
+    <!-- Home screen -->
+    <string name="home_title">Головна</string>
+    <string name="home_empty_message">Імпортуйте плейлист, щоб почати</string>
+
+    <!-- Channels screen -->
+    <string name="channels_title">Канали</string>
+    <string name="channels_empty_message">Поки що немає каналів</string>
+    <string name="channels_search_hint">Пошук каналів</string>
+
+    <!-- Favorites screen -->
+    <string name="favorites_title">Обране</string>
+    <string name="favorites_empty_message">Поки що немає обраних каналів</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Налаштування</string>
+    <string name="settings_section_general">Загальні</string>
+    <string name="settings_language_label">Мова</string>
+    <string name="settings_app_version">Версія застосунку</string>
+    <string name="settings_help">Довідка</string>
+
+    <!-- Common -->
+    <string name="common_ok">Гаразд</string>
+    <string name="common_cancel">Скасувати</string>
+    <string name="common_retry">Повторити</string>
+    <string name="common_loading">Завантаження…</string>
+    <string name="common_error_generic">Щось пішло не так</string>
+    <string name="common_back">Назад</string>
+    <string name="common_close">Закрити</string>
+</resources>

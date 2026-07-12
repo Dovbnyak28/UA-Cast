@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UA Cast Player</string>
+
+    <!-- Language picker (first run) -->
+    <string name="language_picker_title">Choose your language</string>
+    <string name="language_picker_subtitle">You can change this later in Settings</string>
+    <string name="language_picker_continue">Continue</string>
+    <string name="language_name_uk">Українська</string>
+    <string name="language_name_en">English</string>
+    <string name="language_name_ru">Русский</string>
+    <string name="language_name_es">Español</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_channels">Channels</string>
+    <string name="nav_favorites">Favorites</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home screen -->
+    <string name="home_title">Home</string>
+    <string name="home_empty_message">Import a playlist to get started</string>
+
+    <!-- Channels screen -->
+    <string name="channels_title">Channels</string>
+    <string name="channels_empty_message">No channels yet</string>
+    <string name="channels_search_hint">Search channels</string>
+
+    <!-- Favorites screen -->
+    <string name="favorites_title">Favorites</string>
+    <string name="favorites_empty_message">No favorite channels yet</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_general">General</string>
+    <string name="settings_language_label">Language</string>
+    <string name="settings_app_version">App version</string>
+    <string name="settings_help">Help</string>
+
+    <!-- Common -->
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_error_generic">Something went wrong</string>
+    <string name="common_back">Back</string>
+    <string name="common_close">Close</string>
+</resources>

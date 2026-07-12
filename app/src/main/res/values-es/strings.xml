@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UA Cast Player</string>
+
+    <!-- Language picker (first run) -->
+    <string name="language_picker_title">Elige tu idioma</string>
+    <string name="language_picker_subtitle">Puedes cambiarlo más tarde en Ajustes</string>
+    <string name="language_picker_continue">Continuar</string>
+    <string name="language_name_uk">Українська</string>
+    <string name="language_name_en">English</string>
+    <string name="language_name_ru">Русский</string>
+    <string name="language_name_es">Español</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Inicio</string>
+    <string name="nav_channels">Canales</string>
+    <string name="nav_favorites">Favoritos</string>
+    <string name="nav_settings">Ajustes</string>
+
+    <!-- Home screen -->
+    <string name="home_title">Inicio</string>
+    <string name="home_empty_message">Importa una lista de reproducción para empezar</string>
+
+    <!-- Channels screen -->
+    <string name="channels_title">Canales</string>
+    <string name="channels_empty_message">Todavía no hay canales</string>
+    <string name="channels_search_hint">Buscar canales</string>
+
+    <!-- Favorites screen -->
+    <string name="favorites_title">Favoritos</string>
+    <string name="favorites_empty_message">Todavía no hay canales favoritos</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_section_general">General</string>
+    <string name="settings_language_label">Idioma</string>
+    <string name="settings_app_version">Versión de la app</string>
+    <string name="settings_help">Ayuda</string>
+
+    <!-- Common -->
+    <string name="common_ok">Aceptar</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_retry">Reintentar</string>
+    <string name="common_loading">Cargando…</string>
+    <string name="common_error_generic">Algo salió mal</string>
+    <string name="common_back">Atrás</string>
+    <string name="common_close">Cerrar</string>
+</resources>
