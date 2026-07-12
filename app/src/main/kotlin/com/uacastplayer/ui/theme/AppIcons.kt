@@ -129,4 +129,199 @@ object AppIcons {
             }
         }.build()
     }
+
+    val ArrowBack: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "ArrowBack", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.NonZero) {
+                moveTo(11f, 4f)
+                lineTo(13.1f, 6.1f)
+                lineTo(7.7f, 11f)
+                lineTo(21f, 11f)
+                lineTo(21f, 13f)
+                lineTo(7.7f, 13f)
+                lineTo(13.1f, 17.9f)
+                lineTo(11f, 20f)
+                lineTo(3f, 12f)
+                close()
+            }
+        }.build()
+    }
+
+    val Play: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Play", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.NonZero) {
+                moveTo(7f, 4f)
+                lineTo(20f, 12f)
+                lineTo(7f, 20f)
+                close()
+            }
+        }.build()
+    }
+
+    val Pause: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Pause", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.NonZero) {
+                moveTo(6f, 4f)
+                lineTo(10f, 4f)
+                lineTo(10f, 20f)
+                lineTo(6f, 20f)
+                close()
+                moveTo(14f, 4f)
+                lineTo(18f, 4f)
+                lineTo(18f, 20f)
+                lineTo(14f, 20f)
+                close()
+            }
+        }.build()
+    }
+
+    val SkipNext: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "SkipNext", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.NonZero) {
+                moveTo(6f, 5f)
+                lineTo(15f, 12f)
+                lineTo(6f, 19f)
+                close()
+                moveTo(16f, 5f)
+                lineTo(18.5f, 5f)
+                lineTo(18.5f, 19f)
+                lineTo(16f, 19f)
+                close()
+            }
+        }.build()
+    }
+
+    val SkipPrevious: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "SkipPrevious", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.NonZero) {
+                moveTo(18f, 5f)
+                lineTo(18f, 19f)
+                lineTo(9f, 12f)
+                close()
+                moveTo(8f, 5f)
+                lineTo(5.5f, 5f)
+                lineTo(5.5f, 19f)
+                lineTo(8f, 19f)
+                close()
+            }
+        }.build()
+    }
+
+    val Fullscreen: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Fullscreen", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.EvenOdd) {
+                moveTo(4f, 4f)
+                lineTo(10f, 4f)
+                lineTo(10f, 6.5f)
+                lineTo(6.5f, 6.5f)
+                lineTo(6.5f, 10f)
+                lineTo(4f, 10f)
+                close()
+                moveTo(20f, 4f)
+                lineTo(20f, 10f)
+                lineTo(17.5f, 10f)
+                lineTo(17.5f, 6.5f)
+                lineTo(14f, 6.5f)
+                lineTo(14f, 4f)
+                close()
+                moveTo(4f, 14f)
+                lineTo(6.5f, 14f)
+                lineTo(6.5f, 17.5f)
+                lineTo(10f, 17.5f)
+                lineTo(10f, 20f)
+                lineTo(4f, 20f)
+                close()
+                moveTo(17.5f, 14f)
+                lineTo(20f, 14f)
+                lineTo(20f, 20f)
+                lineTo(14f, 20f)
+                lineTo(14f, 17.5f)
+                lineTo(17.5f, 17.5f)
+                close()
+            }
+        }.build()
+    }
+
+    val FullscreenExit: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "FullscreenExit", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.EvenOdd) {
+                moveTo(6.5f, 4f)
+                lineTo(9f, 4f)
+                lineTo(9f, 9f)
+                lineTo(4f, 9f)
+                lineTo(4f, 6.5f)
+                lineTo(6.5f, 6.5f)
+                close()
+                moveTo(15f, 4f)
+                lineTo(17.5f, 4f)
+                lineTo(17.5f, 6.5f)
+                lineTo(20f, 6.5f)
+                lineTo(20f, 9f)
+                lineTo(15f, 9f)
+                close()
+                moveTo(4f, 15f)
+                lineTo(9f, 15f)
+                lineTo(9f, 20f)
+                lineTo(6.5f, 20f)
+                lineTo(6.5f, 17.5f)
+                lineTo(4f, 17.5f)
+                close()
+                moveTo(17.5f, 17.5f)
+                lineTo(17.5f, 20f)
+                lineTo(15f, 20f)
+                lineTo(15f, 15f)
+                lineTo(20f, 15f)
+                lineTo(20f, 17.5f)
+                close()
+            }
+        }.build()
+    }
+
+    val PictureInPicture: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "PictureInPicture", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(pathFillType = PathFillType.EvenOdd) {
+                moveTo(2f, 5f)
+                lineTo(22f, 5f)
+                lineTo(22f, 19f)
+                lineTo(2f, 19f)
+                close()
+                moveTo(4f, 7f)
+                lineTo(4f, 17f)
+                lineTo(20f, 17f)
+                lineTo(20f, 7f)
+                close()
+            }
+            path(pathFillType = PathFillType.NonZero) {
+                moveTo(12f, 11f)
+                lineTo(19f, 11f)
+                lineTo(19f, 16f)
+                lineTo(12f, 16f)
+                close()
+            }
+        }.build()
+    }
 }

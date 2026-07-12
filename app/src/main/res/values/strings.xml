@@ -59,6 +59,23 @@
     <string name="settings_app_version">App version</string>
     <string name="settings_help">Help</string>
 
+    <!-- Player -->
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_next">Next channel</string>
+    <string name="player_previous">Previous channel</string>
+    <string name="player_fullscreen">Fullscreen</string>
+    <string name="player_exit_fullscreen">Exit fullscreen</string>
+    <string name="player_picture_in_picture">Picture in picture</string>
+    <string name="player_audio_track">Audio</string>
+    <string name="player_subtitle_track">Subtitles</string>
+    <string name="player_subtitle_off">Off</string>
+    <string name="player_fatal_error">This channel isn\'t available right now</string>
+    <string name="audio_layout_mono">Mono</string>
+    <string name="audio_layout_stereo">Stereo</string>
+    <string name="audio_layout_surround_5_1">5.1 surround</string>
+    <string name="audio_layout_surround_7_1">7.1 surround</string>
+
     <!-- Common -->
     <string name="common_ok">OK</string>
     <string name="common_cancel">Cancel</string>

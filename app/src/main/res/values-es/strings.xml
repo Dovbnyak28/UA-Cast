@@ -59,6 +59,23 @@
     <string name="settings_app_version">Versión de la app</string>
     <string name="settings_help">Ayuda</string>
 
+    <!-- Player -->
+    <string name="player_play">Reproducir</string>
+    <string name="player_pause">Pausar</string>
+    <string name="player_next">Canal siguiente</string>
+    <string name="player_previous">Canal anterior</string>
+    <string name="player_fullscreen">Pantalla completa</string>
+    <string name="player_exit_fullscreen">Salir de pantalla completa</string>
+    <string name="player_picture_in_picture">Imagen en imagen</string>
+    <string name="player_audio_track">Audio</string>
+    <string name="player_subtitle_track">Subtítulos</string>
+    <string name="player_subtitle_off">Desactivados</string>
+    <string name="player_fatal_error">Este canal no está disponible ahora</string>
+    <string name="audio_layout_mono">Mono</string>
+    <string name="audio_layout_stereo">Estéreo</string>
+    <string name="audio_layout_surround_5_1">Sonido envolvente 5.1</string>
+    <string name="audio_layout_surround_7_1">Sonido envolvente 7.1</string>
+
     <!-- Common -->
     <string name="common_ok">Aceptar</string>
     <string name="common_cancel">Cancelar</string>

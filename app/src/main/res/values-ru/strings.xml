@@ -59,6 +59,23 @@
     <string name="settings_app_version">Версия приложения</string>
     <string name="settings_help">Справка</string>
 
+    <!-- Player -->
+    <string name="player_play">Воспроизвести</string>
+    <string name="player_pause">Пауза</string>
+    <string name="player_next">Следующий канал</string>
+    <string name="player_previous">Предыдущий канал</string>
+    <string name="player_fullscreen">Во весь экран</string>
+    <string name="player_exit_fullscreen">Выйти из полноэкранного режима</string>
+    <string name="player_picture_in_picture">Картинка в картинке</string>
+    <string name="player_audio_track">Аудио</string>
+    <string name="player_subtitle_track">Субтитры</string>
+    <string name="player_subtitle_off">Выключено</string>
+    <string name="player_fatal_error">Этот канал сейчас недоступен</string>
+    <string name="audio_layout_mono">Моно</string>
+    <string name="audio_layout_stereo">Стерео</string>
+    <string name="audio_layout_surround_5_1">Объёмный звук 5.1</string>
+    <string name="audio_layout_surround_7_1">Объёмный звук 7.1</string>
+
     <!-- Common -->
     <string name="common_ok">ОК</string>
     <string name="common_cancel">Отмена</string>

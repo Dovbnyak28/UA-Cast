@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.channels
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import com.uacastplayer.R
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.playlist.NameQualityBadge
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
 
@@ -37,9 +39,11 @@ fun ChannelsScreen(
     playlistState: PlaylistUiState,
     onLoadUrl: (String) -> Unit,
     onPickFile: () -> Unit,
+    onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var urlInput by rememberSaveable { mutableStateOf("") }
+    val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -66,7 +70,13 @@ fun ChannelsScreen(
         when {
             playlistState.isLoading -> LoadingState()
             playlistState.error != null -> ErrorState(playlistState.error)
-            playlistState.hasChannels -> ChannelGroupList(playlistState.groups)
+            playlistState.hasChannels -> ChannelGroupList(
+                groups = playlistState.groups,
+                onChannelClick = { channel ->
+                    val index = flatChannels.indexOf(channel)
+                    if (index >= 0) onChannelSelected(flatChannels, index)
+                },
+            )
             else -> EmptyState()
         }
     }
@@ -110,7 +120,7 @@ private fun EmptyState() {
 }
 
 @Composable
-private fun ChannelGroupList(groups: List<GroupedChannels>) {
+private fun ChannelGroupList(groups: List<GroupedChannels>, onChannelClick: (M3uChannel) -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
         for (grouped in groups) {
             item(key = "header-${groupDisplayKey(grouped.group)}") {
@@ -122,20 +132,35 @@ private fun ChannelGroupList(groups: List<GroupedChannels>) {
                 )
             }
             items(grouped.channels, key = { it.streamUrl }) { channel ->
-                ChannelRow(channel)
+                ChannelRow(channel, onClick = { onChannelClick(channel) })
             }
         }
     }
 }
 
 @Composable
-private fun ChannelRow(channel: M3uChannel) {
-    Text(
-        text = channel.displayName,
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-    )
+private fun ChannelRow(channel: M3uChannel, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = channel.displayName,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        NameQualityBadge.detect(channel.displayName)?.let { badge ->
+            Text(
+                text = badge,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
 }
 
 private fun groupDisplayKey(group: ChannelGroup): String = when (group) {

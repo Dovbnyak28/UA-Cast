@@ -22,6 +22,7 @@ import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.core.nav.BottomNavEvent
 import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
+import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.favorites.FavoritesScreen
@@ -41,6 +42,7 @@ fun RootScaffold(
     playlistState: PlaylistUiState,
     onLoadPlaylistUrl: (String) -> Unit,
     onPickPlaylistFile: () -> Unit,
+    onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -79,6 +81,7 @@ fun RootScaffold(
                     playlistState = playlistState,
                     onLoadUrl = onLoadPlaylistUrl,
                     onPickFile = onPickPlaylistFile,
+                    onChannelSelected = onChannelSelected,
                     modifier = content,
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(modifier = content)
