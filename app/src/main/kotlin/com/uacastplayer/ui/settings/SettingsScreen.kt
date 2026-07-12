@@ -28,6 +28,7 @@ import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.SettingsUiState
 
@@ -51,7 +52,7 @@ fun SettingsScreen(
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
         SectionTitle(stringResource(R.string.settings_section_general))
         LabeledRow(stringResource(R.string.settings_language_label)) {
-            AppLanguage.entries.forEach { language ->
+            for (language in AppLanguage.entries) {
                 SettingsChip(
                     label = stringResource(language.nativeNameRes()),
                     isSelected = language == currentLanguage,
@@ -72,7 +73,7 @@ fun SettingsScreen(
         HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
         SectionTitle(stringResource(R.string.settings_section_playback))
         LabeledRow(stringResource(R.string.settings_icon_display_mode_label)) {
-            IconDisplayMode.entries.forEach { mode ->
+            for (mode in IconDisplayMode.entries) {
                 SettingsChip(
                     label = stringResource(mode.labelRes()),
                     isSelected = mode == settingsState.iconDisplayMode,
@@ -82,7 +83,7 @@ fun SettingsScreen(
         }
         SwitchRow(stringResource(R.string.settings_icon_wifi_only_label), iconWifiOnly, onIconWifiOnlyChanged)
         LabeledRow(stringResource(R.string.settings_list_density_label)) {
-            ListDensity.entries.forEach { density ->
+            for (density in ListDensity.entries) {
                 SettingsChip(
                     label = stringResource(density.labelRes()),
                     isSelected = density == settingsState.listDensity,
@@ -91,7 +92,7 @@ fun SettingsScreen(
             }
         }
         LabeledRow(stringResource(R.string.settings_channel_layout_label)) {
-            ChannelLayout.entries.forEach { layout ->
+            for (layout in ChannelLayout.entries) {
                 SettingsChip(
                     label = stringResource(layout.labelRes()),
                     isSelected = layout == settingsState.channelLayout,
@@ -111,9 +112,15 @@ fun SettingsScreen(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
         Text(
+            text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes()),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
             text = stringResource(R.string.settings_app_version) + ": " + BuildConfig.VERSION_NAME,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
         )
         Text(
             text = stringResource(R.string.settings_help),
@@ -236,4 +243,10 @@ private fun ChannelLayout.labelRes(): Int = when (this) {
     ChannelLayout.LIST -> R.string.channel_layout_list
     ChannelLayout.GRID -> R.string.channel_layout_grid
     ChannelLayout.LARGE_ICONS -> R.string.channel_layout_large_icons
+}
+
+private fun DeviceTier.labelRes(): Int = when (this) {
+    DeviceTier.LOW_END -> R.string.device_tier_low_end
+    DeviceTier.MID_RANGE -> R.string.device_tier_mid_range
+    DeviceTier.HIGH_END -> R.string.device_tier_high_end
 }

@@ -5,6 +5,7 @@ import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.util.Rational
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.uacastplayer.R
@@ -53,6 +55,7 @@ import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_MILLIS = 3000L
 
+@OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel,

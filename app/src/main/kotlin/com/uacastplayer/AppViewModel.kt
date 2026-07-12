@@ -18,6 +18,7 @@ import com.uacastplayer.data.playlist.PlaylistOutcome
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.data.prefs.DeviceSpecsProvider
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
@@ -25,6 +26,9 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.icons.LogoUpdateReminder
+import com.uacastplayer.performance.DevicePerformanceClassifier
+import com.uacastplayer.performance.DeviceTier
+import com.uacastplayer.performance.DeviceTierDefaults
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
@@ -64,6 +68,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val favoritesRepository = FavoritesRepository(application)
     private var unmeteredNetworkWatcher: AutoCloseable? = null
 
+    private val baseDeviceTier: DeviceTier = DeviceSpecsProvider.current(application).let { specs ->
+        DevicePerformanceClassifier.classify(specs.totalRamBytes, specs.cpuCoreCount, specs.sdkInt)
+    }
+    private var playlistChannelCount = 0
+    private var epgProgrammeCount = 0
+
     val castState: StateFlow<CastPlaybackState> = CastSessionRepository.getInstance(application).state
     val favorites: StateFlow<List<FavoriteChannel>> = favoritesRepository.favorites
 
@@ -91,11 +101,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _settingsState = MutableStateFlow(
         SettingsUiState(
-            iconDisplayMode = preferences.iconDisplayMode,
-            listDensity = preferences.listDensity,
+            iconDisplayMode = resolvedIconDisplayMode(baseDeviceTier),
+            listDensity = resolvedListDensity(baseDeviceTier),
             channelLayout = preferences.channelLayout,
             wrapAroundEnabled = preferences.wrapAroundEnabled,
             autoSkipDeadEnabled = preferences.autoSkipDeadEnabled,
+            deviceTier = baseDeviceTier,
         )
     )
     val settingsState: StateFlow<SettingsUiState> = _settingsState.asStateFlow()
@@ -105,9 +116,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             playlistRepository.restoreSnapshot()?.let { applyPlaylistOutcome(it) }
         }
         viewModelScope.launch {
-            (epgRepository.restoreSnapshot() as? EpgOutcome.Loaded)?.let { outcome ->
-                _epgState.update { it.copy(data = outcome.data) }
-            }
+            epgRepository.restoreSnapshot()?.let { applyEpgOutcome(it) }
         }
         viewModelScope.launch {
             while (isActive) {
@@ -171,6 +180,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setListDensity(density: ListDensity) {
         preferences.listDensity = density
         _settingsState.update { it.copy(listDensity = density) }
+    }
+
+    /** [DeviceTierDefaults] only apply until the user picks explicitly; [AppPreferences.hasChosenIconDisplayMode] tracks that. */
+    private fun resolvedIconDisplayMode(tier: DeviceTier): IconDisplayMode =
+        if (preferences.hasChosenIconDisplayMode) preferences.iconDisplayMode else DeviceTierDefaults.iconDisplayMode(tier)
+
+    private fun resolvedListDensity(tier: DeviceTier): ListDensity =
+        if (preferences.hasChosenListDensity) preferences.listDensity else DeviceTierDefaults.listDensity(tier)
+
+    private fun recomputeDeviceTierDefaults() {
+        val effectiveTier = DevicePerformanceClassifier.adjustForContentSize(baseDeviceTier, playlistChannelCount, epgProgrammeCount)
+        _settingsState.update {
+            it.copy(
+                deviceTier = effectiveTier,
+                iconDisplayMode = resolvedIconDisplayMode(effectiveTier),
+                listDensity = resolvedListDensity(effectiveTier),
+            )
+        }
     }
 
     fun setChannelLayout(layout: ChannelLayout) {
@@ -247,7 +274,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun applyPlaylistOutcome(outcome: PlaylistOutcome) {
         _playlistState.value = when (outcome) {
             is PlaylistOutcome.Loaded -> {
-                triggerIconPrefetch(outcome.groups.flatMap { it.channels })
+                val channels = outcome.groups.flatMap { it.channels }
+                playlistChannelCount = channels.size
+                recomputeDeviceTierDefaults()
+                triggerIconPrefetch(channels)
                 PlaylistUiState(
                     groups = outcome.groups,
                     isLoading = false,
@@ -277,6 +307,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 is EpgOutcome.Loaded -> current.copy(data = outcome.data, isLoading = false)
                 else -> current.copy(isLoading = false)
             }
+        }
+        if (outcome is EpgOutcome.Loaded) {
+            epgProgrammeCount = outcome.data.programmesByChannelId.values.sumOf { it.size }
+            recomputeDeviceTierDefaults()
         }
         refreshCacheSizes()
     }

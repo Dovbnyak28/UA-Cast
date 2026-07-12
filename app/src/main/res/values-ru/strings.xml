@@ -80,6 +80,10 @@
     <string name="cache_icons_label">Кеш логотипов</string>
     <string name="cache_coil_label">Кеш изображений</string>
     <string name="cache_clear_button">Очистить</string>
+    <string name="settings_device_tier_label">Определённый уровень устройства</string>
+    <string name="device_tier_low_end">Базовый</string>
+    <string name="device_tier_mid_range">Стандартный</string>
+    <string name="device_tier_high_end">Высокопроизводительный</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="settings_help">Справка</string>
     <string name="settings_help_body">UA Cast Player — персональный IPTV-плеер. Импортируйте плейлист на вкладке «Каналы» (по URL или файлом), выберите источник телепрограммы и нажмите на канал, чтобы начать просмотр. Используйте кнопку Cast для трансляции на Chromecast или Google TV; если поток не удаётся воспроизвести напрямую на приёмнике, приложение автоматически повторяет попытку через локальный ретранслятор на телефоне.</string>

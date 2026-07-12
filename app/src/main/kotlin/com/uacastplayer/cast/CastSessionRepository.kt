@@ -213,7 +213,7 @@ class CastSessionRepository private constructor(context: Context) {
 
     private fun applyResult(result: CastReducerResult) {
         _state.value = result.state
-        result.effects.forEach { effect ->
+        for (effect in result.effects) {
             if (effect is CastSideEffect.CloseProxySession) {
                 proxyServer.stop()
                 wakeLocks.release()

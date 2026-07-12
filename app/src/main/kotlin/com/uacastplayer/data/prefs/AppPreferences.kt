@@ -45,9 +45,16 @@ class AppPreferences(context: Context) {
         get() = IconDisplayMode.fromId(prefs.getString(KEY_ICON_DISPLAY_MODE, null))
         set(value) = prefs.edit().putString(KEY_ICON_DISPLAY_MODE, value.name).apply()
 
+    /** Once true, the user's explicit choice above wins forever over the device-tier-computed default. */
+    val hasChosenIconDisplayMode: Boolean
+        get() = prefs.contains(KEY_ICON_DISPLAY_MODE)
+
     var listDensity: ListDensity
         get() = ListDensity.fromId(prefs.getString(KEY_LIST_DENSITY, null))
         set(value) = prefs.edit().putString(KEY_LIST_DENSITY, value.name).apply()
+
+    val hasChosenListDensity: Boolean
+        get() = prefs.contains(KEY_LIST_DENSITY)
 
     var channelLayout: ChannelLayout
         get() = ChannelLayout.fromId(prefs.getString(KEY_CHANNEL_LAYOUT, null))

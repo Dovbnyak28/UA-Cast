@@ -1,9 +1,11 @@
 package com.uacastplayer.ui.player
 
+import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -15,6 +17,7 @@ import com.uacastplayer.playlist.M3uChannel
  * and with it [PlayerViewModel] and the single ExoPlayer instance it owns - is torn down the
  * moment this composable leaves composition, instead of living for the app's whole process.
  */
+@OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun PlayerHost(
     channels: List<M3uChannel>,

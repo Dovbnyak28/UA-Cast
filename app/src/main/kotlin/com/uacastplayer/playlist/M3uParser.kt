@@ -8,10 +8,11 @@ package com.uacastplayer.playlist
  */
 object M3uParser {
 
+    private const val UTF8_BOM = "\uFEFF"
     private val attributePattern = Regex("""([a-zA-Z][\w-]*)=(?:"([^"]*)"|(\S+))""")
 
     fun parse(text: String): M3uParseResult {
-        val normalized = text.removePrefix("﻿")
+        val normalized = text.removePrefix(UTF8_BOM)
         val lines = normalized.split("\n").map { it.trimEnd('\r') }
 
         val channels = mutableListOf<M3uChannel>()

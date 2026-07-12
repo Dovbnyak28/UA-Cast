@@ -80,6 +80,10 @@
     <string name="cache_icons_label">Caché de logotipos</string>
     <string name="cache_coil_label">Caché de imágenes</string>
     <string name="cache_clear_button">Vaciar</string>
+    <string name="settings_device_tier_label">Nivel de dispositivo detectado</string>
+    <string name="device_tier_low_end">Básico</string>
+    <string name="device_tier_mid_range">Estándar</string>
+    <string name="device_tier_high_end">Alto rendimiento</string>
     <string name="settings_app_version">Versión de la app</string>
     <string name="settings_help">Ayuda</string>
     <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía TV y toca un canal para empezar a verlo. Usa el botón Cast para reproducir en un Chromecast o Google TV; si un canal no se puede reproducir directamente en el receptor, la app reintenta automáticamente mediante un relé local en tu teléfono.</string>

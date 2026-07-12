@@ -108,7 +108,7 @@ fun RootScaffold(
         },
         bottomBar = {
             NavigationBar {
-                BottomDestination.entries.forEach { destination ->
+                for (destination in BottomDestination.entries) {
                     NavigationBarItem(
                         selected = destination == navState.current,
                         onClick = {
