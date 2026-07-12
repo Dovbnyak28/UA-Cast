@@ -13,6 +13,7 @@ data class CastPlaybackState(
     val receiverStatus: ReceiverStatus = ReceiverStatus.DISCONNECTED,
     val idleReason: IdleReason = IdleReason.NONE,
     val pendingChannelIndex: Int? = null,
+    val deliveryMode: CastDeliveryMode = CastDeliveryMode.Direct,
 )
 
 sealed class CastLoadResult {

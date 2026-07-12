@@ -96,7 +96,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             is CastSideEffect.ApplyPendingChannelSwitch -> switchToIndexImmediate(effect.index)
             is CastSideEffect.RecordIncompatibility ->
                 AppLog.d(TAG) { "Cast incompatibility recorded: ${effect.reason}" }
-            CastSideEffect.CloseProxySession -> Unit // No proxy session exists until Stage 7.
+            CastSideEffect.CloseProxySession -> Unit // CastSessionRepository owns and closes the proxy itself.
         }
     }
 

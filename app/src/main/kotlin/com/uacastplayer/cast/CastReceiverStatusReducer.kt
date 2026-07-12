@@ -50,6 +50,7 @@ object CastReceiverStatusReducer {
             loadPhase = CastLoadPhase.IDLE,
             idleReason = IdleReason.NONE,
             pendingChannelIndex = null,
+            deliveryMode = CastDeliveryMode.Direct,
         )
         return CastReducerResult(newState, effects)
     }
