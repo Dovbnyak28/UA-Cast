@@ -1,7 +1,6 @@
 package com.uacastplayer.ui.favorites
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.theme.AppIcons
 
 @Composable
@@ -30,13 +30,12 @@ fun FavoritesScreen(
     modifier: Modifier = Modifier,
 ) {
     if (favorites.isEmpty()) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = stringResource(R.string.favorites_empty_message),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        EmptyState(
+            icon = AppIcons.Favorites,
+            title = stringResource(R.string.favorites_empty_message),
+            subtitle = stringResource(R.string.favorites_empty_subtitle),
+            modifier = modifier,
+        )
         return
     }
 
@@ -65,7 +64,11 @@ fun FavoritesScreen(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { onRemove(favorite.key) }) {
-                    Icon(AppIcons.Favorites, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        AppIcons.Delete,
+                        contentDescription = stringResource(R.string.favorites_remove_content_description),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }

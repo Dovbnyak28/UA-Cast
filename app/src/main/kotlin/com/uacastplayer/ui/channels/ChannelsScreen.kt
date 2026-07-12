@@ -157,13 +157,11 @@ private fun ErrorState(error: PlaylistError) {
 
 @Composable
 private fun EmptyState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = stringResource(R.string.channels_empty_message),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    com.uacastplayer.ui.components.EmptyState(
+        icon = AppIcons.Channels,
+        title = stringResource(R.string.channels_empty_message),
+        subtitle = stringResource(R.string.channels_empty_subtitle),
+    )
 }
 
 @Composable

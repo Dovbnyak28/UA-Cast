@@ -20,10 +20,12 @@
     <!-- Home screen -->
     <string name="home_title">Home</string>
     <string name="home_empty_message">Import a playlist to get started</string>
+    <string name="home_empty_subtitle">Open the Channels tab and load an M3U link or file</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Channels</string>
     <string name="channels_empty_message">No channels yet</string>
+    <string name="channels_empty_subtitle">Load a playlist above by URL or file to see channels here</string>
     <string name="channels_search_hint">Search channels</string>
     <string name="playlist_url_hint">Playlist URL (m3u/m3u8)</string>
     <string name="playlist_load_button">Load playlist</string>
@@ -51,6 +53,8 @@
     <!-- Favorites screen -->
     <string name="favorites_title">Favorites</string>
     <string name="favorites_empty_message">No favorite channels yet</string>
+    <string name="favorites_empty_subtitle">Tap the star next to a channel to add it here</string>
+    <string name="favorites_remove_content_description">Remove from favorites</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>

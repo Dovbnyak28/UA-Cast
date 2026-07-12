@@ -1,6 +1,7 @@
 package com.uacastplayer.ui.nav
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -124,9 +125,10 @@ fun RootScaffold(
             }
         },
     ) { innerPadding ->
-        stateHolder.SaveableStateProvider(navState.current) {
+        Crossfade(targetState = navState.current, label = "bottomNavContent") { destination ->
+        stateHolder.SaveableStateProvider(destination) {
             val content = Modifier.padding(innerPadding)
-            when (navState.current) {
+            when (destination) {
                 BottomDestination.HOME -> HomeScreen(modifier = content)
                 BottomDestination.CHANNELS -> ChannelsScreen(
                     playlistState = playlistState,
@@ -165,6 +167,7 @@ fun RootScaffold(
                     modifier = content,
                 )
             }
+        }
         }
     }
 }

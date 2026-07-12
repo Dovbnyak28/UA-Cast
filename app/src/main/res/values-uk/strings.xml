@@ -20,10 +20,12 @@
     <!-- Home screen -->
     <string name="home_title">Головна</string>
     <string name="home_empty_message">Імпортуйте плейлист, щоб почати</string>
+    <string name="home_empty_subtitle">Відкрийте вкладку «Канали» та завантажте M3U-посилання або файл</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Канали</string>
     <string name="channels_empty_message">Поки що немає каналів</string>
+    <string name="channels_empty_subtitle">Завантажте плейлист вище за URL або файлом, щоб побачити канали тут</string>
     <string name="channels_search_hint">Пошук каналів</string>
     <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
     <string name="playlist_load_button">Завантажити плейлист</string>
@@ -51,6 +53,8 @@
     <!-- Favorites screen -->
     <string name="favorites_title">Обране</string>
     <string name="favorites_empty_message">Поки що немає обраних каналів</string>
+    <string name="favorites_empty_subtitle">Торкніться зірочки біля каналу, щоб додати його сюди</string>
+    <string name="favorites_remove_content_description">Прибрати з обраного</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Налаштування</string>
