@@ -59,8 +59,30 @@
     <string name="settings_icon_wifi_only_label">Fetch channel logos on Wi-Fi only</string>
     <string name="settings_epg_source_label">TV guide source</string>
     <string name="settings_epg_source_variant">Source %1$d</string>
+    <string name="settings_icon_display_mode_label">Channel logos</string>
+    <string name="icon_display_mode_placeholders">Placeholders only</string>
+    <string name="icon_display_mode_cache">Show and cache</string>
+    <string name="icon_display_mode_cache_limited">Cached only</string>
+    <string name="settings_list_density_label">List density</string>
+    <string name="list_density_full">Full</string>
+    <string name="list_density_simple">Simple</string>
+    <string name="list_density_minimal">Minimal</string>
+    <string name="settings_channel_layout_label">Layout</string>
+    <string name="channel_layout_list">List</string>
+    <string name="channel_layout_grid">Grid</string>
+    <string name="channel_layout_large_icons">Large icons</string>
+    <string name="settings_wrap_around_label">Wrap around at end of channel list</string>
+    <string name="settings_auto_skip_label">Automatically skip unavailable channels</string>
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_section_cache">Cache</string>
+    <string name="cache_playlist_label">Playlist cache</string>
+    <string name="cache_epg_label">TV guide cache</string>
+    <string name="cache_icons_label">Channel logo cache</string>
+    <string name="cache_coil_label">Image cache</string>
+    <string name="cache_clear_button">Clear</string>
     <string name="settings_app_version">App version</string>
     <string name="settings_help">Help</string>
+    <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. Use the Cast button to play on a Chromecast or Google TV device; if a stream can\'t be played directly on the receiver, the app automatically retries through a local relay on your phone.</string>
 
     <!-- Player -->
     <string name="player_play">Play</string>

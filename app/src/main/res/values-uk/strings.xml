@@ -59,8 +59,30 @@
     <string name="settings_icon_wifi_only_label">Завантажувати логотипи лише через Wi-Fi</string>
     <string name="settings_epg_source_label">Джерело телепрограми</string>
     <string name="settings_epg_source_variant">Джерело %1$d</string>
+    <string name="settings_icon_display_mode_label">Логотипи каналів</string>
+    <string name="icon_display_mode_placeholders">Лише заповнювачі</string>
+    <string name="icon_display_mode_cache">Показувати й кешувати</string>
+    <string name="icon_display_mode_cache_limited">Лише з кешу</string>
+    <string name="settings_list_density_label">Щільність списку</string>
+    <string name="list_density_full">Повна</string>
+    <string name="list_density_simple">Проста</string>
+    <string name="list_density_minimal">Мінімальна</string>
+    <string name="settings_channel_layout_label">Розкладка</string>
+    <string name="channel_layout_list">Список</string>
+    <string name="channel_layout_grid">Сітка</string>
+    <string name="channel_layout_large_icons">Великі іконки</string>
+    <string name="settings_wrap_around_label">Циклічне перемикання каналів</string>
+    <string name="settings_auto_skip_label">Автоматично пропускати недоступні канали</string>
+    <string name="settings_section_playback">Відтворення</string>
+    <string name="settings_section_cache">Кеш</string>
+    <string name="cache_playlist_label">Кеш плейлиста</string>
+    <string name="cache_epg_label">Кеш телепрограми</string>
+    <string name="cache_icons_label">Кеш логотипів</string>
+    <string name="cache_coil_label">Кеш зображень</string>
+    <string name="cache_clear_button">Очистити</string>
     <string name="settings_app_version">Версія застосунку</string>
     <string name="settings_help">Довідка</string>
+    <string name="settings_help_body">UA Cast Player — персональний IPTV-плеєр. Імпортуйте плейлист на вкладці «Канали» (за URL або файлом), оберіть джерело телепрограми та торкніться каналу, щоб почати перегляд. Використовуйте кнопку Cast для трансляції на Chromecast або Google TV; якщо потік не вдається відтворити напряму на приймачі, застосунок автоматично повторює спробу через локальний ретранслятор на телефоні.</string>
 
     <!-- Player -->
     <string name="player_play">Відтворити</string>

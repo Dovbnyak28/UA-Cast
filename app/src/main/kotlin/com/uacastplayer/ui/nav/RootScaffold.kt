@@ -27,11 +27,17 @@ import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.core.nav.BottomNavEvent
 import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
+import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.data.prefs.IconDisplayMode
+import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.settings.CacheKind
+import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.favorites.FavoritesScreen
@@ -60,6 +66,17 @@ fun RootScaffold(
     onIconWifiOnlyChanged: (Boolean) -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
     castState: CastPlaybackState,
+    settingsState: SettingsUiState,
+    onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
+    onListDensitySelected: (ListDensity) -> Unit,
+    onChannelLayoutSelected: (ChannelLayout) -> Unit,
+    onWrapAroundChanged: (Boolean) -> Unit,
+    onAutoSkipChanged: (Boolean) -> Unit,
+    onClearCache: (CacheKind) -> Unit,
+    favorites: List<FavoriteChannel>,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    onRemoveFavorite: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -119,9 +136,18 @@ fun RootScaffold(
                     epgState = epgState,
                     iconPrefetchState = iconPrefetchState,
                     resolveIcon = resolveIcon,
+                    density = settingsState.listDensity,
+                    layout = settingsState.channelLayout,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
                     modifier = content,
                 )
-                BottomDestination.FAVORITES -> FavoritesScreen(modifier = content)
+                BottomDestination.FAVORITES -> FavoritesScreen(
+                    favorites = favorites,
+                    onChannelSelected = onChannelSelected,
+                    onRemove = onRemoveFavorite,
+                    modifier = content,
+                )
                 BottomDestination.SETTINGS -> SettingsScreen(
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
@@ -129,6 +155,13 @@ fun RootScaffold(
                     onEpgSourceSelected = onEpgSourceSelected,
                     iconWifiOnly = iconPrefetchState.wifiOnly,
                     onIconWifiOnlyChanged = onIconWifiOnlyChanged,
+                    settingsState = settingsState,
+                    onIconDisplayModeSelected = onIconDisplayModeSelected,
+                    onListDensitySelected = onListDensitySelected,
+                    onChannelLayoutSelected = onChannelLayoutSelected,
+                    onWrapAroundChanged = onWrapAroundChanged,
+                    onAutoSkipChanged = onAutoSkipChanged,
+                    onClearCache = onClearCache,
                     modifier = content,
                 )
             }

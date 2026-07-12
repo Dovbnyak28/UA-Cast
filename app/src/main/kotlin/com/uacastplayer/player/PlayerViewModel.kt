@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
+import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.M3uChannel
 import java.util.Locale
@@ -45,8 +46,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var pendingSwitchJob: Job? = null
     private var retryJob: Job? = null
 
-    var wrapAroundEnabled: Boolean = true
-    var autoSkipDeadEnabled: Boolean = true
+    private val preferences = AppPreferences(application)
+    var wrapAroundEnabled: Boolean = preferences.wrapAroundEnabled
+    var autoSkipDeadEnabled: Boolean = preferences.autoSkipDeadEnabled
 
     private val castRepository = CastSessionRepository.getInstance(application)
     private var isCasting: Boolean = false

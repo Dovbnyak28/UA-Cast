@@ -59,8 +59,30 @@
     <string name="settings_icon_wifi_only_label">Descargar logotipos solo con Wi-Fi</string>
     <string name="settings_epg_source_label">Fuente de la guía TV</string>
     <string name="settings_epg_source_variant">Fuente %1$d</string>
+    <string name="settings_icon_display_mode_label">Logotipos de canales</string>
+    <string name="icon_display_mode_placeholders">Solo marcadores</string>
+    <string name="icon_display_mode_cache">Mostrar y guardar en caché</string>
+    <string name="icon_display_mode_cache_limited">Solo en caché</string>
+    <string name="settings_list_density_label">Densidad de la lista</string>
+    <string name="list_density_full">Completa</string>
+    <string name="list_density_simple">Simple</string>
+    <string name="list_density_minimal">Mínima</string>
+    <string name="settings_channel_layout_label">Diseño</string>
+    <string name="channel_layout_list">Lista</string>
+    <string name="channel_layout_grid">Cuadrícula</string>
+    <string name="channel_layout_large_icons">Iconos grandes</string>
+    <string name="settings_wrap_around_label">Volver al principio al llegar al final</string>
+    <string name="settings_auto_skip_label">Omitir automáticamente canales no disponibles</string>
+    <string name="settings_section_playback">Reproducción</string>
+    <string name="settings_section_cache">Caché</string>
+    <string name="cache_playlist_label">Caché de la lista</string>
+    <string name="cache_epg_label">Caché de la guía TV</string>
+    <string name="cache_icons_label">Caché de logotipos</string>
+    <string name="cache_coil_label">Caché de imágenes</string>
+    <string name="cache_clear_button">Vaciar</string>
     <string name="settings_app_version">Versión de la app</string>
     <string name="settings_help">Ayuda</string>
+    <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía TV y toca un canal para empezar a verlo. Usa el botón Cast para reproducir en un Chromecast o Google TV; si un canal no se puede reproducir directamente en el receptor, la app reintenta automáticamente mediante un relé local en tu teléfono.</string>
 
     <!-- Player -->
     <string name="player_play">Reproducir</string>

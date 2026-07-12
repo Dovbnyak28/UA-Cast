@@ -41,11 +41,36 @@ class AppPreferences(context: Context) {
             }
         }
 
+    var iconDisplayMode: IconDisplayMode
+        get() = IconDisplayMode.fromId(prefs.getString(KEY_ICON_DISPLAY_MODE, null))
+        set(value) = prefs.edit().putString(KEY_ICON_DISPLAY_MODE, value.name).apply()
+
+    var listDensity: ListDensity
+        get() = ListDensity.fromId(prefs.getString(KEY_LIST_DENSITY, null))
+        set(value) = prefs.edit().putString(KEY_LIST_DENSITY, value.name).apply()
+
+    var channelLayout: ChannelLayout
+        get() = ChannelLayout.fromId(prefs.getString(KEY_CHANNEL_LAYOUT, null))
+        set(value) = prefs.edit().putString(KEY_CHANNEL_LAYOUT, value.name).apply()
+
+    var wrapAroundEnabled: Boolean
+        get() = prefs.getBoolean(KEY_WRAP_AROUND, true)
+        set(value) = prefs.edit().putBoolean(KEY_WRAP_AROUND, value).apply()
+
+    var autoSkipDeadEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SKIP_DEAD, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_SKIP_DEAD, value).apply()
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
         const val KEY_EPG_SOURCE = "epg_source_id"
         const val KEY_ICON_WIFI_ONLY = "icon_wifi_only"
         const val KEY_LAST_ICON_PREFETCH = "last_icon_prefetch_at"
+        const val KEY_ICON_DISPLAY_MODE = "icon_display_mode"
+        const val KEY_LIST_DENSITY = "list_density"
+        const val KEY_CHANNEL_LAYOUT = "channel_layout"
+        const val KEY_WRAP_AROUND = "wrap_around_enabled"
+        const val KEY_AUTO_SKIP_DEAD = "auto_skip_dead_enabled"
     }
 }

@@ -45,6 +45,8 @@ class MainActivity : FragmentActivity() {
             val epgState by viewModel.epgState.collectAsStateWithLifecycle()
             val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
             val castState by viewModel.castState.collectAsStateWithLifecycle()
+            val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
+            val favorites by viewModel.favorites.collectAsStateWithLifecycle()
 
             val pickPlaylistFile = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
@@ -91,6 +93,17 @@ class MainActivity : FragmentActivity() {
                         onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
                         resolveIcon = viewModel::resolveChannelIcon,
                         castState = castState,
+                        settingsState = settingsState,
+                        onIconDisplayModeSelected = viewModel::setIconDisplayMode,
+                        onListDensitySelected = viewModel::setListDensity,
+                        onChannelLayoutSelected = viewModel::setChannelLayout,
+                        onWrapAroundChanged = viewModel::setWrapAroundEnabled,
+                        onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
+                        onClearCache = viewModel::clearCache,
+                        favorites = favorites,
+                        isFavorite = viewModel::isFavorite,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onRemoveFavorite = viewModel::removeFavorite,
                     )
                 }
             }

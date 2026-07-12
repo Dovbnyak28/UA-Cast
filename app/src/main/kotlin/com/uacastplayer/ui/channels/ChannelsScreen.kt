@@ -12,10 +12,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,6 +40,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.uacastplayer.R
+import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.CurrentNextProgrammes
 import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
@@ -46,6 +53,7 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.NameQualityBadge
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.theme.AppIcons
 import java.io.File
 
 @Composable
@@ -57,6 +65,10 @@ fun ChannelsScreen(
     epgState: EpgUiState,
     iconPrefetchState: IconPrefetchUiState,
     resolveIcon: suspend (M3uChannel) -> File?,
+    density: ListDensity,
+    layout: ChannelLayout,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var urlInput by rememberSaveable { mutableStateOf("") }
@@ -103,6 +115,10 @@ fun ChannelsScreen(
                 groups = playlistState.groups,
                 epgState = epgState,
                 resolveIcon = resolveIcon,
+                density = density,
+                layout = layout,
+                isFavorite = isFavorite,
+                onToggleFavorite = onToggleFavorite,
                 onChannelClick = { channel ->
                     val index = flatChannels.indexOf(channel)
                     if (index >= 0) onChannelSelected(flatChannels, index)
@@ -155,24 +171,59 @@ private fun ChannelGroupList(
     groups: List<GroupedChannels>,
     epgState: EpgUiState,
     resolveIcon: suspend (M3uChannel) -> File?,
+    density: ListDensity,
+    layout: ChannelLayout,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
-        for (grouped in groups) {
-            item(key = "header-${groupDisplayKey(grouped.group)}") {
-                Text(
-                    text = groupLabel(grouped.group),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                )
+    if (layout == ChannelLayout.LIST) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
+            for (grouped in groups) {
+                item(key = "header-${groupDisplayKey(grouped.group)}") { GroupHeader(grouped.group) }
+                items(grouped.channels, key = { it.streamUrl }) { channel ->
+                    val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
+                    ChannelRow(
+                        channel = channel,
+                        programme = programme,
+                        nowMillis = epgState.nowMillis,
+                        resolveIcon = resolveIcon,
+                        density = density,
+                        isFavorite = isFavorite(channel),
+                        onToggleFavorite = { onToggleFavorite(channel) },
+                        onClick = { onChannelClick(channel) },
+                    )
+                }
             }
-            items(grouped.channels, key = { it.streamUrl }) { channel ->
-                val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
-                ChannelRow(channel, programme, epgState.nowMillis, resolveIcon, onClick = { onChannelClick(channel) })
+        }
+    } else {
+        val columns = if (layout == ChannelLayout.LARGE_ICONS) 2 else 3
+        LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
+            for (grouped in groups) {
+                item(key = "header-${groupDisplayKey(grouped.group)}", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(columns) }) {
+                    GroupHeader(grouped.group)
+                }
+                items(grouped.channels, key = { it.streamUrl }) { channel ->
+                    ChannelTile(
+                        channel = channel,
+                        resolveIcon = resolveIcon,
+                        large = layout == ChannelLayout.LARGE_ICONS,
+                        onClick = { onChannelClick(channel) },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun GroupHeader(group: ChannelGroup) {
+    Text(
+        text = groupLabel(group),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+    )
 }
 
 @Composable
@@ -181,33 +232,46 @@ private fun ChannelRow(
     programme: CurrentNextProgrammes?,
     nowMillis: Long,
     resolveIcon: suspend (M3uChannel) -> File?,
+    density: ListDensity,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = if (density == ListDensity.MINIMAL) 4.dp else 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ChannelIcon(channel, resolveIcon)
+            if (density != ListDensity.MINIMAL) ChannelIcon(channel, resolveIcon)
             Text(
                 text = channel.displayName,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                modifier = Modifier.weight(1f).padding(start = if (density == ListDensity.MINIMAL) 0.dp else 12.dp),
             )
-            NameQualityBadge.detect(channel.displayName)?.let { badge ->
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+            if (density == ListDensity.FULL) {
+                NameQualityBadge.detect(channel.displayName)?.let { badge ->
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
+            }
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    AppIcons.Favorites,
+                    contentDescription = null,
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
             }
         }
         val current = programme?.current
         val effectiveStop = programme?.effectiveStopMillis
-        if (current != null && effectiveStop != null) {
+        if (density == ListDensity.FULL && current != null && effectiveStop != null) {
             Text(
                 text = current.title,
                 style = MaterialTheme.typography.bodyMedium,
@@ -223,11 +287,35 @@ private fun ChannelRow(
 }
 
 @Composable
-private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?) {
+private fun ChannelTile(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    large: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        ChannelIcon(channel, resolveIcon, size = if (large) 64.dp else 44.dp)
+        Text(
+            text = channel.displayName,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?, size: androidx.compose.ui.unit.Dp = 32.dp) {
     val iconFile by produceState<File?>(initialValue = null, key1 = channel.streamUrl) {
         value = resolveIcon(channel)
     }
-    val size = 32.dp
     if (iconFile != null) {
         AsyncImage(
             model = iconFile,
