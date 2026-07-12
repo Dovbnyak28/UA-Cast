@@ -43,6 +43,7 @@ class MainActivity : FragmentActivity() {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
             val epgState by viewModel.epgState.collectAsStateWithLifecycle()
+            val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
 
             val pickPlaylistFile = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
@@ -85,6 +86,9 @@ class MainActivity : FragmentActivity() {
                         },
                         epgState = epgState,
                         onEpgSourceSelected = viewModel::selectEpgSource,
+                        iconPrefetchState = iconPrefetchState,
+                        onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
+                        resolveIcon = viewModel::resolveChannelIcon,
                     )
                 }
             }

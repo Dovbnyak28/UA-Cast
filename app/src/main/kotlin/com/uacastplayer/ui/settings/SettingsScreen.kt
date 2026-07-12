@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -26,6 +28,8 @@ fun SettingsScreen(
     onLanguageSelected: (AppLanguage) -> Unit,
     currentEpgSource: EpgSource,
     onEpgSourceSelected: (EpgSource) -> Unit,
+    iconWifiOnly: Boolean,
+    onIconWifiOnlyChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
@@ -64,6 +68,18 @@ fun SettingsScreen(
                     onClick = { onEpgSourceSelected(source) },
                 )
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_icon_wifi_only_label),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = iconWifiOnly, onCheckedChange = onIconWifiOnlyChanged)
         }
         Text(
             text = stringResource(R.string.settings_app_version) + ": " + BuildConfig.VERSION_NAME,

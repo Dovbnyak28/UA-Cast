@@ -24,12 +24,14 @@ import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.settings.SettingsScreen
+import java.io.File
 
 private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
     save = { state -> state.stack.map(BottomDestination::name) },
@@ -47,6 +49,9 @@ fun RootScaffold(
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     epgState: EpgUiState,
     onEpgSourceSelected: (EpgSource) -> Unit,
+    iconPrefetchState: IconPrefetchUiState,
+    onIconWifiOnlyChanged: (Boolean) -> Unit,
+    resolveIcon: suspend (M3uChannel) -> File?,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -87,6 +92,8 @@ fun RootScaffold(
                     onPickFile = onPickPlaylistFile,
                     onChannelSelected = onChannelSelected,
                     epgState = epgState,
+                    iconPrefetchState = iconPrefetchState,
+                    resolveIcon = resolveIcon,
                     modifier = content,
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(modifier = content)
@@ -95,6 +102,8 @@ fun RootScaffold(
                     onLanguageSelected = onLanguageSelected,
                     currentEpgSource = epgState.selectedSource,
                     onEpgSourceSelected = onEpgSourceSelected,
+                    iconWifiOnly = iconPrefetchState.wifiOnly,
+                    onIconWifiOnlyChanged = onIconWifiOnlyChanged,
                     modifier = content,
                 )
             }

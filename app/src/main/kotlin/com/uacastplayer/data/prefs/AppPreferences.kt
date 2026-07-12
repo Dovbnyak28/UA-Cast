@@ -27,9 +27,25 @@ class AppPreferences(context: Context) {
         get() = EpgSource.fromId(prefs.getString(KEY_EPG_SOURCE, null))
         set(value) = prefs.edit().putString(KEY_EPG_SOURCE, value.id).apply()
 
+    var iconWifiOnly: Boolean
+        get() = prefs.getBoolean(KEY_ICON_WIFI_ONLY, true)
+        set(value) = prefs.edit().putBoolean(KEY_ICON_WIFI_ONLY, value).apply()
+
+    var lastIconPrefetchAtMillis: Long?
+        get() = if (prefs.contains(KEY_LAST_ICON_PREFETCH)) prefs.getLong(KEY_LAST_ICON_PREFETCH, 0L) else null
+        set(value) {
+            if (value == null) {
+                prefs.edit().remove(KEY_LAST_ICON_PREFETCH).apply()
+            } else {
+                prefs.edit().putLong(KEY_LAST_ICON_PREFETCH, value).apply()
+            }
+        }
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
         const val KEY_EPG_SOURCE = "epg_source_id"
+        const val KEY_ICON_WIFI_ONLY = "icon_wifi_only"
+        const val KEY_LAST_ICON_PREFETCH = "last_icon_prefetch_at"
     }
 }

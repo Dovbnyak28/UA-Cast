@@ -7,13 +7,19 @@ import androidx.lifecycle.viewModelScope
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.epg.EpgOutcome
 import com.uacastplayer.data.epg.EpgRepository
+import com.uacastplayer.data.icons.IconPrefetcher
+import com.uacastplayer.data.icons.IconRepository
 import com.uacastplayer.data.playlist.PlaylistOutcome
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.icons.LogoUpdateReminder
+import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +45,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = AppPreferences(application)
     private val playlistRepository = PlaylistRepository(application)
     private val epgRepository = EpgRepository(application)
+    private val iconRepository = IconRepository(application)
+    private val iconPrefetcher = IconPrefetcher(application, iconRepository)
+    private var unmeteredNetworkWatcher: AutoCloseable? = null
 
     private val _uiState = MutableStateFlow(
         AppUiState(
@@ -53,6 +62,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _epgState = MutableStateFlow(EpgUiState(selectedSource = preferences.epgSource))
     val epgState: StateFlow<EpgUiState> = _epgState.asStateFlow()
+
+    private val _iconPrefetchState = MutableStateFlow(
+        IconPrefetchUiState(
+            wifiOnly = preferences.iconWifiOnly,
+            updateReminderDue = LogoUpdateReminder.isDue(preferences.lastIconPrefetchAtMillis, System.currentTimeMillis()),
+        )
+    )
+    val iconPrefetchState: StateFlow<IconPrefetchUiState> = _iconPrefetchState.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -99,14 +116,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setIconWifiOnly(enabled: Boolean) {
+        preferences.iconWifiOnly = enabled
+        _iconPrefetchState.update { it.copy(wifiOnly = enabled) }
+    }
+
+    suspend fun resolveChannelIcon(channel: M3uChannel): File? {
+        val epgIconUrl = epgState.value.data?.index?.match(channel)?.iconUrl
+        return iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrl, channel.tvgId)
+    }
+
+    private var lastPrefetchChannels: List<M3uChannel> = emptyList()
+
+    private fun triggerIconPrefetch(channels: List<M3uChannel>) {
+        lastPrefetchChannels = channels
+        unmeteredNetworkWatcher?.close()
+        unmeteredNetworkWatcher = iconPrefetcher.awaitUnmeteredNetwork {
+            viewModelScope.launch { runIconPrefetch(lastPrefetchChannels) }
+        }
+        viewModelScope.launch { runIconPrefetch(channels) }
+    }
+
+    private suspend fun runIconPrefetch(channels: List<M3uChannel>) {
+        if (channels.isEmpty()) return
+        _iconPrefetchState.update { it.copy(isRunning = true, completed = 0, total = channels.size) }
+        iconPrefetcher.prefetch(channels, preferences.iconWifiOnly) { progress ->
+            _iconPrefetchState.update { it.copy(completed = progress.completed, total = progress.total) }
+        }
+        preferences.lastIconPrefetchAtMillis = System.currentTimeMillis()
+        _iconPrefetchState.update { it.copy(isRunning = false, updateReminderDue = false) }
+    }
+
+    override fun onCleared() {
+        unmeteredNetworkWatcher?.close()
+    }
+
     private fun applyPlaylistOutcome(outcome: PlaylistOutcome) {
         _playlistState.value = when (outcome) {
-            is PlaylistOutcome.Loaded -> PlaylistUiState(
-                groups = outcome.groups,
-                isLoading = false,
-                skippedLineCount = outcome.skippedLineCount,
-                error = null,
-            )
+            is PlaylistOutcome.Loaded -> {
+                triggerIconPrefetch(outcome.groups.flatMap { it.channels })
+                PlaylistUiState(
+                    groups = outcome.groups,
+                    isLoading = false,
+                    skippedLineCount = outcome.skippedLineCount,
+                    error = null,
+                )
+            }
             PlaylistOutcome.SizeLimitExceeded -> _playlistState.value.copy(
                 isLoading = false,
                 error = PlaylistError.SizeLimitExceeded,

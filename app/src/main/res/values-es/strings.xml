@@ -56,6 +56,7 @@
     <string name="settings_title">Ajustes</string>
     <string name="settings_section_general">General</string>
     <string name="settings_language_label">Idioma</string>
+    <string name="settings_icon_wifi_only_label">Descargar logotipos solo con Wi-Fi</string>
     <string name="settings_epg_source_label">Fuente de la guía TV</string>
     <string name="settings_epg_source_variant">Fuente %1$d</string>
     <string name="settings_app_version">Versión de la app</string>

@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.channels
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -21,24 +24,29 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.uacastplayer.R
 import com.uacastplayer.epg.CurrentNextProgrammes
 import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.epg.ProgrammeProgress
+import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.NameQualityBadge
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import java.io.File
 
 @Composable
 fun ChannelsScreen(
@@ -47,6 +55,8 @@ fun ChannelsScreen(
     onPickFile: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     epgState: EpgUiState,
+    iconPrefetchState: IconPrefetchUiState,
+    resolveIcon: suspend (M3uChannel) -> File?,
     modifier: Modifier = Modifier,
 ) {
     var urlInput by rememberSaveable { mutableStateOf("") }
@@ -74,12 +84,25 @@ fun ChannelsScreen(
             }
         }
 
+        if (iconPrefetchState.isRunning) {
+            val progress = if (iconPrefetchState.total > 0) {
+                iconPrefetchState.completed.toFloat() / iconPrefetchState.total
+            } else {
+                0f
+            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
+
         when {
             playlistState.isLoading -> LoadingState()
             playlistState.error != null -> ErrorState(playlistState.error)
             playlistState.hasChannels -> ChannelGroupList(
                 groups = playlistState.groups,
                 epgState = epgState,
+                resolveIcon = resolveIcon,
                 onChannelClick = { channel ->
                     val index = flatChannels.indexOf(channel)
                     if (index >= 0) onChannelSelected(flatChannels, index)
@@ -131,6 +154,7 @@ private fun EmptyState() {
 private fun ChannelGroupList(
     groups: List<GroupedChannels>,
     epgState: EpgUiState,
+    resolveIcon: suspend (M3uChannel) -> File?,
     onChannelClick: (M3uChannel) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
@@ -145,7 +169,7 @@ private fun ChannelGroupList(
             }
             items(grouped.channels, key = { it.streamUrl }) { channel ->
                 val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
-                ChannelRow(channel, programme, epgState.nowMillis, onClick = { onChannelClick(channel) })
+                ChannelRow(channel, programme, epgState.nowMillis, resolveIcon, onClick = { onChannelClick(channel) })
             }
         }
     }
@@ -156,6 +180,7 @@ private fun ChannelRow(
     channel: M3uChannel,
     programme: CurrentNextProgrammes?,
     nowMillis: Long,
+    resolveIcon: suspend (M3uChannel) -> File?,
     onClick: () -> Unit,
 ) {
     Column(
@@ -165,11 +190,12 @@ private fun ChannelRow(
             .padding(vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            ChannelIcon(channel, resolveIcon)
             Text(
                 text = channel.displayName,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
             )
             NameQualityBadge.detect(channel.displayName)?.let { badge ->
                 Text(
@@ -195,6 +221,38 @@ private fun ChannelRow(
         }
     }
 }
+
+@Composable
+private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?) {
+    val iconFile by produceState<File?>(initialValue = null, key1 = channel.streamUrl) {
+        value = resolveIcon(channel)
+    }
+    val size = 32.dp
+    if (iconFile != null) {
+        AsyncImage(
+            model = iconFile,
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(RoundedCornerShape(6.dp)),
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = initialsFor(channel.displayName),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun initialsFor(name: String): String =
+    name.trim().split(Regex("\\s+")).mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
 
 private fun groupDisplayKey(group: ChannelGroup): String = when (group) {
     is ChannelGroup.Known -> group.key

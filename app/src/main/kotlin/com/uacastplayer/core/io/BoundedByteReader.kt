@@ -1,4 +1,4 @@
-package com.uacastplayer.epg
+package com.uacastplayer.core.io
 
 import java.io.ByteArrayOutputStream
 import java.io.InputStream

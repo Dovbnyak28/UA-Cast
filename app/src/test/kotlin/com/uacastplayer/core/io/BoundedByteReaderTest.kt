@@ -1,4 +1,4 @@
-package com.uacastplayer.epg
+package com.uacastplayer.core.io
 
 import java.io.ByteArrayInputStream
 import org.junit.Assert.assertArrayEquals

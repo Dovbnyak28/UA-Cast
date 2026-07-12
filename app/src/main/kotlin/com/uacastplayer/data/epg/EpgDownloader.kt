@@ -1,7 +1,7 @@
 package com.uacastplayer.data.epg
 
-import com.uacastplayer.epg.BoundedByteReader
-import com.uacastplayer.epg.BoundedBytesResult
+import com.uacastplayer.core.io.BoundedByteReader
+import com.uacastplayer.core.io.BoundedBytesResult
 import com.uacastplayer.playlist.HttpRetryPolicy
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
