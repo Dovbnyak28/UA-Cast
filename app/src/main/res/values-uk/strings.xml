@@ -62,7 +62,11 @@
     <string name="settings_language_label">Мова</string>
     <string name="settings_icon_wifi_only_label">Завантажувати логотипи лише через Wi-Fi</string>
     <string name="settings_epg_source_label">Джерело телепрограми</string>
-    <string name="settings_epg_source_variant">Джерело %1$d</string>
+    <string name="epg_source_rect_transparent">Прямокутні (прозорий фон)</string>
+    <string name="epg_source_square_dark">Квадратні (темний фон)</string>
+    <string name="epg_source_perfect_player">Perfect Player</string>
+    <string name="epg_source_rect_transparent_simple">Спрощений: прямокутні</string>
+    <string name="epg_source_square_dark_simple">Спрощений: квадратні</string>
     <string name="settings_icon_display_mode_label">Логотипи каналів</string>
     <string name="icon_display_mode_placeholders">Лише заповнювачі</string>
     <string name="icon_display_mode_cache">Показувати й кешувати</string>

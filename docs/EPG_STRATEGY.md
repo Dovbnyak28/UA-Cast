@@ -2,15 +2,18 @@
 
 ## Sources
 
-Five `cdn.epg.one` variants (`epg/EpgSource.kt`), user-selectable in Settings, persisted. The exact
-URL paths are placeholders pending confirmation of the real endpoints - see the README's "Known
-limitations" section.
+Five `epg.it999.ru` variants (`epg/EpgSource.kt`), user-selectable in Settings, persisted. Three are
+gzip (`epg2.xml.gz`, `epg.xml.gz`, `pp.xml.gz`); two are the same simplified feeds already inflated,
+served as plain XML (`epg2.xml`, `epg.xml`). Cleartext (`http://`) is intentional - like most
+IPTV/EPG providers this host serves plain HTTP, and it's already permitted by the network security
+config.
 
 ## Download and parsing
 
-- The gzip document is downloaded and stored **as-is** (`data/epg/EpgDownloader.kt`, 96MB cap via
-  `BoundedByteReader`) - it is only inflated (`GZIPInputStream`) at the moment it's parsed, never
-  eagerly.
+- The document is downloaded and stored **as-is** (`data/epg/EpgDownloader.kt`, 96MB cap via
+  `BoundedByteReader`) - gzip sources are only inflated (`GZIPInputStream`) at the moment they're
+  parsed, never eagerly. `core/io/GzipSniffer.kt` checks the magic bytes rather than trusting the
+  URL's extension, since two of the five sources are already plain XML.
 - Parsing (`epg/XmlTvParser.kt`) is SAX-based and hardened against XXE: secure processing is
   requested, external general/parameter entities are disabled, and the entity resolver returns
   nothing for any external reference. A `DOCTYPE` declaration is still **allowed** - real feeds

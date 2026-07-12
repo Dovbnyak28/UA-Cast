@@ -1,13 +1,14 @@
 package com.uacastplayer.epg
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EpgSourceTest {
 
     @Test
     fun `fromId resolves a known id`() {
-        assertEquals(EpgSource.VARIANT_3, EpgSource.fromId("epg_one_3"))
+        assertEquals(EpgSource.PERFECT_PLAYER, EpgSource.fromId("epg_it999_pp"))
     }
 
     @Test
@@ -21,9 +22,15 @@ class EpgSourceTest {
     }
 
     @Test
-    fun `all five variants use https`() {
+    fun `all five sources use a plain http url`() {
         EpgSource.entries.forEach { source ->
-            assertEquals(true, source.url.startsWith("https://"))
+            assertTrue(source.url.startsWith("http://"))
         }
+    }
+
+    @Test
+    fun `every source has a distinct id and url`() {
+        assertEquals(EpgSource.entries.size, EpgSource.entries.map { it.id }.distinct().size)
+        assertEquals(EpgSource.entries.size, EpgSource.entries.map { it.url }.distinct().size)
     }
 }

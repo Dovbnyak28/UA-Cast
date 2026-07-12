@@ -11,13 +11,16 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 sealed class EpgDownloadResult {
-    data class Success(val gzipBytes: ByteArray) : EpgDownloadResult()
+    data class Success(val documentBytes: ByteArray) : EpgDownloadResult()
     data object SizeLimitExceeded : EpgDownloadResult()
     data class HttpError(val code: Int) : EpgDownloadResult()
     data class ReadError(val message: String?) : EpgDownloadResult()
 }
 
-/** Downloads an XMLTV feed's raw gzip bytes as-is - it is never inflated at download time. */
+/**
+ * Downloads an XMLTV feed's raw bytes as-is - never inflated at download time, since some feeds
+ * are gzip-compressed and others are already-plain XML (see [EpgSource]).
+ */
 class EpgDownloader(private val client: OkHttpClient) {
 
     suspend fun download(url: String): EpgDownloadResult = withContext(Dispatchers.IO) {

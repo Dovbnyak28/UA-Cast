@@ -1,6 +1,7 @@
 package com.uacastplayer.data.epg
 
 import android.content.Context
+import com.uacastplayer.core.io.GzipSniffer
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.epg.EpgData
 import com.uacastplayer.epg.EpgIndex
@@ -10,6 +11,7 @@ import com.uacastplayer.epg.XmlTvParseResult
 import com.uacastplayer.epg.XmlTvParser
 import com.uacastplayer.log.AppLog
 import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.Dispatchers
@@ -38,8 +40,8 @@ class EpgRepository(context: Context) {
     suspend fun loadFromSource(source: EpgSource): EpgOutcome {
         return when (val result = downloader.download(source.url)) {
             is EpgDownloadResult.Success -> {
-                val data = withContext(Dispatchers.Default) { buildEpgData(parseGzip(result.gzipBytes)) }
-                persist(source, result.gzipBytes)
+                val data = withContext(Dispatchers.Default) { buildEpgData(parseDocument(result.documentBytes)) }
+                persist(source, result.documentBytes)
                 EpgOutcome.Loaded(data)
             }
             EpgDownloadResult.SizeLimitExceeded -> EpgOutcome.SizeLimitExceeded
@@ -51,7 +53,7 @@ class EpgRepository(context: Context) {
     suspend fun restoreSnapshot(): EpgOutcome? {
         val snapshot = snapshotStore.load() ?: return null
         return try {
-            val data = withContext(Dispatchers.Default) { buildEpgData(parseGzip(snapshot.gzipDocument)) }
+            val data = withContext(Dispatchers.Default) { buildEpgData(parseDocument(snapshot.documentBytes)) }
             EpgOutcome.Loaded(data)
         } catch (e: Exception) {
             AppLog.w(TAG) { "Failed to parse cached EPG snapshot: ${e.javaClass.simpleName}" }
@@ -59,13 +61,13 @@ class EpgRepository(context: Context) {
         }
     }
 
-    private suspend fun persist(source: EpgSource, gzipBytes: ByteArray) {
+    private suspend fun persist(source: EpgSource, documentBytes: ByteArray) {
         try {
             snapshotStore.save(
                 EpgSnapshot(
                     sourceFingerprint = Fingerprint.of(source.url),
                     savedAtEpochMillis = System.currentTimeMillis(),
-                    gzipDocument = gzipBytes,
+                    documentBytes = documentBytes,
                 )
             )
         } catch (e: Exception) {
@@ -73,8 +75,12 @@ class EpgRepository(context: Context) {
         }
     }
 
-    private fun parseGzip(gzipBytes: ByteArray): XmlTvParseResult =
-        GZIPInputStream(ByteArrayInputStream(gzipBytes)).use(XmlTvParser::parse)
+    /** Some sources serve gzip, others already-plain XML; sniff the magic bytes rather than trust the URL. */
+    private fun parseDocument(documentBytes: ByteArray): XmlTvParseResult {
+        val rawStream: InputStream = ByteArrayInputStream(documentBytes)
+        val stream = if (GzipSniffer.isGzip(documentBytes)) GZIPInputStream(rawStream) else rawStream
+        return stream.use(XmlTvParser::parse)
+    }
 
     private fun buildEpgData(parsed: XmlTvParseResult): EpgData {
         val programmesByChannel = parsed.programmes

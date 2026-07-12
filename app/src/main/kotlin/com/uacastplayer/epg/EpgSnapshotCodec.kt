@@ -17,8 +17,8 @@ object EpgSnapshotCodec {
         out.writeInt(FORMAT_VERSION)
         out.writeUTF(snapshot.sourceFingerprint)
         out.writeLong(snapshot.savedAtEpochMillis)
-        out.writeInt(snapshot.gzipDocument.size)
-        out.write(snapshot.gzipDocument)
+        out.writeInt(snapshot.documentBytes.size)
+        out.write(snapshot.documentBytes)
         out.flush()
     }
 

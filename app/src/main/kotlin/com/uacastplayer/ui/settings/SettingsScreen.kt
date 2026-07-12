@@ -70,9 +70,9 @@ fun SettingsScreen(
                 }
             }
             LabeledRow(stringResource(R.string.settings_epg_source_label), AppIcons.Tv) {
-                EpgSource.entries.forEachIndexed { index, source ->
+                for (source in EpgSource.entries) {
                     SettingsChip(
-                        label = stringResource(R.string.settings_epg_source_variant, index + 1),
+                        label = stringResource(source.labelRes()),
                         isSelected = source == currentEpgSource,
                         onClick = { onEpgSourceSelected(source) },
                     )
@@ -288,6 +288,14 @@ private fun ChannelLayout.labelRes(): Int = when (this) {
     ChannelLayout.LIST -> R.string.channel_layout_list
     ChannelLayout.GRID -> R.string.channel_layout_grid
     ChannelLayout.LARGE_ICONS -> R.string.channel_layout_large_icons
+}
+
+private fun EpgSource.labelRes(): Int = when (this) {
+    EpgSource.RECT_TRANSPARENT -> R.string.epg_source_rect_transparent
+    EpgSource.SQUARE_DARK -> R.string.epg_source_square_dark
+    EpgSource.PERFECT_PLAYER -> R.string.epg_source_perfect_player
+    EpgSource.RECT_TRANSPARENT_SIMPLE -> R.string.epg_source_rect_transparent_simple
+    EpgSource.SQUARE_DARK_SIMPLE -> R.string.epg_source_square_dark_simple
 }
 
 private fun ChannelLayout.icon(): ImageVector = when (this) {

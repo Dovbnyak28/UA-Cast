@@ -64,12 +64,13 @@ See `docs/` for the design rules behind the trickier subsystems:
 
 ## Known limitations
 
-- The five `cdn.epg.one` EPG source variants and the icon CDN fallback URL in
-  `EpgSource.kt`/`IconRepository.kt` are placeholders - the real endpoint paths were not available
-  when this was built. Swap them in (one line each) once confirmed.
-- Built and verified via `gradlew` command-line builds in this environment; UI flows (Cast
-  hardware, PiP, orientation changes) should be exercised on a real device/emulator before
-  shipping, per the usual Android testing caveats.
+- The five `epg.it999.ru` EPG source variants (`EpgSource.kt`) are real and verified on-device. The
+  icon CDN fallback URL in `IconRepository.kt` is still a placeholder - the real endpoint path
+  wasn't available when this was built. Swap it in (one line) once confirmed.
+- Built and verified via `gradlew` command-line builds, plus manual on-device testing (language
+  picker, all four tabs, EPG source download for both the gzip and plain-XML variants) on a Xiaomi
+  Mi A2 (Android 11). Cast hardware, PiP, and orientation changes haven't been exercised on a real
+  receiver/device yet.
 
 ## CI
 

@@ -15,11 +15,11 @@ class EpgSnapshotCodecTest {
     }
 
     @Test
-    fun `round-trips a snapshot with a gzip payload`() {
+    fun `round-trips a snapshot with a document payload`() {
         val snapshot = EpgSnapshot(
             sourceFingerprint = "abc123",
             savedAtEpochMillis = 1_700_000_000_000L,
-            gzipDocument = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            documentBytes = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
         )
         assertEquals(snapshot, roundTrip(snapshot))
     }

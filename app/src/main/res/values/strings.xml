@@ -62,7 +62,11 @@
     <string name="settings_language_label">Language</string>
     <string name="settings_icon_wifi_only_label">Fetch channel logos on Wi-Fi only</string>
     <string name="settings_epg_source_label">TV guide source</string>
-    <string name="settings_epg_source_variant">Source %1$d</string>
+    <string name="epg_source_rect_transparent">Rectangular (transparent)</string>
+    <string name="epg_source_square_dark">Square (dark background)</string>
+    <string name="epg_source_perfect_player">Perfect Player</string>
+    <string name="epg_source_rect_transparent_simple">Simplified: rectangular</string>
+    <string name="epg_source_square_dark_simple">Simplified: square</string>
     <string name="settings_icon_display_mode_label">Channel logos</string>
     <string name="icon_display_mode_placeholders">Placeholders only</string>
     <string name="icon_display_mode_cache">Show and cache</string>

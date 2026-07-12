@@ -62,7 +62,11 @@
     <string name="settings_language_label">Язык</string>
     <string name="settings_icon_wifi_only_label">Загружать логотипы только через Wi-Fi</string>
     <string name="settings_epg_source_label">Источник телепрограммы</string>
-    <string name="settings_epg_source_variant">Источник %1$d</string>
+    <string name="epg_source_rect_transparent">Прямоугольные (прозрачный фон)</string>
+    <string name="epg_source_square_dark">Квадратные (тёмный фон)</string>
+    <string name="epg_source_perfect_player">Perfect Player</string>
+    <string name="epg_source_rect_transparent_simple">Упрощённый: прямоугольные</string>
+    <string name="epg_source_square_dark_simple">Упрощённый: квадратные</string>
     <string name="settings_icon_display_mode_label">Логотипы каналов</string>
     <string name="icon_display_mode_placeholders">Только заглушки</string>
     <string name="icon_display_mode_cache">Показывать и кешировать</string>

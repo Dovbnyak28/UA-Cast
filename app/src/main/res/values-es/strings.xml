@@ -62,7 +62,11 @@
     <string name="settings_language_label">Idioma</string>
     <string name="settings_icon_wifi_only_label">Descargar logotipos solo con Wi-Fi</string>
     <string name="settings_epg_source_label">Fuente de la guía TV</string>
-    <string name="settings_epg_source_variant">Fuente %1$d</string>
+    <string name="epg_source_rect_transparent">Rectangular (transparente)</string>
+    <string name="epg_source_square_dark">Cuadrado (fondo oscuro)</string>
+    <string name="epg_source_perfect_player">Perfect Player</string>
+    <string name="epg_source_rect_transparent_simple">Simplificado: rectangular</string>
+    <string name="epg_source_square_dark_simple">Simplificado: cuadrado</string>
     <string name="settings_icon_display_mode_label">Logotipos de canales</string>
     <string name="icon_display_mode_placeholders">Solo marcadores</string>
     <string name="icon_display_mode_cache">Mostrar y guardar en caché</string>
