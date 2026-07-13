@@ -130,6 +130,9 @@
     <string name="audio_layout_stereo">Стерео</string>
     <string name="audio_layout_surround_5_1">Объёмный звук 5.1</string>
     <string name="audio_layout_surround_7_1">Объёмный звук 7.1</string>
+    <string name="player_sleep_timer">Таймер сна</string>
+    <string name="player_sleep_timer_minutes">%1$d мин</string>
+    <string name="player_sleep_timer_cancel">Выключить таймер</string>
 
     <!-- Cast session foreground service -->
     <string name="cast_session_channel_name">Трансляция</string>

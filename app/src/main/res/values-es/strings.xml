@@ -128,6 +128,9 @@
     <string name="audio_layout_stereo">Estéreo</string>
     <string name="audio_layout_surround_5_1">Sonido envolvente 5.1</string>
     <string name="audio_layout_surround_7_1">Sonido envolvente 7.1</string>
+    <string name="player_sleep_timer">Temporizador de apagado</string>
+    <string name="player_sleep_timer_minutes">%1$d min</string>
+    <string name="player_sleep_timer_cancel">Desactivar temporizador</string>
 
     <!-- Cast session foreground service -->
     <string name="cast_session_channel_name">Transmisión</string>

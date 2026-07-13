@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Rational
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,11 +15,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,13 +61,18 @@ import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.player.PlayerViewModel
+import com.uacastplayer.player.SleepTimerFormatter
 import com.uacastplayer.ui.components.GradientPlayButton
 import com.uacastplayer.ui.components.RoundIconButton
+import com.uacastplayer.ui.components.SleepTimerDialog
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.Azure
 import com.uacastplayer.ui.theme.BreatheMs
 import com.uacastplayer.ui.theme.CardTitle
+import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.LabelSecondary
 import com.uacastplayer.ui.theme.LiveText
 import com.uacastplayer.ui.theme.RadiusItem
@@ -88,6 +96,8 @@ fun PlayerScreen(
 
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+    val sleepTimer = rememberSleepTimerState(onExpire = { viewModel.player.pause() })
 
     val configuration = LocalConfiguration.current
     val isInPip = remember(configuration, activity) {
@@ -140,6 +150,7 @@ fun PlayerScreen(
             PlayerControlsOverlay(
                 uiState = uiState,
                 isFullscreen = isFullscreen,
+                sleepTimerRemainingMillis = sleepTimer.remainingMillis,
                 onExit = onExit,
                 onPlayPause = {
                     if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
@@ -148,7 +159,23 @@ fun PlayerScreen(
                 onPrevious = viewModel::requestPrevious,
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onEnterPip = { activity?.let(PipController::enter) },
+                onOpenSleepTimer = { showSleepTimerDialog = true },
                 onSelectPreview = { indexed -> viewModel.requestSwitch(indexed.index) },
+            )
+        }
+
+        if (showSleepTimerDialog) {
+            SleepTimerDialog(
+                isTimerActive = sleepTimer.remainingMillis != null,
+                onSelect = { duration ->
+                    sleepTimer.start(duration)
+                    showSleepTimerDialog = false
+                },
+                onCancelTimer = {
+                    sleepTimer.cancel()
+                    showSleepTimerDialog = false
+                },
+                onDismiss = { showSleepTimerDialog = false },
             )
         }
     }
@@ -158,12 +185,14 @@ fun PlayerScreen(
 private fun PlayerControlsOverlay(
     uiState: PlayerUiState,
     isFullscreen: Boolean,
+    sleepTimerRemainingMillis: Long?,
     onExit: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onEnterPip: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
     onSelectPreview: (IndexedChannel) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -229,6 +258,7 @@ private fun PlayerControlsOverlay(
                 contentDescription = stringResource(R.string.player_next),
             )
             Box(modifier = Modifier.weight(1f))
+            SleepTimerButton(remainingMillis = sleepTimerRemainingMillis, onClick = onOpenSleepTimer)
             SmallRoundIconButton(
                 icon = AppIcons.PictureInPicture,
                 onClick = onEnterPip,
@@ -242,6 +272,46 @@ private fun PlayerControlsOverlay(
                     if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_fullscreen
                 ),
                 background = Color(0x66000000),
+            )
+        }
+    }
+}
+
+/**
+ * Opens the sleep timer dialog. Shows a plain icon when idle; once a timer is running, widens into
+ * a pill showing the live countdown instead, so the remaining time is visible without opening the
+ * dialog.
+ */
+@Composable
+private fun SleepTimerButton(remainingMillis: Long?, onClick: () -> Unit) {
+    if (remainingMillis == null) {
+        SmallRoundIconButton(
+            icon = AppIcons.Timer,
+            onClick = onClick,
+            contentDescription = stringResource(R.string.player_sleep_timer),
+            background = Color(0x66000000),
+        )
+    } else {
+        Row(
+            modifier = Modifier
+                .height(IconButtonSize)
+                .clip(RoundedCornerShape(IconButtonSize / 2))
+                .background(Color(0x66000000))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                AppIcons.Timer,
+                contentDescription = stringResource(R.string.player_sleep_timer),
+                tint = Azure,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = SleepTimerFormatter.formatRemaining(remainingMillis),
+                color = Color.White,
+                style = Caption,
+                modifier = Modifier.padding(start = 6.dp),
             )
         }
     }

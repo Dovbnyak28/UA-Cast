@@ -126,6 +126,9 @@
     <string name="audio_layout_stereo">Stereo</string>
     <string name="audio_layout_surround_5_1">5.1 surround</string>
     <string name="audio_layout_surround_7_1">7.1 surround</string>
+    <string name="player_sleep_timer">Sleep timer</string>
+    <string name="player_sleep_timer_minutes">%1$d min</string>
+    <string name="player_sleep_timer_cancel">Turn off timer</string>
 
     <!-- Cast session foreground service -->
     <string name="cast_session_channel_name">Casting</string>
