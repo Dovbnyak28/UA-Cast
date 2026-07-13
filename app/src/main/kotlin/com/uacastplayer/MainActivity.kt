@@ -105,6 +105,7 @@ class MainActivity : FragmentActivity() {
                             onIconDisplayModeSelected = viewModel::setIconDisplayMode,
                             onListDensitySelected = viewModel::setListDensity,
                             onChannelLayoutSelected = viewModel::setChannelLayout,
+                            onFavoritesSortOrderSelected = viewModel::setFavoritesSortOrder,
                             onWrapAroundChanged = viewModel::setWrapAroundEnabled,
                             onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
                             onClearCache = viewModel::clearCache,

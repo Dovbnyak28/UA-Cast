@@ -11,6 +11,7 @@ object FavoritesJsonCodec {
                     "streamUrl" to favorite.streamUrl,
                     "tvgId" to favorite.tvgId,
                     "groupTitle" to favorite.groupTitle,
+                    "addedAtMillis" to favorite.addedAtMillis.toString(),
                 )
             }
         )
@@ -20,7 +21,8 @@ object FavoritesJsonCodec {
             val key = fields["key"] ?: return@mapNotNull null
             val displayName = fields["displayName"] ?: return@mapNotNull null
             val streamUrl = fields["streamUrl"] ?: return@mapNotNull null
-            FavoriteChannel(key, displayName, streamUrl, fields["tvgId"], fields["groupTitle"])
+            val addedAtMillis = fields["addedAtMillis"]?.toLongOrNull() ?: 0L
+            FavoriteChannel(key, displayName, streamUrl, fields["tvgId"], fields["groupTitle"], addedAtMillis)
         }
     } catch (_: Exception) {
         emptyList()

@@ -27,3 +27,13 @@ enum class ChannelLayout {
         fun fromId(id: String?): ChannelLayout = entries.firstOrNull { it.name == id } ?: DEFAULT
     }
 }
+
+/** How the Favorites screen orders its channels - see `com.uacastplayer.favorites.FavoritesSorter`. */
+enum class FavoritesSortOrder {
+    PLAYLIST_ORDER, ALPHABETICAL, RECENTLY_ADDED;
+
+    companion object {
+        val DEFAULT = PLAYLIST_ORDER
+        fun fromId(id: String?): FavoritesSortOrder = entries.firstOrNull { it.name == id } ?: DEFAULT
+    }
+}

@@ -35,7 +35,14 @@ class FavoritesRepository(context: Context) {
         val updated = if (current.any { it.key == key }) {
             current.filterNot { it.key == key }
         } else {
-            current + FavoriteChannel(key, channel.displayName, channel.streamUrl, channel.tvgId, channel.groupTitle)
+            current + FavoriteChannel(
+                key = key,
+                displayName = channel.displayName,
+                streamUrl = channel.streamUrl,
+                tvgId = channel.tvgId,
+                groupTitle = channel.groupTitle,
+                addedAtMillis = System.currentTimeMillis(),
+            )
         }
         _favorites.value = updated
         scope.launch { store.save(updated) }

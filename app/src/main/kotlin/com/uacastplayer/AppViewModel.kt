@@ -22,6 +22,7 @@ import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.DeviceSpecsProvider
+import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
@@ -109,6 +110,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             iconDisplayMode = resolvedIconDisplayMode(baseDeviceTier),
             listDensity = resolvedListDensity(baseDeviceTier),
             channelLayout = preferences.channelLayout,
+            favoritesSortOrder = preferences.favoritesSortOrder,
             wrapAroundEnabled = preferences.wrapAroundEnabled,
             autoSkipDeadEnabled = preferences.autoSkipDeadEnabled,
             deviceTier = baseDeviceTier,
@@ -235,6 +237,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setChannelLayout(layout: ChannelLayout) {
         preferences.channelLayout = layout
         _settingsState.update { it.copy(channelLayout = layout) }
+    }
+
+    fun setFavoritesSortOrder(order: FavoritesSortOrder) {
+        preferences.favoritesSortOrder = order
+        _settingsState.update { it.copy(favoritesSortOrder = order) }
     }
 
     fun setWrapAroundEnabled(enabled: Boolean) {

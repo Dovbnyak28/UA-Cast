@@ -67,6 +67,10 @@
     <string name="favorites_empty_message">No favorite channels yet</string>
     <string name="favorites_empty_subtitle">Tap the star next to a channel to add it here</string>
     <string name="favorites_remove_content_description">Remove from favorites</string>
+    <string name="favorites_sort_title">Sort favorites</string>
+    <string name="favorites_sort_playlist_order">Playlist order</string>
+    <string name="favorites_sort_alphabetical">Alphabetical</string>
+    <string name="favorites_sort_recently_added">Recently added</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>

@@ -687,6 +687,41 @@ object AppIcons {
         }.build()
     }
 
+    val Sort: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Sort", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(6f, 4f)
+                lineTo(8f, 4f)
+                lineTo(8f, 16.2f)
+                lineTo(10.6f, 13.6f)
+                lineTo(12f, 15f)
+                lineTo(7f, 20f)
+                lineTo(2f, 15f)
+                lineTo(3.4f, 13.6f)
+                lineTo(6f, 16.2f)
+                close()
+                moveTo(14f, 4f)
+                lineTo(22f, 4f)
+                lineTo(22f, 6f)
+                lineTo(14f, 6f)
+                close()
+                moveTo(14f, 9f)
+                lineTo(20f, 9f)
+                lineTo(20f, 11f)
+                lineTo(14f, 11f)
+                close()
+                moveTo(14f, 14f)
+                lineTo(18f, 14f)
+                lineTo(18f, 16f)
+                lineTo(14f, 16f)
+                close()
+            }
+        }.build()
+    }
+
     val Timer: ImageVector by lazy {
         ImageVector.Builder(
             name = "Timer", defaultWidth = 24.dp, defaultHeight = 24.dp,

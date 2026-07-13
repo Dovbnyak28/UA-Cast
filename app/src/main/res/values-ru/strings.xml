@@ -71,6 +71,10 @@
     <string name="favorites_empty_message">Пока нет избранных каналов</string>
     <string name="favorites_empty_subtitle">Нажмите на звёздочку рядом с каналом, чтобы добавить его сюда</string>
     <string name="favorites_remove_content_description">Убрать из избранного</string>
+    <string name="favorites_sort_title">Сортировать избранное</string>
+    <string name="favorites_sort_playlist_order">Порядок плейлиста</string>
+    <string name="favorites_sort_alphabetical">По алфавиту</string>
+    <string name="favorites_sort_recently_added">Недавно добавленные</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Настройки</string>

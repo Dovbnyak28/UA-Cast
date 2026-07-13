@@ -60,6 +60,10 @@ class AppPreferences(context: Context) {
         get() = ChannelLayout.fromId(prefs.getString(KEY_CHANNEL_LAYOUT, null))
         set(value) = prefs.edit().putString(KEY_CHANNEL_LAYOUT, value.name).apply()
 
+    var favoritesSortOrder: FavoritesSortOrder
+        get() = FavoritesSortOrder.fromId(prefs.getString(KEY_FAVORITES_SORT_ORDER, null))
+        set(value) = prefs.edit().putString(KEY_FAVORITES_SORT_ORDER, value.name).apply()
+
     var wrapAroundEnabled: Boolean
         get() = prefs.getBoolean(KEY_WRAP_AROUND, true)
         set(value) = prefs.edit().putBoolean(KEY_WRAP_AROUND, value).apply()
@@ -82,6 +86,7 @@ class AppPreferences(context: Context) {
         const val KEY_ICON_DISPLAY_MODE = "icon_display_mode"
         const val KEY_LIST_DENSITY = "list_density"
         const val KEY_CHANNEL_LAYOUT = "channel_layout"
+        const val KEY_FAVORITES_SORT_ORDER = "favorites_sort_order"
         const val KEY_WRAP_AROUND = "wrap_around_enabled"
         const val KEY_AUTO_SKIP_DEAD = "auto_skip_dead_enabled"
         const val KEY_SEEN_BATTERY_HINT = "seen_battery_optimization_hint"

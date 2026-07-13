@@ -29,6 +29,7 @@ import com.uacastplayer.core.nav.BottomNavEvent
 import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
 import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
@@ -77,6 +78,7 @@ fun RootScaffold(
     onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
     onListDensitySelected: (ListDensity) -> Unit,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
+    onFavoritesSortOrderSelected: (FavoritesSortOrder) -> Unit,
     onWrapAroundChanged: (Boolean) -> Unit,
     onAutoSkipChanged: (Boolean) -> Unit,
     onClearCache: (CacheKind) -> Unit,
@@ -176,6 +178,9 @@ fun RootScaffold(
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(
                     favorites = favorites,
+                    playlistChannels = playlistState.groups.flatMap { it.channels },
+                    sortOrder = settingsState.favoritesSortOrder,
+                    onSortOrderSelected = onFavoritesSortOrderSelected,
                     onChannelSelected = onChannelSelected,
                     onRemove = onRemoveFavorite,
                     modifier = content,
