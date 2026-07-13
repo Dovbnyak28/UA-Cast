@@ -22,6 +22,11 @@ data class SettingsUiState(
     val autoSkipDeadEnabled: Boolean = true,
     val cacheSizes: CacheSizes = CacheSizes(),
     val deviceTier: DeviceTier = DeviceTier.MID_RANGE,
+    val customIconSources: List<String> = emptyList(),
+    val iconSourceAddError: IconSourceAddError? = null,
 )
 
 enum class CacheKind { PLAYLIST, EPG, ICONS, COIL }
+
+/** Why [com.uacastplayer.AppViewModel.addCustomIconSource] rejected the entered URL. */
+enum class IconSourceAddError { INVALID_URL, ALREADY_ADDED }

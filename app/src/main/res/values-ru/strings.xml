@@ -101,6 +101,14 @@
     <string name="channel_layout_large_icons">Крупные значки</string>
     <string name="settings_wrap_around_label">Циклическое переключение каналов</string>
     <string name="settings_auto_skip_label">Автоматически пропускать недоступные каналы</string>
+    <string name="settings_icon_sources_title">Источники иконок</string>
+    <string name="settings_icon_sources_hint">Пробуются по очереди, перед встроенным источником</string>
+    <string name="settings_icon_sources_builtin">%1$s (встроенный)</string>
+    <string name="settings_icon_sources_placeholder">https://example.com/logos/</string>
+    <string name="settings_icon_sources_add">Добавить источник</string>
+    <string name="settings_icon_sources_remove">Убрать источник</string>
+    <string name="settings_icon_sources_error_invalid">Введите полный URL http(s)</string>
+    <string name="settings_icon_sources_error_duplicate">Этот источник уже добавлен</string>
     <string name="settings_section_playback">Воспроизведение</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="cache_playlist_label">Кеш плейлиста</string>

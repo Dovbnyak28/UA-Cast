@@ -15,13 +15,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
@@ -42,8 +47,10 @@ import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.settings.CacheKind
+import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.theme.AppIcons
 
@@ -63,6 +70,9 @@ fun SettingsScreen(
     onAutoSkipChanged: (Boolean) -> Unit,
     onClearCache: (CacheKind) -> Unit,
     onOpenBatteryOptimizationHint: () -> Unit,
+    onAddIconSource: (String) -> Unit,
+    onRemoveIconSource: (String) -> Unit,
+    onDismissIconSourceError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(true) }
@@ -138,6 +148,13 @@ fun SettingsScreen(
             }
             SwitchRow(stringResource(R.string.settings_wrap_around_label), settingsState.wrapAroundEnabled, onWrapAroundChanged)
             SwitchRow(stringResource(R.string.settings_auto_skip_label), settingsState.autoSkipDeadEnabled, onAutoSkipChanged)
+            IconSourcesSection(
+                customSources = settingsState.customIconSources,
+                addError = settingsState.iconSourceAddError,
+                onAddSource = onAddIconSource,
+                onRemoveSource = onRemoveIconSource,
+                onDismissError = onDismissIconSourceError,
+            )
         }
 
         SettingsSection(
@@ -270,6 +287,116 @@ private fun BatteryOptimizationRow(onOpen: () -> Unit) {
         )
         OutlinedButton(onClick = onOpen) { Text(stringResource(R.string.settings_battery_optimization_button)) }
     }
+}
+
+/**
+ * Lets the user add their own base-URL icon sources (tried before the built-in CDN fallback - see
+ * [IconResolver]) and remove ones they added. The built-in source is shown for context but isn't
+ * removable.
+ */
+@Composable
+private fun IconSourcesSection(
+    customSources: List<String>,
+    addError: IconSourceAddError?,
+    onAddSource: (String) -> Unit,
+    onRemoveSource: (String) -> Unit,
+    onDismissError: () -> Unit,
+) {
+    var newSourceUrl by rememberSaveable { mutableStateOf("") }
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        Text(
+            text = stringResource(R.string.settings_icon_sources_title),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.settings_icon_sources_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+        )
+        IconSourceRow(
+            urlText = stringResource(
+                R.string.settings_icon_sources_builtin,
+                IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL,
+            ),
+            onRemoveClick = null,
+        )
+        customSources.forEach { source ->
+            IconSourceRow(urlText = source, onRemoveClick = { onRemoveSource(source) })
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = newSourceUrl,
+                onValueChange = {
+                    newSourceUrl = it
+                    if (addError != null) onDismissError()
+                },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(stringResource(R.string.settings_icon_sources_placeholder)) },
+                singleLine = true,
+                isError = addError != null,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    capitalization = KeyboardCapitalization.None,
+                ),
+            )
+            IconButton(onClick = {
+                if (newSourceUrl.isNotBlank()) {
+                    onAddSource(newSourceUrl)
+                    newSourceUrl = ""
+                }
+            }) {
+                Icon(
+                    AppIcons.Plus,
+                    contentDescription = stringResource(R.string.settings_icon_sources_add),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        if (addError != null) {
+            Text(
+                text = stringResource(addError.messageRes()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun IconSourceRow(urlText: String, onRemoveClick: (() -> Unit)?) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = urlText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (onRemoveClick != null) {
+            IconButton(onClick = onRemoveClick, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    AppIcons.Delete,
+                    contentDescription = stringResource(R.string.settings_icon_sources_remove),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun IconSourceAddError.messageRes(): Int = when (this) {
+    IconSourceAddError.INVALID_URL -> R.string.settings_icon_sources_error_invalid
+    IconSourceAddError.ALREADY_ADDED -> R.string.settings_icon_sources_error_duplicate
 }
 
 @Composable

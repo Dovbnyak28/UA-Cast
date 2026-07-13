@@ -55,7 +55,44 @@ class IconResolverTest {
 
     @Test
     fun `no signals at all yields no candidates`() {
-        val result = IconResolver.candidates(null, null, null, cdnBuilder)
+        val result = IconResolver.candidates(null, null, null, cdnFallbackUrl = cdnBuilder)
         assertEquals(emptyList<IconCandidate>(), result)
+    }
+
+    @Test
+    fun `custom sources are fetchable and tried before the CDN fallback`() {
+        val result = IconResolver.candidates(
+            tvgLogo = null,
+            epgIconUrl = null,
+            tvgId = "ch1",
+            customBaseUrls = listOf("https://mycdn.com/logos/", "https://other.example.com/icons"),
+            cdnFallbackUrl = cdnBuilder,
+        )
+        assertEquals(
+            listOf(
+                IconCandidate.Fetchable("https://mycdn.com/logos/ch1.png"),
+                IconCandidate.Fetchable("https://other.example.com/icons/ch1.png"),
+                IconCandidate.CacheOnly("https://cdn.example.com/ch1.png"),
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `custom sources are skipped without a tvg-id, same as the CDN fallback`() {
+        val result = IconResolver.candidates(
+            tvgLogo = "http://logo",
+            epgIconUrl = null,
+            tvgId = null,
+            customBaseUrls = listOf("https://mycdn.com/logos/"),
+            cdnFallbackUrl = cdnBuilder,
+        )
+        assertEquals(listOf(IconCandidate.Fetchable("http://logo")), result)
+    }
+
+    @Test
+    fun `iconUrl trims a trailing slash on the base url`() {
+        assertEquals("https://mycdn.com/logos/ch1.png", IconResolver.iconUrl("https://mycdn.com/logos/", "ch1"))
+        assertEquals("https://mycdn.com/logos/ch1.png", IconResolver.iconUrl("https://mycdn.com/logos", "ch1"))
     }
 }

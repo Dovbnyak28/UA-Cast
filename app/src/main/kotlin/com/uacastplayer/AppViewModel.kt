@@ -38,6 +38,7 @@ import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.CacheSizes
+import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -111,6 +112,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             listDensity = resolvedListDensity(baseDeviceTier),
             channelLayout = preferences.channelLayout,
             favoritesSortOrder = preferences.favoritesSortOrder,
+            customIconSources = iconRepository.customIconSources(),
             wrapAroundEnabled = preferences.wrapAroundEnabled,
             autoSkipDeadEnabled = preferences.autoSkipDeadEnabled,
             deviceTier = baseDeviceTier,
@@ -242,6 +244,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setFavoritesSortOrder(order: FavoritesSortOrder) {
         preferences.favoritesSortOrder = order
         _settingsState.update { it.copy(favoritesSortOrder = order) }
+    }
+
+    fun addCustomIconSource(rawUrl: String) {
+        val url = rawUrl.trim()
+        val isHttpUrl = url.startsWith("http://") || url.startsWith("https://")
+        val error = when {
+            !isHttpUrl -> IconSourceAddError.INVALID_URL
+            url in iconRepository.customIconSources() -> IconSourceAddError.ALREADY_ADDED
+            else -> null
+        }
+        if (error != null) {
+            _settingsState.update { it.copy(iconSourceAddError = error) }
+            return
+        }
+        iconRepository.addCustomIconSource(url)
+        _settingsState.update {
+            it.copy(customIconSources = iconRepository.customIconSources(), iconSourceAddError = null)
+        }
+    }
+
+    fun removeCustomIconSource(url: String) {
+        iconRepository.removeCustomIconSource(url)
+        _settingsState.update { it.copy(customIconSources = iconRepository.customIconSources()) }
+    }
+
+    fun dismissIconSourceError() {
+        _settingsState.update { it.copy(iconSourceAddError = null) }
     }
 
     fun setWrapAroundEnabled(enabled: Boolean) {

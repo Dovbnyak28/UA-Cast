@@ -114,6 +114,9 @@ class MainActivity : FragmentActivity() {
                             onToggleFavorite = viewModel::toggleFavorite,
                             onRemoveFavorite = viewModel::removeFavorite,
                             onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
+                            onAddIconSource = viewModel::addCustomIconSource,
+                            onRemoveIconSource = viewModel::removeCustomIconSource,
+                            onDismissIconSourceError = viewModel::dismissIconSourceError,
                         )
                         DownloadStatusBanner(
                             iconPrefetchState = iconPrefetchState,

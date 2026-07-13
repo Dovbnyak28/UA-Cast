@@ -25,13 +25,29 @@ class IconRepository(context: Context) {
     private val appContext = context.applicationContext
     private val diskCache = IconDiskCache(appContext)
     private val failureStore = IconFailureStore(appContext)
+    private val customSourceStore = CustomIconSourceStore(appContext)
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    fun customIconSources(): List<String> = customSourceStore.getBaseUrls()
+
+    fun addCustomIconSource(baseUrl: String) {
+        val current = customSourceStore.getBaseUrls()
+        if (baseUrl !in current) customSourceStore.saveBaseUrls(current + baseUrl)
+    }
+
+    fun removeCustomIconSource(baseUrl: String) {
+        customSourceStore.saveBaseUrls(customSourceStore.getBaseUrls() - baseUrl)
+    }
+
     suspend fun resolveIconFile(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File? {
-        val candidates = IconResolver.candidates(tvgLogo, epgIconUrl, tvgId, ::cdnFallbackUrl)
+        val candidates = IconResolver.candidates(
+            tvgLogo, epgIconUrl, tvgId,
+            customBaseUrls = customSourceStore.getBaseUrls(),
+            cdnFallbackUrl = ::cdnFallbackUrl,
+        )
         for (candidate in candidates) {
             diskCache.get(candidate.url)?.let { return it }
             if (candidate is IconCandidate.CacheOnly) continue
@@ -46,7 +62,7 @@ class IconRepository(context: Context) {
     suspend fun trimCache() = diskCache.trim()
 
     private fun cdnFallbackUrl(tvgId: String): String =
-        "https://cdn.epg.one/logo/$tvgId.png"
+        IconResolver.iconUrl(IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL, tvgId)
 
     private suspend fun fetchAndValidate(url: String): File? = withContext(Dispatchers.IO) {
         try {

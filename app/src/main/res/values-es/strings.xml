@@ -99,6 +99,14 @@
     <string name="channel_layout_large_icons">Iconos grandes</string>
     <string name="settings_wrap_around_label">Volver al principio al llegar al final</string>
     <string name="settings_auto_skip_label">Omitir automáticamente canales no disponibles</string>
+    <string name="settings_icon_sources_title">Fuentes de iconos</string>
+    <string name="settings_icon_sources_hint">Se prueban en orden, antes de la fuente integrada</string>
+    <string name="settings_icon_sources_builtin">%1$s (integrada)</string>
+    <string name="settings_icon_sources_placeholder">https://example.com/logos/</string>
+    <string name="settings_icon_sources_add">Añadir fuente</string>
+    <string name="settings_icon_sources_remove">Quitar fuente</string>
+    <string name="settings_icon_sources_error_invalid">Introduce una URL http(s) completa</string>
+    <string name="settings_icon_sources_error_duplicate">Esa fuente ya está añadida</string>
     <string name="settings_section_playback">Reproducción</string>
     <string name="settings_section_cache">Caché</string>
     <string name="cache_playlist_label">Caché de la lista</string>

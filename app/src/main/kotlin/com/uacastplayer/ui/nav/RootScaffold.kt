@@ -87,6 +87,9 @@ fun RootScaffold(
     onToggleFavorite: (M3uChannel) -> Unit,
     onRemoveFavorite: (String) -> Unit,
     onOpenBatteryOptimizationHint: () -> Unit,
+    onAddIconSource: (String) -> Unit,
+    onRemoveIconSource: (String) -> Unit,
+    onDismissIconSourceError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -200,6 +203,9 @@ fun RootScaffold(
                     onAutoSkipChanged = onAutoSkipChanged,
                     onClearCache = onClearCache,
                     onOpenBatteryOptimizationHint = onOpenBatteryOptimizationHint,
+                    onAddIconSource = onAddIconSource,
+                    onRemoveIconSource = onRemoveIconSource,
+                    onDismissIconSourceError = onDismissIconSourceError,
                     modifier = content,
                 )
             }

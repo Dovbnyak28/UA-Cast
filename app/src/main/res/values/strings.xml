@@ -97,6 +97,14 @@
     <string name="channel_layout_large_icons">Large icons</string>
     <string name="settings_wrap_around_label">Wrap around at end of channel list</string>
     <string name="settings_auto_skip_label">Automatically skip unavailable channels</string>
+    <string name="settings_icon_sources_title">Icon sources</string>
+    <string name="settings_icon_sources_hint">Tried in order, before the built-in fallback</string>
+    <string name="settings_icon_sources_builtin">%1$s (built-in)</string>
+    <string name="settings_icon_sources_placeholder">https://example.com/logos/</string>
+    <string name="settings_icon_sources_add">Add source</string>
+    <string name="settings_icon_sources_remove">Remove source</string>
+    <string name="settings_icon_sources_error_invalid">Enter a full http(s) URL</string>
+    <string name="settings_icon_sources_error_duplicate">That source is already added</string>
     <string name="settings_section_playback">Playback</string>
     <string name="settings_section_cache">Cache</string>
     <string name="cache_playlist_label">Playlist cache</string>
