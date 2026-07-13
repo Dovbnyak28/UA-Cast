@@ -22,9 +22,9 @@ class EpgSourceTest {
     }
 
     @Test
-    fun `all five sources use a plain http url`() {
+    fun `all five sources use https`() {
         EpgSource.entries.forEach { source ->
-            assertTrue(source.url.startsWith("http://"))
+            assertTrue(source.url.startsWith("https://"))
         }
     }
 
