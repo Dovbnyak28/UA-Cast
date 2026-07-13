@@ -73,6 +73,8 @@ fun SettingsScreen(
     onAddIconSource: (String) -> Unit,
     onRemoveIconSource: (String) -> Unit,
     onDismissIconSourceError: () -> Unit,
+    onOpenHelp: () -> Unit,
+    onOpenTerms: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(true) }
@@ -192,7 +194,25 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 12.dp),
             )
+            LinkRow(stringResource(R.string.settings_open_help), onOpenHelp, modifier = Modifier.padding(top = 16.dp))
+            LinkRow(stringResource(R.string.settings_open_terms), onOpenTerms, modifier = Modifier.padding(top = 8.dp))
         }
+    }
+}
+
+@Composable
+private fun LinkRow(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = onClick) { Text(stringResource(R.string.settings_battery_optimization_button)) }
     }
 }
 

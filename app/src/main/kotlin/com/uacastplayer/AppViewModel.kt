@@ -56,6 +56,7 @@ import kotlinx.coroutines.withContext
 data class AppUiState(
     val language: AppLanguage = AppLanguage.DEFAULT,
     val needsLanguagePicker: Boolean = true,
+    val needsTermsAcceptance: Boolean = true,
 )
 
 private const val EPG_TICK_MILLIS = 30_000L
@@ -88,6 +89,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         AppUiState(
             language = preferences.language,
             needsLanguagePicker = !preferences.hasChosenLanguage,
+            needsTermsAcceptance = !preferences.hasAcceptedTerms,
         )
     )
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -166,6 +168,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         preferences.language = language
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language.code))
         _uiState.value = _uiState.value.copy(language = language, needsLanguagePicker = false)
+    }
+
+    /** Declining is handled at the Activity level (exits the app) - see [MainActivity]. */
+    fun acceptTerms() {
+        preferences.hasAcceptedTerms = true
+        _uiState.value = _uiState.value.copy(needsTermsAcceptance = false)
     }
 
     fun loadPlaylistFromUrl(url: String) {

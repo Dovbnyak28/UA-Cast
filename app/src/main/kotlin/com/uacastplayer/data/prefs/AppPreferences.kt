@@ -77,6 +77,11 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SEEN_BATTERY_HINT, false)
         set(value) = prefs.edit().putBoolean(KEY_SEEN_BATTERY_HINT, value).apply()
 
+    /** Gates first launch, same as [hasChosenLanguage]; declining the terms exits the app instead of setting this. */
+    var hasAcceptedTerms: Boolean
+        get() = prefs.getBoolean(KEY_ACCEPTED_TERMS, false)
+        set(value) = prefs.edit().putBoolean(KEY_ACCEPTED_TERMS, value).apply()
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
@@ -90,5 +95,6 @@ class AppPreferences(context: Context) {
         const val KEY_WRAP_AROUND = "wrap_around_enabled"
         const val KEY_AUTO_SKIP_DEAD = "auto_skip_dead_enabled"
         const val KEY_SEEN_BATTERY_HINT = "seen_battery_optimization_hint"
+        const val KEY_ACCEPTED_TERMS = "accepted_terms"
     }
 }

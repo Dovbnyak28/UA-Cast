@@ -121,6 +121,50 @@
     <string name="settings_app_version">Versión de la app</string>
     <string name="settings_help">Ayuda</string>
     <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía TV y toca un canal para empezar a verlo. Usa el botón Cast para reproducir en un Chromecast o Google TV; si un canal no se puede reproducir directamente en el receptor, la app reintenta automáticamente mediante un relé local en tu teléfono.</string>
+    <string name="settings_open_help">Ayuda detallada</string>
+    <string name="settings_open_terms">Términos de uso</string>
+
+    <!-- Help screen -->
+    <string name="help_title">Ayuda</string>
+    <string name="help_q1_title">¿Cómo añado canales?</string>
+    <string name="help_q1_body">Abre la pestaña Canales y pega la URL de una lista (m3u/m3u8), o elige un archivo de tu dispositivo. La app recuerda tu última lista y la vuelve a cargar automáticamente la próxima vez.</string>
+    <string name="help_q2_title">¿Qué es la guía TV (EPG)?</string>
+    <string name="help_q2_body">Muestra qué se emite ahora y qué sigue en cada canal. Elige una fuente en Ajustes; la guía se descarga en segundo plano y se relaciona automáticamente con los canales por tvg-id o nombre.</string>
+    <string name="help_q3_title">¿Cómo funciona la transmisión (Cast)?</string>
+    <string name="help_q3_body">Toca el botón Cast y elige un Chromecast o Google TV. La app intenta primero reproducir el canal directamente en el receptor; si el receptor no puede, la app cambia automáticamente a un relé local en tu teléfono.</string>
+    <string name="help_q4_title">¿Qué son los grupos de canales?</string>
+    <string name="help_q4_body">La pestaña Canales agrupa tu lista en categorías con el número de canales de cada una. Toca un grupo para ver y buscar sus canales; el botón de diseño cambia entre lista y cuadrícula.</string>
+    <string name="help_q5_title">¿Cómo funcionan los favoritos?</string>
+    <string name="help_q5_body">Toca la estrella junto a un canal para añadirlo a Favoritos. El botón de orden en la pestaña Favoritos permite ordenarlos por posición en la lista, alfabéticamente o por fecha de adición.</string>
+    <string name="help_q6_title">¿Qué hacen los ajustes de logotipos de canales?</string>
+    <string name="help_q6_body">En Ajustes puedes elegir si los logotipos se descargan y muestran, se muestran solo desde la caché, o se sustituyen por marcadores simples — útil con una conexión lenta o un dispositivo antiguo. También puedes añadir tus propias fuentes de iconos, que se prueban antes que la integrada.</string>
+    <string name="help_q7_title">¿Qué es el temporizador de apagado?</string>
+    <string name="help_q7_body">Toca el icono del temporizador en el reproductor para pausar la reproducción automáticamente tras 15, 30, 45 o 60 minutos. Sigue la cuenta atrás aunque cambies de canal, como el temporizador de apagado de un televisor físico.</string>
+    <string name="help_q8_title">¿Dónde se guardan mis datos?</string>
+    <string name="help_q8_body">Todo — tu lista, la guía TV, los favoritos y los iconos descargados — se guarda solo en el almacenamiento privado de la app en tu dispositivo. Consulta los Términos de uso y la Política de privacidad para más detalles.</string>
+
+    <!-- Terms of Use screen -->
+    <string name="terms_title">Términos de uso</string>
+    <string name="terms_intro">Al instalar o usar UA Cast Player («la app»), aceptas estos Términos de uso. Si no estás de acuerdo, no uses la app.</string>
+    <string name="terms_s1_title">1. Qué es esta app</string>
+    <string name="terms_s1_body">UA Cast Player es un reproductor de propósito general para listas M3U/M3U8 que tú proporcionas, y un emisor de Google Cast. No aloja, ofrece, vende, selecciona ni verifica ningún canal, película o contenido multimedia propio — cada transmisión proviene de un enlace o archivo que tú mismo suministras.</string>
+    <string name="terms_s2_title">2. Eres responsable de tu contenido</string>
+    <string name="terms_s2_body">Eres el único responsable de las listas y transmisiones que añades, y de asegurarte de tener derecho a acceder y verlas según las leyes que te sean aplicables — incluidas las normas de derechos de autor, radiodifusión y licencias de tu país. El desarrollador no selecciona, supervisa ni respalda ningún contenido reproducido a través de la app, y no asume responsabilidad alguna por lo que decidas añadir o ver, incluido cualquier uso ilegal o no autorizado. Si una lista o transmisión que añades infringe los derechos de alguien o incumple la ley local, eso es un asunto entre tú y el titular de derechos/autoridad correspondiente — no del desarrollador.</string>
+    <string name="terms_s3_title">3. Sin garantía</string>
+    <string name="terms_s3_body">La app se proporciona «tal cual», sin garantía de ningún tipo, expresa o implícita. El desarrollador no garantiza que ninguna lista, transmisión o fuente de terceros vaya a funcionar, ser exacta, estar disponible o ser legal de usar en tu jurisdicción.</string>
+    <string name="terms_s4_title">4. Limitación de responsabilidad</string>
+    <string name="terms_s4_body">En la medida máxima permitida por la ley aplicable, el desarrollador no es responsable de ningún daño directo, indirecto, incidental o consecuente, pérdida, multa o consecuencia legal derivada del uso o mal uso de la app — incluido el contenido que añadas, los servicios de terceros a los que te conectes, o cualquier infracción de la ley local. Nada en estos términos excluye la responsabilidad que no pueda excluirse conforme a la legislación obligatoria de tu jurisdicción.</string>
+    <string name="terms_s5_title">5. Servicios de terceros</string>
+    <string name="terms_s5_body">La transmisión depende del Google Cast SDK y del dispositivo Cast que elijas; las solicitudes de lista, guía TV e iconos van directamente a las fuentes que configures. Esos terceros operan bajo sus propios términos, fuera del control del desarrollador.</string>
+    <string name="terms_s6_title">6. Propiedad intelectual</string>
+    <string name="terms_s6_body">La app en sí — su código, diseño y marca — pertenece a su desarrollador. El contenido reproducido a través de la app sigue siendo propiedad de sus respectivos dueños; nada aquí te otorga ningún derecho sobre ese contenido más allá de lo que ya te concede su fuente.</string>
+    <string name="terms_s7_title">7. Cambios y terminación</string>
+    <string name="terms_s7_body">Estos términos pueden actualizarse ocasionalmente; el uso continuado tras un cambio implica la aceptación de la actualización. El desarrollador puede discontinuar la app en cualquier momento, por cualquier motivo.</string>
+    <string name="terms_s8_title">8. Derechos de autor y contacto</string>
+    <string name="terms_s8_body">© 2026 Dovbnyak28. Todos los derechos reservados. Preguntas sobre estos términos: dovbnyak@gmail.com</string>
+    <string name="terms_gate_footer">Debes aceptar estos términos para usar la app.</string>
+    <string name="terms_accept_button">Aceptar y continuar</string>
+    <string name="terms_decline_button">Rechazar y salir</string>
 
     <!-- Player -->
     <string name="player_live_indicator">LIVE</string>

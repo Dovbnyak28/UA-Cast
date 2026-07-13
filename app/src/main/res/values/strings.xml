@@ -119,6 +119,50 @@
     <string name="settings_app_version">App version</string>
     <string name="settings_help">Help</string>
     <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. Use the Cast button to play on a Chromecast or Google TV device; if a stream can\'t be played directly on the receiver, the app automatically retries through a local relay on your phone.</string>
+    <string name="settings_open_help">Detailed help</string>
+    <string name="settings_open_terms">Terms of Use</string>
+
+    <!-- Help screen -->
+    <string name="help_title">Help</string>
+    <string name="help_q1_title">How do I add channels?</string>
+    <string name="help_q1_body">Open the Channels tab and paste a playlist URL (m3u/m3u8), or pick a file from your device. The app remembers your last playlist and reloads it automatically next time.</string>
+    <string name="help_q2_title">What is the TV guide (EPG)?</string>
+    <string name="help_q2_body">It shows what\'s currently playing and what\'s next for each channel. Pick a source in Settings; the guide downloads in the background and matches channels automatically by tvg-id or name.</string>
+    <string name="help_q3_title">How does casting work?</string>
+    <string name="help_q3_body">Tap the Cast button and choose a Chromecast or Google TV device. The app tries to play the stream directly on the receiver first; if the receiver can\'t handle it, the app automatically falls back to a local relay running on your phone.</string>
+    <string name="help_q4_title">What are channel groups?</string>
+    <string name="help_q4_body">The Channels tab groups your playlist into categories with a channel count for each. Tap a group to see and search its channels; the layout button switches between list and grid views.</string>
+    <string name="help_q5_title">How do favorites work?</string>
+    <string name="help_q5_body">Tap the star next to any channel to add it to Favorites. The sort button on the Favorites tab lets you order them by playlist position, alphabetically, or by when you added them.</string>
+    <string name="help_q6_title">What do the channel logo settings do?</string>
+    <string name="help_q6_body">Settings lets you choose whether logos are downloaded and shown, only shown from cache, or replaced with plain placeholders — useful on a slow connection or older device. You can also add your own icon sources, tried before the built-in one.</string>
+    <string name="help_q7_title">What is the sleep timer?</string>
+    <string name="help_q7_body">Tap the timer icon in the player to pause playback automatically after 15, 30, 45, or 60 minutes. It keeps counting down even if you switch channels, like a physical TV\'s sleep timer.</string>
+    <string name="help_q8_title">Where is my data stored?</string>
+    <string name="help_q8_body">Everything - your playlist, TV guide, favorites, and downloaded icons - stays in the app\'s private storage on your device. See the Terms of Use and Privacy Policy for details.</string>
+
+    <!-- Terms of Use screen -->
+    <string name="terms_title">Terms of Use</string>
+    <string name="terms_intro">By installing or using UA Cast Player (\"the app\"), you agree to these Terms of Use. If you do not agree, do not use the app.</string>
+    <string name="terms_s1_title">1. What this app is</string>
+    <string name="terms_s1_body">UA Cast Player is a general-purpose player for M3U/M3U8 playlists that you provide, and a Google Cast sender. It does not host, provide, sell, curate, or verify any channel, movie, or media content of its own - every stream comes from a link or file you supply yourself.</string>
+    <string name="terms_s2_title">2. You are responsible for your content</string>
+    <string name="terms_s2_body">You are solely responsible for the playlists and streams you add, and for making sure you have the right to access and view them under the laws that apply to you - including copyright, broadcasting, and licensing rules in your country. The developer does not select, monitor, or endorse any content played through the app, and takes no responsibility for what you choose to add or watch, including any illegal or unauthorized use. If a playlist or stream you add infringes someone\'s rights or breaks local law, that is between you and the relevant rights holder/authority - not the developer.</string>
+    <string name="terms_s3_title">3. No warranty</string>
+    <string name="terms_s3_body">The app is provided \"as is\", without warranty of any kind, express or implied. The developer does not guarantee that any playlist, stream, or third-party source will work, be accurate, be available, or be legal to use in your jurisdiction.</string>
+    <string name="terms_s4_title">4. Limitation of liability</string>
+    <string name="terms_s4_body">To the maximum extent permitted by applicable law, the developer is not liable for any direct, indirect, incidental, or consequential damages, losses, fines, or legal consequences arising from your use or misuse of the app - including from content you add, third-party services you connect to, or any violation of local law. Nothing in these terms excludes liability that cannot be excluded under mandatory law in your jurisdiction.</string>
+    <string name="terms_s5_title">5. Third-party services</string>
+    <string name="terms_s5_body">Casting relies on the Google Cast SDK and your chosen Cast device; playlist, TV-guide, and icon requests go directly to the sources you configure. Those third parties operate under their own terms, outside the developer\'s control.</string>
+    <string name="terms_s6_title">6. Intellectual property</string>
+    <string name="terms_s6_body">The app itself - its code, design, and branding - belongs to its developer. Content played through the app remains the property of its respective owners; nothing here grants you any rights to that content beyond what its source already gives you.</string>
+    <string name="terms_s7_title">7. Changes and termination</string>
+    <string name="terms_s7_body">These terms may be updated from time to time; continued use after a change means you accept the update. The developer may discontinue the app at any time, for any reason.</string>
+    <string name="terms_s8_title">8. Copyright and contact</string>
+    <string name="terms_s8_body">© 2026 Dovbnyak28. All rights reserved. Questions about these terms: dovbnyak@gmail.com</string>
+    <string name="terms_gate_footer">You must accept these terms to use the app.</string>
+    <string name="terms_accept_button">Accept and continue</string>
+    <string name="terms_decline_button">Decline and exit</string>
 
     <!-- Player -->
     <string name="player_live_indicator">LIVE</string>

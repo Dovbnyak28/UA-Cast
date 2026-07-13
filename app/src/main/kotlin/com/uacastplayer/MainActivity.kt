@@ -24,6 +24,8 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
 import com.uacastplayer.ui.components.DownloadStatusBanner
 import com.uacastplayer.ui.language.LanguagePickerScreen
+import com.uacastplayer.ui.legal.HelpScreen
+import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.player.PlayerHost
 import com.uacastplayer.ui.theme.UaCastPlayerTheme
@@ -60,6 +62,8 @@ class MainActivity : FragmentActivity() {
             ) { uri -> uri?.let(viewModel::loadPlaylistFromFile) }
 
             var playerRequest by remember { mutableStateOf<PlayerRequest?>(null) }
+            var showHelp by remember { mutableStateOf(false) }
+            var showTerms by remember { mutableStateOf(false) }
 
             LaunchedEffect(uiState.language) {
                 val previous = activeLanguage
@@ -75,6 +79,9 @@ class MainActivity : FragmentActivity() {
                     uiState.needsLanguagePicker ->
                         LanguagePickerScreen(onLanguageConfirmed = viewModel::selectLanguage)
 
+                    uiState.needsTermsAcceptance ->
+                        TermsScreen(onAccept = viewModel::acceptTerms, onDecline = { finish() })
+
                     request != null -> {
                         BackHandler { playerRequest = null }
                         PlayerHost(
@@ -82,6 +89,16 @@ class MainActivity : FragmentActivity() {
                             startIndex = request.startIndex,
                             onExit = { playerRequest = null },
                         )
+                    }
+
+                    showHelp -> {
+                        BackHandler { showHelp = false }
+                        HelpScreen(onBackClick = { showHelp = false })
+                    }
+
+                    showTerms -> {
+                        BackHandler { showTerms = false }
+                        TermsScreen(onBackClick = { showTerms = false })
                     }
 
                     else -> Box(modifier = Modifier.fillMaxSize()) {
@@ -117,6 +134,8 @@ class MainActivity : FragmentActivity() {
                             onAddIconSource = viewModel::addCustomIconSource,
                             onRemoveIconSource = viewModel::removeCustomIconSource,
                             onDismissIconSourceError = viewModel::dismissIconSourceError,
+                            onOpenHelp = { showHelp = true },
+                            onOpenTerms = { showTerms = true },
                         )
                         DownloadStatusBanner(
                             iconPrefetchState = iconPrefetchState,

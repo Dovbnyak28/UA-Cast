@@ -90,6 +90,8 @@ fun RootScaffold(
     onAddIconSource: (String) -> Unit,
     onRemoveIconSource: (String) -> Unit,
     onDismissIconSourceError: () -> Unit,
+    onOpenHelp: () -> Unit,
+    onOpenTerms: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -206,6 +208,8 @@ fun RootScaffold(
                     onAddIconSource = onAddIconSource,
                     onRemoveIconSource = onRemoveIconSource,
                     onDismissIconSourceError = onDismissIconSourceError,
+                    onOpenHelp = onOpenHelp,
+                    onOpenTerms = onOpenTerms,
                     modifier = content,
                 )
             }
