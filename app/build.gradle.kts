@@ -14,9 +14,10 @@ android {
         applicationId = "com.uacastplayer"
         minSdk = 24
         targetSdk = 36
-        // TODO: automate versionCode/versionName bumps from CI instead of hand-editing here.
-        versionCode = 2
-        versionName = "0.2.0"
+        // CI overrides these via -Puacast.versionCode/-Puacast.versionName; the defaults below
+        // are what local (non-CI) builds get.
+        versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 2
+        versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

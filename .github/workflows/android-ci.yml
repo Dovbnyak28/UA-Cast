@@ -12,6 +12,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # versionCode must increase monotonically across releases; the CI run number does that for
+      # free. versionName stays human-readable but gets the run number appended so each CI build
+      # is traceable back to the workflow run that produced it.
+      UACAST_VERSION_CODE: ${{ github.run_number }}
+      UACAST_VERSION_NAME: 0.2.0.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,8 +30,11 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Assemble debug
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: ./gradlew :app:assembleDebug --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
 
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
@@ -34,7 +43,7 @@ jobs:
         run: ./gradlew :app:lintDebug --stacktrace
 
       - name: Assemble release (unsigned)
-        run: ./gradlew :app:assembleRelease --stacktrace
+        run: ./gradlew :app:assembleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
 
       - name: Upload test reports
         if: always()
