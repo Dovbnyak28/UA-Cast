@@ -1,0 +1,19 @@
+# Hand-authored baseline profile (no Macrobenchmark module in this project; see README's
+# "Baseline profile" note in the Stack section for why).
+#
+# AGP automatically merges baseline profiles bundled inside dependency AARs (Coil and Jetpack
+# Compose ship their own), but media3/ExoPlayer does not, and neither does our own app code.
+# These broad wildcard rules cover both gaps so profileinstaller has something meaningful to
+# precompile ahead-of-time on first run, rather than shipping the dependency with nothing to do.
+#
+# Wildcards: ** matches any sequence including package separators, * excludes them.
+# Flags: H = hot, S = startup, P = post-startup.
+
+HSPLcom/uacastplayer/**->**(**)**
+Lcom/uacastplayer/**
+
+HSPLandroidx/media3/exoplayer/**->**(**)**
+Landroidx/media3/exoplayer/**
+
+HSPLandroidx/media3/common/**->**(**)**
+Landroidx/media3/common/**
