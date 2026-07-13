@@ -6,18 +6,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
+import com.uacastplayer.ui.components.DownloadStatusBanner
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.player.PlayerHost
@@ -79,35 +84,42 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
-                    else -> RootScaffold(
-                        currentLanguage = uiState.language,
-                        onLanguageSelected = viewModel::selectLanguage,
-                        onExitApp = { finish() },
-                        playlistState = playlistState,
-                        onLoadPlaylistUrl = viewModel::loadPlaylistFromUrl,
-                        onPickPlaylistFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
-                        onChannelSelected = { channels, startIndex ->
-                            playerRequest = PlayerRequest(channels, startIndex)
-                        },
-                        epgState = epgState,
-                        onEpgSourceSelected = viewModel::selectEpgSource,
-                        iconPrefetchState = iconPrefetchState,
-                        onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
-                        resolveIcon = viewModel::resolveChannelIcon,
-                        castState = castState,
-                        settingsState = settingsState,
-                        onIconDisplayModeSelected = viewModel::setIconDisplayMode,
-                        onListDensitySelected = viewModel::setListDensity,
-                        onChannelLayoutSelected = viewModel::setChannelLayout,
-                        onWrapAroundChanged = viewModel::setWrapAroundEnabled,
-                        onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
-                        onClearCache = viewModel::clearCache,
-                        favorites = favorites,
-                        isFavorite = viewModel::isFavorite,
-                        onToggleFavorite = viewModel::toggleFavorite,
-                        onRemoveFavorite = viewModel::removeFavorite,
-                        onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
-                    )
+                    else -> Box(modifier = Modifier.fillMaxSize()) {
+                        RootScaffold(
+                            currentLanguage = uiState.language,
+                            onLanguageSelected = viewModel::selectLanguage,
+                            onExitApp = { finish() },
+                            playlistState = playlistState,
+                            onLoadPlaylistUrl = viewModel::loadPlaylistFromUrl,
+                            onPickPlaylistFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
+                            onChannelSelected = { channels, startIndex ->
+                                playerRequest = PlayerRequest(channels, startIndex)
+                            },
+                            epgState = epgState,
+                            onEpgSourceSelected = viewModel::selectEpgSource,
+                            iconPrefetchState = iconPrefetchState,
+                            onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
+                            resolveIcon = viewModel::resolveChannelIcon,
+                            castState = castState,
+                            settingsState = settingsState,
+                            onIconDisplayModeSelected = viewModel::setIconDisplayMode,
+                            onListDensitySelected = viewModel::setListDensity,
+                            onChannelLayoutSelected = viewModel::setChannelLayout,
+                            onWrapAroundChanged = viewModel::setWrapAroundEnabled,
+                            onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
+                            onClearCache = viewModel::clearCache,
+                            favorites = favorites,
+                            isFavorite = viewModel::isFavorite,
+                            onToggleFavorite = viewModel::toggleFavorite,
+                            onRemoveFavorite = viewModel::removeFavorite,
+                            onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
+                        )
+                        DownloadStatusBanner(
+                            iconPrefetchState = iconPrefetchState,
+                            epgState = epgState,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                        )
+                    }
                 }
 
                 if (showBatteryOptimizationHint) {

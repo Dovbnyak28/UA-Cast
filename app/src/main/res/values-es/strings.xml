@@ -131,6 +131,12 @@
     <string name="settings_battery_optimization_label">Optimización de batería en segundo plano</string>
     <string name="settings_battery_optimization_button">Abrir</string>
 
+    <!-- Download status banner -->
+    <string name="download_banner_title">Preparando tus canales…</string>
+    <string name="download_banner_dismiss">Ocultar</string>
+    <string name="download_banner_icons">Iconos: %1$d%%</string>
+    <string name="download_banner_epg_processing">Actualizando la guía TV…</string>
+
     <!-- Common -->
     <string name="common_ok">Aceptar</string>
     <string name="common_cancel">Cancelar</string>

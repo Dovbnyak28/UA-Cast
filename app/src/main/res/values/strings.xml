@@ -131,6 +131,12 @@
     <string name="settings_battery_optimization_label">Background battery optimization</string>
     <string name="settings_battery_optimization_button">Open</string>
 
+    <!-- Download status banner -->
+    <string name="download_banner_title">Preparing your channels…</string>
+    <string name="download_banner_dismiss">Dismiss</string>
+    <string name="download_banner_icons">Icons: %1$d%%</string>
+    <string name="download_banner_epg_processing">Updating TV guide…</string>
+
     <!-- Common -->
     <string name="common_ok">OK</string>
     <string name="common_cancel">Cancel</string>

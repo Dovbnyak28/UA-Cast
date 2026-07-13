@@ -131,6 +131,12 @@
     <string name="settings_battery_optimization_label">Оптимізація батареї у фоні</string>
     <string name="settings_battery_optimization_button">Відкрити</string>
 
+    <!-- Download status banner -->
+    <string name="download_banner_title">Готуємо ваші канали…</string>
+    <string name="download_banner_dismiss">Приховати</string>
+    <string name="download_banner_icons">Іконки: %1$d%%</string>
+    <string name="download_banner_epg_processing">Оновлення телепрограми…</string>
+
     <!-- Common -->
     <string name="common_ok">Гаразд</string>
     <string name="common_cancel">Скасувати</string>
