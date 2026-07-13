@@ -47,6 +47,13 @@ and get merged in automatically; media3 doesn't, which is the gap this file fill
 Release signing is read only from environment variables / Gradle properties, never committed:
 `UACAST_STORE_FILE`, `UACAST_STORE_PASSWORD`, `UACAST_KEY_ALIAS`, `UACAST_KEY_PASSWORD`.
 
+`minSdk` is 24 (Android 7.0). The Cast proxy session runs as a `mediaPlayback` foreground service
+(`FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission), so a physical or emulated device/receiver is
+needed to exercise casting end-to-end; unit tests and lint don't touch that path.
+
+To package the source tree without `.git`/`.gradle`/`build` (a checkout can run ~450 MB; the
+tracked source is a couple MB): `git archive --format=zip -o uacast-source.zip HEAD`.
+
 ## Project layout
 
 Business logic is organized by feature as plain Kotlin (no Android/Compose types), each paired
@@ -80,4 +87,7 @@ See `docs/` for the design rules behind the trickier subsystems:
 ## CI
 
 `.github/workflows/android-ci.yml` runs `assembleDebug` → `testDebugUnitTest` → `lintDebug` →
-`assembleRelease` (unsigned) on every push/PR, plus Gradle wrapper validation.
+`assembleRelease` (unsigned) on every push/PR, plus Gradle wrapper validation and
+`gradle/actions/setup-gradle` caching. `versionCode`/`versionName` for the CI-built APKs are
+derived from the workflow run number (`-Puacast.versionCode`/`-Puacast.versionName`), not the
+hand-edited defaults in `app/build.gradle.kts`.
