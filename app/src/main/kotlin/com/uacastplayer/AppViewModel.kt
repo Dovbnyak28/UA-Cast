@@ -2,6 +2,7 @@ package com.uacastplayer
 
 import android.app.Application
 import android.net.Uri
+import android.os.PowerManager
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
@@ -43,6 +44,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -113,6 +116,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     val settingsState: StateFlow<SettingsUiState> = _settingsState.asStateFlow()
 
+    private val _showBatteryOptimizationHint = MutableStateFlow(false)
+    val showBatteryOptimizationHint: StateFlow<Boolean> = _showBatteryOptimizationHint.asStateFlow()
+
     init {
         viewModelScope.launch {
             playlistRepository.restoreSnapshot()?.let { applyPlaylistOutcome(it) }
@@ -126,7 +132,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _epgState.update { it.copy(nowMillis = System.currentTimeMillis()) }
             }
         }
+        viewModelScope.launch {
+            castState.map { it.isSessionConnected }.distinctUntilChanged().collect { connected ->
+                if (connected) maybeOfferBatteryOptimizationHint()
+            }
+        }
         refreshCacheSizes()
+    }
+
+    /** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]); manufacturer battery managers (MIUI/HyperOS and friends) otherwise silently kill the cast proxy in the background. */
+    private fun maybeOfferBatteryOptimizationHint() {
+        if (preferences.hasSeenBatteryOptimizationHint) return
+        val powerManager = getApplication<Application>().getSystemService(PowerManager::class.java) ?: return
+        if (powerManager.isIgnoringBatteryOptimizations(getApplication<Application>().packageName)) return
+        _showBatteryOptimizationHint.value = true
+    }
+
+    /** Settings screen entry point to bring the hint back up manually, bypassing the "seen" gate. */
+    fun reopenBatteryOptimizationHint() {
+        _showBatteryOptimizationHint.value = true
+    }
+
+    fun dismissBatteryOptimizationHint() {
+        preferences.hasSeenBatteryOptimizationHint = true
+        _showBatteryOptimizationHint.value = false
     }
 
     fun selectLanguage(language: AppLanguage) {

@@ -1,5 +1,9 @@
 package com.uacastplayer.ui.settings
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,8 +25,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -53,13 +62,24 @@ fun SettingsScreen(
     onWrapAroundChanged: (Boolean) -> Unit,
     onAutoSkipChanged: (Boolean) -> Unit,
     onClearCache: (CacheKind) -> Unit,
+    onOpenBatteryOptimizationHint: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var generalExpanded by rememberSaveable { mutableStateOf(true) }
+    var playbackExpanded by rememberSaveable { mutableStateOf(false) }
+    var cacheExpanded by rememberSaveable { mutableStateOf(false) }
+    var helpExpanded by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SettingsSection(stringResource(R.string.settings_section_general), AppIcons.Globe) {
+        SettingsSection(
+            title = stringResource(R.string.settings_section_general),
+            icon = AppIcons.Globe,
+            expanded = generalExpanded,
+            onToggleExpanded = { generalExpanded = !generalExpanded },
+        ) {
             LabeledRow(stringResource(R.string.settings_language_label), AppIcons.Globe) {
                 for (language in AppLanguage.entries) {
                     SettingsChip(
@@ -78,9 +98,15 @@ fun SettingsScreen(
                     )
                 }
             }
+            BatteryOptimizationRow(onOpenBatteryOptimizationHint)
         }
 
-        SettingsSection(stringResource(R.string.settings_section_playback), AppIcons.Play) {
+        SettingsSection(
+            title = stringResource(R.string.settings_section_playback),
+            icon = AppIcons.Play,
+            expanded = playbackExpanded,
+            onToggleExpanded = { playbackExpanded = !playbackExpanded },
+        ) {
             LabeledRow(stringResource(R.string.settings_icon_display_mode_label), AppIcons.Image) {
                 for (mode in IconDisplayMode.entries) {
                     SettingsChip(
@@ -114,14 +140,24 @@ fun SettingsScreen(
             SwitchRow(stringResource(R.string.settings_auto_skip_label), settingsState.autoSkipDeadEnabled, onAutoSkipChanged)
         }
 
-        SettingsSection(stringResource(R.string.settings_section_cache), AppIcons.Storage) {
+        SettingsSection(
+            title = stringResource(R.string.settings_section_cache),
+            icon = AppIcons.Storage,
+            expanded = cacheExpanded,
+            onToggleExpanded = { cacheExpanded = !cacheExpanded },
+        ) {
             CacheRow(R.string.cache_playlist_label, settingsState.cacheSizes.playlistBytes) { onClearCache(CacheKind.PLAYLIST) }
             CacheRow(R.string.cache_epg_label, settingsState.cacheSizes.epgBytes) { onClearCache(CacheKind.EPG) }
             CacheRow(R.string.cache_icons_label, settingsState.cacheSizes.iconCacheBytes) { onClearCache(CacheKind.ICONS) }
             CacheRow(R.string.cache_coil_label, settingsState.cacheSizes.coilCacheBytes) { onClearCache(CacheKind.COIL) }
         }
 
-        SettingsSection(stringResource(R.string.settings_help), AppIcons.HelpCircle) {
+        SettingsSection(
+            title = stringResource(R.string.settings_help),
+            icon = AppIcons.HelpCircle,
+            expanded = helpExpanded,
+            onToggleExpanded = { helpExpanded = !helpExpanded },
+        ) {
             Text(
                 text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes()),
                 style = MaterialTheme.typography.bodyMedium,
@@ -144,22 +180,40 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsSection(
+    title: String,
+    icon: ImageVector,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val chevronRotation by animateFloatAsState(if (expanded) 180f else 0f, label = "sectionChevron")
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+        Column(modifier = Modifier.animateContentSize(tween(220)).padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggleExpanded),
+            ) {
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 10.dp),
+                    modifier = Modifier.padding(start = 10.dp).weight(1f),
+                )
+                Icon(
+                    AppIcons.ChevronDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp).rotate(chevronRotation),
                 )
             }
-            content()
+            if (expanded) {
+                Column(modifier = Modifier.padding(top = 12.dp)) { content() }
+            }
         }
     }
 }
@@ -199,6 +253,22 @@ private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean
             modifier = Modifier.weight(1f),
         )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun BatteryOptimizationRow(onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_battery_optimization_label),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = onOpen) { Text(stringResource(R.string.settings_battery_optimization_button)) }
     }
 }
 

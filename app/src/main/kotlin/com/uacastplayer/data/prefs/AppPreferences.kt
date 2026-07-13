@@ -68,6 +68,11 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_SKIP_DEAD, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SKIP_DEAD, value).apply()
 
+    /** Once true, the automatic first-cast-session battery optimization hint never shows again on its own. */
+    var hasSeenBatteryOptimizationHint: Boolean
+        get() = prefs.getBoolean(KEY_SEEN_BATTERY_HINT, false)
+        set(value) = prefs.edit().putBoolean(KEY_SEEN_BATTERY_HINT, value).apply()
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
@@ -79,5 +84,6 @@ class AppPreferences(context: Context) {
         const val KEY_CHANNEL_LAYOUT = "channel_layout"
         const val KEY_WRAP_AROUND = "wrap_around_enabled"
         const val KEY_AUTO_SKIP_DEAD = "auto_skip_dead_enabled"
+        const val KEY_SEEN_BATTERY_HINT = "seen_battery_optimization_hint"
     }
 }

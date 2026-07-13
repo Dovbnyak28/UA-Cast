@@ -123,6 +123,14 @@
     <string name="cast_session_notification_text">Трансляція на %1$s</string>
     <string name="cast_session_stop_action">Зупинити</string>
 
+    <!-- Battery optimization hint -->
+    <string name="battery_hint_title">Не зупиняти трансляцію у фоні</string>
+    <string name="battery_hint_body">Деякі виробники телефонів (наприклад, Xiaomi) агресивно зупиняють застосунки у фоні, через що трансляція на TV може обірватися. Дозвольте UA Cast Player ігнорувати оптимізацію батареї, щоб відтворення не переривалось.</string>
+    <string name="battery_hint_allow">Дозволити</string>
+    <string name="battery_hint_later">Пізніше</string>
+    <string name="settings_battery_optimization_label">Оптимізація батареї у фоні</string>
+    <string name="settings_battery_optimization_button">Відкрити</string>
+
     <!-- Common -->
     <string name="common_ok">Гаразд</string>
     <string name="common_cancel">Скасувати</string>

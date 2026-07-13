@@ -123,6 +123,14 @@
     <string name="cast_session_notification_text">Transmitiendo a %1$s</string>
     <string name="cast_session_stop_action">Detener</string>
 
+    <!-- Battery optimization hint -->
+    <string name="battery_hint_title">Evita que la transmisión se detenga en segundo plano</string>
+    <string name="battery_hint_body">Algunos fabricantes (como Xiaomi) detienen agresivamente las apps en segundo plano, lo que puede cortar la transmisión a tu TV. Permite que UA Cast Player ignore la optimización de batería para que la reproducción no se interrumpa.</string>
+    <string name="battery_hint_allow">Permitir</string>
+    <string name="battery_hint_later">Más tarde</string>
+    <string name="settings_battery_optimization_label">Optimización de batería en segundo plano</string>
+    <string name="settings_battery_optimization_button">Abrir</string>
+
     <!-- Common -->
     <string name="common_ok">Aceptar</string>
     <string name="common_cancel">Cancelar</string>

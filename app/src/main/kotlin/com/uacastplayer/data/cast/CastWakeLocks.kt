@@ -2,6 +2,7 @@ package com.uacastplayer.data.cast
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.PowerManager
 import com.uacastplayer.log.AppLog
 
@@ -25,8 +26,13 @@ class CastWakeLocks(context: Context) {
                 acquire(MAX_WAKE_LOCK_MILLIS)
             }
             val wifiManager = appContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            @Suppress("DEPRECATION")
-            wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+            val wifiMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                @Suppress("DEPRECATION")
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
+            wifiLock = wifiManager.createWifiLock(wifiMode, WAKE_LOCK_TAG).apply {
                 setReferenceCounted(false)
                 acquire()
             }

@@ -17,6 +17,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.ui.components.BatteryOptimizationDialog
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.player.PlayerHost
@@ -47,6 +48,7 @@ class MainActivity : FragmentActivity() {
             val castState by viewModel.castState.collectAsStateWithLifecycle()
             val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
             val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+            val showBatteryOptimizationHint by viewModel.showBatteryOptimizationHint.collectAsStateWithLifecycle()
 
             val pickPlaylistFile = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
@@ -104,6 +106,14 @@ class MainActivity : FragmentActivity() {
                         isFavorite = viewModel::isFavorite,
                         onToggleFavorite = viewModel::toggleFavorite,
                         onRemoveFavorite = viewModel::removeFavorite,
+                        onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
+                    )
+                }
+
+                if (showBatteryOptimizationHint) {
+                    BatteryOptimizationDialog(
+                        onAllow = viewModel::dismissBatteryOptimizationHint,
+                        onDismiss = viewModel::dismissBatteryOptimizationHint,
                     )
                 }
             }

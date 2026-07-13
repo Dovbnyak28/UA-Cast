@@ -2,14 +2,12 @@ package com.uacastplayer.ui.nav
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +17,9 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.uacastplayer.R
 import com.uacastplayer.cast.CastPlaybackState
@@ -41,9 +41,15 @@ import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
+import com.uacastplayer.ui.components.GlassTabBar
+import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.settings.SettingsScreen
+import com.uacastplayer.ui.theme.LargeTitle
+import com.uacastplayer.ui.theme.LabelPrimary
+import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.Void
 import java.io.File
 
 private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
@@ -78,6 +84,7 @@ fun RootScaffold(
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
     onRemoveFavorite: (String) -> Unit,
+    onOpenBatteryOptimizationHint: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -90,27 +97,34 @@ fun RootScaffold(
 
     Scaffold(
         modifier = modifier,
+        containerColor = Void,
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Column {
-                        Text(stringResource(R.string.app_name))
-                        if (castState.isSessionConnected) {
-                            Text(
-                                text = stringResource(R.string.cast_status_connected),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Void)
+                    .padding(horizontal = ScreenHPadding, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = stringResource(navState.current.labelRes()), style = LargeTitle, color = LabelPrimary)
+                    if (castState.isSessionConnected) {
+                        Text(
+                            text = stringResource(R.string.cast_status_connected),
+                            style = com.uacastplayer.ui.theme.Caption,
+                            color = com.uacastplayer.ui.theme.Azure,
+                        )
                     }
-                },
-                actions = { CastButton() },
-            )
+                }
+                CastButton()
+            }
         },
         bottomBar = {
-            NavigationBar {
-                for (destination in BottomDestination.entries) {
-                    NavigationBarItem(
+            GlassTabBar(
+                items = BottomDestination.entries.map { destination ->
+                    TabBarItem(
+                        label = stringResource(destination.labelRes()),
+                        icon = destination.icon(),
                         selected = destination == navState.current,
                         onClick = {
                             navState = NavBackStackReducer.reduce(
@@ -118,18 +132,33 @@ fun RootScaffold(
                                 BottomNavEvent.Select(destination),
                             ).state
                         },
-                        icon = { Icon(destination.icon(), contentDescription = null) },
-                        label = { Text(stringResource(destination.labelRes())) },
                     )
-                }
-            }
+                },
+            )
         },
     ) { innerPadding ->
         Crossfade(targetState = navState.current, label = "bottomNavContent") { destination ->
         stateHolder.SaveableStateProvider(destination) {
             val content = Modifier.padding(innerPadding)
             when (destination) {
-                BottomDestination.HOME -> HomeScreen(modifier = content)
+                BottomDestination.HOME -> HomeScreen(
+                    playlistState = playlistState,
+                    onLoadUrl = { url ->
+                        navState = NavBackStackReducer.reduce(
+                            navState,
+                            BottomNavEvent.Select(BottomDestination.CHANNELS),
+                        ).state
+                        onLoadPlaylistUrl(url)
+                    },
+                    onPickFile = {
+                        navState = NavBackStackReducer.reduce(
+                            navState,
+                            BottomNavEvent.Select(BottomDestination.CHANNELS),
+                        ).state
+                        onPickPlaylistFile()
+                    },
+                    modifier = content,
+                )
                 BottomDestination.CHANNELS -> ChannelsScreen(
                     playlistState = playlistState,
                     onLoadUrl = onLoadPlaylistUrl,
@@ -164,6 +193,7 @@ fun RootScaffold(
                     onWrapAroundChanged = onWrapAroundChanged,
                     onAutoSkipChanged = onAutoSkipChanged,
                     onClearCache = onClearCache,
+                    onOpenBatteryOptimizationHint = onOpenBatteryOptimizationHint,
                     modifier = content,
                 )
             }
