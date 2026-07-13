@@ -17,18 +17,15 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,7 +50,26 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.NameQualityBadge
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.components.GlowStatusDot
+import com.uacastplayer.ui.components.PlaylistImportControls
+import com.uacastplayer.ui.components.SegmentedControl
+import com.uacastplayer.ui.components.StatusPillVariant
+import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.BodyText
+import com.uacastplayer.ui.theme.Caption
+import com.uacastplayer.ui.theme.ChannelLogoRadius
+import com.uacastplayer.ui.theme.ChannelLogoSize
+import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.Hairline
+import com.uacastplayer.ui.theme.HairlineInsetChannels
+import com.uacastplayer.ui.theme.ItemPadding
+import com.uacastplayer.ui.theme.LabelPrimary
+import com.uacastplayer.ui.theme.LabelSecondary
+import com.uacastplayer.ui.theme.RadiusList
+import com.uacastplayer.ui.theme.SectionLabel
+import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.Surface1
 import java.io.File
 
 @Composable
@@ -71,30 +87,11 @@ fun ChannelsScreen(
     onToggleFavorite: (M3uChannel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var urlInput by rememberSaveable { mutableStateOf("") }
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
+    var selectedCategory by rememberSaveable { mutableIntStateOf(0) }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = urlInput,
-                onValueChange = { urlInput = it },
-                label = { Text(stringResource(R.string.playlist_url_hint)) },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Button(onClick = { onLoadUrl(urlInput) }, modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.playlist_load_button))
-            }
-            OutlinedButton(onClick = onPickFile) {
-                Text(stringResource(R.string.playlist_browse_file))
-            }
-        }
+    Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding)) {
+        PlaylistImportControls(onLoadUrl = onLoadUrl, onPickFile = onPickFile)
 
         if (iconPrefetchState.isRunning) {
             val progress = if (iconPrefetchState.total > 0) {
@@ -111,19 +108,37 @@ fun ChannelsScreen(
         when {
             playlistState.isLoading -> LoadingState()
             playlistState.error != null -> ErrorState(playlistState.error)
-            playlistState.hasChannels -> ChannelGroupList(
-                groups = playlistState.groups,
-                epgState = epgState,
-                resolveIcon = resolveIcon,
-                density = density,
-                layout = layout,
-                isFavorite = isFavorite,
-                onToggleFavorite = onToggleFavorite,
-                onChannelClick = { channel ->
-                    val index = flatChannels.indexOf(channel)
-                    if (index >= 0) onChannelSelected(flatChannels, index)
-                },
-            )
+            playlistState.hasChannels -> {
+                val categories = remember(playlistState.groups) { playlistState.groups.map { it.group } }
+                if (categories.size > 1) {
+                    val labels = listOf(stringResource(R.string.channels_category_all)) + categories.map { groupLabel(it) }
+                    SegmentedControl(
+                        options = labels,
+                        selectedIndex = selectedCategory.coerceIn(0, labels.lastIndex),
+                        onSelected = { selectedCategory = it },
+                        modifier = Modifier.padding(top = GapM),
+                    )
+                }
+                val visibleGroups = if (selectedCategory == 0 || categories.size <= 1) {
+                    playlistState.groups
+                } else {
+                    val target = categories.getOrNull(selectedCategory - 1)
+                    playlistState.groups.filter { it.group == target }
+                }
+                ChannelGroupList(
+                    groups = visibleGroups,
+                    epgState = epgState,
+                    resolveIcon = resolveIcon,
+                    density = density,
+                    layout = layout,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onChannelClick = { channel ->
+                        val index = flatChannels.indexOf(channel)
+                        if (index >= 0) onChannelSelected(flatChannels, index)
+                    },
+                )
+            }
             else -> EmptyState()
         }
     }
@@ -136,7 +151,8 @@ private fun LoadingState() {
             CircularProgressIndicator()
             Text(
                 text = stringResource(R.string.playlist_loading),
-                style = MaterialTheme.typography.bodyMedium,
+                style = BodyText,
+                color = LabelSecondary,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -151,7 +167,7 @@ private fun ErrorState(error: PlaylistError) {
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
     }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(message, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+        Text(message, style = BodyText, color = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -176,27 +192,45 @@ private fun ChannelGroupList(
     onChannelClick: (M3uChannel) -> Unit,
 ) {
     if (layout == ChannelLayout.LIST) {
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
             for (grouped in groups) {
                 item(key = "header-${groupDisplayKey(grouped.group)}") { GroupHeader(grouped.group) }
-                items(grouped.channels, key = { it.streamUrl }) { channel ->
-                    val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
-                    ChannelRow(
-                        channel = channel,
-                        programme = programme,
-                        nowMillis = epgState.nowMillis,
-                        resolveIcon = resolveIcon,
-                        density = density,
-                        isFavorite = isFavorite(channel),
-                        onToggleFavorite = { onToggleFavorite(channel) },
-                        onClick = { onChannelClick(channel) },
-                    )
+                item(key = "inset-${groupDisplayKey(grouped.group)}") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(RadiusList))
+                            .background(Surface1),
+                    ) {
+                        grouped.channels.forEachIndexed { index, channel ->
+                            val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
+                            ChannelRow(
+                                channel = channel,
+                                programme = programme,
+                                nowMillis = epgState.nowMillis,
+                                resolveIcon = resolveIcon,
+                                density = density,
+                                isFavorite = isFavorite(channel),
+                                onToggleFavorite = { onToggleFavorite(channel) },
+                                onClick = { onChannelClick(channel) },
+                            )
+                            if (index != grouped.channels.lastIndex) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = HairlineInsetChannels)
+                                        .height(1.dp)
+                                        .background(Hairline),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     } else {
         val columns = if (layout == ChannelLayout.LARGE_ICONS) 2 else 3
-        LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
+        LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.fillMaxSize().padding(top = GapM)) {
             for (grouped in groups) {
                 item(key = "header-${groupDisplayKey(grouped.group)}", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(columns) }) {
                     GroupHeader(grouped.group)
@@ -217,9 +251,9 @@ private fun ChannelGroupList(
 @Composable
 private fun GroupHeader(group: ChannelGroup) {
     Text(
-        text = groupLabel(group),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = groupLabel(group).uppercase(),
+        style = SectionLabel,
+        color = LabelSecondary,
         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
     )
 }
@@ -235,52 +269,64 @@ private fun ChannelRow(
     onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = if (density == ListDensity.MINIMAL) 4.dp else 10.dp),
+            .padding(ItemPadding),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (density != ListDensity.MINIMAL) ChannelIcon(channel, resolveIcon)
-            Text(
-                text = channel.displayName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f).padding(start = if (density == ListDensity.MINIMAL) 0.dp else 12.dp),
-            )
-            if (density == ListDensity.FULL) {
-                NameQualityBadge.detect(channel.displayName)?.let { badge ->
-                    Text(
-                        text = badge,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(end = 4.dp),
-                    )
+        if (density != ListDensity.MINIMAL) ChannelIcon(channel, resolveIcon)
+        Column(modifier = Modifier.weight(1f).padding(start = if (density == ListDensity.MINIMAL) 0.dp else 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = channel.displayName,
+                    style = BodyText,
+                    color = LabelPrimary,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (density == ListDensity.FULL) {
+                    NameQualityBadge.detect(channel.displayName)?.let { badge ->
+                        Text(
+                            text = badge,
+                            style = Caption,
+                            color = com.uacastplayer.ui.theme.Azure2,
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
                 }
             }
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    AppIcons.Favorites,
-                    contentDescription = null,
-                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+            val current = programme?.current
+            val effectiveStop = programme?.effectiveStopMillis
+            if (density == ListDensity.FULL && current != null && effectiveStop != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    GlowStatusDot(variant = StatusPillVariant.Bad, size = 6.dp)
+                    Text(
+                        text = current.title,
+                        style = Caption,
+                        color = LabelSecondary,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+                TrackProgress(
+                    progress = ProgrammeProgress.progress(current.startMillis, effectiveStop, nowMillis),
+                    modifier = Modifier.padding(top = 6.dp),
                 )
             }
         }
-        val current = programme?.current
-        val effectiveStop = programme?.effectiveStopMillis
-        if (density == ListDensity.FULL && current != null && effectiveStop != null) {
-            Text(
-                text = current.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            LinearProgressIndicator(
-                progress = { ProgrammeProgress.progress(current.startMillis, effectiveStop, nowMillis) },
-                modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 4.dp),
+        IconButton(onClick = onToggleFavorite) {
+            Icon(
+                AppIcons.Favorites,
+                contentDescription = null,
+                tint = if (isFavorite) com.uacastplayer.ui.theme.Azure else LabelSecondary,
             )
         }
+        Icon(
+            AppIcons.ChevronDown,
+            contentDescription = null,
+            tint = LabelSecondary,
+            modifier = Modifier.size(16.dp).padding(start = 2.dp),
+        )
     }
 }
 
@@ -301,8 +347,8 @@ private fun ChannelTile(
         ChannelIcon(channel, resolveIcon, size = if (large) 64.dp else 44.dp)
         Text(
             text = channel.displayName,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = Caption,
+            color = LabelPrimary,
             maxLines = 2,
             modifier = Modifier.padding(top = 6.dp),
         )
@@ -310,7 +356,7 @@ private fun ChannelTile(
 }
 
 @Composable
-private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?, size: androidx.compose.ui.unit.Dp = 32.dp) {
+private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?, size: androidx.compose.ui.unit.Dp = ChannelLogoSize) {
     val iconFile by produceState<File?>(initialValue = null, key1 = channel.streamUrl) {
         value = resolveIcon(channel)
     }
@@ -318,20 +364,20 @@ private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -
         AsyncImage(
             model = iconFile,
             contentDescription = null,
-            modifier = Modifier.size(size).clip(RoundedCornerShape(6.dp)),
+            modifier = Modifier.size(size).clip(RoundedCornerShape(ChannelLogoRadius)),
         )
     } else {
         Box(
             modifier = Modifier
                 .size(size)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .clip(RoundedCornerShape(ChannelLogoRadius))
+                .background(com.uacastplayer.ui.theme.Surface2),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = initialsFor(channel.displayName),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = Caption,
+                color = LabelSecondary,
             )
         }
     }

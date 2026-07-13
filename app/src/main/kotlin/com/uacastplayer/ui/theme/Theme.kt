@@ -1,33 +1,30 @@
 package com.uacastplayer.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-/** UA Cast Player is dark-only by design; [isSystemInDarkTheme] is intentionally not consulted. */
+/** UA Cast Player is dark-only by design; [androidx.compose.foundation.isSystemInDarkTheme] is intentionally not consulted. */
 private val UaCastColorScheme = darkColorScheme(
-    primary = UaCastPrimary,
+    primary = Azure,
     onPrimary = Color.White,
-    primaryContainer = UaCastPrimaryContainer,
-    onPrimaryContainer = UaCastOnPrimaryContainer,
-    secondary = UaCastCyan,
-    onSecondary = UaCastBackground,
-    secondaryContainer = UaCastCyanContainer,
-    onSecondaryContainer = UaCastOnCyanContainer,
-    background = UaCastBackground,
-    onBackground = UaCastOnSurface,
-    surface = UaCastSurface,
-    onSurface = UaCastOnSurface,
-    surfaceVariant = UaCastSurfaceVariant,
-    onSurfaceVariant = UaCastOnSurfaceMuted,
-    surfaceContainer = UaCastSurfaceContainer,
-    surfaceContainerHigh = UaCastSurfaceVariant,
-    surfaceContainerHighest = UaCastBorder,
-    outline = UaCastBorder,
-    outlineVariant = UaCastBorder,
-    error = UaCastError,
+    primaryContainer = Azure,
+    onPrimaryContainer = Color.White,
+    secondary = Azure2,
+    onSecondary = Void,
+    background = Void,
+    onBackground = LabelPrimary,
+    surface = Surface1,
+    onSurface = LabelPrimary,
+    surfaceVariant = Surface2,
+    onSurfaceVariant = LabelSecondary,
+    surfaceContainer = Surface1,
+    surfaceContainerHigh = Surface2,
+    surfaceContainerHighest = Surface2,
+    outline = Hairline,
+    outlineVariant = Hairline,
+    error = RouteRed,
     onError = Color.White,
 )
 
@@ -35,7 +32,7 @@ private val UaCastColorScheme = darkColorScheme(
 fun UaCastPlayerTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = UaCastColorScheme,
-        typography = UaCastTypography,
+        typography = AppTypography,
         content = content,
     )
 }

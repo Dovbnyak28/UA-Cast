@@ -1,18 +1,33 @@
 package com.uacastplayer.ui.theme
 
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-val UaCastBackground = Color(0xFF070A12)
-val UaCastSurface = Color(0xFF111827)
-val UaCastSurfaceVariant = Color(0xFF1B2333)
-val UaCastSurfaceContainer = Color(0xFF161F30)
-val UaCastPrimary = Color(0xFF3B82F6)
-val UaCastPrimaryContainer = Color(0xFF1E3A6E)
-val UaCastOnPrimaryContainer = Color(0xFFCBDEFF)
-val UaCastCyan = Color(0xFF22D3EE)
-val UaCastCyanContainer = Color(0xFF0E3A42)
-val UaCastOnCyanContainer = Color(0xFFA8F0FB)
-val UaCastBorder = Color(0xFF243044)
-val UaCastOnSurface = Color(0xFFE5E7EB)
-val UaCastOnSurfaceMuted = Color(0xFF8B96A8)
-val UaCastError = Color(0xFFF87171)
+// Backgrounds
+val Void = Color(0xFF0A0A0C)
+val Surface1 = Color(0xFF1C1C1E)
+val Surface2 = Color(0xFF2C2C2E)
+
+// Accent
+val Azure = Color(0xFF0A84FF)
+val Azure2 = Color(0xFF64D2FF)
+val AzureGradient = Brush.linearGradient(listOf(Azure, Azure2))
+
+// Route health semantics
+val RouteGreen = Color(0xFF30D158)
+val RouteAmber = Color(0xFFFFD60A)
+val RouteRed = Color(0xFFFF453A)
+
+// Text
+val LabelPrimary = Color(0xFFF5F5F7)
+val LabelSecondary = Color(0x99EBEBF5)
+val LabelTertiary = Color(0x4DEBEBF5)
+
+// Lines
+val Hairline = Color(0x14FFFFFF)
+
+// Glow
+val AzureGlow = Color(0x800A84FF)
+val GreenGlow = Color(0x9930D158)
+val AmberGlow = Color(0x80FFD60A)
+val RedGlow = Color(0x99FF453A)

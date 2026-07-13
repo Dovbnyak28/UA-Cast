@@ -15,11 +15,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +42,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import com.uacastplayer.R
 import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.player.AudioChannelLayout
@@ -50,7 +58,19 @@ import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.player.PlayerViewModel
+import com.uacastplayer.ui.components.GradientPlayButton
+import com.uacastplayer.ui.components.RoundIconButton
+import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.BreatheMs
+import com.uacastplayer.ui.theme.CardTitle
+import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.LabelSecondary
+import com.uacastplayer.ui.theme.LiveText
+import com.uacastplayer.ui.theme.RadiusItem
+import com.uacastplayer.ui.theme.RouteRed
+import com.uacastplayer.ui.theme.RedGlow
+import com.uacastplayer.ui.theme.ScreenHPadding
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_MILLIS = 3000L
@@ -148,27 +168,27 @@ private fun PlayerControlsOverlay(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onExit) {
-                Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = Color.White)
-            }
-            Column(modifier = Modifier.padding(start = 8.dp)) {
-                Text(
-                    text = uiState.currentChannel?.displayName.orEmpty(),
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                )
+            SmallRoundIconButton(
+                icon = AppIcons.ArrowBack,
+                onClick = onExit,
+                contentDescription = stringResource(R.string.common_back),
+                background = Color(0x66000000),
+            )
+            Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
+                Text(text = uiState.currentChannel?.displayName.orEmpty(), color = Color.White, style = CardTitle)
                 BadgesRow(uiState.badges)
             }
+            LiveIndicator()
         }
 
         Box(modifier = Modifier.weight(1f))
 
         if (uiState.nextChannelsPreview.isNotEmpty()) {
             LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(uiState.nextChannelsPreview, key = { it.index }) { indexed ->
@@ -177,6 +197,7 @@ private fun PlayerControlsOverlay(
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier
+                            .clip(RoundedCornerShape(RadiusItem))
                             .background(Color(0x66000000))
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                             .pointerInput(indexed.index) {
@@ -188,37 +209,74 @@ private fun PlayerControlsOverlay(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onPrevious) {
-                Icon(AppIcons.SkipPrevious, contentDescription = stringResource(R.string.player_previous), tint = Color.White)
-            }
-            IconButton(onClick = onPlayPause) {
-                Icon(
-                    if (uiState.isPlaying) AppIcons.Pause else AppIcons.Play,
-                    contentDescription = playPauseLabel(uiState.isPlaying),
-                    tint = Color.White,
-                )
-            }
-            IconButton(onClick = onNext) {
-                Icon(AppIcons.SkipNext, contentDescription = stringResource(R.string.player_next), tint = Color.White)
-            }
+            RoundIconButton(
+                icon = AppIcons.SkipPrevious,
+                onClick = onPrevious,
+                contentDescription = stringResource(R.string.player_previous),
+            )
+            GradientPlayButton(
+                icon = if (uiState.isPlaying) AppIcons.Pause else AppIcons.Play,
+                onClick = onPlayPause,
+                contentDescription = playPauseLabel(uiState.isPlaying),
+            )
+            RoundIconButton(
+                icon = AppIcons.SkipNext,
+                onClick = onNext,
+                contentDescription = stringResource(R.string.player_next),
+            )
             Box(modifier = Modifier.weight(1f))
-            IconButton(onClick = onEnterPip) {
-                Icon(AppIcons.PictureInPicture, contentDescription = stringResource(R.string.player_picture_in_picture), tint = Color.White)
-            }
-            IconButton(onClick = onToggleFullscreen) {
-                Icon(
-                    if (isFullscreen) AppIcons.FullscreenExit else AppIcons.Fullscreen,
-                    contentDescription = stringResource(
-                        if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_fullscreen
-                    ),
-                    tint = Color.White,
-                )
-            }
+            SmallRoundIconButton(
+                icon = AppIcons.PictureInPicture,
+                onClick = onEnterPip,
+                contentDescription = stringResource(R.string.player_picture_in_picture),
+                background = Color(0x66000000),
+            )
+            SmallRoundIconButton(
+                icon = if (isFullscreen) AppIcons.FullscreenExit else AppIcons.Fullscreen,
+                onClick = onToggleFullscreen,
+                contentDescription = stringResource(
+                    if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_fullscreen
+                ),
+                background = Color(0x66000000),
+            )
         }
+    }
+}
+
+/** §4 rule 3 - LIVE dot breathing between alpha/scale 1 and 0.3/0.8, reversed, on an infinite loop. */
+@Composable
+private fun LiveIndicator() {
+    val transition = rememberInfiniteTransition(label = "liveBreathe")
+    val alpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(tween(BreatheMs), repeatMode = RepeatMode.Reverse),
+        label = "liveAlpha",
+    )
+    val dotScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(tween(BreatheMs), repeatMode = RepeatMode.Reverse),
+        label = "liveScale",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .scale(dotScale)
+                .background(RouteRed.copy(alpha = alpha), CircleShape)
+                .background(RedGlow.copy(alpha = alpha * 0.4f), CircleShape),
+        )
+        Text(
+            text = stringResource(R.string.player_live_indicator),
+            style = LiveText,
+            color = RouteRed.copy(alpha = alpha.coerceAtLeast(0.6f)),
+            modifier = Modifier.padding(start = 6.dp),
+        )
     }
 }
 
@@ -237,8 +295,8 @@ private fun BadgesRow(badges: PlaybackBadgesState) {
     if (parts.isNotEmpty()) {
         Text(
             text = parts.joinToString(" · "),
-            color = Color(0xFFB5BFCF),
-            style = MaterialTheme.typography.labelLarge,
+            color = LabelSecondary,
+            style = com.uacastplayer.ui.theme.Caption,
         )
     }
 }
