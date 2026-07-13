@@ -21,12 +21,15 @@
     <string name="home_title">Головна</string>
     <string name="home_empty_message">Імпортуйте плейлист, щоб почати</string>
     <string name="home_empty_subtitle">Відкрийте вкладку «Канали» та завантажте M3U-посилання або файл</string>
+    <string name="home_playlist_loaded_title">Плейлист завантажено</string>
+    <string name="home_playlist_loaded_subtitle">Відкрийте вкладку «Канали», щоб переглянути й відтворити</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Канали</string>
     <string name="channels_empty_message">Поки що немає каналів</string>
     <string name="channels_empty_subtitle">Завантажте плейлист вище за URL або файлом, щоб побачити канали тут</string>
     <string name="channels_search_hint">Пошук каналів</string>
+    <string name="channels_category_all">Усі</string>
     <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
     <string name="playlist_load_button">Завантажити плейлист</string>
     <string name="playlist_browse_file">Обрати файл</string>
@@ -97,6 +100,7 @@
     <string name="settings_help_body">UA Cast Player — персональний IPTV-плеєр. Імпортуйте плейлист на вкладці «Канали» (за URL або файлом), оберіть джерело телепрограми та торкніться каналу, щоб почати перегляд. Використовуйте кнопку Cast для трансляції на Chromecast або Google TV; якщо потік не вдається відтворити напряму на приймачі, застосунок автоматично повторює спробу через локальний ретранслятор на телефоні.</string>
 
     <!-- Player -->
+    <string name="player_live_indicator">LIVE</string>
     <string name="player_play">Відтворити</string>
     <string name="player_pause">Пауза</string>
     <string name="player_next">Наступний канал</string>
@@ -113,6 +117,11 @@
     <string name="audio_layout_stereo">Стерео</string>
     <string name="audio_layout_surround_5_1">Об\'ємний звук 5.1</string>
     <string name="audio_layout_surround_7_1">Об\'ємний звук 7.1</string>
+
+    <!-- Cast session foreground service -->
+    <string name="cast_session_channel_name">Трансляція</string>
+    <string name="cast_session_notification_text">Трансляція на %1$s</string>
+    <string name="cast_session_stop_action">Зупинити</string>
 
     <!-- Common -->
     <string name="common_ok">Гаразд</string>

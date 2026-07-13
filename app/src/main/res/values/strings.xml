@@ -21,12 +21,15 @@
     <string name="home_title">Home</string>
     <string name="home_empty_message">Import a playlist to get started</string>
     <string name="home_empty_subtitle">Open the Channels tab and load an M3U link or file</string>
+    <string name="home_playlist_loaded_title">Playlist loaded</string>
+    <string name="home_playlist_loaded_subtitle">Open the Channels tab to browse and play</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Channels</string>
     <string name="channels_empty_message">No channels yet</string>
     <string name="channels_empty_subtitle">Load a playlist above by URL or file to see channels here</string>
     <string name="channels_search_hint">Search channels</string>
+    <string name="channels_category_all">All</string>
     <string name="playlist_url_hint">Playlist URL (m3u/m3u8)</string>
     <string name="playlist_load_button">Load playlist</string>
     <string name="playlist_browse_file">Browse file</string>
@@ -97,6 +100,7 @@
     <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. Use the Cast button to play on a Chromecast or Google TV device; if a stream can\'t be played directly on the receiver, the app automatically retries through a local relay on your phone.</string>
 
     <!-- Player -->
+    <string name="player_live_indicator">LIVE</string>
     <string name="player_play">Play</string>
     <string name="player_pause">Pause</string>
     <string name="player_next">Next channel</string>
@@ -113,6 +117,11 @@
     <string name="audio_layout_stereo">Stereo</string>
     <string name="audio_layout_surround_5_1">5.1 surround</string>
     <string name="audio_layout_surround_7_1">7.1 surround</string>
+
+    <!-- Cast session foreground service -->
+    <string name="cast_session_channel_name">Casting</string>
+    <string name="cast_session_notification_text">Streaming to %1$s</string>
+    <string name="cast_session_stop_action">Stop</string>
 
     <!-- Common -->
     <string name="common_ok">OK</string>

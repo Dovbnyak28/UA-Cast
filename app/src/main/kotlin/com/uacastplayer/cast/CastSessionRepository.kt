@@ -6,7 +6,6 @@ import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
-import com.uacastplayer.data.cast.CastWakeLocks
 import com.uacastplayer.data.cast.IncompatibilityMemoryStore
 import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
@@ -53,7 +52,6 @@ class CastSessionRepository private constructor(context: Context) {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
     private val proxyServer = ProxyServer(httpClient)
-    private val wakeLocks = CastWakeLocks(appContext)
     private val incompatibilityStore = IncompatibilityMemoryStore(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -174,7 +172,7 @@ class CastSessionRepository private constructor(context: Context) {
             return
         }
         proxyServer.start(sessionToken = UUID.randomUUID().toString(), host = host)
-        wakeLocks.acquire()
+        applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)
         val resourceId = proxyServer.registerPlaylist(streamUrl)
         loadOnReceiver(proxyServer.buildLocalUrl(resourceId), title, originalStreamUrl = streamUrl)
     }
@@ -206,6 +204,19 @@ class CastSessionRepository private constructor(context: Context) {
         applyResult(CastLoadResultReducer.reduce(_state.value, result))
     }
 
+    /** Ends the active Cast session outright - used by [CastProxyService]'s notification "Stop" action. */
+    fun endSession() {
+        castContext?.sessionManager?.endCurrentSession(true)
+    }
+
+    private fun applyProxyLifecycle(event: ProxyLifecycleEvent, channelTitle: String? = null, receiverName: String? = null) {
+        when (ProxySessionPolicy.commandFor(event)) {
+            ProxyServiceCommand.StartForeground ->
+                CastProxyService.start(appContext, channelTitle.orEmpty(), receiverName.orEmpty())
+            ProxyServiceCommand.StopForeground -> CastProxyService.stop(appContext)
+        }
+    }
+
     private fun giveUp(streamUrl: String) {
         currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
         applyResult(CastLoadResultReducer.reduce(_state.value, CastLoadResult.Failure("proxy_unavailable")))
@@ -216,7 +227,7 @@ class CastSessionRepository private constructor(context: Context) {
         for (effect in result.effects) {
             if (effect is CastSideEffect.CloseProxySession) {
                 proxyServer.stop()
-                wakeLocks.release()
+                applyProxyLifecycle(ProxyLifecycleEvent.STOPPED)
             }
             if (!_sideEffects.tryEmit(effect)) {
                 AppLog.w(TAG) { "Dropped cast side effect, no buffer space: ${effect.javaClass.simpleName}" }

@@ -21,12 +21,15 @@
     <string name="home_title">Главная</string>
     <string name="home_empty_message">Импортируйте плейлист, чтобы начать</string>
     <string name="home_empty_subtitle">Откройте вкладку «Каналы» и загрузите ссылку M3U или файл</string>
+    <string name="home_playlist_loaded_title">Плейлист загружен</string>
+    <string name="home_playlist_loaded_subtitle">Откройте вкладку «Каналы», чтобы просмотреть и воспроизвести</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Каналы</string>
     <string name="channels_empty_message">Пока нет каналов</string>
     <string name="channels_empty_subtitle">Загрузите плейлист выше по URL или файлом, чтобы увидеть каналы здесь</string>
     <string name="channels_search_hint">Поиск каналов</string>
+    <string name="channels_category_all">Все</string>
     <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
     <string name="playlist_load_button">Загрузить плейлист</string>
     <string name="playlist_browse_file">Выбрать файл</string>
@@ -97,6 +100,7 @@
     <string name="settings_help_body">UA Cast Player — персональный IPTV-плеер. Импортируйте плейлист на вкладке «Каналы» (по URL или файлом), выберите источник телепрограммы и нажмите на канал, чтобы начать просмотр. Используйте кнопку Cast для трансляции на Chromecast или Google TV; если поток не удаётся воспроизвести напрямую на приёмнике, приложение автоматически повторяет попытку через локальный ретранслятор на телефоне.</string>
 
     <!-- Player -->
+    <string name="player_live_indicator">LIVE</string>
     <string name="player_play">Воспроизвести</string>
     <string name="player_pause">Пауза</string>
     <string name="player_next">Следующий канал</string>
@@ -113,6 +117,11 @@
     <string name="audio_layout_stereo">Стерео</string>
     <string name="audio_layout_surround_5_1">Объёмный звук 5.1</string>
     <string name="audio_layout_surround_7_1">Объёмный звук 7.1</string>
+
+    <!-- Cast session foreground service -->
+    <string name="cast_session_channel_name">Трансляция</string>
+    <string name="cast_session_notification_text">Трансляция на %1$s</string>
+    <string name="cast_session_stop_action">Остановить</string>
 
     <!-- Common -->
     <string name="common_ok">ОК</string>

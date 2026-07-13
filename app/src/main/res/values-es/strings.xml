@@ -21,12 +21,15 @@
     <string name="home_title">Inicio</string>
     <string name="home_empty_message">Importa una lista de reproducción para empezar</string>
     <string name="home_empty_subtitle">Abre la pestaña Canales y carga un enlace o archivo M3U</string>
+    <string name="home_playlist_loaded_title">Lista cargada</string>
+    <string name="home_playlist_loaded_subtitle">Abre la pestaña Canales para explorar y reproducir</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Canales</string>
     <string name="channels_empty_message">Todavía no hay canales</string>
     <string name="channels_empty_subtitle">Carga una lista arriba por URL o archivo para ver los canales aquí</string>
     <string name="channels_search_hint">Buscar canales</string>
+    <string name="channels_category_all">Todos</string>
     <string name="playlist_url_hint">URL de la lista (m3u/m3u8)</string>
     <string name="playlist_load_button">Cargar lista</string>
     <string name="playlist_browse_file">Elegir archivo</string>
@@ -97,6 +100,7 @@
     <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía TV y toca un canal para empezar a verlo. Usa el botón Cast para reproducir en un Chromecast o Google TV; si un canal no se puede reproducir directamente en el receptor, la app reintenta automáticamente mediante un relé local en tu teléfono.</string>
 
     <!-- Player -->
+    <string name="player_live_indicator">LIVE</string>
     <string name="player_play">Reproducir</string>
     <string name="player_pause">Pausar</string>
     <string name="player_next">Canal siguiente</string>
@@ -113,6 +117,11 @@
     <string name="audio_layout_stereo">Estéreo</string>
     <string name="audio_layout_surround_5_1">Sonido envolvente 5.1</string>
     <string name="audio_layout_surround_7_1">Sonido envolvente 7.1</string>
+
+    <!-- Cast session foreground service -->
+    <string name="cast_session_channel_name">Transmisión</string>
+    <string name="cast_session_notification_text">Transmitiendo a %1$s</string>
+    <string name="cast_session_stop_action">Detener</string>
 
     <!-- Common -->
     <string name="common_ok">Aceptar</string>
