@@ -2,6 +2,8 @@ package com.uacastplayer
 
 import android.app.Application
 import android.net.Uri
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.uacastplayer.cast.CastPlaybackState
@@ -129,6 +131,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectLanguage(language: AppLanguage) {
         preferences.language = language
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language.code))
         _uiState.value = _uiState.value.copy(language = language, needsLanguagePicker = false)
     }
 

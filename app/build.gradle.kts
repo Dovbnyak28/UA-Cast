@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.uacastplayer"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
         // TODO: automate versionCode/versionName bumps from CI instead of hand-editing here.
         versionCode = 2

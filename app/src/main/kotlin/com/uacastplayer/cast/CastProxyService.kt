@@ -14,6 +14,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.uacastplayer.MainActivity
 import com.uacastplayer.R
+import com.uacastplayer.core.i18n.withAppLocale
 import com.uacastplayer.data.cast.CastWakeLocks
 import com.uacastplayer.log.AppLog
 
@@ -36,6 +37,7 @@ private const val EXTRA_RECEIVER_NAME = "receiver_name"
 class CastProxyService : Service() {
 
     private val wakeLocks by lazy { CastWakeLocks(applicationContext) }
+    private val localizedContext by lazy { applicationContext.withAppLocale() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -74,7 +76,7 @@ class CastProxyService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                getString(R.string.cast_session_channel_name),
+                localizedContext.getString(R.string.cast_session_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
@@ -97,10 +99,10 @@ class CastProxyService : Service() {
         )
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_cast)
-            .setContentTitle(channelTitle.ifEmpty { getString(R.string.app_name) })
-            .setContentText(getString(R.string.cast_session_notification_text, receiverName))
+            .setContentTitle(channelTitle.ifEmpty { localizedContext.getString(R.string.app_name) })
+            .setContentText(localizedContext.getString(R.string.cast_session_notification_text, receiverName))
             .setContentIntent(contentIntent)
-            .addAction(0, getString(R.string.cast_session_stop_action), stopPendingIntent)
+            .addAction(0, localizedContext.getString(R.string.cast_session_stop_action), stopPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
