@@ -29,7 +29,20 @@
     <string name="channels_empty_message">Поки що немає каналів</string>
     <string name="channels_empty_subtitle">Завантажте плейлист вище за URL або файлом, щоб побачити канали тут</string>
     <string name="channels_search_hint">Пошук каналів</string>
-    <string name="channels_category_all">Усі</string>
+    <string name="channels_groups_title">Групи каналів</string>
+    <string name="channels_no_search_results">Немає каналів за запитом «%1$s»</string>
+    <plurals name="channel_groups_count">
+        <item quantity="one">%1$d група</item>
+        <item quantity="few">%1$d групи</item>
+        <item quantity="many">%1$d груп</item>
+        <item quantity="other">%1$d групи</item>
+    </plurals>
+    <plurals name="channels_total_count">
+        <item quantity="one">%1$d канал</item>
+        <item quantity="few">%1$d канали</item>
+        <item quantity="many">%1$d каналів</item>
+        <item quantity="other">%1$d каналу</item>
+    </plurals>
     <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
     <string name="playlist_load_button">Завантажити плейлист</string>
     <string name="playlist_browse_file">Обрати файл</string>

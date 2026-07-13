@@ -169,6 +169,7 @@ fun RootScaffold(
                     resolveIcon = resolveIcon,
                     density = settingsState.listDensity,
                     layout = settingsState.channelLayout,
+                    onChannelLayoutSelected = onChannelLayoutSelected,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
                     modifier = content,

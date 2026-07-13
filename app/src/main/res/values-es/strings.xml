@@ -29,7 +29,18 @@
     <string name="channels_empty_message">Todavía no hay canales</string>
     <string name="channels_empty_subtitle">Carga una lista arriba por URL o archivo para ver los canales aquí</string>
     <string name="channels_search_hint">Buscar canales</string>
-    <string name="channels_category_all">Todos</string>
+    <string name="channels_groups_title">Grupos de canales</string>
+    <string name="channels_no_search_results">Ningún canal coincide con "%1$s"</string>
+    <plurals name="channel_groups_count">
+        <item quantity="one">%1$d grupo</item>
+        <item quantity="many">%1$d grupos</item>
+        <item quantity="other">%1$d grupos</item>
+    </plurals>
+    <plurals name="channels_total_count">
+        <item quantity="one">%1$d canal</item>
+        <item quantity="many">%1$d canales</item>
+        <item quantity="other">%1$d canales</item>
+    </plurals>
     <string name="playlist_url_hint">URL de la lista (m3u/m3u8)</string>
     <string name="playlist_load_button">Cargar lista</string>
     <string name="playlist_browse_file">Elegir archivo</string>

@@ -29,7 +29,16 @@
     <string name="channels_empty_message">No channels yet</string>
     <string name="channels_empty_subtitle">Load a playlist above by URL or file to see channels here</string>
     <string name="channels_search_hint">Search channels</string>
-    <string name="channels_category_all">All</string>
+    <string name="channels_groups_title">Channel groups</string>
+    <string name="channels_no_search_results">No channels match "%1$s"</string>
+    <plurals name="channel_groups_count">
+        <item quantity="one">%1$d group</item>
+        <item quantity="other">%1$d groups</item>
+    </plurals>
+    <plurals name="channels_total_count">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
     <string name="playlist_url_hint">Playlist URL (m3u/m3u8)</string>
     <string name="playlist_load_button">Load playlist</string>
     <string name="playlist_browse_file">Browse file</string>

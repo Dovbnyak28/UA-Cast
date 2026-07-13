@@ -29,7 +29,20 @@
     <string name="channels_empty_message">Пока нет каналов</string>
     <string name="channels_empty_subtitle">Загрузите плейлист выше по URL или файлом, чтобы увидеть каналы здесь</string>
     <string name="channels_search_hint">Поиск каналов</string>
-    <string name="channels_category_all">Все</string>
+    <string name="channels_groups_title">Группы каналов</string>
+    <string name="channels_no_search_results">Нет каналов по запросу «%1$s»</string>
+    <plurals name="channel_groups_count">
+        <item quantity="one">%1$d группа</item>
+        <item quantity="few">%1$d группы</item>
+        <item quantity="many">%1$d групп</item>
+        <item quantity="other">%1$d группы</item>
+    </plurals>
+    <plurals name="channels_total_count">
+        <item quantity="one">%1$d канал</item>
+        <item quantity="few">%1$d канала</item>
+        <item quantity="many">%1$d каналов</item>
+        <item quantity="other">%1$d канала</item>
+    </plurals>
     <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
     <string name="playlist_load_button">Загрузить плейлист</string>
     <string name="playlist_browse_file">Выбрать файл</string>

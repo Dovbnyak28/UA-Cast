@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.channels
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,21 +12,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -52,10 +59,11 @@ import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.PlaylistImportControls
-import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.Azure
+import com.uacastplayer.ui.theme.AzureGradient
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
@@ -70,6 +78,8 @@ import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.SectionLabel
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Surface1
+import com.uacastplayer.ui.theme.Surface2
+import com.uacastplayer.ui.theme.Title
 import java.io.File
 
 @Composable
@@ -83,15 +93,32 @@ fun ChannelsScreen(
     resolveIcon: suspend (M3uChannel) -> File?,
     density: ListDensity,
     layout: ChannelLayout,
+    onChannelLayoutSelected: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
-    var selectedCategory by rememberSaveable { mutableIntStateOf(0) }
+
+    // Landing on a groups overview (like the rest of the bottom-nav tabs, this is per-tab UI state,
+    // not app state - it deliberately resets to the overview on process death, unlike the playlist
+    // itself). Storing the group's stable key (not the GroupedChannels/ChannelGroup value) keeps
+    // this Saveable and lets the open group re-resolve against a reloaded playlist.
+    var openGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val openGroup = remember(playlistState.groups, openGroupKey) {
+        openGroupKey?.let { key -> playlistState.groups.firstOrNull { groupDisplayKey(it.group) == key } }
+    }
+    if (openGroupKey != null && openGroup == null) {
+        openGroupKey = null
+    }
+    if (openGroup != null) {
+        BackHandler { openGroupKey = null }
+    }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding)) {
-        PlaylistImportControls(onLoadUrl = onLoadUrl, onPickFile = onPickFile)
+        if (openGroup == null) {
+            PlaylistImportControls(onLoadUrl = onLoadUrl, onPickFile = onPickFile)
+        }
 
         if (iconPrefetchState.isRunning) {
             val progress = if (iconPrefetchState.total > 0) {
@@ -109,35 +136,31 @@ fun ChannelsScreen(
             playlistState.isLoading -> LoadingState()
             playlistState.error != null -> ErrorState(playlistState.error)
             playlistState.hasChannels -> {
-                val categories = remember(playlistState.groups) { playlistState.groups.map { it.group } }
-                if (categories.size > 1) {
-                    val labels = listOf(stringResource(R.string.channels_category_all)) + categories.map { groupLabel(it) }
-                    SegmentedControl(
-                        options = labels,
-                        selectedIndex = selectedCategory.coerceIn(0, labels.lastIndex),
-                        onSelected = { selectedCategory = it },
-                        modifier = Modifier.padding(top = GapM),
+                val group = openGroup
+                if (group == null) {
+                    GroupsOverviewGrid(
+                        groups = playlistState.groups,
+                        layout = layout,
+                        onLayoutChange = onChannelLayoutSelected,
+                        onGroupClick = { openGroupKey = groupDisplayKey(it.group) },
+                    )
+                } else {
+                    SingleGroupChannelList(
+                        grouped = group,
+                        epgState = epgState,
+                        resolveIcon = resolveIcon,
+                        density = density,
+                        layout = layout,
+                        onLayoutChange = onChannelLayoutSelected,
+                        isFavorite = isFavorite,
+                        onToggleFavorite = onToggleFavorite,
+                        onBack = { openGroupKey = null },
+                        onChannelClick = { channel ->
+                            val index = flatChannels.indexOf(channel)
+                            if (index >= 0) onChannelSelected(flatChannels, index)
+                        },
                     )
                 }
-                val visibleGroups = if (selectedCategory == 0 || categories.size <= 1) {
-                    playlistState.groups
-                } else {
-                    val target = categories.getOrNull(selectedCategory - 1)
-                    playlistState.groups.filter { it.group == target }
-                }
-                ChannelGroupList(
-                    groups = visibleGroups,
-                    epgState = epgState,
-                    resolveIcon = resolveIcon,
-                    density = density,
-                    layout = layout,
-                    isFavorite = isFavorite,
-                    onToggleFavorite = onToggleFavorite,
-                    onChannelClick = { channel ->
-                        val index = flatChannels.indexOf(channel)
-                        if (index >= 0) onChannelSelected(flatChannels, index)
-                    },
-                )
             }
             else -> EmptyState()
         }
@@ -180,29 +203,152 @@ private fun EmptyState() {
     )
 }
 
+/** Landing screen for the Channels tab: one card per group, showing its channel count. */
 @Composable
-private fun ChannelGroupList(
+private fun GroupsOverviewGrid(
     groups: List<GroupedChannels>,
+    layout: ChannelLayout,
+    onLayoutChange: (ChannelLayout) -> Unit,
+    onGroupClick: (GroupedChannels) -> Unit,
+) {
+    val totalChannels = remember(groups) { groups.sumOf { it.channels.size } }
+    val columns = if (layout == ChannelLayout.LIST) 1 else 2
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        modifier = Modifier.fillMaxSize().padding(top = GapM),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item(key = "groups-header", span = { GridItemSpan(columns) }) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(text = stringResource(R.string.channels_groups_title), style = Title, color = LabelPrimary)
+                    Text(
+                        text = pluralStringResource(R.plurals.channel_groups_count, groups.size, groups.size) +
+                            " · " +
+                            pluralStringResource(R.plurals.channels_total_count, totalChannels, totalChannels),
+                        style = Caption,
+                        color = LabelSecondary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
+            }
+        }
+        items(groups, key = { groupDisplayKey(it.group) }) { grouped ->
+            GroupCard(grouped = grouped, onClick = { onGroupClick(grouped) })
+        }
+    }
+}
+
+@Composable
+private fun GroupCard(grouped: GroupedChannels, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(RadiusList))
+            .background(Surface1)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Surface2),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(AppIcons.Tv, contentDescription = null, tint = Azure, modifier = Modifier.size(22.dp))
+        }
+        Box(
+            modifier = Modifier
+                .padding(top = 12.dp)
+                .width(28.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(AzureGradient),
+        )
+        Text(
+            text = groupLabel(grouped.group),
+            style = BodyText,
+            color = LabelPrimary,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Text(
+            text = pluralStringResource(R.plurals.channels_total_count, grouped.channels.size, grouped.channels.size),
+            style = Caption,
+            color = LabelSecondary,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/** One already-selected group's channels: back + title + search, then the list/grid rendering. */
+@Composable
+private fun SingleGroupChannelList(
+    grouped: GroupedChannels,
     epgState: EpgUiState,
     resolveIcon: suspend (M3uChannel) -> File?,
     density: ListDensity,
     layout: ChannelLayout,
+    onLayoutChange: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
+    onBack: () -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
 ) {
-    if (layout == ChannelLayout.LIST) {
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
-            for (grouped in groups) {
-                item(key = "header-${groupDisplayKey(grouped.group)}") { GroupHeader(grouped.group) }
-                item(key = "inset-${groupDisplayKey(grouped.group)}") {
+    var query by rememberSaveable(groupDisplayKey(grouped.group)) { mutableStateOf("") }
+    val trimmedQuery = query.trim()
+    val filteredChannels = remember(grouped.channels, trimmedQuery) {
+        if (trimmedQuery.isEmpty()) {
+            grouped.channels
+        } else {
+            grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = GapM), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = LabelPrimary)
+            }
+            Text(
+                text = groupLabel(grouped.group),
+                style = Title,
+                color = LabelPrimary,
+                maxLines = 1,
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text(stringResource(R.string.channels_search_hint)) },
+            leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = LabelSecondary) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        )
+
+        if (filteredChannels.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.channels_no_search_results, trimmedQuery),
+                    style = BodyText,
+                    color = LabelSecondary,
+                )
+            }
+        } else if (layout == ChannelLayout.LIST) {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
+                item {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(RadiusList))
-                            .background(Surface1),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(RadiusList)).background(Surface1),
                     ) {
-                        grouped.channels.forEachIndexed { index, channel ->
+                        filteredChannels.forEachIndexed { index, channel ->
                             val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
                             ChannelRow(
                                 channel = channel,
@@ -214,7 +360,7 @@ private fun ChannelGroupList(
                                 onToggleFavorite = { onToggleFavorite(channel) },
                                 onClick = { onChannelClick(channel) },
                             )
-                            if (index != grouped.channels.lastIndex) {
+                            if (index != filteredChannels.lastIndex) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -227,15 +373,10 @@ private fun ChannelGroupList(
                     }
                 }
             }
-        }
-    } else {
-        val columns = if (layout == ChannelLayout.LARGE_ICONS) 2 else 3
-        LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.fillMaxSize().padding(top = GapM)) {
-            for (grouped in groups) {
-                item(key = "header-${groupDisplayKey(grouped.group)}", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(columns) }) {
-                    GroupHeader(grouped.group)
-                }
-                items(grouped.channels, key = { it.streamUrl }) { channel ->
+        } else {
+            val columns = if (layout == ChannelLayout.LARGE_ICONS) 2 else 3
+            LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.fillMaxSize().padding(top = GapM)) {
+                items(filteredChannels, key = { it.streamUrl }) { channel ->
                     ChannelTile(
                         channel = channel,
                         resolveIcon = resolveIcon,
@@ -248,14 +389,55 @@ private fun ChannelGroupList(
     }
 }
 
+/** Toolbar control that switches [ChannelLayout], shared by the groups overview and a single group. */
 @Composable
-private fun GroupHeader(group: ChannelGroup) {
-    Text(
-        text = groupLabel(group).uppercase(),
-        style = SectionLabel,
-        color = LabelSecondary,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-    )
+private fun ChannelLayoutMenu(selected: ChannelLayout, onSelect: (ChannelLayout) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = selected.icon(),
+                contentDescription = stringResource(R.string.settings_channel_layout_label),
+                tint = Azure,
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ChannelLayout.entries.forEach { option ->
+                val isSelected = option == selected
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(option.labelRes()),
+                            color = if (isSelected) Azure else LabelPrimary,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            option.icon(),
+                            contentDescription = null,
+                            tint = if (isSelected) Azure else LabelSecondary,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        if (!isSelected) onSelect(option)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun ChannelLayout.icon(): ImageVector = when (this) {
+    ChannelLayout.LIST -> AppIcons.ViewList
+    ChannelLayout.GRID -> AppIcons.GridView
+    ChannelLayout.LARGE_ICONS -> AppIcons.LargeIcons
+}
+
+private fun ChannelLayout.labelRes(): Int = when (this) {
+    ChannelLayout.LIST -> R.string.channel_layout_list
+    ChannelLayout.GRID -> R.string.channel_layout_grid
+    ChannelLayout.LARGE_ICONS -> R.string.channel_layout_large_icons
 }
 
 @Composable
