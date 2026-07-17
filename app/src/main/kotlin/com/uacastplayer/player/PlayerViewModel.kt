@@ -14,6 +14,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.dlna.DlnaConnectionState
+import com.uacastplayer.dlna.DlnaDevice
+import com.uacastplayer.dlna.DlnaSessionRepository
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.M3uChannel
 import java.util.Locale
@@ -53,6 +56,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val castRepository = CastSessionRepository.getInstance(application)
     private var isCasting: Boolean = false
 
+    private val dlnaRepository = DlnaSessionRepository.getInstance(application)
+    private var isDlnaCasting: Boolean = false
+    val dlnaState: StateFlow<DlnaConnectionState> = dlnaRepository.state
+
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
@@ -89,6 +96,33 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             castRepository.sideEffects.collect { effect -> handleCastSideEffect(effect) }
         }
+        viewModelScope.launch {
+            dlnaRepository.state.collect { state -> handleDlnaStateChange(state) }
+        }
+    }
+
+    /**
+     * DLNA has no receiver-status callbacks to drive a reducer off (unlike Cast's [CastSideEffect]
+     * pipeline - see `docs/DLNA.md`), so local playback is paused/resumed directly off the
+     * connected-device transition instead.
+     */
+    private fun handleDlnaStateChange(state: DlnaConnectionState) {
+        val isConnected = state.connectedDevice != null
+        if (isConnected && !isDlnaCasting) exoPlayer.pause()
+        if (!isConnected && isDlnaCasting) exoPlayer.play()
+        isDlnaCasting = isConnected
+        updateSeekability()
+    }
+
+    suspend fun discoverDlnaDevices() = dlnaRepository.discoverDevices()
+
+    fun connectDlna(device: DlnaDevice) {
+        val channel = uiState.value.currentChannel ?: return
+        dlnaRepository.connect(device, channel.streamUrl, channel.displayName)
+    }
+
+    fun stopDlna() {
+        dlnaRepository.stop()
     }
 
     private fun handleCastSideEffect(effect: CastSideEffect) {
@@ -214,7 +248,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun updateSeekability() {
         val isLive = exoPlayer.isCurrentMediaItemLive
         val isSeekable = exoPlayer.isCurrentMediaItemSeekable
-        _uiState.update { it.copy(canSeek = SeekPolicy.canSeek(isLive, isSeekable, isCasting)) }
+        _uiState.update { it.copy(canSeek = SeekPolicy.canSeek(isLive, isSeekable, isCasting || isDlnaCasting)) }
     }
 
     private fun updateBadgesAndTrackLists(tracks: Tracks) {

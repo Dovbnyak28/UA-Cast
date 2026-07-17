@@ -195,6 +195,14 @@
     <string name="cast_session_notification_text">Трансляція на %1$s</string>
     <string name="cast_session_stop_action">Зупинити</string>
 
+    <!-- DLNA casting -->
+    <string name="player_dlna_cast">Транслювати на інший пристрій (DLNA)</string>
+    <string name="dlna_sheet_title">Інші пристрої (DLNA)</string>
+    <string name="dlna_sheet_searching">Пошук пристроїв…</string>
+    <string name="dlna_sheet_no_devices">Пристроїв не знайдено</string>
+    <string name="dlna_sheet_connected_to">Підключено до %1$s</string>
+    <string name="dlna_stop_casting">Зупинити трансляцію</string>
+
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Не зупиняти трансляцію у фоні</string>
     <string name="battery_hint_body">Деякі виробники телефонів (наприклад, Xiaomi) агресивно зупиняють застосунки у фоні, через що трансляція на TV може обірватися. Дозвольте UA Cast Player ігнорувати оптимізацію батареї, щоб відтворення не переривалось.</string>

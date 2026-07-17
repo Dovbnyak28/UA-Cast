@@ -66,6 +66,7 @@ import com.uacastplayer.ui.components.GradientPlayButton
 import com.uacastplayer.ui.components.RoundIconButton
 import com.uacastplayer.ui.components.SleepTimerDialog
 import com.uacastplayer.ui.components.SmallRoundIconButton
+import com.uacastplayer.ui.dlna.DlnaDeviceSheet
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.Azure
 import com.uacastplayer.ui.theme.BreatheMs
@@ -73,6 +74,7 @@ import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.IconButtonSize
+import com.uacastplayer.ui.theme.LabelPrimary
 import com.uacastplayer.ui.theme.LabelSecondary
 import com.uacastplayer.ui.theme.LiveText
 import com.uacastplayer.ui.theme.RadiusItem
@@ -91,12 +93,14 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val dlnaState by viewModel.dlnaState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
 
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showDlnaSheet by remember { mutableStateOf(false) }
     val sleepTimer = rememberSleepTimerState(onExpire = { viewModel.player.pause() })
 
     val configuration = LocalConfiguration.current
@@ -151,6 +155,7 @@ fun PlayerScreen(
                 uiState = uiState,
                 isFullscreen = isFullscreen,
                 sleepTimerRemainingMillis = sleepTimer.remainingMillis,
+                isDlnaCasting = dlnaState.connectedDevice != null,
                 onExit = onExit,
                 onPlayPause = {
                     if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
@@ -160,6 +165,7 @@ fun PlayerScreen(
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onEnterPip = { activity?.let(PipController::enter) },
                 onOpenSleepTimer = { showSleepTimerDialog = true },
+                onOpenDlnaSheet = { showDlnaSheet = true },
                 onSelectPreview = { indexed -> viewModel.requestSwitch(indexed.index) },
             )
         }
@@ -178,6 +184,22 @@ fun PlayerScreen(
                 onDismiss = { showSleepTimerDialog = false },
             )
         }
+
+        if (showDlnaSheet) {
+            DlnaDeviceSheet(
+                connectionState = dlnaState,
+                discoverDevices = viewModel::discoverDlnaDevices,
+                onDismiss = { showDlnaSheet = false },
+                onDeviceSelected = { device ->
+                    viewModel.connectDlna(device)
+                    showDlnaSheet = false
+                },
+                onStopCasting = {
+                    viewModel.stopDlna()
+                    showDlnaSheet = false
+                },
+            )
+        }
     }
 }
 
@@ -186,6 +208,7 @@ private fun PlayerControlsOverlay(
     uiState: PlayerUiState,
     isFullscreen: Boolean,
     sleepTimerRemainingMillis: Long?,
+    isDlnaCasting: Boolean,
     onExit: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -193,6 +216,7 @@ private fun PlayerControlsOverlay(
     onToggleFullscreen: () -> Unit,
     onEnterPip: () -> Unit,
     onOpenSleepTimer: () -> Unit,
+    onOpenDlnaSheet: () -> Unit,
     onSelectPreview: (IndexedChannel) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -259,6 +283,13 @@ private fun PlayerControlsOverlay(
             )
             Box(modifier = Modifier.weight(1f))
             SleepTimerButton(remainingMillis = sleepTimerRemainingMillis, onClick = onOpenSleepTimer)
+            SmallRoundIconButton(
+                icon = AppIcons.Tv,
+                onClick = onOpenDlnaSheet,
+                contentDescription = stringResource(R.string.player_dlna_cast),
+                tint = if (isDlnaCasting) Azure else LabelPrimary,
+                background = Color(0x66000000),
+            )
             SmallRoundIconButton(
                 icon = AppIcons.PictureInPicture,
                 onClick = onEnterPip,

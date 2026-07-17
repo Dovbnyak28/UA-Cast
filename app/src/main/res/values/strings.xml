@@ -191,6 +191,14 @@
     <string name="cast_session_notification_text">Streaming to %1$s</string>
     <string name="cast_session_stop_action">Stop</string>
 
+    <!-- DLNA casting -->
+    <string name="player_dlna_cast">Cast to other devices (DLNA)</string>
+    <string name="dlna_sheet_title">Other devices (DLNA)</string>
+    <string name="dlna_sheet_searching">Searching for devices…</string>
+    <string name="dlna_sheet_no_devices">No devices found</string>
+    <string name="dlna_sheet_connected_to">Connected to %1$s</string>
+    <string name="dlna_stop_casting">Stop casting</string>
+
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Keep casting running in the background</string>
     <string name="battery_hint_body">Some phone makers (like Xiaomi) aggressively stop apps in the background, which can cut off casting to your TV. Allow UA Cast Player to ignore battery optimizations so playback keeps working.</string>
