@@ -1,11 +1,11 @@
 package com.uacastplayer.ui.settings
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -28,31 +28,38 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
+import com.uacastplayer.backup.BackupImportSummary
 import com.uacastplayer.core.i18n.AppLanguage
+import com.uacastplayer.data.prefs.BufferSize
 import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.performance.DeviceTier
+import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.Azure
 
 @Composable
 fun SettingsScreen(
@@ -60,15 +67,24 @@ fun SettingsScreen(
     onLanguageSelected: (AppLanguage) -> Unit,
     currentEpgSource: EpgSource,
     onEpgSourceSelected: (EpgSource) -> Unit,
+    suggestedEpgUrl: String?,
+    onUseSuggestedEpgUrl: () -> Unit,
     iconWifiOnly: Boolean,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
     settingsState: SettingsUiState,
+    playlistState: PlaylistUiState,
+    onOpenAddPlaylist: () -> Unit,
     onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
     onListDensitySelected: (ListDensity) -> Unit,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
+    onBufferSizeSelected: (BufferSize) -> Unit,
     onWrapAroundChanged: (Boolean) -> Unit,
     onAutoSkipChanged: (Boolean) -> Unit,
     onClearCache: (CacheKind) -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
+    backupImportSummary: BackupImportSummary?,
+    onDismissBackupImportSummary: () -> Unit,
     onOpenBatteryOptimizationHint: () -> Unit,
     onAddIconSource: (String) -> Unit,
     onRemoveIconSource: (String) -> Unit,
@@ -77,21 +93,23 @@ fun SettingsScreen(
     onOpenTerms: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var generalExpanded by rememberSaveable { mutableStateOf(true) }
-    var playbackExpanded by rememberSaveable { mutableStateOf(false) }
-    var cacheExpanded by rememberSaveable { mutableStateOf(false) }
-    var helpExpanded by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    LaunchedEffect(backupImportSummary) {
+        val summary = backupImportSummary ?: return@LaunchedEffect
+        val text = context.getString(
+            R.string.settings_data_import_summary,
+            summary.importedSourceCount,
+            summary.importedFavoriteCount,
+        )
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        onDismissBackupImportSummary()
+    }
 
     Column(
         modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SettingsSection(
-            title = stringResource(R.string.settings_section_general),
-            icon = AppIcons.Globe,
-            expanded = generalExpanded,
-            onToggleExpanded = { generalExpanded = !generalExpanded },
-        ) {
+        SettingsSection(title = stringResource(R.string.settings_section_general), icon = AppIcons.Globe) {
             LabeledRow(stringResource(R.string.settings_language_label), AppIcons.Globe) {
                 for (language in AppLanguage.entries) {
                     SettingsChip(
@@ -110,15 +128,41 @@ fun SettingsScreen(
                     )
                 }
             }
+            if (suggestedEpgUrl != null) {
+                EpgSuggestionRow(onUseSuggestedEpgUrl)
+            }
             BatteryOptimizationRow(onOpenBatteryOptimizationHint)
         }
 
-        SettingsSection(
-            title = stringResource(R.string.settings_section_playback),
-            icon = AppIcons.Play,
-            expanded = playbackExpanded,
-            onToggleExpanded = { playbackExpanded = !playbackExpanded },
-        ) {
+        SettingsSection(title = stringResource(R.string.settings_section_playlist), icon = AppIcons.Channels) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.home_active_playlist_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = playlistState.displayName ?: playlistState.activePlaylistId ?: "—",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            PlaylistActionRow(
+                label = stringResource(R.string.home_add_playlist_button),
+                icon = AppIcons.Plus,
+                onClick = onOpenAddPlaylist,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_section_playback), icon = AppIcons.Play) {
             LabeledRow(stringResource(R.string.settings_icon_display_mode_label), AppIcons.Image) {
                 for (mode in IconDisplayMode.entries) {
                     SettingsChip(
@@ -127,6 +171,14 @@ fun SettingsScreen(
                         onClick = { onIconDisplayModeSelected(mode) },
                     )
                 }
+            }
+            if (settingsState.iconDisplayModeIsAutomatic) {
+                Text(
+                    text = stringResource(R.string.settings_icon_display_mode_tier_default_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
             SwitchRow(stringResource(R.string.settings_icon_wifi_only_label), iconWifiOnly, onIconWifiOnlyChanged)
             LabeledRow(stringResource(R.string.settings_list_density_label), AppIcons.ViewList) {
@@ -148,6 +200,15 @@ fun SettingsScreen(
                     )
                 }
             }
+            LabeledRow(stringResource(R.string.settings_buffer_size_label), AppIcons.Storage) {
+                for (size in BufferSize.entries) {
+                    SettingsChip(
+                        label = stringResource(size.labelRes()),
+                        isSelected = size == settingsState.bufferSize,
+                        onClick = { onBufferSizeSelected(size) },
+                    )
+                }
+            }
             SwitchRow(stringResource(R.string.settings_wrap_around_label), settingsState.wrapAroundEnabled, onWrapAroundChanged)
             SwitchRow(stringResource(R.string.settings_auto_skip_label), settingsState.autoSkipDeadEnabled, onAutoSkipChanged)
             IconSourcesSection(
@@ -159,24 +220,33 @@ fun SettingsScreen(
             )
         }
 
-        SettingsSection(
-            title = stringResource(R.string.settings_section_cache),
-            icon = AppIcons.Storage,
-            expanded = cacheExpanded,
-            onToggleExpanded = { cacheExpanded = !cacheExpanded },
-        ) {
+        SettingsSection(title = stringResource(R.string.settings_section_cache), icon = AppIcons.Storage) {
             CacheRow(R.string.cache_playlist_label, settingsState.cacheSizes.playlistBytes) { onClearCache(CacheKind.PLAYLIST) }
             CacheRow(R.string.cache_epg_label, settingsState.cacheSizes.epgBytes) { onClearCache(CacheKind.EPG) }
             CacheRow(R.string.cache_icons_label, settingsState.cacheSizes.iconCacheBytes) { onClearCache(CacheKind.ICONS) }
             CacheRow(R.string.cache_coil_label, settingsState.cacheSizes.coilCacheBytes) { onClearCache(CacheKind.COIL) }
         }
 
-        SettingsSection(
-            title = stringResource(R.string.settings_help),
-            icon = AppIcons.HelpCircle,
-            expanded = helpExpanded,
-            onToggleExpanded = { helpExpanded = !helpExpanded },
-        ) {
+        SettingsSection(title = stringResource(R.string.settings_section_data), icon = AppIcons.Upload) {
+            Text(
+                text = stringResource(R.string.settings_data_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.settings_data_export))
+                }
+                OutlinedButton(onClick = onImportBackup, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.settings_data_import))
+                }
+            }
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_help), icon = AppIcons.HelpCircle) {
             Text(
                 text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes()),
                 style = MaterialTheme.typography.bodyMedium,
@@ -194,14 +264,24 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            LinkRow(stringResource(R.string.settings_open_help), onOpenHelp, modifier = Modifier.padding(top = 16.dp))
-            LinkRow(stringResource(R.string.settings_open_terms), onOpenTerms, modifier = Modifier.padding(top = 8.dp))
+            LinkRow(
+                label = stringResource(R.string.settings_open_help),
+                buttonLabel = stringResource(R.string.settings_open_button),
+                onClick = onOpenHelp,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            LinkRow(
+                label = stringResource(R.string.settings_open_terms),
+                buttonLabel = stringResource(R.string.settings_open_button),
+                onClick = onOpenTerms,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun LinkRow(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun LinkRow(label: String, buttonLabel: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -212,7 +292,7 @@ private fun LinkRow(label: String, onClick: () -> Unit, modifier: Modifier = Mod
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
-        OutlinedButton(onClick = onClick) { Text(stringResource(R.string.settings_battery_optimization_button)) }
+        OutlinedButton(onClick = onClick) { Text(buttonLabel) }
     }
 }
 
@@ -220,38 +300,49 @@ private fun LinkRow(label: String, onClick: () -> Unit, modifier: Modifier = Mod
 private fun SettingsSection(
     title: String,
     icon: ImageVector,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val chevronRotation by animateFloatAsState(if (expanded) 180f else 0f, label = "sectionChevron")
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Column(modifier = Modifier.animateContentSize(tween(220)).padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggleExpanded),
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Azure.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 10.dp).weight(1f),
-                )
-                Icon(
-                    AppIcons.ChevronDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp).rotate(chevronRotation),
-                )
+                Icon(icon, contentDescription = null, tint = Azure, modifier = Modifier.size(18.dp))
             }
-            if (expanded) {
-                Column(modifier = Modifier.padding(top = 12.dp)) { content() }
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 10.dp).weight(1f),
+            )
         }
+        Column(modifier = Modifier.padding(top = 16.dp)) { content() }
+    }
+}
+
+@Composable
+private fun PlaylistActionRow(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(start = 12.dp).weight(1f),
+        )
+        Icon(AppIcons.ChevronDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp).rotate(-90f))
     }
 }
 
@@ -290,6 +381,24 @@ private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean
             modifier = Modifier.weight(1f),
         )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** "EPG address found in playlist" hint (see EpgSourceAutoDetect.Action.Suggest) - only shown
+ * when the user already picked an EPG source manually, so a found URL isn't silently applied. */
+@Composable
+private fun EpgSuggestionRow(onUse: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_epg_suggestion_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = onUse) { Text(stringResource(R.string.settings_epg_suggestion_action)) }
     }
 }
 
@@ -505,6 +614,12 @@ private fun ChannelLayout.labelRes(): Int = when (this) {
     ChannelLayout.LIST -> R.string.channel_layout_list
     ChannelLayout.GRID -> R.string.channel_layout_grid
     ChannelLayout.LARGE_ICONS -> R.string.channel_layout_large_icons
+}
+
+private fun BufferSize.labelRes(): Int = when (this) {
+    BufferSize.SMALL -> R.string.buffer_size_small
+    BufferSize.MEDIUM -> R.string.buffer_size_medium
+    BufferSize.LARGE -> R.string.buffer_size_large
 }
 
 private fun EpgSource.labelRes(): Int = when (this) {

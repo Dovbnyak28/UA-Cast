@@ -14,23 +14,59 @@
     <!-- Bottom navigation -->
     <string name="nav_home">Головна</string>
     <string name="nav_channels">Канали</string>
-    <string name="nav_favorites">Обране</string>
+    <string name="nav_favorites">Улюблені</string>
     <string name="nav_settings">Налаштування</string>
 
     <!-- Home screen -->
     <string name="home_title">Головна</string>
-    <string name="home_empty_message">Імпортуйте плейлист, щоб почати</string>
-    <string name="home_empty_subtitle">Відкрийте вкладку «Канали» та завантажте M3U-посилання або файл</string>
-    <string name="home_playlist_loaded_title">Плейлист завантажено</string>
-    <string name="home_playlist_loaded_subtitle">Відкрийте вкладку «Канали», щоб переглянути й відтворити</string>
+    <string name="home_subtitle">Ваше телебачення</string>
+    <string name="home_empty_message">Плейлист ще не додано</string>
+    <string name="home_empty_subtitle">Додайте посилання на M3U або M3U8 плейлист, щоб переглядати канали.</string>
+    <string name="home_active_playlist_label">Активний плейлист</string>
+    <string name="home_restored_from_cache">Відновлено з кешу</string>
+    <string name="home_stat_channels">Каналів</string>
+    <string name="home_stat_groups">Груп</string>
+    <string name="home_stat_favorites">Улюблених</string>
+    <string name="home_epg_label">Телепрограма</string>
+    <string name="home_epg_restoring">Відновлення телепрограми…</string>
+    <string name="home_epg_ready">Телепрограма готова</string>
+    <string name="home_epg_unavailable">Телепрограма недоступна</string>
+    <string name="home_view_channels_button">Дивитися канали</string>
+    <string name="home_continue_watching_label">Продовжити перегляд</string>
+    <string name="home_change_playlist_button">Змінити плейлист</string>
+    <string name="home_refresh_playlist">Оновити плейлист</string>
+    <string name="home_add_playlist_button">Додати плейлист</string>
+    <string name="home_playlist_sources_title">Збережені плейлисти</string>
+    <string name="home_playlist_source_remove">Видалити плейлист</string>
+
+    <!-- Add playlist screen -->
+    <string name="add_playlist_title">Додати плейлист</string>
+    <string name="add_playlist_name_hint">Назва плейлиста</string>
+    <string name="add_playlist_url_hint">URL плейлиста</string>
+    <string name="add_playlist_helper">Підтримуються M3U, M3U8, TXT плейлисти. URL має починатися з http:// або https://.</string>
+    <string name="add_playlist_status_label">Статус</string>
+    <string name="add_playlist_status_empty">Вставте URL плейлиста M3U або M3U8</string>
+    <string name="add_playlist_status_loading">Завантаження…</string>
+    <string name="add_playlist_status_ready">Готово до завантаження</string>
+    <string name="add_playlist_save_button">Завантажити та зберегти</string>
+    <string name="add_playlist_file_button">Завантажити з файлу</string>
+    <string name="add_playlist_tip">Порада: вставте посилання M3U / M3U8 від вашого провайдера, або завантажте файл плейлиста з пристрою.</string>
+    <string name="add_playlist_type_url">URL M3U</string>
+    <string name="add_playlist_type_file">Файл</string>
+    <string name="add_playlist_type_xtream">Xtream</string>
+    <string name="add_playlist_xtream_server_hint">Адреса сервера (з портом)</string>
+    <string name="add_playlist_xtream_username_hint">Логін</string>
+    <string name="add_playlist_xtream_password_hint">Пароль</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Канали</string>
     <string name="channels_empty_message">Поки що немає каналів</string>
-    <string name="channels_empty_subtitle">Завантажте плейлист вище за URL або файлом, щоб побачити канали тут</string>
+    <string name="channels_empty_subtitle">Додайте плейлист у Налаштуваннях, щоб побачити канали тут</string>
     <string name="channels_search_hint">Пошук каналів</string>
     <string name="channels_groups_title">Групи каналів</string>
     <string name="channels_no_search_results">Немає каналів за запитом «%1$s»</string>
+    <string name="channels_search_all_hint">Пошук по всіх каналах</string>
+    <string name="channels_search_too_broad">Забагато збігів — уточніть запит. Показано перші %1$d.</string>
     <plurals name="channel_groups_count">
         <item quantity="one">%1$d група</item>
         <item quantity="few">%1$d групи</item>
@@ -67,18 +103,22 @@
     <string name="group_regional">Регіональні</string>
 
     <!-- Favorites screen -->
-    <string name="favorites_title">Обране</string>
-    <string name="favorites_empty_message">Поки що немає обраних каналів</string>
-    <string name="favorites_empty_subtitle">Торкніться зірочки біля каналу, щоб додати його сюди</string>
+    <string name="favorites_title">Улюблені</string>
+    <string name="favorites_empty_message">Улюблених каналів поки немає</string>
+    <string name="favorites_empty_subtitle">Позначайте канали зірочкою у списку або плеєрі</string>
+    <string name="favorites_go_to_channels">Перейти до каналів</string>
     <string name="favorites_remove_content_description">Прибрати з обраного</string>
     <string name="favorites_sort_title">Сортувати обране</string>
     <string name="favorites_sort_playlist_order">Порядок плейлиста</string>
     <string name="favorites_sort_alphabetical">За алфавітом</string>
     <string name="favorites_sort_recently_added">Нещодавно додані</string>
+    <string name="favorites_sort_manual">Власний порядок</string>
+    <string name="favorites_reorder_content_description">Змінити порядок %1$s: утримуйте і перетягуйте</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Налаштування</string>
     <string name="settings_section_general">Загальні</string>
+    <string name="settings_section_playlist">Плейлист</string>
     <string name="settings_language_label">Мова</string>
     <string name="settings_icon_wifi_only_label">Завантажувати логотипи лише через Wi-Fi</string>
     <string name="settings_epg_source_label">Джерело телепрограми</string>
@@ -87,10 +127,13 @@
     <string name="epg_source_perfect_player">Perfect Player</string>
     <string name="epg_source_rect_transparent_simple">Спрощений: прямокутні</string>
     <string name="epg_source_square_dark_simple">Спрощений: квадратні</string>
+    <string name="settings_epg_suggestion_hint">У плейлисті знайдено EPG-адресу</string>
+    <string name="settings_epg_suggestion_action">Використати</string>
     <string name="settings_icon_display_mode_label">Логотипи каналів</string>
     <string name="icon_display_mode_placeholders">Лише заповнювачі</string>
     <string name="icon_display_mode_cache">Показувати й кешувати</string>
     <string name="icon_display_mode_cache_limited">Лише з кешу</string>
+    <string name="settings_icon_display_mode_tier_default_hint">Вимкнено автоматично для економії ресурсів на цьому пристрої</string>
     <string name="settings_list_density_label">Щільність списку</string>
     <string name="list_density_full">Повна</string>
     <string name="list_density_simple">Проста</string>
@@ -99,6 +142,10 @@
     <string name="channel_layout_list">Список</string>
     <string name="channel_layout_grid">Сітка</string>
     <string name="channel_layout_large_icons">Великі іконки</string>
+    <string name="settings_buffer_size_label">Буфер відтворення</string>
+    <string name="buffer_size_small">Малий</string>
+    <string name="buffer_size_medium">Середній</string>
+    <string name="buffer_size_large">Великий</string>
     <string name="settings_wrap_around_label">Циклічне перемикання каналів</string>
     <string name="settings_auto_skip_label">Автоматично пропускати недоступні канали</string>
     <string name="settings_icon_sources_title">Джерела іконок</string>
@@ -111,6 +158,11 @@
     <string name="settings_icon_sources_error_duplicate">Це джерело вже додано</string>
     <string name="settings_section_playback">Відтворення</string>
     <string name="settings_section_cache">Кеш</string>
+    <string name="settings_section_data">Дані</string>
+    <string name="settings_data_hint">Збережіть плейлисти, улюблені канали та основні налаштування у файл, або відновіть їх на іншому пристрої. Кеш ніколи не включається.</string>
+    <string name="settings_data_export">Експортувати</string>
+    <string name="settings_data_import">Імпортувати</string>
+    <string name="settings_data_import_summary">Імпортовано: %1$d плейлисти, %2$d улюблених</string>
     <string name="cache_playlist_label">Кеш плейлиста</string>
     <string name="cache_epg_label">Кеш телепрограми</string>
     <string name="cache_icons_label">Кеш логотипів</string>
@@ -125,6 +177,7 @@
     <string name="settings_help_body">UA Cast Player — персональний IPTV-плеєр. Імпортуйте плейлист на вкладці «Канали» (за URL або файлом), оберіть джерело телепрограми та торкніться каналу, щоб почати перегляд. Використовуйте кнопку Cast для трансляції на Chromecast або Google TV; якщо потік не вдається відтворити напряму на приймачі, застосунок автоматично повторює спробу через локальний ретранслятор на телефоні.</string>
     <string name="settings_open_help">Детальна довідка</string>
     <string name="settings_open_terms">Умови використання</string>
+    <string name="settings_open_button">Відкрити</string>
 
     <!-- Help screen -->
     <string name="help_title">Довідка</string>
@@ -189,6 +242,21 @@
     <string name="player_sleep_timer">Таймер сну</string>
     <string name="player_sleep_timer_minutes">%1$d хв</string>
     <string name="player_sleep_timer_cancel">Вимкнути таймер</string>
+    <string name="player_back_to_channels">Назад до каналів</string>
+    <string name="player_next_channels_title">Наступні канали</string>
+    <string name="player_view_all">Дивитися всі</string>
+    <string name="player_quality">Якість відео</string>
+    <string name="player_aspect_ratio">Співвідношення</string>
+    <string name="player_buffering">Буферизація…</string>
+    <string name="player_quality_unknown">Невідомо</string>
+    <string name="player_track_unknown">Доріжка %1$d</string>
+    <string name="player_tv_guide">Телегід</string>
+    <string name="epg_guide_no_data">Немає телегіда для цього каналу</string>
+    <string name="cast_incompatible_audio_message">Аудіоформат цього каналу не підтримується Chromecast. Відтворення на телефоні триває.</string>
+    <string name="cast_incompatible_video_message">Відеоформат цього каналу не підтримується Chromecast. Відтворення на телефоні триває.</string>
+    <string name="player_resize_fit">Вписати</string>
+    <string name="player_resize_fill">Заповнити</string>
+    <string name="player_resize_zoom">Збільшити</string>
 
     <!-- Cast session foreground service -->
     <string name="cast_session_channel_name">Трансляція</string>
@@ -208,6 +276,10 @@
     <string name="download_banner_dismiss">Приховати</string>
     <string name="download_banner_icons">Іконки: %1$d%%</string>
     <string name="download_banner_epg_processing">Оновлення телепрограми…</string>
+
+    <!-- Icon tier banner (Channels tab, PLACEHOLDERS mode from a low-end device default) -->
+    <string name="channels_icon_tier_banner_title">Логотипи каналів вимкнено для економії ресурсів на цьому пристрої</string>
+    <string name="channels_icon_tier_banner_action">Увімкнути іконки</string>
 
     <!-- Common -->
     <string name="common_ok">Гаразд</string>

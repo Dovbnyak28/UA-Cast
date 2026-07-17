@@ -19,18 +19,54 @@
 
     <!-- Home screen -->
     <string name="home_title">Home</string>
-    <string name="home_empty_message">Import a playlist to get started</string>
-    <string name="home_empty_subtitle">Open the Channels tab and load an M3U link or file</string>
-    <string name="home_playlist_loaded_title">Playlist loaded</string>
-    <string name="home_playlist_loaded_subtitle">Open the Channels tab to browse and play</string>
+    <string name="home_subtitle">Your TV</string>
+    <string name="home_empty_message">No playlist added yet</string>
+    <string name="home_empty_subtitle">Add an M3U or M3U8 playlist link to view channels.</string>
+    <string name="home_active_playlist_label">Active playlist</string>
+    <string name="home_restored_from_cache">Restored from cache</string>
+    <string name="home_stat_channels">Channels</string>
+    <string name="home_stat_groups">Groups</string>
+    <string name="home_stat_favorites">Favorites</string>
+    <string name="home_epg_label">TV guide</string>
+    <string name="home_epg_restoring">Updating TV guide…</string>
+    <string name="home_epg_ready">TV guide ready</string>
+    <string name="home_epg_unavailable">TV guide unavailable</string>
+    <string name="home_view_channels_button">View channels</string>
+    <string name="home_continue_watching_label">Continue watching</string>
+    <string name="home_change_playlist_button">Change playlist</string>
+    <string name="home_refresh_playlist">Refresh playlist</string>
+    <string name="home_add_playlist_button">Add playlist</string>
+    <string name="home_playlist_sources_title">Saved playlists</string>
+    <string name="home_playlist_source_remove">Remove playlist</string>
+
+    <!-- Add playlist screen -->
+    <string name="add_playlist_title">Add playlist</string>
+    <string name="add_playlist_name_hint">Playlist name</string>
+    <string name="add_playlist_url_hint">Playlist URL</string>
+    <string name="add_playlist_helper">M3U, M3U8, and TXT playlists are supported. The URL must start with http:// or https://.</string>
+    <string name="add_playlist_status_label">Status</string>
+    <string name="add_playlist_status_empty">Paste an M3U or M3U8 playlist URL</string>
+    <string name="add_playlist_status_loading">Loading…</string>
+    <string name="add_playlist_status_ready">Ready to load</string>
+    <string name="add_playlist_save_button">Download and save</string>
+    <string name="add_playlist_file_button">Load from file</string>
+    <string name="add_playlist_tip">Tip: paste the M3U / M3U8 link from your provider, or upload a playlist file from your device.</string>
+    <string name="add_playlist_type_url">M3U URL</string>
+    <string name="add_playlist_type_file">File</string>
+    <string name="add_playlist_type_xtream">Xtream</string>
+    <string name="add_playlist_xtream_server_hint">Server address (with port)</string>
+    <string name="add_playlist_xtream_username_hint">Username</string>
+    <string name="add_playlist_xtream_password_hint">Password</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Channels</string>
     <string name="channels_empty_message">No channels yet</string>
-    <string name="channels_empty_subtitle">Load a playlist above by URL or file to see channels here</string>
+    <string name="channels_empty_subtitle">Add a playlist in Settings to see channels here</string>
     <string name="channels_search_hint">Search channels</string>
     <string name="channels_groups_title">Channel groups</string>
     <string name="channels_no_search_results">No channels match "%1$s"</string>
+    <string name="channels_search_all_hint">Search all channels</string>
+    <string name="channels_search_too_broad">Too many matches — refine your search. Showing the first %1$d.</string>
     <plurals name="channel_groups_count">
         <item quantity="one">%1$d group</item>
         <item quantity="other">%1$d groups</item>
@@ -65,16 +101,20 @@
     <!-- Favorites screen -->
     <string name="favorites_title">Favorites</string>
     <string name="favorites_empty_message">No favorite channels yet</string>
-    <string name="favorites_empty_subtitle">Tap the star next to a channel to add it here</string>
+    <string name="favorites_empty_subtitle">Mark channels with a star in the list or player</string>
+    <string name="favorites_go_to_channels">Go to channels</string>
     <string name="favorites_remove_content_description">Remove from favorites</string>
     <string name="favorites_sort_title">Sort favorites</string>
     <string name="favorites_sort_playlist_order">Playlist order</string>
     <string name="favorites_sort_alphabetical">Alphabetical</string>
     <string name="favorites_sort_recently_added">Recently added</string>
+    <string name="favorites_sort_manual">Custom order</string>
+    <string name="favorites_reorder_content_description">Reorder %1$s: hold and drag</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>
     <string name="settings_section_general">General</string>
+    <string name="settings_section_playlist">Playlist</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_icon_wifi_only_label">Fetch channel logos on Wi-Fi only</string>
     <string name="settings_epg_source_label">TV guide source</string>
@@ -83,10 +123,13 @@
     <string name="epg_source_perfect_player">Perfect Player</string>
     <string name="epg_source_rect_transparent_simple">Simplified: rectangular</string>
     <string name="epg_source_square_dark_simple">Simplified: square</string>
+    <string name="settings_epg_suggestion_hint">An EPG address was found in the playlist</string>
+    <string name="settings_epg_suggestion_action">Use</string>
     <string name="settings_icon_display_mode_label">Channel logos</string>
     <string name="icon_display_mode_placeholders">Placeholders only</string>
     <string name="icon_display_mode_cache">Show and cache</string>
     <string name="icon_display_mode_cache_limited">Cached only</string>
+    <string name="settings_icon_display_mode_tier_default_hint">Turned off automatically to save resources on this device</string>
     <string name="settings_list_density_label">List density</string>
     <string name="list_density_full">Full</string>
     <string name="list_density_simple">Simple</string>
@@ -95,6 +138,10 @@
     <string name="channel_layout_list">List</string>
     <string name="channel_layout_grid">Grid</string>
     <string name="channel_layout_large_icons">Large icons</string>
+    <string name="settings_buffer_size_label">Playback buffer</string>
+    <string name="buffer_size_small">Small</string>
+    <string name="buffer_size_medium">Medium</string>
+    <string name="buffer_size_large">Large</string>
     <string name="settings_wrap_around_label">Wrap around at end of channel list</string>
     <string name="settings_auto_skip_label">Automatically skip unavailable channels</string>
     <string name="settings_icon_sources_title">Icon sources</string>
@@ -107,6 +154,11 @@
     <string name="settings_icon_sources_error_duplicate">That source is already added</string>
     <string name="settings_section_playback">Playback</string>
     <string name="settings_section_cache">Cache</string>
+    <string name="settings_section_data">Data</string>
+    <string name="settings_data_hint">Back up your saved playlists, favorites, and key settings to a file, or restore them on another device. Caches are never included.</string>
+    <string name="settings_data_export">Export</string>
+    <string name="settings_data_import">Import</string>
+    <string name="settings_data_import_summary">Imported: %1$d playlists, %2$d favorites</string>
     <string name="cache_playlist_label">Playlist cache</string>
     <string name="cache_epg_label">TV guide cache</string>
     <string name="cache_icons_label">Channel logo cache</string>
@@ -121,6 +173,9 @@
     <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. Use the Cast button to play on a Chromecast or Google TV device; if a stream can\'t be played directly on the receiver, the app automatically retries through a local relay on your phone.</string>
     <string name="settings_open_help">Detailed help</string>
     <string name="settings_open_terms">Terms of Use</string>
+    <!-- Generic "Open" action for LinkRow (Help/Terms) - distinct from settings_battery_optimization_button,
+         which is specific to the battery optimization row and must not be reused elsewhere. -->
+    <string name="settings_open_button">Open</string>
 
     <!-- Help screen -->
     <string name="help_title">Help</string>
@@ -185,6 +240,21 @@
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_sleep_timer_minutes">%1$d min</string>
     <string name="player_sleep_timer_cancel">Turn off timer</string>
+    <string name="player_back_to_channels">Back to channels</string>
+    <string name="player_next_channels_title">Next channels</string>
+    <string name="player_view_all">View all</string>
+    <string name="player_quality">Quality</string>
+    <string name="player_aspect_ratio">Aspect ratio</string>
+    <string name="player_buffering">Buffering…</string>
+    <string name="player_quality_unknown">Unknown</string>
+    <string name="player_track_unknown">Track %1$d</string>
+    <string name="player_tv_guide">TV guide</string>
+    <string name="epg_guide_no_data">No TV guide for this channel</string>
+    <string name="cast_incompatible_audio_message">This channel\'s audio format isn\'t supported by Chromecast. Local playback continues.</string>
+    <string name="cast_incompatible_video_message">This channel\'s video format isn\'t supported by Chromecast. Local playback continues.</string>
+    <string name="player_resize_fit">Fit</string>
+    <string name="player_resize_fill">Fill</string>
+    <string name="player_resize_zoom">Zoom</string>
 
     <!-- Cast session foreground service -->
     <string name="cast_session_channel_name">Casting</string>
@@ -204,6 +274,10 @@
     <string name="download_banner_dismiss">Dismiss</string>
     <string name="download_banner_icons">Icons: %1$d%%</string>
     <string name="download_banner_epg_processing">Updating TV guide…</string>
+
+    <!-- Icon tier banner (Channels tab, PLACEHOLDERS mode from a low-end device default) -->
+    <string name="channels_icon_tier_banner_title">Channel logos are off to save resources on this device</string>
+    <string name="channels_icon_tier_banner_action">Enable icons</string>
 
     <!-- Common -->
     <string name="common_ok">OK</string>

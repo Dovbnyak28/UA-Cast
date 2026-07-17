@@ -19,18 +19,54 @@
 
     <!-- Home screen -->
     <string name="home_title">Inicio</string>
-    <string name="home_empty_message">Importa una lista de reproducción para empezar</string>
-    <string name="home_empty_subtitle">Abre la pestaña Canales y carga un enlace o archivo M3U</string>
-    <string name="home_playlist_loaded_title">Lista cargada</string>
-    <string name="home_playlist_loaded_subtitle">Abre la pestaña Canales para explorar y reproducir</string>
+    <string name="home_subtitle">Tu televisión</string>
+    <string name="home_empty_message">Aún no se ha añadido ninguna lista</string>
+    <string name="home_empty_subtitle">Añade un enlace de lista M3U o M3U8 para ver canales.</string>
+    <string name="home_active_playlist_label">Lista activa</string>
+    <string name="home_restored_from_cache">Restaurada desde la caché</string>
+    <string name="home_stat_channels">Canales</string>
+    <string name="home_stat_groups">Grupos</string>
+    <string name="home_stat_favorites">Favoritos</string>
+    <string name="home_epg_label">Guía TV</string>
+    <string name="home_epg_restoring">Actualizando la guía TV…</string>
+    <string name="home_epg_ready">Guía TV lista</string>
+    <string name="home_epg_unavailable">Guía TV no disponible</string>
+    <string name="home_view_channels_button">Ver canales</string>
+    <string name="home_continue_watching_label">Continuar viendo</string>
+    <string name="home_change_playlist_button">Cambiar lista</string>
+    <string name="home_refresh_playlist">Actualizar lista</string>
+    <string name="home_add_playlist_button">Añadir lista</string>
+    <string name="home_playlist_sources_title">Listas guardadas</string>
+    <string name="home_playlist_source_remove">Eliminar lista</string>
+
+    <!-- Add playlist screen -->
+    <string name="add_playlist_title">Añadir lista de reproducción</string>
+    <string name="add_playlist_name_hint">Nombre de la lista</string>
+    <string name="add_playlist_url_hint">URL de la lista</string>
+    <string name="add_playlist_helper">Se admiten listas M3U, M3U8 y TXT. La URL debe empezar por http:// o https://.</string>
+    <string name="add_playlist_status_label">Estado</string>
+    <string name="add_playlist_status_empty">Pega una URL de lista M3U o M3U8</string>
+    <string name="add_playlist_status_loading">Cargando…</string>
+    <string name="add_playlist_status_ready">Listo para cargar</string>
+    <string name="add_playlist_save_button">Descargar y guardar</string>
+    <string name="add_playlist_file_button">Cargar desde archivo</string>
+    <string name="add_playlist_tip">Consejo: pega el enlace M3U / M3U8 de tu proveedor, o sube un archivo de lista desde tu dispositivo.</string>
+    <string name="add_playlist_type_url">URL M3U</string>
+    <string name="add_playlist_type_file">Archivo</string>
+    <string name="add_playlist_type_xtream">Xtream</string>
+    <string name="add_playlist_xtream_server_hint">Dirección del servidor (con puerto)</string>
+    <string name="add_playlist_xtream_username_hint">Usuario</string>
+    <string name="add_playlist_xtream_password_hint">Contraseña</string>
 
     <!-- Channels screen -->
     <string name="channels_title">Canales</string>
     <string name="channels_empty_message">Todavía no hay canales</string>
-    <string name="channels_empty_subtitle">Carga una lista arriba por URL o archivo para ver los canales aquí</string>
+    <string name="channels_empty_subtitle">Añade una lista en Ajustes para ver los canales aquí</string>
     <string name="channels_search_hint">Buscar canales</string>
     <string name="channels_groups_title">Grupos de canales</string>
     <string name="channels_no_search_results">Ningún canal coincide con "%1$s"</string>
+    <string name="channels_search_all_hint">Buscar en todos los canales</string>
+    <string name="channels_search_too_broad">Demasiadas coincidencias — afina tu búsqueda. Mostrando las primeras %1$d.</string>
     <plurals name="channel_groups_count">
         <item quantity="one">%1$d grupo</item>
         <item quantity="many">%1$d grupos</item>
@@ -67,16 +103,20 @@
     <!-- Favorites screen -->
     <string name="favorites_title">Favoritos</string>
     <string name="favorites_empty_message">Todavía no hay canales favoritos</string>
-    <string name="favorites_empty_subtitle">Toca la estrella junto a un canal para añadirlo aquí</string>
+    <string name="favorites_empty_subtitle">Marca los canales con una estrella en la lista o el reproductor</string>
+    <string name="favorites_go_to_channels">Ir a los canales</string>
     <string name="favorites_remove_content_description">Quitar de favoritos</string>
     <string name="favorites_sort_title">Ordenar favoritos</string>
     <string name="favorites_sort_playlist_order">Orden de la lista</string>
     <string name="favorites_sort_alphabetical">Alfabético</string>
     <string name="favorites_sort_recently_added">Añadidos recientemente</string>
+    <string name="favorites_sort_manual">Orden personalizado</string>
+    <string name="favorites_reorder_content_description">Reordenar %1$s: mantener pulsado y arrastrar</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Ajustes</string>
     <string name="settings_section_general">General</string>
+    <string name="settings_section_playlist">Lista de reproducción</string>
     <string name="settings_language_label">Idioma</string>
     <string name="settings_icon_wifi_only_label">Descargar logotipos solo con Wi-Fi</string>
     <string name="settings_epg_source_label">Fuente de la guía TV</string>
@@ -85,10 +125,13 @@
     <string name="epg_source_perfect_player">Perfect Player</string>
     <string name="epg_source_rect_transparent_simple">Simplificado: rectangular</string>
     <string name="epg_source_square_dark_simple">Simplificado: cuadrado</string>
+    <string name="settings_epg_suggestion_hint">Se encontró una dirección de EPG en la lista de canales</string>
+    <string name="settings_epg_suggestion_action">Usar</string>
     <string name="settings_icon_display_mode_label">Logotipos de canales</string>
     <string name="icon_display_mode_placeholders">Solo marcadores</string>
     <string name="icon_display_mode_cache">Mostrar y guardar en caché</string>
     <string name="icon_display_mode_cache_limited">Solo en caché</string>
+    <string name="settings_icon_display_mode_tier_default_hint">Desactivado automáticamente para ahorrar recursos en este dispositivo</string>
     <string name="settings_list_density_label">Densidad de la lista</string>
     <string name="list_density_full">Completa</string>
     <string name="list_density_simple">Simple</string>
@@ -97,6 +140,10 @@
     <string name="channel_layout_list">Lista</string>
     <string name="channel_layout_grid">Cuadrícula</string>
     <string name="channel_layout_large_icons">Iconos grandes</string>
+    <string name="settings_buffer_size_label">Búfer de reproducción</string>
+    <string name="buffer_size_small">Pequeño</string>
+    <string name="buffer_size_medium">Medio</string>
+    <string name="buffer_size_large">Grande</string>
     <string name="settings_wrap_around_label">Volver al principio al llegar al final</string>
     <string name="settings_auto_skip_label">Omitir automáticamente canales no disponibles</string>
     <string name="settings_icon_sources_title">Fuentes de iconos</string>
@@ -109,6 +156,11 @@
     <string name="settings_icon_sources_error_duplicate">Esa fuente ya está añadida</string>
     <string name="settings_section_playback">Reproducción</string>
     <string name="settings_section_cache">Caché</string>
+    <string name="settings_section_data">Datos</string>
+    <string name="settings_data_hint">Guarda tus listas guardadas, favoritos y ajustes clave en un archivo, o restáuralos en otro dispositivo. Las cachés nunca se incluyen.</string>
+    <string name="settings_data_export">Exportar</string>
+    <string name="settings_data_import">Importar</string>
+    <string name="settings_data_import_summary">Importado: %1$d listas, %2$d favoritos</string>
     <string name="cache_playlist_label">Caché de la lista</string>
     <string name="cache_epg_label">Caché de la guía TV</string>
     <string name="cache_icons_label">Caché de logotipos</string>
@@ -123,6 +175,7 @@
     <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía TV y toca un canal para empezar a verlo. Usa el botón Cast para reproducir en un Chromecast o Google TV; si un canal no se puede reproducir directamente en el receptor, la app reintenta automáticamente mediante un relé local en tu teléfono.</string>
     <string name="settings_open_help">Ayuda detallada</string>
     <string name="settings_open_terms">Términos de uso</string>
+    <string name="settings_open_button">Abrir</string>
 
     <!-- Help screen -->
     <string name="help_title">Ayuda</string>
@@ -187,6 +240,21 @@
     <string name="player_sleep_timer">Temporizador de apagado</string>
     <string name="player_sleep_timer_minutes">%1$d min</string>
     <string name="player_sleep_timer_cancel">Desactivar temporizador</string>
+    <string name="player_back_to_channels">Volver a los canales</string>
+    <string name="player_next_channels_title">Próximos canales</string>
+    <string name="player_view_all">Ver todos</string>
+    <string name="player_quality">Calidad de vídeo</string>
+    <string name="player_aspect_ratio">Relación de aspecto</string>
+    <string name="player_buffering">Almacenando en búfer…</string>
+    <string name="player_quality_unknown">Desconocida</string>
+    <string name="player_track_unknown">Pista %1$d</string>
+    <string name="player_tv_guide">Guía de TV</string>
+    <string name="epg_guide_no_data">No hay guía de TV para este canal</string>
+    <string name="cast_incompatible_audio_message">El formato de audio de este canal no es compatible con Chromecast. La reproducción local continúa.</string>
+    <string name="cast_incompatible_video_message">El formato de video de este canal no es compatible con Chromecast. La reproducción local continúa.</string>
+    <string name="player_resize_fit">Ajustar</string>
+    <string name="player_resize_fill">Rellenar</string>
+    <string name="player_resize_zoom">Zoom</string>
 
     <!-- Cast session foreground service -->
     <string name="cast_session_channel_name">Transmisión</string>
@@ -206,6 +274,10 @@
     <string name="download_banner_dismiss">Ocultar</string>
     <string name="download_banner_icons">Iconos: %1$d%%</string>
     <string name="download_banner_epg_processing">Actualizando la guía TV…</string>
+
+    <!-- Icon tier banner (Channels tab, PLACEHOLDERS mode from a low-end device default) -->
+    <string name="channels_icon_tier_banner_title">Los logotipos de canales están desactivados para ahorrar recursos en este dispositivo</string>
+    <string name="channels_icon_tier_banner_action">Activar iconos</string>
 
     <!-- Common -->
     <string name="common_ok">Aceptar</string>
