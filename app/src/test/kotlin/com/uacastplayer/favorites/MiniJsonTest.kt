@@ -1,10 +1,30 @@
 package com.uacastplayer.favorites
 
+import java.util.Locale
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class MiniJsonTest {
+
+    private val originalLocale: Locale = Locale.getDefault()
+
+    @After
+    fun restoreDefaultLocale() {
+        Locale.setDefault(originalLocale)
+    }
+
+    @Test
+    fun `round-trips a control character under a non-ASCII-digit default locale`() {
+        // Arabic uses Arabic-indic digits by default - "%04x".format(...) without Locale.ROOT
+        // would render the escape's hex digits in that script instead of ASCII, corrupting the
+        // JSON this method itself has to be able to parse back.
+        Locale.setDefault(Locale("ar"))
+        val objects = listOf(mapOf("name" to "BeforeAfter"))
+        val json = MiniJson.writeArrayOfObjects(objects)
+        assertEquals(objects, MiniJson.parseArrayOfObjects(json))
+    }
 
     @Test
     fun `round-trips a simple object`() {

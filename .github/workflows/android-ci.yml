@@ -39,8 +39,22 @@ jobs:
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
+      - name: Release unit tests
+        run: ./gradlew :app:testReleaseUnitTest --stacktrace
+
       - name: Lint
         run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Detekt
+        run: ./gradlew :app:detekt --stacktrace
+
+      - name: Locale-independent formatting check
+        run: bash scripts/check-locale-format.sh
+
+      # Compile-only - there's no emulator/device here to actually run instrumentation tests
+      # against (see MainActivitySmokeTest).
+      - name: Compile instrumentation tests
+        run: ./gradlew :app:assembleDebugAndroidTest --stacktrace
 
       - name: Assemble release (unsigned)
         run: ./gradlew :app:assembleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME

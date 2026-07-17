@@ -1,5 +1,7 @@
 package com.uacastplayer.favorites
 
+import java.util.Locale
+
 /**
  * A "just enough" JSON reader/writer for a flat array-of-objects-of-strings-or-null shape - the
  * only shape the favorites cache needs. Written by hand instead of using org.json specifically
@@ -25,7 +27,10 @@ object MiniJson {
                 '\n' -> sb.append("\\n")
                 '\r' -> sb.append("\\r")
                 '\t' -> sb.append("\\t")
-                else -> if (c.code < 0x20) sb.append("\\u%04x".format(c.code)) else sb.append(c)
+                // Locale.ROOT: this output is machine-read back by parseArrayOfObjects, so it must
+                // always use ASCII digits regardless of the device's default locale (Arabic-indic,
+                // Bengali, etc. digit systems would otherwise silently corrupt the escape).
+                else -> if (c.code < 0x20) sb.append("\\u%04x".format(Locale.ROOT, c.code)) else sb.append(c)
             }
         }
         return sb.append('"').toString()
