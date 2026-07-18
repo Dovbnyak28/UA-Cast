@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -39,15 +41,19 @@ import androidx.compose.foundation.selection.selectableGroup
 import com.uacastplayer.ui.theme.Azure
 import com.uacastplayer.ui.theme.AzureGlow
 import com.uacastplayer.ui.theme.AzureGradient
+import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
+import com.uacastplayer.ui.theme.Hairline
 import com.uacastplayer.ui.theme.LabelPrimary
 import com.uacastplayer.ui.theme.LabelSecondary
+import com.uacastplayer.ui.theme.LabelTertiary
 import com.uacastplayer.ui.theme.PillText
 import com.uacastplayer.ui.theme.PressScaleIcon
 import com.uacastplayer.ui.theme.PressScalePlay
 import com.uacastplayer.ui.theme.PressScaleRound
 import com.uacastplayer.ui.theme.PlayButtonSize
+import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusSeg
 import com.uacastplayer.ui.theme.RadiusSegInner
 import com.uacastplayer.ui.theme.RouteAmber
@@ -109,6 +115,7 @@ fun RoundIconButton(
     )
     Box(
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .size(RoundButtonSize)
             .scale(scale)
             .clip(CircleShape)
@@ -143,6 +150,7 @@ fun SmallRoundIconButton(
     )
     Box(
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .size(IconButtonSize)
             .scale(scale)
             .clip(CircleShape)
@@ -284,12 +292,53 @@ fun TrackProgress(progress: Float, modifier: Modifier = Modifier, bold: Boolean 
     }
 }
 
+/** §5.7 - secondary text-only action button (export/import, "open" links). Use instead of Material's OutlinedButton. */
+@Composable
+fun SecondaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) PressScaleRound else 1f,
+        animationSpec = tween(DurPress, easing = EaseSpring),
+        label = "secondaryButtonScale",
+    )
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(RadiusItem))
+            .background(if (pressed) Surface2 else Surface1)
+            .border(1.dp, Hairline, RoundedCornerShape(RadiusItem))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = BodyRegular,
+            color = if (enabled) LabelPrimary else LabelTertiary,
+        )
+    }
+}
+
 /** §5.9 tab bar label chrome - shared by GlassTabBar items. */
 @Composable
 fun TabBarLabel(text: String, selected: Boolean) {
     Text(
         text = text,
         style = TabLabel,
-        color = if (selected) Azure else com.uacastplayer.ui.theme.LabelTertiary,
+        color = if (selected) Azure else com.uacastplayer.ui.theme.LabelSecondary,
+        maxLines = 1,
+        softWrap = false,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     )
 }
