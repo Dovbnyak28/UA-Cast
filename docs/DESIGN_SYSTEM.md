@@ -7,6 +7,13 @@ code - they don't track this palette/type scale and drift out of sync with the r
 moment a token changes. `TermsScreen`/`HelpScreen`/`PlayerScreen` are the reference implementations
 for "screen built entirely from tokens."
 
+**Colors specifically go through `UaTheme.palette` (see "Themes" below), not a bare Color.kt
+constant.** The color names below (`Void`, `Azure`, `LabelPrimary`, ...) are still where the
+*values* live, but a composable reads them as `UaTheme.palette.void`, `UaTheme.palette.azure`,
+`UaTheme.palette.labelPrimary`, etc. - lowerCamelCase, off the active palette - so the app has more
+than one selectable look. Spacing/radii/typography/motion tokens are unaffected by this and stay
+plain top-level constants.
+
 ## Color (`ui/theme/Color.kt`)
 
 - **Backgrounds** - `Void` (app background), `VoidElevated` (~2.5% brighter, elevated surfaces),
@@ -96,3 +103,66 @@ of swapping label color). Built directly on `Box`/`Row`/`clickable` - `Surface2`
 unselected, `Azure` when selected, `RadiusItem` corners, `BodyRegular` label. Used for chip rows
 with more than 4 options or long labels (language, EPG source, icon display mode) where
 `SegmentedControl` wouldn't fit.
+
+## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `Theme.kt`, `Background.kt`)
+
+The app has two selectable visual styles, `AppTheme.AZURE` (default, unchanged from before themes
+existed) and `AppTheme.CINEMA` (warm charcoal background, champagne-gold accent, serif display
+type, pill-shaped controls). Users pick one in Settings; it applies instantly, app-wide.
+
+### How it works
+
+- **`UaPalette`** is a `data class` holding every semantic color plus a handful of per-theme
+  shape/font toggles (`displayFontFamily`, `vignette`, `pillButtons`, `secondaryButtonStyle`).
+  `AzureUaPalette` and `CinemaUaPalette` are the two concrete values - `AzureUaPalette` is built
+  straight from the existing Color.kt constants, so Azure's rendering is byte-for-byte what it was
+  before this system existed.
+- **`LocalUaPalette`** (a `staticCompositionLocalOf<UaPalette>`) carries the active palette down
+  the tree; **`UaTheme.palette`** is the `@Composable` accessor components actually call.
+  `staticCompositionLocalOf` is deliberate, not an oversight - a theme switch is meant to force the
+  *entire* subtree to recompose immediately, which is the opposite of what `compositionLocalOf`'s
+  finer-grained invalidation would give you.
+- **`UaCastTheme(theme: AppTheme, content)`** (in `Theme.kt`) is the actual root: it picks the
+  palette for `theme`, provides it via `LocalUaPalette`, and builds the Material3 `ColorScheme`
+  from it too (so Material internals - ripples, `OutlinedTextField`, etc. - track the theme as
+  well, even though new UI code shouldn't be reading `MaterialTheme.colorScheme.*` directly).
+- **`AppPreferences.appTheme`** (default `AppTheme.AZURE`) persists the choice.
+  `AppViewModel.selectAppTheme` writes it and updates `AppUiState.appTheme`; `MainActivity` passes
+  that straight into `UaCastTheme(theme = uiState.appTheme)`, so picking a theme in Settings
+  recomposes the whole app on the spot - no restart.
+
+### Rules for adding a new theme
+
+1. Add the enum case to `AppTheme`.
+2. Write a new `UaPalette` value (see `CinemaPalette.kt` for the shape: a handful of `private val`
+   base colors, then the full `UaPalette(...)` constructor call). Every field needs a real value -
+   there's no "inherit from Azure" shortcut, so a half-finished theme won't compile.
+3. Wire it into `UaCastTheme`'s `when (theme)` branch in `Theme.kt`.
+4. Add its name string to all 4 locales and a `SegmentedControl` option in Settings' theme picker
+   (`SettingsScreen.kt`) if it should be user-selectable yet.
+5. **Never introduce a `Color(0x...)` literal or a hardcoded shape/font choice inside a screen or
+   component to special-case the new theme.** If an existing screen needs a color the palette
+   doesn't have yet, add the field to `UaPalette` (with a value for *every* existing theme) rather
+   than branching on `UaTheme.palette == CinemaUaPalette` or similar at the call site - components
+   read the palette, they don't know which theme they're in.
+6. `scripts/check-no-hardcoded-colors.sh` (run in CI) fails the build on any `Color(0x...)` under
+   `ui/` outside `ui/theme/` - that's the enforcement mechanism for rule 5.
+
+### Small (<12sp) accent text
+
+`UaPalette.accentText` exists because a theme's accent hue can look thin/washed-out as small plain
+text (badges, "view all" links) even when it reads fine on icons or larger text - Cinema's gold is
+the motivating case, see `UaPalette.kt`'s doc comment on the field. Icon tints and larger accent
+text keep using `UaPalette.azure`; only Caption/Micro-scale text runs should use `accentText`.
+
+### Serif display type
+
+`UaPalette.displayFontFamily` (serif in Cinema via Playfair Display, platform default elsewhere) is
+consumed through `Type.kt`'s `DisplayTitle`/`DisplayName` styles, not read directly at call sites -
+see the "Typography" section above for the base styles they wrap. Cinema's font is fetched via
+Android's Downloadable Fonts API (Google Play Services Fonts provider, see
+`res/font/playfair_display*.xml`) rather than bundled as a binary asset, since no real font binary
+was available when this was built - it falls back silently to the platform default on devices
+without Google Play Services. A future iteration could replace this with an actually-bundled OFL
+font file without touching anything outside those two `res/font/*.xml` resources and
+`CinemaPalette.kt`'s `CinemaDisplayFontFamily`.

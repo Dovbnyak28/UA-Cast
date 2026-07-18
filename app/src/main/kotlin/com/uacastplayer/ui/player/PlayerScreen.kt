@@ -365,7 +365,7 @@ fun PlayerScreen(
                             .align(Alignment.BottomStart)
                             .padding(12.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(Color(0x66000000))
+                            .background(UaTheme.palette.scrimBackground)
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
@@ -559,7 +559,7 @@ private fun GestureLevelIndicator(kind: GestureIndicatorKind, level: Float, modi
                 .weight(1f)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(RadiusField / 2))
-                .background(Color(0x33FFFFFF)),
+                .background(UaTheme.palette.overlayHighlight),
         ) {
             Box(
                 modifier = Modifier
@@ -581,7 +581,7 @@ private fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifie
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(Color(0x66000000))
+            .background(UaTheme.palette.scrimBackground)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -623,7 +623,7 @@ private fun InlineVideoControls(isPlaying: Boolean, onPlayPause: () -> Unit, onT
             icon = AppIcons.Fullscreen,
             onClick = onToggleFullscreen,
             contentDescription = stringResource(R.string.player_fullscreen),
-            background = Color(0x66000000),
+            background = UaTheme.palette.scrimBackground,
             modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
         )
     }
@@ -874,7 +874,7 @@ private fun PlayerControlsOverlay(
                 icon = AppIcons.ArrowBack,
                 onClick = onExit,
                 contentDescription = stringResource(R.string.common_back),
-                background = Color(0x66000000),
+                background = UaTheme.palette.scrimBackground,
             )
             Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
                 Text(text = uiState.currentChannel?.displayName.orEmpty(), color = Color.White, style = DisplayName)
@@ -898,7 +898,7 @@ private fun PlayerControlsOverlay(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier
                             .clip(RoundedCornerShape(RadiusItem))
-                            .background(Color(0x66000000))
+                            .background(UaTheme.palette.scrimBackground)
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                             .pointerInput(indexed.index) {
                                 detectTapGestures { onSelectPreview(indexed) }
@@ -934,7 +934,7 @@ private fun PlayerControlsOverlay(
                 icon = AppIcons.PictureInPicture,
                 onClick = onEnterPip,
                 contentDescription = stringResource(R.string.player_picture_in_picture),
-                background = Color(0x66000000),
+                background = UaTheme.palette.scrimBackground,
             )
             SmallRoundIconButton(
                 icon = if (isFullscreen) AppIcons.FullscreenExit else AppIcons.Fullscreen,
@@ -942,7 +942,7 @@ private fun PlayerControlsOverlay(
                 contentDescription = stringResource(
                     if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_fullscreen
                 ),
-                background = Color(0x66000000),
+                background = UaTheme.palette.scrimBackground,
             )
         }
     }
@@ -954,7 +954,7 @@ private fun PlayerControlsOverlay(
  * doesn't line up with the app's icon buttons otherwise.
  */
 @Composable
-private fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = Color(0x66000000)) {
+private fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = UaTheme.palette.scrimBackground) {
     Box(
         modifier = modifier
             .size(IconButtonSize)
@@ -978,14 +978,14 @@ private fun SleepTimerButton(remainingMillis: Long?, onClick: () -> Unit) {
             icon = AppIcons.Timer,
             onClick = onClick,
             contentDescription = stringResource(R.string.player_sleep_timer),
-            background = Color(0x66000000),
+            background = UaTheme.palette.scrimBackground,
         )
     } else {
         Row(
             modifier = Modifier
                 .height(IconButtonSize)
                 .clip(RoundedCornerShape(IconButtonSize / 2))
-                .background(Color(0x66000000))
+                .background(UaTheme.palette.scrimBackground)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

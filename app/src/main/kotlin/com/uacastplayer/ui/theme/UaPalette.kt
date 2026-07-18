@@ -7,7 +7,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 
 /** Which visual style is active - see docs/DESIGN_SYSTEM.md "Themes". */
-enum class AppTheme { AZURE, CINEMA }
+enum class AppTheme {
+    AZURE, CINEMA;
+
+    companion object {
+        val DEFAULT = AZURE
+        fun fromId(id: String?): AppTheme = entries.firstOrNull { it.name == id } ?: DEFAULT
+    }
+}
 
 /** How the design system's secondary button renders - see docs/DESIGN_SYSTEM.md "Themes". */
 enum class SecondaryButtonStyle { RAISED, GHOST }
@@ -48,6 +55,16 @@ data class UaPalette(
     val greenGlow: Color,
     val amberGlow: Color,
     val redGlow: Color,
+    /** Semi-transparent black behind small icon buttons overlaid on video/photo content (player
+     * controls) - neutral on purpose, so it doesn't color-cast the content underneath. Same value
+     * in every theme. */
+    val scrimBackground: Color,
+    /** Semi-transparent white for light-on-video overlays (e.g. the volume/brightness gesture
+     * fill). Same value in every theme, for the same reason as [scrimBackground]. */
+    val overlayHighlight: Color,
+    /** Near-opaque tint behind the frosted-glass tab bar - unlike the scrim colors above this is
+     * theme chrome, not a video overlay, so it follows the theme's background warmth. */
+    val glassTone: Color,
     /** Serif in Cinema, the platform default elsewhere - see Type.kt DisplayTitle/DisplayName. */
     val displayFontFamily: FontFamily,
     /** Radial "spotlight" background instead of the plain top-to-bottom gradient - see appBackground(). */
@@ -81,12 +98,20 @@ val AzureUaPalette = UaPalette(
     greenGlow = GreenGlow,
     amberGlow = AmberGlow,
     redGlow = RedGlow,
+    scrimBackground = Color(0x66000000),
+    overlayHighlight = Color(0x33FFFFFF),
+    glassTone = Color(0xE6121214),
     displayFontFamily = FontFamily.Default,
     vignette = false,
     pillButtons = false,
     secondaryButtonStyle = SecondaryButtonStyle.RAISED,
 )
 
+// staticCompositionLocalOf is intentional, not an oversight: the Settings theme switcher changes
+// this at the UaCastTheme root, and a theme switch is meant to force the *entire* app subtree to
+// recompose with the new palette immediately - the exact opposite of the fine-grained,
+// change-only-what-reads-it behavior compositionLocalOf would give. See docs/DESIGN_SYSTEM.md
+// "Themes".
 val LocalUaPalette = staticCompositionLocalOf { AzureUaPalette }
 
 object UaTheme {

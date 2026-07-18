@@ -57,6 +57,7 @@ import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.settings.SettingsScreen
+import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.DisplayTitle
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.appBackground
@@ -72,6 +73,8 @@ private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
 fun RootScaffold(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
+    currentAppTheme: AppTheme,
+    onAppThemeSelected: (AppTheme) -> Unit,
     onExitApp: () -> Unit,
     playlistState: PlaylistUiState,
     onOpenAddPlaylist: () -> Unit,
@@ -243,6 +246,8 @@ fun RootScaffold(
                 BottomDestination.SETTINGS -> SettingsScreen(
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
+                    currentAppTheme = currentAppTheme,
+                    onAppThemeSelected = onAppThemeSelected,
                     currentEpgSource = epgState.selectedSource,
                     onEpgSourceSelected = onEpgSourceSelected,
                     suggestedEpgUrl = epgState.suggestedUrl,

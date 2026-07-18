@@ -60,6 +60,7 @@ import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CardTitle
@@ -70,6 +71,8 @@ import com.uacastplayer.ui.theme.RadiusItem
 fun SettingsScreen(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
+    currentAppTheme: AppTheme,
+    onAppThemeSelected: (AppTheme) -> Unit,
     currentEpgSource: EpgSource,
     onEpgSourceSelected: (EpgSource) -> Unit,
     suggestedEpgUrl: String?,
@@ -107,6 +110,13 @@ fun SettingsScreen(
         }
 
         SettingsSection(title = stringResource(R.string.settings_section_general), icon = AppIcons.Globe) {
+            SegmentedRow(stringResource(R.string.settings_theme_label), AppIcons.Image) {
+                SegmentedControl(
+                    options = AppTheme.entries.map { stringResource(it.nameRes()) },
+                    selectedIndex = AppTheme.entries.indexOf(currentAppTheme),
+                    onSelected = { index -> onAppThemeSelected(AppTheme.entries[index]) },
+                )
+            }
             LabeledRow(stringResource(R.string.settings_language_label), AppIcons.Globe) {
                 for (language in AppLanguage.entries) {
                     SettingsChip(
@@ -657,6 +667,11 @@ private fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Unit
             color = if (isSelected) UaTheme.palette.labelPrimary else UaTheme.palette.labelSecondary,
         )
     }
+}
+
+private fun AppTheme.nameRes(): Int = when (this) {
+    AppTheme.AZURE -> R.string.theme_name_azure
+    AppTheme.CINEMA -> R.string.theme_name_cinema
 }
 
 private fun AppLanguage.nativeNameRes(): Int = when (this) {

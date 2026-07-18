@@ -115,6 +115,9 @@
     <string name="settings_title">Settings</string>
     <string name="settings_section_general">General</string>
     <string name="settings_section_playlist">Playlist</string>
+    <string name="settings_theme_label">Theme</string>
+    <string name="theme_name_azure">Classic</string>
+    <string name="theme_name_cinema">Cinema</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_icon_wifi_only_label">Fetch channel logos on Wi-Fi only</string>
     <string name="settings_epg_source_label">TV guide source</string>

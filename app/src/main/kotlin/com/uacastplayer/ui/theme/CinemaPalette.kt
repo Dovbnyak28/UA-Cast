@@ -69,6 +69,11 @@ val CinemaUaPalette = UaPalette(
     greenGlow = GreenGlow,
     amberGlow = AmberGlow,
     redGlow = Color(0x99C9695A),
+    // Neutral video-overlay scrims - same reasoning as UaPalette.scrimBackground doc: they sit over
+    // content, not chrome, so they don't follow the warm palette.
+    scrimBackground = Color(0x66000000),
+    overlayHighlight = Color(0x33FFFFFF),
+    glassTone = Color(0xE6141210),
     displayFontFamily = CinemaDisplayFontFamily,
     vignette = true,
     pillButtons = true,

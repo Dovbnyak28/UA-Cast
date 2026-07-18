@@ -35,7 +35,6 @@ import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.player.PlayerHost
-import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 
 private data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
@@ -146,9 +145,7 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            // Hardcoded until the Settings theme switcher (see docs/DESIGN_SYSTEM.md "Themes") wires
-            // this up to AppPreferences.appTheme.
-            UaCastTheme(theme = AppTheme.AZURE) {
+            UaCastTheme(theme = uiState.appTheme) {
                 val request = playerRequest
                 when {
                     uiState.needsLanguagePicker ->
@@ -209,6 +206,8 @@ class MainActivity : FragmentActivity() {
                         RootScaffold(
                             currentLanguage = uiState.language,
                             onLanguageSelected = viewModel::selectLanguage,
+                            currentAppTheme = uiState.appTheme,
+                            onAppThemeSelected = viewModel::selectAppTheme,
                             onExitApp = { finish() },
                             playlistState = playlistState,
                             onOpenAddPlaylist = { showAddPlaylist = true },

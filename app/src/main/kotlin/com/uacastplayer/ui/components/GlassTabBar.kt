@@ -41,7 +41,7 @@ data class TabBarItem(
 /** §5.10 - bottom navigation chrome: floating rounded glass bar with a highlight pill on the selected tab. */
 @Composable
 fun GlassTabBar(items: List<TabBarItem>, modifier: Modifier = Modifier) {
-    val glassTone = Color(0xE6121214)
+    val glassTone = UaTheme.palette.glassTone
 
     Row(
         modifier = modifier

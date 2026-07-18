@@ -119,6 +119,9 @@
     <string name="settings_title">Налаштування</string>
     <string name="settings_section_general">Загальні</string>
     <string name="settings_section_playlist">Плейлист</string>
+    <string name="settings_theme_label">Тема</string>
+    <string name="theme_name_azure">Класична</string>
+    <string name="theme_name_cinema">Кіно</string>
     <string name="settings_language_label">Мова</string>
     <string name="settings_icon_wifi_only_label">Завантажувати логотипи лише через Wi-Fi</string>
     <string name="settings_epg_source_label">Джерело телепрограми</string>
