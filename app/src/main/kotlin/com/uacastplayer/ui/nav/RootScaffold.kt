@@ -154,7 +154,7 @@ fun RootScaffold(
                         Text(
                             text = stringResource(R.string.cast_status_connected),
                             style = com.uacastplayer.ui.theme.Caption,
-                            color = UaTheme.palette.azure,
+                            color = UaTheme.palette.accentText,
                         )
                     }
                 }

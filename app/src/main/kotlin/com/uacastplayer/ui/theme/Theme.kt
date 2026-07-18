@@ -36,11 +36,9 @@ private fun colorSchemeFor(palette: UaPalette): ColorScheme = darkColorScheme(
  */
 @Composable
 fun UaCastTheme(theme: AppTheme, content: @Composable () -> Unit) {
-    // CINEMA temporarily maps to the Azure palette until CinemaUaPalette exists - keeps this block
-    // self-contained and the app pixel-identical (see docs/DESIGN_SYSTEM.md "Themes").
     val palette = when (theme) {
         AppTheme.AZURE -> AzureUaPalette
-        AppTheme.CINEMA -> AzureUaPalette
+        AppTheme.CINEMA -> CinemaUaPalette
     }
     CompositionLocalProvider(LocalUaPalette provides palette) {
         MaterialTheme(

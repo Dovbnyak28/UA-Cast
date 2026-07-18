@@ -617,7 +617,7 @@ private fun GroupCard(
                         is GroupBadge.Label -> Text(
                             text = badge.text,
                             style = Caption,
-                            color = UaTheme.palette.azure,
+                            color = UaTheme.palette.accentText,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                         )
                     }
@@ -894,7 +894,7 @@ private fun ChannelRow(
                         Text(
                             text = badge,
                             style = Caption,
-                            color = UaTheme.palette.azure2,
+                            color = UaTheme.palette.accentText,
                             modifier = Modifier.padding(start = 6.dp),
                         )
                     }
@@ -968,7 +968,7 @@ private fun ChannelTile(
                 Text(
                     text = badge,
                     style = Caption,
-                    color = UaTheme.palette.azure,
+                    color = UaTheme.palette.accentText,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     modifier = Modifier.padding(top = 2.dp),
                 )

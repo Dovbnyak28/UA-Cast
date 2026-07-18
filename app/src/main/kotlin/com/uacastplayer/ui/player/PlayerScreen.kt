@@ -779,7 +779,7 @@ private fun NextChannelsRail(
                 style = Title,
                 color = UaTheme.palette.labelPrimary,
             )
-            Text(text = stringResource(R.string.player_view_all), style = Caption, color = UaTheme.palette.azure)
+            Text(text = stringResource(R.string.player_view_all), style = Caption, color = UaTheme.palette.accentText)
         }
         LazyRow(
             modifier = Modifier.fillMaxWidth().padding(top = GapM, start = ScreenHPadding, end = ScreenHPadding),

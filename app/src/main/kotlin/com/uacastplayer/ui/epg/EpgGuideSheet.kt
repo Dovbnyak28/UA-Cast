@@ -120,7 +120,11 @@ private fun ProgrammeRow(
         ProgrammeRowState.CURRENT -> UaTheme.palette.labelPrimary
         ProgrammeRowState.UPCOMING -> UaTheme.palette.labelPrimary
     }
-    val timeColor = if (state == ProgrammeRowState.CURRENT) UaTheme.palette.azure else UaTheme.palette.labelTertiary
+    val timeColor = if (state == ProgrammeRowState.CURRENT) {
+        UaTheme.palette.accentText
+    } else {
+        UaTheme.palette.labelTertiary
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.Top) {

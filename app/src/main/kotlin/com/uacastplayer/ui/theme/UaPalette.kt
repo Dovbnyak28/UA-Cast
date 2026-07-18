@@ -25,9 +25,18 @@ data class UaPalette(
     val surface2: Color,
     val azure: Color,
     val azure2: Color,
+    val accentGradientTop: Color,
+    val accentGradientBottom: Color,
     val accentGradient: Brush,
     /** Text/icon color for content drawn on top of a filled accent surface (e.g. play button icon). */
     val accentOnFill: Color,
+    /**
+     * The accent color used for small (< 12sp, i.e. Caption/Micro-scale) plain text runs - badges,
+     * status labels, "view all" links. Distinct from [azure] because a theme's regular accent hue
+     * can be too thin/low-contrast at that size even when it reads fine on icons or larger text -
+     * see docs/DESIGN_SYSTEM.md "Themes". Icon tints and non-Caption text keep using [azure].
+     */
+    val accentText: Color,
     val routeGreen: Color,
     val routeAmber: Color,
     val routeRed: Color,
@@ -56,8 +65,11 @@ val AzureUaPalette = UaPalette(
     surface2 = Surface2,
     azure = Azure,
     azure2 = Azure2,
+    accentGradientTop = Azure,
+    accentGradientBottom = Azure2,
     accentGradient = AzureGradient,
     accentOnFill = Color.White,
+    accentText = Azure,
     routeGreen = RouteGreen,
     routeAmber = RouteAmber,
     routeRed = RouteRed,
