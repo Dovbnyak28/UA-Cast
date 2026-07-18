@@ -19,10 +19,17 @@
         android:name="android.hardware.wifi"
         android:required="false" />
 
+    <!-- Package-visibility declaration so the Cinema theme's downloadable serif font (see
+         res/font/playfair_display.xml) can resolve the Google Play Services Fonts provider on
+         API 30+. Devices without Play Services (some Android TV boxes) just fall back silently
+         to the platform default font - see docs/DESIGN_SYSTEM.md "Themes". -->
+    <queries>
+        <provider android:authorities="com.google.android.gms.fonts" />
+    </queries>
+
     <application
         android:name=".UaCastPlayerApp"
         android:allowBackup="false"
-        android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -46,7 +53,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <!-- LEANBACK_LAUNCHER deliberately omitted - the UI has no D-pad/focus navigation
+                     yet, so the app is unusable on a real TV launcher. See docs/TV_SUPPORT.md for
+                     what's needed before re-adding it. The leanback uses-feature/banner below are
+                     left in place since they're harmless and save re-plumbing them later. -->
             </intent-filter>
         </activity>
 
@@ -59,8 +69,8 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Locale storage is handled by our own AppPreferences (see UaCastPlayerApp), not
-             AppCompat's auto-store, so this stays disabled per the per-app-language docs. -->
+        <!-- Locale storage is handled by our own AppPreferences (see core.i18n.LocalizedContext),
+             not AppCompat's auto-store, so this stays disabled per the per-app-language docs. -->
         <service
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
             android:enabled="false"

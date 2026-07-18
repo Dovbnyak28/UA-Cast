@@ -634,7 +634,7 @@ private fun GroupCard(
         )
         Text(
             text = groupLabel(grouped.group),
-            style = BodyText,
+            style = BodyText.copy(fontFamily = UaTheme.palette.displayFontFamily),
             color = UaTheme.palette.labelPrimary,
             maxLines = 1,
             modifier = Modifier.padding(top = 10.dp),
@@ -881,7 +881,7 @@ private fun ChannelRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = channel.displayName,
-                    style = BodyText,
+                    style = BodyText.copy(fontFamily = UaTheme.palette.displayFontFamily),
                     color = UaTheme.palette.labelPrimary,
                     modifier = Modifier.weight(1f, fill = false),
                 )

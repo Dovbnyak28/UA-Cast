@@ -96,7 +96,7 @@ import com.uacastplayer.ui.epg.EpgGuideSheet
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BreatheMs
 import com.uacastplayer.ui.theme.CardPadding
-import com.uacastplayer.ui.theme.CardTitle
+import com.uacastplayer.ui.theme.DisplayName
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
@@ -712,7 +712,7 @@ private fun ChannelInfoCard(
     ) {
         ChannelIcon(channel = channel, resolveIcon = resolveIcon, size = 64.dp, refreshKey = iconRefreshKey)
         Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
-            Text(text = channel.displayName, style = CardTitle, color = UaTheme.palette.labelPrimary, maxLines = 1)
+            Text(text = channel.displayName, style = DisplayName, color = UaTheme.palette.labelPrimary, maxLines = 1)
             BadgesRow(badges, modifier = Modifier.padding(top = 4.dp))
         }
     }
@@ -877,7 +877,7 @@ private fun PlayerControlsOverlay(
                 background = Color(0x66000000),
             )
             Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
-                Text(text = uiState.currentChannel?.displayName.orEmpty(), color = Color.White, style = CardTitle)
+                Text(text = uiState.currentChannel?.displayName.orEmpty(), color = Color.White, style = DisplayName)
                 BadgesRow(uiState.badges)
             }
             LiveIndicator()

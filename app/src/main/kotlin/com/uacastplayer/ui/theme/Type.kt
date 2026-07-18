@@ -1,6 +1,7 @@
 package com.uacastplayer.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
@@ -62,6 +63,24 @@ val TabLabel = TextStyle(
     fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
     fontFeatureSettings = TabularNums,
 )
+
+/**
+ * [LargeTitle] with the active theme's [UaPalette.displayFontFamily] - serif in Cinema, unchanged
+ * elsewhere. Use for big screen titles (nav bar screen title, Home's app-name title) - see
+ * docs/DESIGN_SYSTEM.md "Themes".
+ */
+val DisplayTitle: TextStyle
+    @Composable get() = LargeTitle.copy(fontFamily = UaTheme.palette.displayFontFamily)
+
+/**
+ * [CardTitle] with the active theme's [UaPalette.displayFontFamily]. Use for channel names at
+ * CardTitle scale (the player's now-playing name). Channel/group names that use [BodyText] scale
+ * instead (ChannelRow, group cards, the Home "continue watching" card) apply the same
+ * `.copy(fontFamily = UaTheme.palette.displayFontFamily)` directly on [BodyText] at the call site,
+ * rather than through a third named style - see docs/DESIGN_SYSTEM.md "Themes".
+ */
+val DisplayName: TextStyle
+    @Composable get() = CardTitle.copy(fontFamily = UaTheme.palette.displayFontFamily)
 
 val AppTypography = Typography(
     displayLarge = LargeTitle,

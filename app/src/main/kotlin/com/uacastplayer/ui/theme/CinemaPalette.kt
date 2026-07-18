@@ -2,7 +2,20 @@ package com.uacastplayer.ui.theme
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import com.uacastplayer.R
+
+/**
+ * Fetched from Google's Downloadable Fonts provider (see res/font/playfair_display*.xml) rather
+ * than bundled as a binary asset. Falls back to the platform default on devices without Google
+ * Play Services - see docs/DESIGN_SYSTEM.md "Themes".
+ */
+private val CinemaDisplayFontFamily = FontFamily(
+    Font(R.font.playfair_display, FontWeight.Normal),
+    Font(R.font.playfair_display_medium, FontWeight.Medium),
+)
 
 // Backgrounds - warm charcoal instead of Azure's neutral black.
 private val CinemaVoid = Color(0xFF0B0A08)
@@ -56,8 +69,7 @@ val CinemaUaPalette = UaPalette(
     greenGlow = GreenGlow,
     amberGlow = AmberGlow,
     redGlow = Color(0x99C9695A),
-    // Serif family lands in a later block; Cinema looks identical to Azure typographically until then.
-    displayFontFamily = FontFamily.Default,
+    displayFontFamily = CinemaDisplayFontFamily,
     vignette = true,
     // Pill buttons/ghost secondary style land in a later block.
     pillButtons = false,

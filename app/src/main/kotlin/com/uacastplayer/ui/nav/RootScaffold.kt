@@ -57,7 +57,7 @@ import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.settings.SettingsScreen
-import com.uacastplayer.ui.theme.LargeTitle
+import com.uacastplayer.ui.theme.DisplayTitle
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.appBackground
 import java.io.File
@@ -147,7 +147,7 @@ fun RootScaffold(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(navState.current.labelRes()),
-                        style = LargeTitle,
+                        style = DisplayTitle,
                         color = UaTheme.palette.labelPrimary,
                     )
                     if (castState.isSessionConnected) {

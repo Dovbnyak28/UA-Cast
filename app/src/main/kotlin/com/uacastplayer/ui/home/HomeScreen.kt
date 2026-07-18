@@ -55,7 +55,7 @@ import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.GapS
-import com.uacastplayer.ui.theme.LargeTitle
+import com.uacastplayer.ui.theme.DisplayTitle
 import com.uacastplayer.ui.theme.NpLogoSize
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
@@ -104,7 +104,7 @@ fun HomeScreen(
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = ScreenHPadding)) {
         Text(
             text = stringResource(R.string.app_name),
-            style = LargeTitle,
+            style = DisplayTitle,
             color = UaTheme.palette.labelPrimary,
             modifier = Modifier.padding(top = 8.dp),
         )
@@ -311,7 +311,12 @@ private fun ContinueWatchingCard(
         Row(modifier = Modifier.fillMaxWidth().padding(top = GapM), verticalAlignment = Alignment.CenterVertically) {
             ChannelIcon(channel, resolveIcon, refreshKey = iconRefreshKey)
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(text = channel.displayName, style = BodyText, color = UaTheme.palette.labelPrimary, maxLines = 1)
+                Text(
+                    text = channel.displayName,
+                    style = BodyText.copy(fontFamily = UaTheme.palette.displayFontFamily),
+                    color = UaTheme.palette.labelPrimary,
+                    maxLines = 1,
+                )
                 val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
                     epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
                 }
