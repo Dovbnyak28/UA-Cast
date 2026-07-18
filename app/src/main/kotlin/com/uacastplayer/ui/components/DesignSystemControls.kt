@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -240,6 +241,12 @@ fun SegmentedControl(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            // Without this, the highlight box below (fillMaxHeight) gets unbounded height
+            // constraints from this wrap-content Box inside a Column and collapses to zero height
+            // - a classic Compose gotcha. IntrinsicSize.Min forces this Box to first resolve its
+            // height from its non-fillMaxHeight children (the Row of labels), then hand that
+            // bounded height down, so fillMaxHeight actually has something to fill.
+            .height(IntrinsicSize.Min)
             .clip(containerShape)
             .background(UaTheme.palette.surface1)
             .padding(3.dp)
