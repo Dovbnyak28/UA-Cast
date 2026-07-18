@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.components
+import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,12 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.player.SleepTimerDuration
-import com.uacastplayer.ui.theme.Azure
 import com.uacastplayer.ui.theme.BodyText
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
-import com.uacastplayer.ui.theme.RouteRed
-import com.uacastplayer.ui.theme.Surface2
 import kotlin.time.Duration
 
 @Composable
@@ -35,9 +31,9 @@ fun SleepTimerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Surface2,
-        titleContentColor = LabelPrimary,
-        textContentColor = LabelSecondary,
+        containerColor = UaTheme.palette.surface2,
+        titleContentColor = UaTheme.palette.labelPrimary,
+        textContentColor = UaTheme.palette.labelSecondary,
         title = { Text(stringResource(R.string.player_sleep_timer)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -76,7 +72,7 @@ private fun SleepTimerDialogRow(label: String, onClick: () -> Unit, emphasized: 
     ) {
         Text(
             text = label,
-            color = if (emphasized) RouteRed else LabelPrimary,
+            color = if (emphasized) UaTheme.palette.routeRed else UaTheme.palette.labelPrimary,
             style = BodyText,
         )
     }

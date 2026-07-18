@@ -1,5 +1,6 @@
 package com.uacastplayer
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,6 +14,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +23,9 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
+import com.uacastplayer.core.i18n.withAppLocale
+import com.uacastplayer.favorites.FavoriteKey
+import java.time.LocalDate
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
 import com.uacastplayer.ui.components.DownloadStatusBanner
@@ -27,10 +33,24 @@ import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.nav.RootScaffold
+import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.player.PlayerHost
-import com.uacastplayer.ui.theme.UaCastPlayerTheme
+import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.UaCastTheme
 
 private data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
+
+/** The Bundle-safe remnant of a [PlayerRequest] that survives process death - just the playing
+ * channel's stable key (see [FavoriteKey]), never the channel list itself, which can be
+ * megabytes for large playlists and would risk a TransactionTooLargeException. */
+private data class SavedPlayerRequest(val channelKey: String, val startIndex: Int)
+
+private val SavedPlayerRequestSaver: Saver<SavedPlayerRequest?, List<Any>> = Saver(
+    save = { request -> request?.let { listOf(it.channelKey, it.startIndex) } ?: emptyList() },
+    restore = { saved ->
+        if (saved.isEmpty()) null else SavedPlayerRequest(saved[0] as String, saved[1] as Int)
+    },
+)
 
 /**
  * A plain ComponentActivity crashes the Cast SDK's MediaRouteButton, so this must stay a
@@ -41,6 +61,10 @@ class MainActivity : FragmentActivity() {
     private val viewModel: AppViewModel by viewModels()
     private var activeLanguage: AppLanguage? = null
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppLocale())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -50,20 +74,38 @@ class MainActivity : FragmentActivity() {
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
+            val playlistSources by viewModel.playlistSources.collectAsStateWithLifecycle()
+            val activePlaylistSourceId by viewModel.activePlaylistSourceId.collectAsStateWithLifecycle()
             val epgState by viewModel.epgState.collectAsStateWithLifecycle()
             val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
             val castState by viewModel.castState.collectAsStateWithLifecycle()
             val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
             val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+            val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()
             val showBatteryOptimizationHint by viewModel.showBatteryOptimizationHint.collectAsStateWithLifecycle()
+            val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
 
             val pickPlaylistFile = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
             ) { uri -> uri?.let(viewModel::loadPlaylistFromFile) }
+            val exportBackupFile = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/json"),
+            ) { uri -> uri?.let(viewModel::exportBackupTo) }
+            val importBackupFile = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri -> uri?.let(viewModel::importBackupFrom) }
 
             var playerRequest by remember { mutableStateOf<PlayerRequest?>(null) }
+            var savedPlayerRequest by rememberSaveable(stateSaver = SavedPlayerRequestSaver) {
+                mutableStateOf<SavedPlayerRequest?>(null)
+            }
             var showHelp by remember { mutableStateOf(false) }
             var showTerms by remember { mutableStateOf(false) }
+            var showAddPlaylist by remember { mutableStateOf(false) }
+            // Incremented (never reset) each time a playlist load finishes from AddPlaylistScreen,
+            // so RootScaffold's LaunchedEffect(token) fires again even if the value happened to
+            // repeat - it's a one-shot "switch to Channels" signal, not a persisted tab selection.
+            var focusChannelsToken by remember { mutableStateOf(0) }
 
             LaunchedEffect(uiState.language) {
                 val previous = activeLanguage
@@ -73,7 +115,40 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            UaCastPlayerTheme {
+            // Mirrors the live playerRequest into the Bundle-safe form on every open/close, so the
+            // saved state always reflects "what would need re-opening if the process dies right
+            // now" without ever holding the channel list itself.
+            LaunchedEffect(playerRequest) {
+                val request = playerRequest
+                savedPlayerRequest = if (request == null) {
+                    null
+                } else {
+                    request.channels.getOrNull(request.startIndex)?.let { channel ->
+                        SavedPlayerRequest(FavoriteKey.of(channel), request.startIndex)
+                    }
+                }
+            }
+
+            // After process death, playerRequest starts out null but savedPlayerRequest may still
+            // hold the channel that was playing - re-open it once the restored playlist has loaded
+            // far enough to find it by key. The original sub-list (e.g. a specific group or search
+            // results) isn't recoverable, so this falls back to the full flat playlist; if the
+            // channel is gone entirely, the saved marker is dropped and the player just stays closed.
+            LaunchedEffect(savedPlayerRequest, playlistState.groups) {
+                val saved = savedPlayerRequest ?: return@LaunchedEffect
+                if (playerRequest != null || !playlistState.hasChannels) return@LaunchedEffect
+                val flatChannels = playlistState.groups.flatMap { it.channels }
+                val index = flatChannels.indexOfFirst { FavoriteKey.of(it) == saved.channelKey }
+                if (index >= 0) {
+                    playerRequest = PlayerRequest(flatChannels, index)
+                } else {
+                    savedPlayerRequest = null
+                }
+            }
+
+            // Hardcoded until the Settings theme switcher (see docs/DESIGN_SYSTEM.md "Themes") wires
+            // this up to AppPreferences.appTheme.
+            UaCastTheme(theme = AppTheme.AZURE) {
                 val request = playerRequest
                 when {
                     uiState.needsLanguagePicker ->
@@ -83,11 +158,24 @@ class MainActivity : FragmentActivity() {
                         TermsScreen(onAccept = viewModel::acceptTerms, onDecline = { finish() })
 
                     request != null -> {
-                        BackHandler { playerRequest = null }
+                        val exitPlayer = {
+                            playerRequest = null
+                            // Home's "continue watching" card only needs to catch up here, not
+                            // reactively - AppPreferences isn't itself observable, and refreshing
+                            // on every write from PlayerViewModel would be needless churn while
+                            // the player is still open anyway.
+                            viewModel.refreshLastWatchedChannel()
+                        }
+                        BackHandler(onBack = exitPlayer)
                         PlayerHost(
                             channels = request.channels,
                             startIndex = request.startIndex,
-                            onExit = { playerRequest = null },
+                            onExit = exitPlayer,
+                            isFavorite = viewModel::isFavorite,
+                            onToggleFavorite = viewModel::toggleFavorite,
+                            resolveIcon = viewModel::resolveChannelIcon,
+                            epgState = epgState,
+                            iconPrefetchState = iconPrefetchState,
                         )
                     }
 
@@ -101,35 +189,70 @@ class MainActivity : FragmentActivity() {
                         TermsScreen(onBackClick = { showTerms = false })
                     }
 
+                    showAddPlaylist -> {
+                        BackHandler { showAddPlaylist = false }
+                        AddPlaylistScreen(
+                            playlistState = playlistState,
+                            onSetDisplayName = viewModel::setPlaylistDisplayName,
+                            onLoadUrl = viewModel::loadPlaylistFromUrl,
+                            onPickFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
+                            onLoadXtream = viewModel::loadXtreamPlaylist,
+                            onBackClick = { showAddPlaylist = false },
+                            onPlaylistLoaded = {
+                                showAddPlaylist = false
+                                focusChannelsToken++
+                            },
+                        )
+                    }
+
                     else -> Box(modifier = Modifier.fillMaxSize()) {
                         RootScaffold(
                             currentLanguage = uiState.language,
                             onLanguageSelected = viewModel::selectLanguage,
                             onExitApp = { finish() },
                             playlistState = playlistState,
-                            onLoadPlaylistUrl = viewModel::loadPlaylistFromUrl,
-                            onPickPlaylistFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
+                            onOpenAddPlaylist = { showAddPlaylist = true },
+                            onRefreshPlaylist = viewModel::refreshPlaylist,
+                            playlistSources = playlistSources,
+                            activePlaylistSourceId = activePlaylistSourceId,
+                            onSwitchPlaylistSource = viewModel::switchPlaylistSource,
+                            onRemovePlaylistSource = { viewModel.removePlaylistSource(it.id) },
+                            focusChannelsToken = focusChannelsToken,
                             onChannelSelected = { channels, startIndex ->
                                 playerRequest = PlayerRequest(channels, startIndex)
                             },
                             epgState = epgState,
                             onEpgSourceSelected = viewModel::selectEpgSource,
+                            onUseSuggestedEpgUrl = viewModel::useSuggestedEpgUrl,
                             iconPrefetchState = iconPrefetchState,
                             onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
                             resolveIcon = viewModel::resolveChannelIcon,
+                            cachedIconFile = viewModel::cachedChannelIcon,
                             castState = castState,
                             settingsState = settingsState,
                             onIconDisplayModeSelected = viewModel::setIconDisplayMode,
+                            onDismissIconTierBanner = viewModel::dismissIconTierBanner,
                             onListDensitySelected = viewModel::setListDensity,
                             onChannelLayoutSelected = viewModel::setChannelLayout,
+                            onBufferSizeSelected = viewModel::setBufferSize,
                             onFavoritesSortOrderSelected = viewModel::setFavoritesSortOrder,
                             onWrapAroundChanged = viewModel::setWrapAroundEnabled,
                             onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
                             onClearCache = viewModel::clearCache,
+                            onExportBackup = {
+                                exportBackupFile.launch("ua-cast-backup-${LocalDate.now()}.json")
+                            },
+                            onImportBackup = {
+                                importBackupFile.launch(arrayOf("application/json", "*/*"))
+                            },
+                            backupImportSummary = backupImportSummary,
+                            onDismissBackupImportSummary = viewModel::dismissBackupImportSummary,
                             favorites = favorites,
+                            lastWatchedChannelKey = lastWatchedChannelKey,
                             isFavorite = viewModel::isFavorite,
                             onToggleFavorite = viewModel::toggleFavorite,
                             onRemoveFavorite = viewModel::removeFavorite,
+                            onReorderFavorites = viewModel::reorderFavorites,
                             onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
                             onAddIconSource = viewModel::addCustomIconSource,
                             onRemoveIconSource = viewModel::removeCustomIconSource,

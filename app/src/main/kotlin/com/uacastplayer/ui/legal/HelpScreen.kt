@@ -1,12 +1,16 @@
 package com.uacastplayer.ui.legal
+import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,12 +29,8 @@ import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
 import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.GapM
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
-import com.uacastplayer.ui.theme.Surface1
-import com.uacastplayer.ui.theme.Void
 
 /**
  * Static, "lite" Q&A-style help: what the app's main pieces are and how they relate, for a user who
@@ -50,18 +50,27 @@ fun HelpScreen(onBackClick: () -> Unit, modifier: Modifier = Modifier) {
         R.string.help_q8_title to R.string.help_q8_body,
     )
 
-    Column(modifier = modifier.fillMaxSize().background(Void)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(UaTheme.palette.void)
+            .windowInsetsPadding(WindowInsets.statusBars),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBackClick) {
-                Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = LabelPrimary)
+                Icon(
+                    AppIcons.ArrowBack,
+                    contentDescription = stringResource(R.string.common_back),
+                    tint = UaTheme.palette.labelPrimary,
+                )
             }
             Text(
                 text = stringResource(R.string.help_title),
                 style = CardTitle,
-                color = LabelPrimary,
+                color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(start = 4.dp),
             )
         }
@@ -74,14 +83,14 @@ fun HelpScreen(onBackClick: () -> Unit, modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(RadiusCard))
-                        .background(Surface1)
+                        .background(UaTheme.palette.surface1)
                         .padding(CardPadding),
                 ) {
-                    Text(text = stringResource(titleRes), style = CardTitle, color = LabelPrimary)
+                    Text(text = stringResource(titleRes), style = CardTitle, color = UaTheme.palette.labelPrimary)
                     Text(
                         text = stringResource(bodyRes),
                         style = BodyText,
-                        color = LabelSecondary,
+                        color = UaTheme.palette.labelSecondary,
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }

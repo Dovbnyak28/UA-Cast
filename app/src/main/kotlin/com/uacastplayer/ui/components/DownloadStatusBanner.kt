@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.components
+import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -37,16 +38,8 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
-import com.uacastplayer.ui.theme.Azure
 import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.Hairline
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
-import com.uacastplayer.ui.theme.Surface1
-import com.uacastplayer.ui.theme.Surface2
 import com.uacastplayer.ui.theme.TabLabel
-
-private val BannerGradient = Brush.verticalGradient(colors = listOf(Surface1, Surface2))
 
 private const val MIN_PERCENT = 0
 private const val MAX_PERCENT = 100
@@ -86,8 +79,11 @@ fun DownloadStatusBanner(
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .clip(shape)
-                .background(brush = BannerGradient, shape = shape)
-                .border(1.dp, Hairline, shape)
+                .background(
+                    brush = Brush.verticalGradient(colors = listOf(UaTheme.palette.surface1, UaTheme.palette.surface2)),
+                    shape = shape,
+                )
+                .border(1.dp, UaTheme.palette.hairline, shape)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -98,7 +94,7 @@ fun DownloadStatusBanner(
             ) {
                 androidx.compose.material3.Text(
                     text = stringResource(R.string.download_banner_title),
-                    color = LabelPrimary,
+                    color = UaTheme.palette.labelPrimary,
                     style = TabLabel,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -108,7 +104,7 @@ fun DownloadStatusBanner(
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = stringResource(R.string.download_banner_dismiss),
-                        tint = LabelSecondary,
+                        tint = UaTheme.palette.labelSecondary,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -135,7 +131,7 @@ private fun BannerProgressLine(label: String, fraction: Float?) {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         androidx.compose.material3.Text(
             text = label,
-            color = LabelSecondary,
+            color = UaTheme.palette.labelSecondary,
             style = Caption,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -148,11 +144,15 @@ private fun BannerProgressLine(label: String, fraction: Float?) {
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = barModifier,
-                color = Azure,
-                trackColor = Hairline,
+                color = UaTheme.palette.azure,
+                trackColor = UaTheme.palette.hairline,
             )
         } else {
-            LinearProgressIndicator(modifier = barModifier, color = Azure, trackColor = Hairline)
+            LinearProgressIndicator(
+                modifier = barModifier,
+                color = UaTheme.palette.azure,
+                trackColor = UaTheme.palette.hairline,
+            )
         }
     }
 }

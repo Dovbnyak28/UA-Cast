@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.settings
+import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,18 +60,11 @@ import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.Azure
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.CaptionSemibold
-import com.uacastplayer.ui.theme.Hairline
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
 import com.uacastplayer.ui.theme.RadiusItem
-import com.uacastplayer.ui.theme.RouteRed
-import com.uacastplayer.ui.theme.Surface1
-import com.uacastplayer.ui.theme.Surface2
 
 @Composable
 fun SettingsScreen(
@@ -142,18 +136,18 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(RadiusItem))
-                    .background(Surface1)
+                    .background(UaTheme.palette.surface1)
                     .padding(16.dp),
             ) {
                 Text(
                     text = stringResource(R.string.home_active_playlist_label),
                     style = CaptionSemibold,
-                    color = LabelSecondary,
+                    color = UaTheme.palette.labelSecondary,
                 )
                 Text(
                     text = playlistState.displayName ?: playlistState.activePlaylistId ?: "—",
                     style = CardTitle,
-                    color = LabelPrimary,
+                    color = UaTheme.palette.labelPrimary,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -179,7 +173,7 @@ fun SettingsScreen(
                 Text(
                     text = stringResource(R.string.settings_icon_display_mode_tier_default_hint),
                     style = Caption,
-                    color = LabelSecondary,
+                    color = UaTheme.palette.labelSecondary,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -227,7 +221,7 @@ fun SettingsScreen(
             Text(
                 text = stringResource(R.string.settings_data_hint),
                 style = Caption,
-                color = LabelSecondary,
+                color = UaTheme.palette.labelSecondary,
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -250,18 +244,18 @@ fun SettingsScreen(
             Text(
                 text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes()),
                 style = BodyRegular,
-                color = LabelSecondary,
+                color = UaTheme.palette.labelSecondary,
             )
             Text(
                 text = stringResource(R.string.settings_app_version) + ": " + BuildConfig.VERSION_NAME,
                 style = BodyRegular,
-                color = LabelSecondary,
+                color = UaTheme.palette.labelSecondary,
                 modifier = Modifier.padding(top = 4.dp),
             )
             Text(
                 text = stringResource(R.string.settings_help_body),
                 style = BodyRegular,
-                color = LabelPrimary,
+                color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(top = 12.dp),
             )
             LinkRow(
@@ -289,7 +283,7 @@ private fun LinkRow(label: String, buttonLabel: String, onClick: () -> Unit, mod
         Text(
             text = label,
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             modifier = Modifier.weight(1f),
         )
         SecondaryButton(text = buttonLabel, onClick = onClick)
@@ -312,8 +306,11 @@ private fun BackupImportSummaryBanner(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(brush = Brush.verticalGradient(listOf(Surface1, Surface2)), shape = shape)
-            .border(1.dp, Hairline, shape)
+            .background(
+                brush = Brush.verticalGradient(listOf(UaTheme.palette.surface1, UaTheme.palette.surface2)),
+                shape = shape,
+            )
+            .border(1.dp, UaTheme.palette.hairline, shape)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -324,7 +321,7 @@ private fun BackupImportSummaryBanner(
                 summary.importedFavoriteCount,
             ),
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
@@ -332,7 +329,7 @@ private fun BackupImportSummaryBanner(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.download_banner_dismiss),
-                tint = LabelSecondary,
+                tint = UaTheme.palette.labelSecondary,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -351,15 +348,15 @@ private fun SettingsSection(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Azure.copy(alpha = 0.16f)),
+                    .background(UaTheme.palette.azure.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = Azure, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(18.dp))
             }
             Text(
                 text = title,
                 style = CardTitle,
-                color = LabelPrimary,
+                color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(start = 10.dp).weight(1f),
             )
         }
@@ -373,22 +370,22 @@ private fun PlaylistActionRow(label: String, icon: ImageVector, onClick: () -> U
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusItem))
-            .background(Surface1)
+            .background(UaTheme.palette.surface1)
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = LabelSecondary, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, tint = UaTheme.palette.labelSecondary, modifier = Modifier.size(20.dp))
         Text(
             text = label,
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             modifier = Modifier.padding(start = 12.dp).weight(1f),
         )
         Icon(
             AppIcons.ChevronDown,
             contentDescription = null,
-            tint = LabelSecondary,
+            tint = UaTheme.palette.labelSecondary,
             modifier = Modifier.size(16.dp).rotate(-90f),
         )
     }
@@ -417,13 +414,13 @@ private fun RowLabel(label: String, icon: ImageVector) {
         Icon(
             icon,
             contentDescription = null,
-            tint = LabelSecondary,
+            tint = UaTheme.palette.labelSecondary,
             modifier = Modifier.size(16.dp),
         )
         Text(
             text = label,
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             modifier = Modifier.padding(start = 8.dp),
         )
     }
@@ -438,19 +435,19 @@ private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean
         Text(
             text = label,
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             modifier = Modifier.weight(1f),
         )
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = LabelPrimary,
-                checkedTrackColor = Azure,
-                checkedBorderColor = Azure,
-                uncheckedThumbColor = LabelSecondary,
-                uncheckedTrackColor = Surface2,
-                uncheckedBorderColor = Hairline,
+                checkedThumbColor = UaTheme.palette.labelPrimary,
+                checkedTrackColor = UaTheme.palette.azure,
+                checkedBorderColor = UaTheme.palette.azure,
+                uncheckedThumbColor = UaTheme.palette.labelSecondary,
+                uncheckedTrackColor = UaTheme.palette.surface2,
+                uncheckedBorderColor = UaTheme.palette.hairline,
             ),
         )
     }
@@ -467,7 +464,7 @@ private fun EpgSuggestionRow(onUse: () -> Unit) {
         Text(
             text = stringResource(R.string.settings_epg_suggestion_hint),
             style = Caption,
-            color = LabelSecondary,
+            color = UaTheme.palette.labelSecondary,
             modifier = Modifier.weight(1f),
         )
         SecondaryButton(text = stringResource(R.string.settings_epg_suggestion_action), onClick = onUse)
@@ -483,7 +480,7 @@ private fun BatteryOptimizationRow(onOpen: () -> Unit) {
         Text(
             text = stringResource(R.string.settings_battery_optimization_label),
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             modifier = Modifier.weight(1f),
         )
         SecondaryButton(text = stringResource(R.string.settings_battery_optimization_button), onClick = onOpen)
@@ -508,12 +505,12 @@ private fun IconSourcesSection(
         Text(
             text = stringResource(R.string.settings_icon_sources_title),
             style = BodyRegular,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
         )
         Text(
             text = stringResource(R.string.settings_icon_sources_hint),
             style = Caption,
-            color = LabelSecondary,
+            color = UaTheme.palette.labelSecondary,
             modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
         )
         IconSourceRow(
@@ -555,7 +552,7 @@ private fun IconSourcesSection(
                 Icon(
                     AppIcons.Plus,
                     contentDescription = stringResource(R.string.settings_icon_sources_add),
-                    tint = Azure,
+                    tint = UaTheme.palette.azure,
                 )
             }
         }
@@ -563,7 +560,7 @@ private fun IconSourcesSection(
             Text(
                 text = stringResource(addError.messageRes()),
                 style = Caption,
-                color = RouteRed,
+                color = UaTheme.palette.routeRed,
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
@@ -580,7 +577,7 @@ private fun IconSourceRow(urlText: String, onRemoveClick: (() -> Unit)?) {
         Text(
             text = urlText,
             style = Caption,
-            color = LabelSecondary,
+            color = UaTheme.palette.labelSecondary,
             modifier = Modifier.weight(1f),
         )
         if (onRemoveClick != null) {
@@ -588,7 +585,7 @@ private fun IconSourceRow(urlText: String, onRemoveClick: (() -> Unit)?) {
                 Icon(
                     AppIcons.Delete,
                     contentDescription = stringResource(R.string.settings_icon_sources_remove),
-                    tint = LabelSecondary,
+                    tint = UaTheme.palette.labelSecondary,
                 )
             }
         }
@@ -609,19 +606,19 @@ private fun CacheRow(labelRes: Int, sizeBytes: Long, onClear: () -> Unit) {
         Icon(
             AppIcons.Storage,
             contentDescription = null,
-            tint = LabelSecondary,
+            tint = UaTheme.palette.labelSecondary,
             modifier = Modifier.size(20.dp),
         )
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Text(
                 text = stringResource(labelRes),
                 style = BodyRegular,
-                color = LabelPrimary,
+                color = UaTheme.palette.labelPrimary,
             )
             Text(
                 text = formatBytes(sizeBytes),
                 style = Caption,
-                color = LabelSecondary,
+                color = UaTheme.palette.labelSecondary,
             )
         }
         SecondaryButton(text = stringResource(R.string.cache_clear_button), onClick = onClear)
@@ -640,19 +637,24 @@ private fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Unit
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(RadiusItem))
-            .background(if (isSelected) Azure else Surface2)
+            .background(if (isSelected) UaTheme.palette.azure else UaTheme.palette.surface2)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (isSelected) {
-            Icon(AppIcons.Check, contentDescription = null, tint = LabelPrimary, modifier = Modifier.size(14.dp))
+            Icon(
+                AppIcons.Check,
+                contentDescription = null,
+                tint = UaTheme.palette.labelPrimary,
+                modifier = Modifier.size(14.dp),
+            )
         }
         Text(
             text = label,
             style = BodyRegular,
-            color = if (isSelected) LabelPrimary else LabelSecondary,
+            color = if (isSelected) UaTheme.palette.labelPrimary else UaTheme.palette.labelSecondary,
         )
     }
 }

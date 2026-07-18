@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.components
+import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -38,16 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import com.uacastplayer.ui.theme.Azure
-import com.uacastplayer.ui.theme.AzureGlow
-import com.uacastplayer.ui.theme.AzureGradient
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
-import com.uacastplayer.ui.theme.Hairline
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
-import com.uacastplayer.ui.theme.LabelTertiary
 import com.uacastplayer.ui.theme.PillText
 import com.uacastplayer.ui.theme.PressScaleIcon
 import com.uacastplayer.ui.theme.PressScalePlay
@@ -56,13 +50,8 @@ import com.uacastplayer.ui.theme.PlayButtonSize
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusSeg
 import com.uacastplayer.ui.theme.RadiusSegInner
-import com.uacastplayer.ui.theme.RouteAmber
-import com.uacastplayer.ui.theme.RouteGreen
-import com.uacastplayer.ui.theme.RouteRed
 import com.uacastplayer.ui.theme.RoundButtonSize
 import com.uacastplayer.ui.theme.IconButtonSize
-import com.uacastplayer.ui.theme.Surface1
-import com.uacastplayer.ui.theme.Surface2
 import com.uacastplayer.ui.theme.TabLabel
 
 /** §5.1 - the main circular play/pause control. */
@@ -84,9 +73,9 @@ fun GradientPlayButton(
         modifier = modifier
             .size(PlayButtonSize)
             .scale(scale)
-            .shadow(10.dp, CircleShape, spotColor = AzureGlow)
+            .shadow(10.dp, CircleShape, spotColor = UaTheme.palette.azureGlow)
             .clip(CircleShape)
-            .background(AzureGradient)
+            .background(UaTheme.palette.accentGradient)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -119,7 +108,7 @@ fun RoundIconButton(
             .size(RoundButtonSize)
             .scale(scale)
             .clip(CircleShape)
-            .background(if (pressed) Surface2 else Surface1)
+            .background(if (pressed) UaTheme.palette.surface2 else UaTheme.palette.surface1)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -127,7 +116,12 @@ fun RoundIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = LabelPrimary, modifier = Modifier.size(20.dp))
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = UaTheme.palette.labelPrimary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -138,8 +132,8 @@ fun SmallRoundIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    tint: Color = LabelPrimary,
-    background: Color = Surface1,
+    tint: Color = UaTheme.palette.labelPrimary,
+    background: Color = UaTheme.palette.surface1,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -172,9 +166,9 @@ enum class StatusPillVariant { Good, Proxy, Bad }
 @Composable
 fun StatusPill(text: String, variant: StatusPillVariant, modifier: Modifier = Modifier) {
     val color = when (variant) {
-        StatusPillVariant.Good -> RouteGreen
-        StatusPillVariant.Proxy -> RouteAmber
-        StatusPillVariant.Bad -> RouteRed
+        StatusPillVariant.Good -> UaTheme.palette.routeGreen
+        StatusPillVariant.Proxy -> UaTheme.palette.routeAmber
+        StatusPillVariant.Bad -> UaTheme.palette.routeRed
     }
     Text(
         text = text,
@@ -191,14 +185,14 @@ fun StatusPill(text: String, variant: StatusPillVariant, modifier: Modifier = Mo
 @Composable
 fun GlowStatusDot(variant: StatusPillVariant, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = com.uacastplayer.ui.theme.StatusDotSize) {
     val color = when (variant) {
-        StatusPillVariant.Good -> RouteGreen
-        StatusPillVariant.Proxy -> RouteAmber
-        StatusPillVariant.Bad -> RouteRed
+        StatusPillVariant.Good -> UaTheme.palette.routeGreen
+        StatusPillVariant.Proxy -> UaTheme.palette.routeAmber
+        StatusPillVariant.Bad -> UaTheme.palette.routeRed
     }
     val glow = when (variant) {
-        StatusPillVariant.Good -> com.uacastplayer.ui.theme.GreenGlow
-        StatusPillVariant.Proxy -> com.uacastplayer.ui.theme.AmberGlow
-        StatusPillVariant.Bad -> com.uacastplayer.ui.theme.RedGlow
+        StatusPillVariant.Good -> UaTheme.palette.greenGlow
+        StatusPillVariant.Proxy -> UaTheme.palette.amberGlow
+        StatusPillVariant.Bad -> UaTheme.palette.redGlow
     }
     Box(
         modifier = modifier
@@ -231,7 +225,7 @@ fun SegmentedControl(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusSeg))
-            .background(Surface1)
+            .background(UaTheme.palette.surface1)
             .padding(3.dp)
             .onSizeChanged { containerSizePx = it }
             .selectableGroup(),
@@ -244,7 +238,7 @@ fun SegmentedControl(
                     .fillMaxHeight()
                     .shadow(8.dp, RoundedCornerShape(RadiusSegInner), ambientColor = Color.Black.copy(alpha = 0.35f))
                     .clip(RoundedCornerShape(RadiusSegInner))
-                    .background(Surface2),
+                    .background(UaTheme.palette.surface2),
             )
         }
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -263,7 +257,7 @@ fun SegmentedControl(
                     Text(
                         text = label,
                         style = com.uacastplayer.ui.theme.CaptionSemibold,
-                        color = if (selected) LabelPrimary else LabelSecondary,
+                        color = if (selected) UaTheme.palette.labelPrimary else UaTheme.palette.labelSecondary,
                     )
                 }
             }
@@ -280,14 +274,14 @@ fun TrackProgress(progress: Float, modifier: Modifier = Modifier, bold: Boolean 
             .fillMaxWidth()
             .height(height)
             .clip(RoundedCornerShape(50))
-            .background(Surface2),
+            .background(UaTheme.palette.surface2),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .height(height)
                 .clip(RoundedCornerShape(50))
-                .background(AzureGradient),
+                .background(UaTheme.palette.accentGradient),
         )
     }
 }
@@ -311,8 +305,8 @@ fun SecondaryButton(
         modifier = modifier
             .scale(scale)
             .clip(RoundedCornerShape(RadiusItem))
-            .background(if (pressed) Surface2 else Surface1)
-            .border(1.dp, Hairline, RoundedCornerShape(RadiusItem))
+            .background(if (pressed) UaTheme.palette.surface2 else UaTheme.palette.surface1)
+            .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusItem))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -325,7 +319,7 @@ fun SecondaryButton(
         Text(
             text = text,
             style = BodyRegular,
-            color = if (enabled) LabelPrimary else LabelTertiary,
+            color = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary,
         )
     }
 }
@@ -336,7 +330,7 @@ fun TabBarLabel(text: String, selected: Boolean) {
     Text(
         text = text,
         style = TabLabel,
-        color = if (selected) Azure else com.uacastplayer.ui.theme.LabelSecondary,
+        color = if (selected) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
         maxLines = 1,
         softWrap = false,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

@@ -1,6 +1,9 @@
 package com.uacastplayer.ui.favorites
+import com.uacastplayer.ui.theme.UaTheme
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -21,8 +26,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -30,11 +40,15 @@ import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.favorites.FavoritesSorter
+import com.uacastplayer.favorites.ReorderPolicy
 import com.uacastplayer.playlist.M3uChannel
-import com.uacastplayer.ui.components.EmptyState
-import com.uacastplayer.ui.theme.Azure
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
+import com.uacastplayer.ui.theme.BodyText
+import com.uacastplayer.ui.theme.CardPadding
+import com.uacastplayer.ui.theme.GapL
+import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.RadiusCard
+import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.AppIcons
 
 @Composable
@@ -45,15 +59,36 @@ fun FavoritesScreen(
     onSortOrderSelected: (FavoritesSortOrder) -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     onRemove: (key: String) -> Unit,
+    onReorder: (List<FavoriteChannel>) -> Unit,
+    onOpenChannels: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (favorites.isEmpty()) {
-        EmptyState(
-            icon = AppIcons.Favorites,
-            title = stringResource(R.string.favorites_empty_message),
-            subtitle = stringResource(R.string.favorites_empty_subtitle),
-            modifier = modifier,
-        )
+        Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding, vertical = GapM)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = GapL)
+                    .clip(RoundedCornerShape(RadiusCard))
+                    .background(UaTheme.palette.surface1)
+                    .padding(CardPadding),
+            ) {
+                Text(
+                    text = stringResource(R.string.favorites_empty_message),
+                    style = Title,
+                    color = UaTheme.palette.labelPrimary,
+                )
+                Text(
+                    text = stringResource(R.string.favorites_empty_subtitle),
+                    style = BodyText,
+                    color = UaTheme.palette.labelSecondary,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Button(onClick = onOpenChannels, modifier = Modifier.fillMaxWidth().padding(top = GapL)) {
+                    Text(stringResource(R.string.favorites_go_to_channels))
+                }
+            }
+        }
         return
     }
 
@@ -63,16 +98,20 @@ fun FavoritesScreen(
     val sortedFavorites = remember(favorites, sortOrder, playlistIndexByKey) {
         FavoritesSorter.sort(favorites, sortOrder) { playlistIndexByKey[it.key] }
     }
-    val channels = remember(sortedFavorites) {
-        sortedFavorites.map { fav ->
-            M3uChannel(
-                displayName = fav.displayName,
-                streamUrl = fav.streamUrl,
-                tvgId = fav.tvgId,
-                groupTitle = fav.groupTitle,
-            )
-        }
+    // A local snapshot list the drag gesture mutates live for immediate visual feedback; only
+    // re-seeded when the upstream order actually changes (not on every recomposition), so an
+    // in-progress drag isn't reset out from under the user - see onReorder below.
+    val orderedFavorites = remember(sortedFavorites) { sortedFavorites.toMutableStateList() }
+    val channels = orderedFavorites.map { fav ->
+        M3uChannel(
+            displayName = fav.displayName,
+            streamUrl = fav.streamUrl,
+            tvgId = fav.tvgId,
+            groupTitle = fav.groupTitle,
+        )
     }
+    var rowHeightPx by remember { mutableStateOf(0f) }
+    var dragState by remember { mutableStateOf<FavoriteDragState?>(null) }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -80,11 +119,46 @@ fun FavoritesScreen(
             FavoritesSortMenu(selected = sortOrder, onSelect = onSortOrderSelected)
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(sortedFavorites, key = { _, favorite -> favorite.key }) { index, favorite ->
+            itemsIndexed(orderedFavorites, key = { _, favorite -> favorite.key }) { index, favorite ->
+                val isDragging = dragState?.draggedIndex == index
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer { translationY = if (isDragging) dragState?.offsetY ?: 0f else 0f }
+                        .onSizeChanged { rowHeightPx = it.height.toFloat() }
                         .clickable { onChannelSelected(channels, index) }
+                        .then(
+                            if (sortOrder == FavoritesSortOrder.MANUAL) {
+                                Modifier.pointerInput(favorite.key) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { dragState = FavoriteDragState(index, 0f) },
+                                        onDragEnd = {
+                                            dragState = null
+                                            onReorder(orderedFavorites.toList())
+                                        },
+                                        onDragCancel = { dragState = null },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            val state = dragState ?: return@detectDragGesturesAfterLongPress
+                                            val newOffsetY = state.offsetY + dragAmount.y
+                                            val delta = ReorderPolicy.indexDelta(newOffsetY, rowHeightPx)
+                                            val targetIndex = (state.draggedIndex + delta).coerceIn(orderedFavorites.indices)
+                                            if (delta != 0 && targetIndex != state.draggedIndex) {
+                                                val moved = ReorderPolicy.move(orderedFavorites.toList(), state.draggedIndex, targetIndex)
+                                                orderedFavorites.clear()
+                                                orderedFavorites.addAll(moved)
+                                                val consumedOffset = (targetIndex - state.draggedIndex) * rowHeightPx
+                                                dragState = FavoriteDragState(targetIndex, newOffsetY - consumedOffset)
+                                            } else {
+                                                dragState = state.copy(offsetY = newOffsetY)
+                                            }
+                                        },
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            },
+                        )
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -116,7 +190,7 @@ private fun FavoritesSortMenu(selected: FavoritesSortOrder, onSelect: (Favorites
             Icon(
                 imageVector = AppIcons.Sort,
                 contentDescription = stringResource(R.string.favorites_sort_title),
-                tint = Azure,
+                tint = UaTheme.palette.azure,
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -126,14 +200,14 @@ private fun FavoritesSortMenu(selected: FavoritesSortOrder, onSelect: (Favorites
                     text = {
                         Text(
                             text = stringResource(order.labelRes()),
-                            color = if (isSelected) Azure else LabelPrimary,
+                            color = if (isSelected) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
                         )
                     },
                     leadingIcon = {
                         Icon(
                             AppIcons.Sort,
                             contentDescription = null,
-                            tint = if (isSelected) Azure else LabelSecondary,
+                            tint = if (isSelected) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
                         )
                     },
                     onClick = {
@@ -150,4 +224,9 @@ private fun FavoritesSortOrder.labelRes(): Int = when (this) {
     FavoritesSortOrder.PLAYLIST_ORDER -> R.string.favorites_sort_playlist_order
     FavoritesSortOrder.ALPHABETICAL -> R.string.favorites_sort_alphabetical
     FavoritesSortOrder.RECENTLY_ADDED -> R.string.favorites_sort_recently_added
+    FavoritesSortOrder.MANUAL -> R.string.favorites_sort_manual
 }
+
+/** [offsetY] is the dragged row's accumulated vertical translation (px) since the drag started -
+ * reset relative to [draggedIndex] each time a swap happens, so it stays continuous. */
+private data class FavoriteDragState(val draggedIndex: Int, val offsetY: Float)

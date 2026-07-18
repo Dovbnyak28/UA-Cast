@@ -1,8 +1,16 @@
 package com.uacastplayer.ui.channels
+import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,20 +22,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -52,53 +66,75 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.epg.ProgrammeProgress
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.ChannelGroup
+import com.uacastplayer.playlist.ChannelListKeys
+import com.uacastplayer.playlist.ChannelRowShape
+import com.uacastplayer.playlist.ChannelSearch
+import com.uacastplayer.playlist.ChannelSearchOutcome
+import com.uacastplayer.playlist.ChannelSearchResult
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.NameQualityBadge
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.components.GlowStatusDot
-import com.uacastplayer.ui.components.PlaylistImportControls
+import com.uacastplayer.ui.components.GroupIconCollage
+import com.uacastplayer.ui.components.IconHeader
+import com.uacastplayer.ui.components.IconTierBanner
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.Azure
-import com.uacastplayer.ui.theme.AzureGradient
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
 import com.uacastplayer.ui.theme.ChannelLogoSize
+import com.uacastplayer.ui.theme.ChannelTileMinWidth
+import com.uacastplayer.ui.theme.ChannelTileMinWidthLarge
+import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapM
-import com.uacastplayer.ui.theme.Hairline
+import com.uacastplayer.ui.theme.GroupTileMinWidth
 import com.uacastplayer.ui.theme.HairlineInsetChannels
 import com.uacastplayer.ui.theme.ItemPadding
-import com.uacastplayer.ui.theme.LabelPrimary
-import com.uacastplayer.ui.theme.LabelSecondary
+import com.uacastplayer.ui.theme.PressScaleRound
+import com.uacastplayer.ui.theme.RadiusField
+import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.SectionLabel
 import com.uacastplayer.ui.theme.ScreenHPadding
-import com.uacastplayer.ui.theme.Surface1
-import com.uacastplayer.ui.theme.Surface2
 import com.uacastplayer.ui.theme.Title
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChannelsScreen(
     playlistState: PlaylistUiState,
-    onLoadUrl: (String) -> Unit,
-    onPickFile: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     epgState: EpgUiState,
     iconPrefetchState: IconPrefetchUiState,
     resolveIcon: suspend (M3uChannel) -> File?,
+    cachedIconFile: suspend (M3uChannel) -> File?,
     density: ListDensity,
     layout: ChannelLayout,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
+    onRefreshPlaylist: () -> Unit,
+    onOpenAddPlaylist: () -> Unit,
+    showIconTierBanner: Boolean,
+    onEnableIcons: () -> Unit,
+    onDismissIconTierBanner: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
+    var guideChannel by remember { mutableStateOf<M3uChannel?>(null) }
+
+    // Forces every ChannelIcon/GroupIconCollage in this screen to re-resolve when either signal
+    // fires: EPG data arriving unlocks its icon-URL source (see AppViewModel.resolveChannelIcon),
+    // and a completed prefetch run may have just written new files for channels that previously
+    // resolved to nothing. Deliberately NOT nowMillis or anything else that changes often - a
+    // re-resolve on every recomposition would defeat the point of ChannelIcon's own caching.
+    val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
 
     // Landing on a groups overview (like the rest of the bottom-nav tabs, this is per-tab UI state,
     // not app state - it deliberately resets to the overview on process death, unlike the playlist
@@ -116,8 +152,12 @@ fun ChannelsScreen(
     }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding)) {
-        if (openGroup == null) {
-            PlaylistImportControls(onLoadUrl = onLoadUrl, onPickFile = onPickFile)
+        if (showIconTierBanner) {
+            IconTierBanner(
+                onEnableIcons = onEnableIcons,
+                onDismiss = onDismissIconTierBanner,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
         }
 
         if (iconPrefetchState.isRunning) {
@@ -132,9 +172,92 @@ fun ChannelsScreen(
             )
         }
 
+        // Only a URL-sourced playlist has anything to pull-to-refresh from; a file import would
+        // just spin and settle back with nothing having happened, which reads as broken.
+        if (playlistState.sourceUrl != null) {
+            PullToRefreshBox(
+                isRefreshing = playlistState.isLoading && playlistState.hasChannels,
+                onRefresh = onRefreshPlaylist,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) {
+                ChannelsContent(
+                    playlistState = playlistState,
+                    openGroup = openGroup,
+                    flatChannels = flatChannels,
+                    epgState = epgState,
+                    iconRefreshKey = iconRefreshKey,
+                    resolveIcon = resolveIcon,
+                    cachedIconFile = cachedIconFile,
+                    density = density,
+                    layout = layout,
+                    onChannelLayoutSelected = onChannelLayoutSelected,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onOpenAddPlaylist = onOpenAddPlaylist,
+                    onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
+                    onCloseGroup = { openGroupKey = null },
+                    onChannelSelected = onChannelSelected,
+                    onLongPressChannel = { guideChannel = it },
+                )
+            }
+        } else {
+            ChannelsContent(
+                playlistState = playlistState,
+                openGroup = openGroup,
+                flatChannels = flatChannels,
+                epgState = epgState,
+                iconRefreshKey = iconRefreshKey,
+                resolveIcon = resolveIcon,
+                cachedIconFile = cachedIconFile,
+                density = density,
+                layout = layout,
+                onChannelLayoutSelected = onChannelLayoutSelected,
+                isFavorite = isFavorite,
+                onToggleFavorite = onToggleFavorite,
+                onOpenAddPlaylist = onOpenAddPlaylist,
+                onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
+                onCloseGroup = { openGroupKey = null },
+                onChannelSelected = onChannelSelected,
+                onLongPressChannel = { guideChannel = it },
+            )
+        }
+    }
+
+    guideChannel?.let { channel ->
+        com.uacastplayer.ui.epg.EpgGuideSheet(
+            channel = channel,
+            epgData = epgState.data,
+            nowMillis = epgState.nowMillis,
+            onDismiss = { guideChannel = null },
+        )
+    }
+}
+
+@Composable
+private fun ChannelsContent(
+    playlistState: PlaylistUiState,
+    openGroup: GroupedChannels?,
+    flatChannels: List<M3uChannel>,
+    epgState: EpgUiState,
+    iconRefreshKey: Any,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    cachedIconFile: suspend (M3uChannel) -> File?,
+    density: ListDensity,
+    layout: ChannelLayout,
+    onChannelLayoutSelected: (ChannelLayout) -> Unit,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    onOpenAddPlaylist: () -> Unit,
+    onOpenGroup: (GroupedChannels) -> Unit,
+    onCloseGroup: () -> Unit,
+    onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
+    onLongPressChannel: (M3uChannel) -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
         when {
-            playlistState.isLoading -> LoadingState()
-            playlistState.error != null -> ErrorState(playlistState.error)
+            // hasChannels wins over both isLoading and error: a reload in progress or one that
+            // just failed must not hide channels already on screen - see applyPlaylistOutcome/
+            // PlaylistOutcomeReducer, which deliberately preserve them for exactly this reason.
             playlistState.hasChannels -> {
                 val group = openGroup
                 if (group == null) {
@@ -142,27 +265,40 @@ fun ChannelsScreen(
                         groups = playlistState.groups,
                         layout = layout,
                         onLayoutChange = onChannelLayoutSelected,
-                        onGroupClick = { openGroupKey = groupDisplayKey(it.group) },
+                        onGroupClick = onOpenGroup,
+                        iconRefreshKey = iconRefreshKey,
+                        resolveIcon = resolveIcon,
+                        cachedIconFile = cachedIconFile,
+                        isFavorite = isFavorite,
+                        onToggleFavorite = onToggleFavorite,
+                        onChannelClick = { channel ->
+                            val index = flatChannels.indexOf(channel)
+                            if (index >= 0) onChannelSelected(flatChannels, index)
+                        },
                     )
                 } else {
                     SingleGroupChannelList(
                         grouped = group,
                         epgState = epgState,
+                        iconRefreshKey = iconRefreshKey,
                         resolveIcon = resolveIcon,
                         density = density,
                         layout = layout,
                         onLayoutChange = onChannelLayoutSelected,
                         isFavorite = isFavorite,
                         onToggleFavorite = onToggleFavorite,
-                        onBack = { openGroupKey = null },
+                        onBack = onCloseGroup,
                         onChannelClick = { channel ->
                             val index = flatChannels.indexOf(channel)
                             if (index >= 0) onChannelSelected(flatChannels, index)
                         },
+                        onLongPressChannel = onLongPressChannel,
                     )
                 }
             }
-            else -> EmptyState()
+            playlistState.isLoading -> LoadingState()
+            playlistState.error != null -> ErrorState(playlistState.error)
+            else -> EmptyState(onOpenAddPlaylist)
         }
     }
 }
@@ -175,7 +311,7 @@ private fun LoadingState() {
             Text(
                 text = stringResource(R.string.playlist_loading),
                 style = BodyText,
-                color = LabelSecondary,
+                color = UaTheme.palette.labelSecondary,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -194,93 +330,319 @@ private fun ErrorState(error: PlaylistError) {
     }
 }
 
+/** No playlist loaded at all - unlike [ErrorState] (a load that failed) or the search's
+ * [NoSearchResults] (a query with no matches), this dead end needs a way out. */
 @Composable
-private fun EmptyState() {
-    com.uacastplayer.ui.components.EmptyState(
-        icon = AppIcons.Channels,
-        title = stringResource(R.string.channels_empty_message),
-        subtitle = stringResource(R.string.channels_empty_subtitle),
-    )
+private fun EmptyState(onOpenAddPlaylist: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        IconHeader(
+            icon = AppIcons.Channels,
+            title = stringResource(R.string.channels_empty_message),
+            subtitle = stringResource(R.string.channels_empty_subtitle),
+        )
+        Button(onClick = onOpenAddPlaylist, modifier = Modifier.padding(top = GapM)) {
+            Text(stringResource(R.string.home_add_playlist_button))
+        }
+    }
 }
 
-/** Landing screen for the Channels tab: one card per group, showing its channel count. */
+/**
+ * Landing screen for the Channels tab: one card per group, showing its channel count. A non-blank
+ * query switches to a flat, whole-playlist [ChannelSearch] result list instead - browsing group by
+ * group doesn't scale to playlists with thousands of channels.
+ */
 @Composable
 private fun GroupsOverviewGrid(
     groups: List<GroupedChannels>,
     layout: ChannelLayout,
     onLayoutChange: (ChannelLayout) -> Unit,
     onGroupClick: (GroupedChannels) -> Unit,
+    iconRefreshKey: Any,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    cachedIconFile: suspend (M3uChannel) -> File?,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    onChannelClick: (M3uChannel) -> Unit,
 ) {
     val totalChannels = remember(groups) { groups.sumOf { it.channels.size } }
-    val columns = if (layout == ChannelLayout.LIST) 1 else 2
+    // LIST mode stays a literal single column (a list of group cards); GRID/LARGE_ICONS lets the
+    // width fit as many ~GroupTileMinWidth tiles as the screen allows, unlike a fixed column count.
+    val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(GroupTileMinWidth)
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        modifier = Modifier.fillMaxSize().padding(top = GapM),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item(key = "groups-header", span = { GridItemSpan(columns) }) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+    var query by rememberSaveable { mutableStateOf("") }
+    val trimmedQuery = query.trim()
+    val searchOutcome = remember(groups, trimmedQuery) {
+        if (trimmedQuery.isEmpty()) null else ChannelSearch.search(groups, trimmedQuery)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.channels_groups_title),
+                    style = Title,
+                    color = UaTheme.palette.labelPrimary,
+                )
+                Text(
+                    text = pluralStringResource(R.plurals.channel_groups_count, groups.size, groups.size) +
+                        " · " +
+                        pluralStringResource(R.plurals.channels_total_count, totalChannels, totalChannels),
+                    style = Caption,
+                    color = UaTheme.palette.labelSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text(stringResource(R.string.channels_search_all_hint)) },
+            leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
+            singleLine = true,
+            shape = RoundedCornerShape(RadiusField),
+            modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        )
+
+        when (searchOutcome) {
+            null -> LazyVerticalGrid(
+                columns = gridCells,
+                modifier = Modifier.fillMaxSize().padding(top = GapM),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column {
-                    Text(text = stringResource(R.string.channels_groups_title), style = Title, color = LabelPrimary)
-                    Text(
-                        text = pluralStringResource(R.plurals.channel_groups_count, groups.size, groups.size) +
-                            " · " +
-                            pluralStringResource(R.plurals.channels_total_count, totalChannels, totalChannels),
-                        style = Caption,
-                        color = LabelSecondary,
-                        modifier = Modifier.padding(top = 2.dp),
+                items(groups, key = { groupDisplayKey(it.group) }) { grouped ->
+                    GroupCard(
+                        grouped = grouped,
+                        iconRefreshKey = iconRefreshKey,
+                        cachedIconFile = cachedIconFile,
+                        onClick = { onGroupClick(grouped) },
                     )
                 }
-                ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
             }
-        }
-        items(groups, key = { groupDisplayKey(it.group) }) { grouped ->
-            GroupCard(grouped = grouped, onClick = { onGroupClick(grouped) })
+
+            is ChannelSearchOutcome.Matches -> if (searchOutcome.results.isEmpty()) {
+                NoSearchResults(trimmedQuery)
+            } else {
+                ChannelSearchResultsList(
+                    results = searchOutcome.results,
+                    iconRefreshKey = iconRefreshKey,
+                    resolveIcon = resolveIcon,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onChannelClick = onChannelClick,
+                )
+            }
+
+            is ChannelSearchOutcome.TooBroad -> {
+                Text(
+                    text = stringResource(R.string.channels_search_too_broad, ChannelSearch.MAX_RESULTS),
+                    style = Caption,
+                    color = UaTheme.palette.labelSecondary,
+                    modifier = Modifier.padding(top = GapM),
+                )
+                ChannelSearchResultsList(
+                    results = searchOutcome.results,
+                    iconRefreshKey = iconRefreshKey,
+                    resolveIcon = resolveIcon,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onChannelClick = onChannelClick,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun GroupCard(grouped: GroupedChannels, onClick: () -> Unit) {
+private fun NoSearchResults(query: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = stringResource(R.string.channels_no_search_results, query),
+            style = BodyText,
+            color = UaTheme.palette.labelSecondary,
+        )
+    }
+}
+
+/** Flat, cross-group results for a whole-playlist [ChannelSearch] - each row shows which group a
+ * match came from, since it's no longer implied by an already-open group screen. */
+@Composable
+private fun ChannelSearchResultsList(
+    results: List<ChannelSearchResult>,
+    iconRefreshKey: Any,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    onChannelClick: (M3uChannel) -> Unit,
+) {
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(RadiusList))
+                    .background(UaTheme.palette.surface1)
+                    .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusList)),
+            ) {
+                results.forEachIndexed { index, result ->
+                    ChannelSearchResultRow(
+                        result = result,
+                        iconRefreshKey = iconRefreshKey,
+                        resolveIcon = resolveIcon,
+                        isFavorite = isFavorite(result.channel),
+                        onToggleFavorite = { onToggleFavorite(result.channel) },
+                        onClick = { onChannelClick(result.channel) },
+                    )
+                    if (index != results.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = HairlineInsetChannels)
+                                .height(1.dp)
+                                .background(UaTheme.palette.hairline),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelSearchResultRow(
+    result: ChannelSearchResult,
+    iconRefreshKey: Any,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(ItemPadding),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ChannelIcon(result.channel, resolveIcon, refreshKey = iconRefreshKey)
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(
+                text = result.channel.displayName,
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+                maxLines = 1,
+            )
+            Text(
+                text = groupLabel(result.group),
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                maxLines = 1,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        IconButton(onClick = onToggleFavorite) {
+            Icon(
+                AppIcons.Favorites,
+                contentDescription = stringResource(R.string.favorites_title),
+                tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
+            )
+        }
+    }
+}
+
+private sealed class GroupBadge {
+    data class Glyph(val icon: ImageVector) : GroupBadge()
+    data class Label(val text: String) : GroupBadge()
+}
+
+private fun groupBadge(group: ChannelGroup, label: String): GroupBadge {
+    val upper = label.uppercase()
+    return when {
+        (group is ChannelGroup.Known && group.key == ChannelGroup.KEY_KIDS) ||
+            upper.contains("ДИТ") || upper.contains("KIDS") || upper.contains("ДЕТ") -> GroupBadge.Glyph(AppIcons.Kids)
+        upper.contains("4K") -> GroupBadge.Label("4K")
+        upper.contains("HD") -> GroupBadge.Label("HD")
+        else -> GroupBadge.Glyph(AppIcons.Tv)
+    }
+}
+
+@Composable
+private fun GroupCard(
+    grouped: GroupedChannels,
+    iconRefreshKey: Any,
+    cachedIconFile: suspend (M3uChannel) -> File?,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) PressScaleRound else 1f,
+        animationSpec = tween(DurPress, easing = EaseSpring),
+        label = "groupCardScale",
+    )
+    val shape = RoundedCornerShape(RadiusList)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(RadiusList))
-            .background(Surface1)
-            .clickable(onClick = onClick)
+            .scale(scale)
+            .clip(shape)
+            .background(UaTheme.palette.surface1)
+            .border(1.dp, UaTheme.palette.hairline, shape)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(16.dp),
     ) {
-        Box(
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Surface2),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(AppIcons.Tv, contentDescription = null, tint = Azure, modifier = Modifier.size(22.dp))
-        }
+        GroupIconCollage(
+            channels = grouped.channels,
+            cachedIconFile = cachedIconFile,
+            refreshKey = iconRefreshKey,
+            size = 44.dp,
+            fallback = {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(RadiusItem))
+                        .background(UaTheme.palette.surface2),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (val badge = groupBadge(grouped.group, groupLabel(grouped.group))) {
+                        is GroupBadge.Glyph -> Icon(
+                            badge.icon,
+                            contentDescription = null,
+                            tint = UaTheme.palette.azure,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        is GroupBadge.Label -> Text(
+                            text = badge.text,
+                            style = Caption,
+                            color = UaTheme.palette.azure,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        )
+                    }
+                }
+            },
+        )
         Box(
             modifier = Modifier
                 .padding(top = 12.dp)
                 .width(28.dp)
                 .height(3.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(AzureGradient),
+                .background(UaTheme.palette.accentGradient),
         )
         Text(
             text = groupLabel(grouped.group),
             style = BodyText,
-            color = LabelPrimary,
+            color = UaTheme.palette.labelPrimary,
             maxLines = 1,
             modifier = Modifier.padding(top = 10.dp),
         )
         Text(
             text = pluralStringResource(R.plurals.channels_total_count, grouped.channels.size, grouped.channels.size),
             style = Caption,
-            color = LabelSecondary,
+            color = UaTheme.palette.labelSecondary,
             modifier = Modifier.padding(top = 2.dp),
         )
     }
@@ -291,6 +653,7 @@ private fun GroupCard(grouped: GroupedChannels, onClick: () -> Unit) {
 private fun SingleGroupChannelList(
     grouped: GroupedChannels,
     epgState: EpgUiState,
+    iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
     density: ListDensity,
     layout: ChannelLayout,
@@ -299,6 +662,7 @@ private fun SingleGroupChannelList(
     onToggleFavorite: (M3uChannel) -> Unit,
     onBack: () -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
+    onLongPressChannel: (M3uChannel) -> Unit,
 ) {
     var query by rememberSaveable(groupDisplayKey(grouped.group)) { mutableStateOf("") }
     val trimmedQuery = query.trim()
@@ -311,76 +675,114 @@ private fun SingleGroupChannelList(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(top = GapM), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = LabelPrimary)
+        Box(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
+            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+                Icon(
+                    AppIcons.ArrowBack,
+                    contentDescription = stringResource(R.string.common_back),
+                    tint = UaTheme.palette.labelPrimary,
+                )
             }
             Text(
                 text = groupLabel(grouped.group),
                 style = Title,
-                color = LabelPrimary,
+                color = UaTheme.palette.labelPrimary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 1,
-                modifier = Modifier.weight(1f).padding(start = 4.dp),
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
             )
-            ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
+            Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
+            }
         }
 
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
             placeholder = { Text(stringResource(R.string.channels_search_hint)) },
-            leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = LabelSecondary) },
+            leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
             singleLine = true,
+            shape = RoundedCornerShape(RadiusField),
             modifier = Modifier.fillMaxWidth().padding(top = GapM),
         )
 
         if (filteredChannels.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(R.string.channels_no_search_results, trimmedQuery),
-                    style = BodyText,
-                    color = LabelSecondary,
-                )
-            }
+            NoSearchResults(trimmedQuery)
         } else if (layout == ChannelLayout.LIST) {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
-                item {
+                // One LazyColumn item per channel - NOT a single item wrapping a forEachIndexed
+                // Column - so LazyColumn actually virtualizes a large group instead of composing
+                // every row up front regardless of what's on screen. Corner rounding is computed
+                // per row (see ChannelRowShape) so the list still reads as one continuous rounded
+                // card despite each row being its own item; don't collapse this back into one
+                // item for a simpler-looking Column, that reintroduces the non-virtualized
+                // composition this was written to fix.
+                itemsIndexed(
+                    filteredChannels,
+                    key = { index, channel -> ChannelListKeys.keyFor(index, channel.streamUrl) },
+                ) { index, channel ->
+                    val rounding = ChannelRowShape.roundingFor(index, filteredChannels.lastIndex)
+                    val shape = RoundedCornerShape(
+                        topStart = if (rounding.top) RadiusList else 0.dp,
+                        topEnd = if (rounding.top) RadiusList else 0.dp,
+                        bottomStart = if (rounding.bottom) RadiusList else 0.dp,
+                        bottomEnd = if (rounding.bottom) RadiusList else 0.dp,
+                    )
                     Column(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(RadiusList)).background(Surface1),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(shape)
+                            .background(UaTheme.palette.surface1),
                     ) {
-                        filteredChannels.forEachIndexed { index, channel ->
-                            val programme = epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
-                            ChannelRow(
-                                channel = channel,
-                                programme = programme,
-                                nowMillis = epgState.nowMillis,
-                                resolveIcon = resolveIcon,
-                                density = density,
-                                isFavorite = isFavorite(channel),
-                                onToggleFavorite = { onToggleFavorite(channel) },
-                                onClick = { onChannelClick(channel) },
+                        // nowMillis only changes once a minute (see EpgUiState), so this only
+                        // recomputes on an actual minute tick or a channel/data change - not on
+                        // every recomposition this row goes through while scrolling.
+                        val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+                            epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
+                        }
+                        ChannelRow(
+                            channel = channel,
+                            programme = programme,
+                            nowMillis = epgState.nowMillis,
+                            iconRefreshKey = iconRefreshKey,
+                            resolveIcon = resolveIcon,
+                            density = density,
+                            isFavorite = isFavorite(channel),
+                            onToggleFavorite = { onToggleFavorite(channel) },
+                            onClick = { onChannelClick(channel) },
+                            onLongClick = { onLongPressChannel(channel) },
+                        )
+                        if (!rounding.bottom) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = HairlineInsetChannels)
+                                    .height(1.dp)
+                                    .background(UaTheme.palette.hairline),
                             )
-                            if (index != filteredChannels.lastIndex) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = HairlineInsetChannels)
-                                        .height(1.dp)
-                                        .background(Hairline),
-                                )
-                            }
                         }
                     }
                 }
             }
         } else {
-            val columns = if (layout == ChannelLayout.LARGE_ICONS) 2 else 3
-            LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.fillMaxSize().padding(top = GapM)) {
-                items(filteredChannels, key = { it.streamUrl }) { channel ->
+            val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(tileMinWidth),
+                modifier = Modifier.fillMaxSize().padding(top = GapM),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                gridItemsIndexed(
+                    filteredChannels,
+                    key = { index, channel -> ChannelListKeys.keyFor(index, channel.streamUrl) },
+                ) { _, channel ->
                     ChannelTile(
                         channel = channel,
+                        iconRefreshKey = iconRefreshKey,
                         resolveIcon = resolveIcon,
                         large = layout == ChannelLayout.LARGE_ICONS,
+                        isFavorite = isFavorite(channel),
+                        onToggleFavorite = { onToggleFavorite(channel) },
                         onClick = { onChannelClick(channel) },
                     )
                 }
@@ -398,7 +800,7 @@ private fun ChannelLayoutMenu(selected: ChannelLayout, onSelect: (ChannelLayout)
             Icon(
                 imageVector = selected.icon(),
                 contentDescription = stringResource(R.string.settings_channel_layout_label),
-                tint = Azure,
+                tint = UaTheme.palette.azure,
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -408,14 +810,14 @@ private fun ChannelLayoutMenu(selected: ChannelLayout, onSelect: (ChannelLayout)
                     text = {
                         Text(
                             text = stringResource(option.labelRes()),
-                            color = if (isSelected) Azure else LabelPrimary,
+                            color = if (isSelected) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
                         )
                     },
                     leadingIcon = {
                         Icon(
                             option.icon(),
                             contentDescription = null,
-                            tint = if (isSelected) Azure else LabelSecondary,
+                            tint = if (isSelected) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
                         )
                     },
                     onClick = {
@@ -440,39 +842,59 @@ private fun ChannelLayout.labelRes(): Int = when (this) {
     ChannelLayout.LARGE_ICONS -> R.string.channel_layout_large_icons
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChannelRow(
     channel: M3uChannel,
     programme: CurrentNextProgrammes?,
     nowMillis: Long,
+    iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
     density: ListDensity,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) PressScaleRound else 1f,
+        animationSpec = tween(DurPress, easing = EaseSpring),
+        label = "channelRowScale",
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .scale(scale)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(ItemPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (density != ListDensity.MINIMAL) ChannelIcon(channel, resolveIcon)
+        if (density != ListDensity.MINIMAL) ChannelIcon(channel, resolveIcon, refreshKey = iconRefreshKey)
         Column(modifier = Modifier.weight(1f).padding(start = if (density == ListDensity.MINIMAL) 0.dp else 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = channel.displayName,
                     style = BodyText,
-                    color = LabelPrimary,
+                    color = UaTheme.palette.labelPrimary,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (density == ListDensity.FULL) {
-                    NameQualityBadge.detect(channel.displayName)?.let { badge ->
+                    // NameQualityBadge.detect runs a handful of regexes - only worth redoing when
+                    // the name it's scanning actually changes, not on every recomposition this row
+                    // goes through while scrolling.
+                    val qualityBadge = remember(channel.displayName) { NameQualityBadge.detect(channel.displayName) }
+                    qualityBadge?.let { badge ->
                         Text(
                             text = badge,
                             style = Caption,
-                            color = com.uacastplayer.ui.theme.Azure2,
+                            color = UaTheme.palette.azure2,
                             modifier = Modifier.padding(start = 6.dp),
                         )
                     }
@@ -486,7 +908,7 @@ private fun ChannelRow(
                     Text(
                         text = current.title,
                         style = Caption,
-                        color = LabelSecondary,
+                        color = UaTheme.palette.labelSecondary,
                         modifier = Modifier.padding(start = 6.dp),
                     )
                 }
@@ -499,14 +921,14 @@ private fun ChannelRow(
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 AppIcons.Favorites,
-                contentDescription = null,
-                tint = if (isFavorite) com.uacastplayer.ui.theme.Azure else LabelSecondary,
+                contentDescription = stringResource(R.string.favorites_title),
+                tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
             )
         }
         Icon(
             AppIcons.ChevronDown,
             contentDescription = null,
-            tint = LabelSecondary,
+            tint = UaTheme.palette.labelSecondary,
             modifier = Modifier.size(16.dp).padding(start = 2.dp),
         )
     }
@@ -515,62 +937,64 @@ private fun ChannelRow(
 @Composable
 private fun ChannelTile(
     channel: M3uChannel,
+    iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
     large: Boolean,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
 ) {
-    Column(
+    val tileShape = RoundedCornerShape(RadiusList)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(tileShape)
+            .background(UaTheme.palette.surface1)
+            .border(1.dp, UaTheme.palette.hairline, tileShape)
             .clickable(onClick = onClick)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(12.dp),
     ) {
-        ChannelIcon(channel, resolveIcon, size = if (large) 64.dp else 44.dp)
-        Text(
-            text = channel.displayName,
-            style = Caption,
-            color = LabelPrimary,
-            maxLines = 2,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-    }
-}
-
-@Composable
-private fun ChannelIcon(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?, size: androidx.compose.ui.unit.Dp = ChannelLogoSize) {
-    val iconFile by produceState<File?>(initialValue = null, key1 = channel.streamUrl) {
-        value = resolveIcon(channel)
-    }
-    if (iconFile != null) {
-        AsyncImage(
-            model = iconFile,
-            contentDescription = null,
-            modifier = Modifier.size(size).clip(RoundedCornerShape(ChannelLogoRadius)),
-        )
-    } else {
-        Box(
-            modifier = Modifier
-                .size(size)
-                .clip(RoundedCornerShape(ChannelLogoRadius))
-                .background(com.uacastplayer.ui.theme.Surface2),
-            contentAlignment = Alignment.Center,
-        ) {
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            ChannelIcon(channel, resolveIcon, size = if (large) 64.dp else 44.dp, refreshKey = iconRefreshKey)
             Text(
-                text = initialsFor(channel.displayName),
+                text = channel.displayName,
                 style = Caption,
-                color = LabelSecondary,
+                color = UaTheme.palette.labelPrimary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            NameQualityBadge.detect(channel.displayName)?.let { badge ->
+                Text(
+                    text = badge,
+                    style = Caption,
+                    color = UaTheme.palette.azure,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        IconButton(
+            onClick = onToggleFavorite,
+            modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+        ) {
+            Icon(
+                AppIcons.Favorites,
+                contentDescription = stringResource(R.string.favorites_title),
+                tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
+                modifier = Modifier.size(16.dp),
             )
         }
     }
 }
 
-private fun initialsFor(name: String): String =
-    name.trim().split(Regex("\\s+")).mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
-
+// Prefixed per subtype so a provider's raw custom group title can never collide with a Known
+// group's key constant or the Ungrouped sentinel - e.g. a real playlist with a literal custom
+// group titled "ungrouped" would otherwise produce the same key as ChannelGroup.Ungrouped and
+// crash the LazyVerticalGrid the first time both were visible together.
 private fun groupDisplayKey(group: ChannelGroup): String = when (group) {
-    is ChannelGroup.Known -> group.key
-    is ChannelGroup.Custom -> group.rawTitle
+    is ChannelGroup.Known -> "known:${group.key}"
+    is ChannelGroup.Custom -> "custom:${group.rawTitle}"
     ChannelGroup.Ungrouped -> "ungrouped"
 }
 
