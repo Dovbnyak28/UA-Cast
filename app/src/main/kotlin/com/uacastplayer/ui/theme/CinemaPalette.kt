@@ -71,7 +71,6 @@ val CinemaUaPalette = UaPalette(
     redGlow = Color(0x99C9695A),
     displayFontFamily = CinemaDisplayFontFamily,
     vignette = true,
-    // Pill buttons/ghost secondary style land in a later block.
-    pillButtons = false,
-    secondaryButtonStyle = SecondaryButtonStyle.RAISED,
+    pillButtons = true,
+    secondaryButtonStyle = SecondaryButtonStyle.GHOST,
 )

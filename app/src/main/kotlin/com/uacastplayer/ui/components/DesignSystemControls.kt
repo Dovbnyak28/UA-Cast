@@ -31,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
@@ -52,7 +54,11 @@ import com.uacastplayer.ui.theme.RadiusSeg
 import com.uacastplayer.ui.theme.RadiusSegInner
 import com.uacastplayer.ui.theme.RoundButtonSize
 import com.uacastplayer.ui.theme.IconButtonSize
+import com.uacastplayer.ui.theme.SecondaryButtonStyle
 import com.uacastplayer.ui.theme.TabLabel
+
+private const val SEGMENT_PILL_HIGHLIGHT_HEIGHT_PX = 24f
+private const val GHOST_BUTTON_PRESSED_ALPHA = 0.12f
 
 /** §5.1 - the main circular play/pause control. */
 @Composable
@@ -204,7 +210,13 @@ fun GlowStatusDot(variant: StatusPillVariant, modifier: Modifier = Modifier, siz
     }
 }
 
-/** §5.4 - equal-width segmented control with an animated sliding highlight. */
+/**
+ * §5.4 - equal-width segmented control with an animated sliding highlight. Shape/fill follow
+ * [UaPalette.pillButtons]: Azure keeps the flat rounded-rect card with a solid highlight; Cinema
+ * (pillButtons = true) becomes a fully-rounded pill with the gold accent gradient behind the
+ * selected segment, [UaPalette.accentOnFill] text, and a soft top highlight suggesting a raised
+ * bevel - see docs/DESIGN_SYSTEM.md "Themes". Mechanics/behavior are unchanged either way.
+ */
 @Composable
 fun SegmentedControl(
     options: List<String>,
@@ -212,6 +224,10 @@ fun SegmentedControl(
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val palette = UaTheme.palette
+    val containerShape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusSeg)
+    val segmentShape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusSegInner)
+
     var containerSizePx by remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
     val segmentWidthPx = if (options.isEmpty()) 0 else containerSizePx.width / options.size
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -224,7 +240,7 @@ fun SegmentedControl(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(RadiusSeg))
+            .clip(containerShape)
             .background(UaTheme.palette.surface1)
             .padding(3.dp)
             .onSizeChanged { containerSizePx = it }
@@ -236,9 +252,21 @@ fun SegmentedControl(
                     .offset(x = offsetX)
                     .width(with(density) { segmentWidthPx.toDp() })
                     .fillMaxHeight()
-                    .shadow(8.dp, RoundedCornerShape(RadiusSegInner), ambientColor = Color.Black.copy(alpha = 0.35f))
-                    .clip(RoundedCornerShape(RadiusSegInner))
-                    .background(UaTheme.palette.surface2),
+                    .shadow(8.dp, segmentShape, ambientColor = Color.Black.copy(alpha = 0.35f))
+                    .clip(segmentShape)
+                    .background(if (palette.pillButtons) palette.accentGradient else SolidColor(palette.surface2))
+                    .then(
+                        if (palette.pillButtons) {
+                            Modifier.background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+                                    endY = SEGMENT_PILL_HIGHLIGHT_HEIGHT_PX,
+                                ),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         }
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -257,7 +285,11 @@ fun SegmentedControl(
                     Text(
                         text = label,
                         style = com.uacastplayer.ui.theme.CaptionSemibold,
-                        color = if (selected) UaTheme.palette.labelPrimary else UaTheme.palette.labelSecondary,
+                        color = when {
+                            selected && palette.pillButtons -> palette.accentOnFill
+                            selected -> palette.labelPrimary
+                            else -> palette.labelSecondary
+                        },
                     )
                 }
             }
@@ -286,7 +318,13 @@ fun TrackProgress(progress: Float, modifier: Modifier = Modifier, bold: Boolean 
     }
 }
 
-/** §5.7 - secondary text-only action button (export/import, "open" links). Use instead of Material's OutlinedButton. */
+/**
+ * §5.7 - secondary text-only action button (export/import, "open" links). Use instead of
+ * Material's OutlinedButton. Shape and fill follow the active palette: `pillButtons` swaps the
+ * rounded-rect corner for a full pill, and `secondaryButtonStyle` picks RAISED (Azure - solid
+ * surface fill, hairline border) or GHOST (Cinema - transparent fill, gold border) - see
+ * docs/DESIGN_SYSTEM.md "Themes".
+ */
 @Composable
 fun SecondaryButton(
     text: String,
@@ -294,6 +332,7 @@ fun SecondaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val palette = UaTheme.palette
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -301,12 +340,21 @@ fun SecondaryButton(
         animationSpec = tween(DurPress, easing = EaseSpring),
         label = "secondaryButtonScale",
     )
+    val shape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusItem)
+    val isGhost = palette.secondaryButtonStyle == SecondaryButtonStyle.GHOST
+    val background = when {
+        isGhost && pressed -> palette.azure.copy(alpha = GHOST_BUTTON_PRESSED_ALPHA)
+        isGhost -> Color.Transparent
+        pressed -> palette.surface2
+        else -> palette.surface1
+    }
+    val borderColor = if (isGhost) palette.azure else palette.hairline
     Box(
         modifier = modifier
             .scale(scale)
-            .clip(RoundedCornerShape(RadiusItem))
-            .background(if (pressed) UaTheme.palette.surface2 else UaTheme.palette.surface1)
-            .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusItem))
+            .clip(shape)
+            .background(background)
+            .border(1.dp, borderColor, shape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
