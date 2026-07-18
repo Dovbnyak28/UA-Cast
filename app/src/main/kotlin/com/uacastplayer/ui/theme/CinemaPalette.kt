@@ -2,20 +2,7 @@ package com.uacastplayer.ui.theme
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import com.uacastplayer.R
-
-/**
- * Fetched from Google's Downloadable Fonts provider (see res/font/playfair_display*.xml) rather
- * than bundled as a binary asset. Falls back to the platform default on devices without Google
- * Play Services - see docs/DESIGN_SYSTEM.md "Themes".
- */
-private val CinemaDisplayFontFamily = FontFamily(
-    Font(R.font.playfair_display, FontWeight.Normal),
-    Font(R.font.playfair_display_medium, FontWeight.Medium),
-)
 
 // Backgrounds - warm charcoal instead of Azure's neutral black.
 private val CinemaVoid = Color(0xFF0B0A08)
@@ -40,9 +27,8 @@ private val CinemaLabelTertiary = Color(0xFF6E6555)
 private val CinemaDanger = Color(0xFFC9695A)
 
 /**
- * Warm, "premium cinema" palette: charcoal background, champagne-gold accent, serif display type
- * (wired in once the font lands), pill-shaped buttons, and a radial vignette background - see
- * docs/DESIGN_SYSTEM.md "Themes".
+ * Warm, "premium cinema" palette: charcoal background, champagne-gold accent, serif display type,
+ * pill-shaped buttons, and a radial vignette background - see docs/DESIGN_SYSTEM.md "Themes".
  */
 val CinemaUaPalette = UaPalette(
     void = CinemaVoid,
@@ -74,7 +60,13 @@ val CinemaUaPalette = UaPalette(
     scrimBackground = Color(0x66000000),
     overlayHighlight = Color(0x33FFFFFF),
     glassTone = Color(0xE6141210),
-    displayFontFamily = CinemaDisplayFontFamily,
+    // A real bundled OFL font would be more distinctive, but no tool available in this session can
+    // produce an actual font binary, and the downloadable-fonts alternative (Google Play Services
+    // Fonts provider) was confirmed on-device to silently fail on de-Googled ROMs (e.g. LineageOS +
+    // microG) - see docs/DESIGN_SYSTEM.md "Themes". FontFamily.Serif is the generic system serif
+    // alias: no assets, no network, works everywhere, and still reads as distinctly "premium"
+    // against Azure's default sans-serif.
+    displayFontFamily = FontFamily.Serif,
     vignette = true,
     pillButtons = true,
     secondaryButtonStyle = SecondaryButtonStyle.GHOST,

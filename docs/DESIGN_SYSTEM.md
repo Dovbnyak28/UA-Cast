@@ -157,12 +157,14 @@ text keep using `UaPalette.azure`; only Caption/Micro-scale text runs should use
 
 ### Serif display type
 
-`UaPalette.displayFontFamily` (serif in Cinema via Playfair Display, platform default elsewhere) is
+`UaPalette.displayFontFamily` (`FontFamily.Serif` in Cinema, the platform default elsewhere) is
 consumed through `Type.kt`'s `DisplayTitle`/`DisplayName` styles, not read directly at call sites -
-see the "Typography" section above for the base styles they wrap. Cinema's font is fetched via
-Android's Downloadable Fonts API (Google Play Services Fonts provider, see
-`res/font/playfair_display*.xml`) rather than bundled as a binary asset, since no real font binary
-was available when this was built - it falls back silently to the platform default on devices
-without Google Play Services. A future iteration could replace this with an actually-bundled OFL
-font file without touching anything outside those two `res/font/*.xml` resources and
-`CinemaPalette.kt`'s `CinemaDisplayFontFamily`.
+see the "Typography" section above for the base styles they wrap. `FontFamily.Serif` is Android's
+generic serif alias (resolves to whatever serif face the device ships) rather than a specific
+bundled typeface like Playfair Display: no font binary was available when this was built, and the
+first attempt (Android's Downloadable Fonts API against the Google Play Services Fonts provider)
+was confirmed on-device to silently fail on de-Googled ROMs (LineageOS + microG) - package-visibility
+blocked the query since microG doesn't implement that provider, so it fell back to the platform
+default with no error. `FontFamily.Serif` has none of that risk (no network, no GMS dependency) at
+the cost of not being a specific named typeface. A future iteration could swap in an actually-bundled
+OFL font file by changing just `CinemaPalette.kt`'s `displayFontFamily` value.
