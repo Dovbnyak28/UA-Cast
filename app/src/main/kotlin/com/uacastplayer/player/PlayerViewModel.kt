@@ -153,7 +153,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             castRepository.state.collect { state ->
                 isCasting = state.isSessionConnected
                 _uiState.update {
-                    it.copy(isCasting = isCasting, castCodecIncompatibility = state.codecIncompatibility)
+                    it.copy(
+                        isCasting = isCasting,
+                        castCodecIncompatibility = state.codecIncompatibility,
+                        castReceiverLoadFailed = state.receiverLoadFailed,
+                    )
                 }
                 updateSeekability()
             }

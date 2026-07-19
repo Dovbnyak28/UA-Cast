@@ -263,6 +263,7 @@
     <string name="epg_guide_no_data">No hay guía de TV para este canal</string>
     <string name="cast_incompatible_audio_message">El formato de audio de este canal no es compatible con Chromecast. La reproducción local continúa.</string>
     <string name="cast_incompatible_video_message">El formato de video de este canal no es compatible con Chromecast. La reproducción local continúa.</string>
+    <string name="cast_receiver_load_failed_message">No se pudo transmitir este canal a tu Chromecast. La reproducción local continúa.</string>
     <string name="player_resize_fit">Ajustar</string>
     <string name="player_resize_fill">Rellenar</string>
     <string name="player_resize_zoom">Zoom</string>

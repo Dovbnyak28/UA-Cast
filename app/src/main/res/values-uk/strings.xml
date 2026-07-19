@@ -265,6 +265,7 @@
     <string name="epg_guide_no_data">Немає телегіда для цього каналу</string>
     <string name="cast_incompatible_audio_message">Аудіоформат цього каналу не підтримується Chromecast. Відтворення на телефоні триває.</string>
     <string name="cast_incompatible_video_message">Відеоформат цього каналу не підтримується Chromecast. Відтворення на телефоні триває.</string>
+    <string name="cast_receiver_load_failed_message">Не вдалося транслювати цей канал на Chromecast. Відтворення на телефоні триває.</string>
     <string name="player_resize_fit">Вписати</string>
     <string name="player_resize_fill">Заповнити</string>
     <string name="player_resize_zoom">Збільшити</string>

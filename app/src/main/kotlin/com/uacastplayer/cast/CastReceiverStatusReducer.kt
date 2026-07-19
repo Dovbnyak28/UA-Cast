@@ -15,12 +15,16 @@ object CastReceiverStatusReducer {
     ): CastReducerResult {
         if (status == ReceiverStatus.DISCONNECTED) return reduceDisconnected(state)
 
-        val newState = state.copy(isSessionConnected = true, receiverStatus = status, idleReason = idleReason)
+        var newState = state.copy(isSessionConnected = true, receiverStatus = status, idleReason = idleReason)
         val effects = mutableListOf<CastSideEffect>()
 
         when {
-            status == ReceiverStatus.PLAYING -> effects += CastSideEffect.PauseLocalPlayer
+            status == ReceiverStatus.PLAYING -> {
+                newState = newState.copy(receiverLoadFailed = false)
+                effects += CastSideEffect.PauseLocalPlayer
+            }
             status == ReceiverStatus.IDLE && idleReason == IdleReason.ERROR -> {
+                newState = newState.copy(receiverLoadFailed = true)
                 effects += CastSideEffect.RecordIncompatibility("receiver_idle_error")
                 effects += CastSideEffect.CloseProxySession
                 effects += CastSideEffect.ResumeLocalPlayer
@@ -51,6 +55,8 @@ object CastReceiverStatusReducer {
             idleReason = IdleReason.NONE,
             pendingChannelIndex = null,
             deliveryMode = CastDeliveryMode.Direct,
+            codecIncompatibility = null,
+            receiverLoadFailed = false,
         )
         return CastReducerResult(newState, effects)
     }

@@ -7,6 +7,11 @@ enum class ReceiverStatus { BUFFERING, PLAYING, PAUSED, IDLE, DISCONNECTED }
 
 enum class IdleReason { NONE, FINISHED, ERROR, CANCELLED, INTERRUPTED }
 
+/** Surfaced when [CastCompatibilityPolicy] finds a codec the receiver can't play - proxy fallback
+ * would not help (it re-serves the same codecs, see docs/PROXY_RULES.md), so this is shown to the
+ * user instead of silently retrying. Cleared whenever a new channel starts casting. */
+enum class CodecIncompatibilityKind { AUDIO, VIDEO }
+
 data class CastPlaybackState(
     val isSessionConnected: Boolean = false,
     val loadPhase: CastLoadPhase = CastLoadPhase.IDLE,
@@ -14,6 +19,14 @@ data class CastPlaybackState(
     val idleReason: IdleReason = IdleReason.NONE,
     val pendingChannelIndex: Int? = null,
     val deliveryMode: CastDeliveryMode = CastDeliveryMode.Direct,
+    val codecIncompatibility: CodecIncompatibilityKind? = null,
+    // The receiver went idle/error even after falling back to the proxy - unlike
+    // codecIncompatibility, this covers everything else that can go wrong (the proxy URL
+    // unreachable from the receiver's network, a malformed playlist, etc.), where retrying
+    // wouldn't obviously help either. Previously this only logged a debug line - from the user's
+    // side, casting silently reverting to local playback with no explanation looked identical to
+    // "casting doesn't work at all".
+    val receiverLoadFailed: Boolean = false,
 )
 
 sealed class CastLoadResult {

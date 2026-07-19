@@ -24,6 +24,13 @@ class CastReceiverStatusReducerTest {
     }
 
     @Test
+    fun `PLAYING clears a previous receiver load failure`() {
+        val state = CastPlaybackState(isSessionConnected = true, receiverLoadFailed = true)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.PLAYING)
+        assertFalse(result.state.receiverLoadFailed)
+    }
+
+    @Test
     fun `PAUSED updates status with no side effects`() {
         val result = CastReceiverStatusReducer.reduce(CastPlaybackState(), ReceiverStatus.PAUSED)
         assertEquals(ReceiverStatus.PAUSED, result.state.receiverStatus)
@@ -35,6 +42,7 @@ class CastReceiverStatusReducerTest {
         val result = CastReceiverStatusReducer.reduce(CastPlaybackState(), ReceiverStatus.IDLE, IdleReason.ERROR)
         assertEquals(ReceiverStatus.IDLE, result.state.receiverStatus)
         assertEquals(IdleReason.ERROR, result.state.idleReason)
+        assertTrue(result.state.receiverLoadFailed)
         assertEquals(
             listOf(
                 CastSideEffect.RecordIncompatibility("receiver_idle_error"),
@@ -109,5 +117,19 @@ class CastReceiverStatusReducerTest {
         val state = CastPlaybackState(isSessionConnected = true, idleReason = IdleReason.ERROR)
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
         assertEquals(IdleReason.NONE, result.state.idleReason)
+    }
+
+    @Test
+    fun `DISCONNECTED clears a lingering codec incompatibility warning`() {
+        val state = CastPlaybackState(isSessionConnected = true, codecIncompatibility = CodecIncompatibilityKind.AUDIO)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
+        assertNull(result.state.codecIncompatibility)
+    }
+
+    @Test
+    fun `DISCONNECTED clears a lingering receiver load failure`() {
+        val state = CastPlaybackState(isSessionConnected = true, receiverLoadFailed = true)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
+        assertFalse(result.state.receiverLoadFailed)
     }
 }

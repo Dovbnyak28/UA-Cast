@@ -139,7 +139,7 @@ class CastSessionRepository private constructor(context: Context) {
      * down like any other.
      */
     private fun startProxyEagerly() {
-        val host = LocalNetworkAddress.currentIpv4Address() ?: return
+        val host = LocalNetworkAddress.currentIpv4Address(appContext) ?: return
         proxyServer.start(
             sessionToken = UUID.randomUUID().toString(),
             host = host,
@@ -161,7 +161,7 @@ class CastSessionRepository private constructor(context: Context) {
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
         val mode = CastDeliveryStrategy.initialMode(knownIncompatible)
-        _state.update { it.copy(deliveryMode = mode, codecIncompatibility = null) }
+        _state.update { it.copy(deliveryMode = mode, codecIncompatibility = null, receiverLoadFailed = false) }
 
         when (mode) {
             CastDeliveryMode.Direct -> loadDirectWithWatchdog(streamUrl, title, userAgent, referrer)
@@ -211,7 +211,7 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun startProxyAndLoad(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
-        val host = LocalNetworkAddress.currentIpv4Address()
+        val host = LocalNetworkAddress.currentIpv4Address(appContext)
         if (host == null) {
             AppLog.w(TAG) { "No LAN address available; cannot start proxy fallback" }
             giveUp(streamUrl)
@@ -224,7 +224,9 @@ class CastSessionRepository private constructor(context: Context) {
         )
         applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)
         val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
-        loadOnReceiver(proxyServer.buildLocalUrl(resourceId), title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
+        val localUrl = proxyServer.buildLocalUrl(resourceId)
+        AppLog.d(TAG) { "Proxy fallback loading receiver from $localUrl" }
+        loadOnReceiver(localUrl, title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
     }
 
     private fun loadOnReceiver(

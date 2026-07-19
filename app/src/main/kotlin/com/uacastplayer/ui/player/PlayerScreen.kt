@@ -409,9 +409,19 @@ fun PlayerScreen(
                 }
             }
 
-            uiState.castCodecIncompatibility?.let { kind ->
-                CastCodecIncompatibilityBanner(
-                    kind = kind,
+            // Codec incompatibility is the more specific, actionable explanation, so it takes
+            // precedence in the rare case both could apply (see CastReceiverStatusReducer).
+            val castIncompatibilityMessage = when {
+                uiState.castCodecIncompatibility == CodecIncompatibilityKind.AUDIO ->
+                    stringResource(R.string.cast_incompatible_audio_message)
+                uiState.castCodecIncompatibility == CodecIncompatibilityKind.VIDEO ->
+                    stringResource(R.string.cast_incompatible_video_message)
+                uiState.castReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
+                else -> null
+            }
+            castIncompatibilityMessage?.let { message ->
+                CastIncompatibilityBanner(
+                    message = message,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 4.dp),
                 )
             }
@@ -700,12 +710,14 @@ private fun PillButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
-/** Shown while casting a channel whose codecs [com.uacastplayer.cast.CastCompatibilityPolicy]
- * flagged as incompatible - local playback keeps playing regardless, this only explains why the
- * receiver isn't. Clears itself once [PlayerUiState.castCodecIncompatibility] goes back to null
- * (new channel, cast disconnect). */
+/** Shown while casting has some reason it isn't reaching the receiver - either a codec
+ * [com.uacastplayer.cast.CastCompatibilityPolicy] flagged as incompatible, or the receiver
+ * rejecting/erroring on the proxy fallback for any other reason. Local playback keeps playing
+ * regardless, this only explains why the receiver isn't. Clears itself once the relevant
+ * [PlayerUiState] field goes back to its default (new channel, cast disconnect, or - for a codec
+ * incompatibility - the receiver recovering). */
 @Composable
-private fun CastCodecIncompatibilityBanner(kind: CodecIncompatibilityKind, modifier: Modifier = Modifier) {
+private fun CastIncompatibilityBanner(message: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
@@ -719,13 +731,7 @@ private fun CastCodecIncompatibilityBanner(kind: CodecIncompatibilityKind, modif
             modifier = Modifier.size(18.dp),
         )
         Text(
-            text = stringResource(
-                if (kind == CodecIncompatibilityKind.AUDIO) {
-                    R.string.cast_incompatible_audio_message
-                } else {
-                    R.string.cast_incompatible_video_message
-                },
-            ),
+            text = message,
             style = Caption,
             color = UaTheme.palette.labelPrimary,
             modifier = Modifier.padding(start = GapM),

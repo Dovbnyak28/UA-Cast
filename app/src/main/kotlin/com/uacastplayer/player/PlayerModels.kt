@@ -37,6 +37,8 @@ data class PlayerUiState(
     /** Mirrors [com.uacastplayer.cast.CastPlaybackState.codecIncompatibility] - see
      * [com.uacastplayer.cast.CastCompatibilityPolicy] for how it's decided. */
     val castCodecIncompatibility: CodecIncompatibilityKind? = null,
+    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.receiverLoadFailed]. */
+    val castReceiverLoadFailed: Boolean = false,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */
