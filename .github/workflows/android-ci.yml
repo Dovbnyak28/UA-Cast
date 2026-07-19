@@ -54,6 +54,9 @@ jobs:
       - name: No hardcoded colors outside ui/theme check
         run: bash scripts/check-no-hardcoded-colors.sh
 
+      - name: ViewModel onCleared() calls super check
+        run: bash scripts/check-oncleared-super.sh
+
       # Compile-only - there's no emulator/device here to actually run instrumentation tests
       # against (see MainActivitySmokeTest).
       - name: Compile instrumentation tests
