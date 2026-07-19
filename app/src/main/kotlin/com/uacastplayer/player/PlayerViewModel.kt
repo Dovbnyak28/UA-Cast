@@ -79,6 +79,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var currentIndex: Int = -1
     private val deadIndices = mutableSetOf<Int>()
     private var retryState = RetryState()
+    private var liveWindowRecoveryHistory: List<Long> = emptyList()
     private var pendingSwitchJob: Job? = null
     private var retryJob: Job? = null
 
@@ -93,7 +94,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) retryState = PlaybackRetryPolicy.onIsPlaying(retryState)
+            if (isPlaying) {
+                retryState = PlaybackRetryPolicy.onIsPlaying(retryState)
+                liveWindowRecoveryHistory = emptyList()
+            }
             _uiState.update { it.copy(isPlaying = isPlaying) }
         }
 
@@ -151,6 +155,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         this.channels = channels
         deadIndices.clear()
         retryState = RetryState()
+        liveWindowRecoveryHistory = emptyList()
         if (channels.isNotEmpty()) switchToIndexImmediate(startIndex.coerceIn(channels.indices))
     }
 
@@ -246,6 +251,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handlePlaybackError(error: PlaybackException) {
         val errorType = PlayerErrorClassifier.classify(error)
+        if (errorType == PlaybackErrorType.BEHIND_LIVE_WINDOW && recoverFromBehindLiveWindow()) return
         when (val decision = PlaybackRetryPolicy.onError(retryState, errorType)) {
             is RetryDecision.Retry -> {
                 retryState = decision.newState
@@ -271,6 +277,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+    /**
+     * A long live view inevitably outruns HLS's live window eventually - this is the canonical
+     * ExoPlayer-documented fix (seek back into the live window, then re-prepare), applied silently
+     * rather than surfacing it as a playback error. Returns true if it handled the error (caller
+     * should stop here); false means [LiveWindowRecoveryPolicy] gave up and the normal error path
+     * (see [PlaybackRetryPolicy]) should run instead - this stream's live window is shrinking faster
+     * than playback can keep up with, which a seek can't fix.
+     */
+    private fun recoverFromBehindLiveWindow(): Boolean {
+        val decision = LiveWindowRecoveryPolicy.onBehindLiveWindow(
+            System.currentTimeMillis(),
+            liveWindowRecoveryHistory,
+        )
+        if (decision !is LiveWindowRecoveryPolicy.Decision.Recover) return false
+        liveWindowRecoveryHistory = decision.newHistory
+        AppLog.d(TAG) {
+            "Recovering from BehindLiveWindowException (attempt ${decision.newHistory.size} in the last 60s)"
+        }
+        exoPlayer.seekToDefaultPosition()
+        exoPlayer.prepare()
+        return true
     }
 
     private fun updateSeekability() {
