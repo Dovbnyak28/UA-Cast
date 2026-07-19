@@ -4,8 +4,16 @@ import java.io.ByteArrayOutputStream
 
 /** [durationMillis] is the wall-clock span (from the stream's own PCR clock, not local time)
  * covered by this segment - used both for the segment's `#EXTINF` value and to derive
- * `#EXT-X-TARGETDURATION` (see [LiveHlsPlaylistBuilder]). */
-data class TsSegment(val sequence: Int, val bytes: ByteArray, val durationMillis: Long)
+ * `#EXT-X-TARGETDURATION` (see [LiveHlsPlaylistBuilder]). [discontinuity] marks the first segment
+ * produced after an upstream reconnect (see [TsSegmenter.onReconnect]) - the PCR/timestamp clock
+ * is not continuous across the gap, which [LiveHlsPlaylistBuilder] must signal to the receiver via
+ * `#EXT-X-DISCONTINUITY`. */
+data class TsSegment(
+    val sequence: Int,
+    val bytes: ByteArray,
+    val durationMillis: Long,
+    val discontinuity: Boolean = false,
+)
 
 private const val PACKET_SIZE = 188
 private const val SYNC_BYTE = 0x47
@@ -68,6 +76,7 @@ class TsSegmenter(
     private var segmentStartPcrTicks: Long? = null
     private var lastPcrTicks: Long? = null
     private var nextSequence = 0
+    private var pendingDiscontinuity = false
 
     /** Feed one 188-byte TS packet (anything else is ignored). Returns a completed [TsSegment]
      * when this packet lands on a cut point, in which case the packet itself starts the *next*
@@ -100,6 +109,24 @@ class TsSegmenter(
      * upstream connection ends. Returns null if nothing was buffered. */
     fun flush(): TsSegment? = if (buffer.size() > 0) completeSegment() else null
 
+    /**
+     * Call when the upstream connection has just been re-established after a drop (see
+     * `RawTsRemuxSession`'s reconnect logic). Flushes whatever was buffered before the gap as its
+     * own final (non-discontinuous) segment, then resets the PCR clock - the reconnected stream's
+     * PCR values are on a different clock than before the gap, so diffing against pre-gap ticks
+     * would produce a garbage (or negative) duration. PAT/PMT/videoPid/pcrPid are deliberately left
+     * alone: it's the same channel/program, just a new TCP connection to it. The *next* segment
+     * produced by [feed] is marked [TsSegment.discontinuity] so [LiveHlsPlaylistBuilder] can signal
+     * the gap to the receiver.
+     */
+    fun onReconnect(): TsSegment? {
+        val flushed = flush()
+        segmentStartPcrTicks = null
+        lastPcrTicks = null
+        pendingDiscontinuity = true
+        return flushed
+    }
+
     private fun shouldCut(isKeyframeBoundary: Boolean, elapsed: Long): Boolean =
         buffer.size() > 0 &&
             ((isKeyframeBoundary && elapsed >= targetDurationMillis) ||
@@ -107,7 +134,8 @@ class TsSegmenter(
                 buffer.size() >= maxSegmentBytes)
 
     private fun completeSegment(): TsSegment {
-        val segment = TsSegment(nextSequence, buffer.toByteArray(), elapsedMillis(lastPcrTicks))
+        val segment = TsSegment(nextSequence, buffer.toByteArray(), elapsedMillis(lastPcrTicks), pendingDiscontinuity)
+        pendingDiscontinuity = false
         buffer = ByteArrayOutputStream()
         nextSequence++
         return segment

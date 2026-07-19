@@ -103,3 +103,26 @@ instead of an upstream fetch once remuxing is active; segments are served from
 session runs per proxy session (same rule as "one active channel"), and switching channels or
 stopping the proxy always tears down the old one - the reader thread's blocking read is unblocked
 by closing the upstream response, not by any polling.
+
+### Upstream reconnect
+
+A raw-TS origin connection can drop mid-stream (network blip, an overloaded encoder resetting the
+socket) without the receiver ever asking for anything different - previously this ended the
+`RawTsRemuxSession` outright, silently freezing the receiver's live playlist forever. Instead,
+`RawTsRemuxSession`'s reader loop treats both a clean EOF and an `IOException` while reading as "the
+connection ended, not the channel" and reconnects to the same origin (same `Request`, same
+`OkHttpClient`, so it shares the app-wide connection pool - see `core/net/AppHttp.kt`):
+
+- **Backoff** (`proxy/RemuxReconnectPolicy.kt`, pure): 1s, then 2s, then 4s. A successful reconnect
+  resets the attempt counter; three consecutive failures give up and end the session the same way a
+  permanent origin failure always has.
+- **Discontinuity**: `TsSegmenter.onReconnect()` flushes whatever was buffered before the gap as its
+  own final segment, resets the PCR clock (the reconnected stream's PCR values aren't on the same
+  clock as before the gap - diffing across it would produce garbage durations), but leaves
+  PAT/PMT/video-PID/PCR-PID alone, since it's still the same channel. The *next* segment produced is
+  marked `TsSegment.discontinuity = true`, which `LiveHlsPlaylistBuilder` turns into an
+  `#EXT-X-DISCONTINUITY` tag immediately before that segment - `#EXT-X-MEDIA-SEQUENCE` numbering
+  continues across the gap unchanged, per the live-HLS spec.
+- `RawTsRemuxSession.stop()` interrupts the reader thread (in addition to closing the current
+  response) specifically so it can't be left sleeping through a multi-second backoff wait after the
+  session has actually been asked to stop.

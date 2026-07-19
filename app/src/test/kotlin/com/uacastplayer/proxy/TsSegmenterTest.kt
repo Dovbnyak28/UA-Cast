@@ -245,6 +245,48 @@ class TsSegmenterTest {
     }
 
     @Test
+    fun `onReconnect flushes the pre-gap buffer as a non-discontinuous segment`() {
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000)
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        val flushed = segmenter.onReconnect()
+        assertTrue(flushed != null)
+        assertEquals(false, flushed?.discontinuity)
+    }
+
+    @Test
+    fun `the first segment produced after a reconnect is marked as a discontinuity`() {
+        val segmenter = TsSegmenter(targetDurationMillis = 1_000)
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        segmenter.onReconnect()
+
+        // Same channel (PAT/PMT/videoPid untouched), PCR clock restarts from zero after the gap.
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        val completed = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(1.5)))
+        assertEquals(true, completed?.discontinuity)
+
+        // The discontinuity flag doesn't carry over to the segment after that one.
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(1.5)))
+        val next = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(3.0)))
+        assertEquals(false, next?.discontinuity)
+    }
+
+    @Test
+    fun `onReconnect on an empty buffer returns null but still arms the discontinuity flag`() {
+        val segmenter = TsSegmenter(targetDurationMillis = 1_000)
+        assertNull(segmenter.onReconnect())
+
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        val completed = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(1.5)))
+        assertEquals(true, completed?.discontinuity)
+    }
+
+    @Test
     fun `non-sync-byte input is ignored`() {
         val segmenter = TsSegmenter()
         assertNull(segmenter.feed(ByteArray(188)))

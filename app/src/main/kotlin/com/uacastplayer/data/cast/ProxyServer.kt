@@ -1,16 +1,31 @@
 package com.uacastplayer.data.cast
 
+import com.uacastplayer.cast.CastCompatibilityPolicy
+import com.uacastplayer.cast.CastCompatibilityVerdict
+import com.uacastplayer.cast.TsProgramInfoParser
+import com.uacastplayer.core.net.HttpDefaults
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.playlist.BoundedReadResult
+import com.uacastplayer.playlist.BoundedTextReader
+import com.uacastplayer.proxy.LiveHlsPlaylistBuilder
 import com.uacastplayer.proxy.M3u8Rewriter
+import com.uacastplayer.proxy.PlaylistDetector
+import com.uacastplayer.proxy.RawTsRemuxActivation
+import com.uacastplayer.proxy.RemuxReconnectPolicy
+import com.uacastplayer.proxy.RemuxSegmentBuffer
+import com.uacastplayer.proxy.TsSegment
+import com.uacastplayer.proxy.TsSegmenter
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
@@ -21,13 +36,28 @@ import okhttp3.Response
 private const val TAG = "ProxyServer"
 private const val MAX_HEADER_BYTES = 16 * 1024
 private const val MAX_RESOURCES = 512
+private const val MAX_PLAYLIST_BYTES = 4 * 1024 * 1024
 private const val THREAD_POOL_SIZE = 6
+private const val PLAYLIST_SNIFF_BYTES = 16L
+private const val TS_PROBE_BYTES = 128L * 1024
+private const val TS_PACKET_SIZE = 188
+private const val TS_SYNC_BYTE = 0x47
+private const val REMUX_TARGET_SEGMENT_SECONDS = 5
+private const val REMUX_INITIAL_PLAYLIST_WAIT_MILLIS = 4_000L
+private const val REMUX_POLL_INTERVAL_MILLIS = 100L
+private const val REMUX_READ_CHUNK_BYTES = 64 * 1024
+private const val REMUX_READER_JOIN_TIMEOUT_MILLIS = 1_000L
 
-private const val RESOURCE_TYPE_PLAYLIST = "playlist"
-private const val RESOURCE_TYPE_MEDIA = "media"
+internal const val RESOURCE_TYPE_PLAYLIST = "playlist"
+internal const val RESOURCE_TYPE_MEDIA = "media"
 
 private data class ParsedRequest(val method: String, val path: String, val headers: Map<String, String>)
-private data class ResourceEntry(val type: String, val originalUrl: String)
+
+/** [userAgent] always has a value (defaulted to [HttpDefaults.BROWSER_USER_AGENT] at registration
+ * time if the channel didn't specify one via `#EXTVLCOPT:http-user-agent=`); [referrer] is only
+ * ever set from that same per-channel override. Resources discovered while rewriting a playlist
+ * (segments, sub-playlists, key URIs) inherit both from their parent - see [ProxyServer.servePlaylist]. */
+internal data class ResourceEntry(val type: String, val originalUrl: String, val userAgent: String, val referrer: String?)
 
 /**
  * Local HLS proxy: rewrites and re-serves an HLS stream so a Cast receiver that can't (or won't)
@@ -42,6 +72,10 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     private var acceptThread: Thread? = null
     private var sessionToken: String = ""
     private var host: String = "127.0.0.1"
+    // Fixed once in start() rather than read live off serverSocket?.localPort - that getter goes
+    // null the instant stop() runs, and buildLocalUrl() racing a concurrent stop() would otherwise
+    // silently produce "http://host:null/..." instead of either a real port or a loud failure.
+    @Volatile private var boundPort: Int? = null
     @Volatile private var running = false
 
     private val resources = object : LinkedHashMap<String, ResourceEntry>(16, 0.75f, true) {
@@ -50,14 +84,20 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     }
     private val resourcesLock = Any()
 
-    val port: Int? get() = serverSocket?.localPort
+    // "One active remux stream per session" (docs/PROXY_RULES.md) - a channel switch always goes
+    // through start(), which tears down whatever the previous channel had running.
+    private var remuxEnabled = true
+    private var activeRemuxSession: RawTsRemuxSession? = null
+    private val remuxLock = Any()
 
-    fun start(sessionToken: String, host: String): Int {
+    fun start(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
         stop()
         this.sessionToken = sessionToken
         this.host = host
+        this.remuxEnabled = remuxEnabled
         val socket = ServerSocket(0, 50, InetAddress.getByName("0.0.0.0"))
         serverSocket = socket
+        boundPort = socket.localPort
         val pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE)
         executor = pool
         running = true
@@ -76,6 +116,7 @@ class ProxyServer(private val httpClient: OkHttpClient) {
 
     fun stop() {
         running = false
+        boundPort = null
         try {
             serverSocket?.close()
         } catch (_: Exception) {
@@ -84,17 +125,36 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         executor?.shutdownNow()
         executor = null
         synchronized(resourcesLock) { resources.clear() }
+        synchronized(remuxLock) {
+            activeRemuxSession?.stop()
+            activeRemuxSession = null
+        }
     }
 
-    fun registerPlaylist(url: String): String = registerResource(RESOURCE_TYPE_PLAYLIST, url)
+    fun registerPlaylist(url: String, userAgent: String? = null, referrer: String? = null): String =
+        registerResource(RESOURCE_TYPE_PLAYLIST, url, userAgent?.ifBlank { null } ?: HttpDefaults.BROWSER_USER_AGENT, referrer?.ifBlank { null })
 
-    private fun registerResource(type: String, url: String): String {
+    private fun registerResource(type: String, url: String, userAgent: String, referrer: String?): String {
         val id = Fingerprint.of("$type:$url")
-        synchronized(resourcesLock) { resources[id] = ResourceEntry(type, url) }
+        synchronized(resourcesLock) { resources[id] = ResourceEntry(type, url, userAgent, referrer) }
         return id
     }
 
-    fun buildLocalUrl(resourceId: String): String = "http://$host:$port/hls/$sessionToken/$resourceId"
+    /** @throws IllegalStateException if called while the server isn't running - a caller asking
+     * for a URL into a stopped proxy is a bug upstream, not something to paper over with a
+     * malformed "http://host:null/..." URL. */
+    fun buildLocalUrl(resourceId: String): String {
+        val port = checkNotNull(boundPort) { "buildLocalUrl() called while the proxy server is not running" }
+        return "http://$host:$port/hls/$sessionToken/$resourceId"
+    }
+
+    private fun buildRemuxSegmentUrl(resourceId: String, sequence: Int): String {
+        val port = checkNotNull(boundPort) { "buildRemuxSegmentUrl() called while the proxy server is not running" }
+        return "http://$host:$port/hls/$sessionToken/$resourceId/seg$sequence.ts"
+    }
+
+    /** Exposed only so tests can verify header inheritance (see [servePlaylist]) without going through a real socket. */
+    internal fun resourcesForTesting(): Map<String, ResourceEntry> = synchronized(resourcesLock) { resources.toMap() }
 
     private fun handleConnection(socket: Socket) {
         socket.use {
@@ -120,43 +180,150 @@ class ProxyServer(private val httpClient: OkHttpClient) {
 
     private fun serveRequest(request: ParsedRequest, output: OutputStream) {
         val segments = request.path.substringBefore('?').split('/').filter { it.isNotEmpty() }
-        if (segments.size != 3 || segments[0] != "hls" || segments[1] != sessionToken) {
+
+        if (segments.size == 4 && segments[0] == "hls" && isSessionToken(segments[1])) {
+            serveRemuxSegment(resourceId = segments[2], segmentPathPart = segments[3], output = output)
+            return
+        }
+        if (segments.size != 3 || segments[0] != "hls" || !isSessionToken(segments[1])) {
             writeError(output, 404, "Not Found")
             return
         }
-        val resource = synchronized(resourcesLock) { resources[segments[2]] }
+        val resourceId = segments[2]
+        val resource = synchronized(resourcesLock) { resources[resourceId] }
         if (resource == null) {
             writeError(output, 404, "Not Found")
             return
         }
+        servePlaylistOrMediaResource(resourceId, resource, request, output)
+    }
+
+    private fun servePlaylistOrMediaResource(
+        resourceId: String,
+        resource: ResourceEntry,
+        request: ParsedRequest,
+        output: OutputStream,
+    ) {
+        // A second (or third, ...) poll of a channel already being remuxed - serve the live
+        // playlist as it stands right now, no upstream fetch involved.
+        val activeSession = synchronized(remuxLock) { activeRemuxSession }?.takeIf { it.resourceId == resourceId }
+        if (activeSession != null) {
+            writePlaylistText(activeSession.currentPlaylist(), request.method, output)
+            return
+        }
 
         val upstreamRequest = Request.Builder().url(resource.originalUrl).apply {
+            header("User-Agent", resource.userAgent)
+            resource.referrer?.let { header("Referer", it) }
             request.headers["range"]?.let { header("Range", it) }
         }.build()
+        val response = httpClient.newCall(upstreamRequest).execute()
 
-        httpClient.newCall(upstreamRequest).execute().use { response ->
-            if (resource.type == RESOURCE_TYPE_PLAYLIST) {
-                servePlaylist(response, request.method, output)
-            } else {
-                servePassthrough(response, request.method, output)
-            }
+        // The resource's registered type is only a hint used when it was discovered inside a
+        // parent playlist (see servePlaylist below) - it can be wrong for extensionless/tokenized
+        // URLs, so what actually gets served is decided from the real response via peekBody(),
+        // which does not consume the body available to servePlaylist/servePassthrough/the remux
+        // reader below.
+        if (isUpstreamPlaylist(response)) {
+            response.use { servePlaylist(it, request.method, output, resource) }
+            return
+        }
+
+        if (shouldRemuxUpstream(response)) {
+            // Ownership of `response` passes to the remux session's background reader thread from
+            // here on - it is deliberately NOT wrapped in .use{} on this thread, and is closed by
+            // the session itself once the reader loop ends (stream EOF, stop(), or an error).
+            val session = startRemuxSession(resourceId, response)
+            writePlaylistText(session.awaitInitialPlaylist(), request.method, output)
+        } else {
+            response.use { servePassthrough(it, request.method, output) }
         }
     }
 
-    private fun servePlaylist(response: Response, method: String, output: OutputStream) {
-        val text = response.body?.string().orEmpty()
-        val finalUrl = response.request.url.toString()
-        val rewritten = M3u8Rewriter.rewrite(text, finalUrl) { absoluteUrl ->
-            val type = if (looksLikePlaylist(absoluteUrl)) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_MEDIA
-            buildLocalUrl(registerResource(type, absoluteUrl))
+    private fun isUpstreamPlaylist(response: Response): Boolean =
+        response.body != null &&
+            PlaylistDetector.isPlaylist(response.header("Content-Type"), response.peekBody(PLAYLIST_SNIFF_BYTES).bytes())
+
+    private fun shouldRemuxUpstream(response: Response): Boolean {
+        val tsProbe = if (response.body != null) response.peekBody(TS_PROBE_BYTES).bytes() else ByteArray(0)
+        val looksLikeTs = looksLikeMpegTs(tsProbe)
+        val verdict = if (looksLikeTs) {
+            CastCompatibilityPolicy.classify(TsProgramInfoParser.parse(tsProbe))
+        } else {
+            CastCompatibilityVerdict.Unknown
         }
-        val bytes = rewritten.toByteArray(Charsets.UTF_8)
+        return RawTsRemuxActivation.shouldActivate(
+            isHlsPlaylist = false,
+            looksLikeMpegTs = looksLikeTs,
+            verdict = verdict,
+            featureEnabled = remuxEnabled,
+        )
+    }
+
+    private fun startRemuxSession(resourceId: String, response: Response): RawTsRemuxSession {
+        val session = RawTsRemuxSession(resourceId, response, httpClient, ::buildRemuxSegmentUrl)
+        synchronized(remuxLock) {
+            activeRemuxSession?.stop()
+            activeRemuxSession = session
+        }
+        session.start()
+        return session
+    }
+
+    private fun serveRemuxSegment(resourceId: String, segmentPathPart: String, output: OutputStream) {
+        val sequence = parseSegmentSequence(segmentPathPart)
+        val session = synchronized(remuxLock) { activeRemuxSession }?.takeIf { it.resourceId == resourceId }
+        val bytes = sequence?.let { session?.segmentBytes(it) }
+        if (bytes == null) {
+            writeError(output, 404, "Not Found")
+            return
+        }
+        val headers = mapOf("Content-Type" to "video/MP2T", "Content-Length" to bytes.size.toString())
+        writeHeaders(output, 200, "OK", headers)
+        output.write(bytes)
+        output.flush()
+    }
+
+    private fun parseSegmentSequence(segmentPathPart: String): Int? {
+        if (!segmentPathPart.startsWith("seg") || !segmentPathPart.endsWith(".ts")) return null
+        return segmentPathPart.removePrefix("seg").removeSuffix(".ts").toIntOrNull()
+    }
+
+    private fun writePlaylistText(text: String, method: String, output: OutputStream) {
+        val bytes = text.toByteArray(Charsets.UTF_8)
         writeHeaders(
             output, 200, "OK",
             mapOf("Content-Type" to "application/vnd.apple.mpegurl", "Content-Length" to bytes.size.toString()),
         )
         if (method == "GET") output.write(bytes)
         output.flush()
+    }
+
+    private fun looksLikeMpegTs(bytes: ByteArray): Boolean {
+        if (bytes.size < TS_PACKET_SIZE * 2) return bytes.isNotEmpty() && (bytes[0].toInt() and 0xFF) == TS_SYNC_BYTE
+        return (bytes[0].toInt() and 0xFF) == TS_SYNC_BYTE && (bytes[TS_PACKET_SIZE].toInt() and 0xFF) == TS_SYNC_BYTE
+    }
+
+    internal fun servePlaylist(response: Response, method: String, output: OutputStream, parent: ResourceEntry) {
+        val body = response.body
+        if (body == null) {
+            writeError(output, 502, "Bad Gateway")
+            return
+        }
+        val text = when (val bounded = BoundedTextReader.readText(body.byteStream(), MAX_PLAYLIST_BYTES)) {
+            is BoundedReadResult.Success -> bounded.text
+            BoundedReadResult.SizeLimitExceeded -> {
+                AppLog.w(TAG) { "Upstream playlist exceeded $MAX_PLAYLIST_BYTES bytes; rejecting" }
+                writeError(output, 502, "Bad Gateway")
+                return
+            }
+        }
+        val finalUrl = response.request.url.toString()
+        val rewritten = M3u8Rewriter.rewrite(text, finalUrl) { absoluteUrl ->
+            val type = if (looksLikePlaylist(absoluteUrl)) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_MEDIA
+            buildLocalUrl(registerResource(type, absoluteUrl, parent.userAgent, parent.referrer))
+        }
+        writePlaylistText(rewritten, method, output)
     }
 
     private fun servePassthrough(response: Response, method: String, output: OutputStream) {
@@ -171,11 +338,25 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         output.flush()
     }
 
+    /** Constant-time so a client fishing for the session token can't learn anything from how
+     * quickly a guess gets rejected. */
+    private fun isSessionToken(candidate: String): Boolean =
+        MessageDigest.isEqual(candidate.toByteArray(Charsets.UTF_8), sessionToken.toByteArray(Charsets.UTF_8))
+
+    /** Only a hint for how to pre-register a URL discovered inside a playlist, before it's ever
+     * been fetched - what actually gets served for it is decided from the real response by
+     * [PlaylistDetector] once that request comes in (see [serveRequest]). */
     private fun looksLikePlaylist(url: String): Boolean {
         val path = url.substringBefore('?').lowercase()
         return path.endsWith(".m3u8") || path.endsWith(".m3u")
     }
 
+    // Deliberately always "close" rather than keep-alive: correctly framing a reused connection
+    // needs the response's exact length known up front for every case (Content-Length here is
+    // reliable, but a chunked or close-delimited upstream body is not), and a framing mistake
+    // hangs or corrupts the next request on that socket - worse for a Chromecast receiver than
+    // the extra per-segment TCP handshake this trades away. Revisit only with a real framing
+    // layer (chunked-encoding support included), not a quick loop around handleConnection.
     private fun writeHeaders(output: OutputStream, status: Int, statusText: String, headers: Map<String, String>) {
         val builder = StringBuilder("HTTP/1.1 $status $statusText\r\n")
         for ((key, value) in headers) builder.append("$key: $value\r\n")
@@ -219,5 +400,187 @@ class ProxyServer(private val httpClient: OkHttpClient) {
             headers[lines[i].substring(0, separator).trim().lowercase()] = lines[i].substring(separator + 1).trim()
         }
         return ParsedRequest(requestLine[0].uppercase(), requestLine[1], headers)
+    }
+}
+
+/**
+ * Owns one continuous upstream raw-TS read for the lifetime of a "raw TS remux" channel (see
+ * docs/PROXY_RULES.md "Raw TS remux"): a single background thread reads the origin response body
+ * in chunks, resyncs to TS packet boundaries the same way [com.uacastplayer.cast.TsProgramInfoParser]
+ * does (a live HTTP stream isn't guaranteed to start exactly on a sync byte), feeds each packet to
+ * a [TsSegmenter], and appends completed segments to a [RemuxSegmentBuffer] that [ProxyServer]
+ * serves segment/playlist requests from. [initialResponse] is this session's own to close - callers
+ * must not wrap it in their own `use {}`. If the connection drops mid-stream, the reader reconnects
+ * to the same origin via [httpClient] with backoff (see [RemuxReconnectPolicy]) instead of ending
+ * the session outright - see docs/PROXY_RULES.md "Raw TS remux" for the reconnect/discontinuity
+ * behavior.
+ */
+internal class RawTsRemuxSession(
+    val resourceId: String,
+    initialResponse: Response,
+    private val httpClient: OkHttpClient,
+    private val segmentUrl: (resourceId: String, sequence: Int) -> String,
+) {
+    private val segmenter = TsSegmenter(targetDurationMillis = REMUX_TARGET_SEGMENT_SECONDS * 1000L)
+    private val buffer = RemuxSegmentBuffer()
+    private val bufferLock = Any()
+    @Volatile private var running = true
+    private var readerThread: Thread? = null
+
+    // Only ever read/written from the reader thread itself - readLoop() owns it exclusively once
+    // start() has been called, so it doesn't need the same synchronization as `buffer`.
+    private var currentResponse = initialResponse
+
+    fun start() {
+        readerThread = thread(name = "ProxyServer-remux-$resourceId") { readLoop() }
+    }
+
+    /** Stops the reader loop and closes the upstream connection - safe to call from any thread,
+     * including the reader thread itself (e.g. on natural stream end, where it's a no-op beyond
+     * the close). */
+    fun stop() {
+        running = false
+        runCatching { currentResponse.close() } // unblocks a blocking read() inside readLoop()
+        val thread = readerThread
+        thread?.interrupt() // unblocks a Thread.sleep() during a reconnect backoff wait
+        if (thread != null && thread !== Thread.currentThread()) {
+            runCatching { thread.join(REMUX_READER_JOIN_TIMEOUT_MILLIS) }
+        }
+    }
+
+    /** Blocks the calling (request-handling) thread briefly for the first segment(s) to become
+     * available, so the receiver's very first playlist fetch isn't an empty, useless list - then
+     * returns whatever is ready, even if that's still nothing (a slow origin shouldn't hang the
+     * connection forever). */
+    fun awaitInitialPlaylist(): String {
+        val deadline = System.currentTimeMillis() + REMUX_INITIAL_PLAYLIST_WAIT_MILLIS
+        while (running && isBufferEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(REMUX_POLL_INTERVAL_MILLIS)
+        }
+        return currentPlaylist()
+    }
+
+    fun currentPlaylist(): String {
+        val snapshot = synchronized(bufferLock) { buffer.snapshot() }
+        return LiveHlsPlaylistBuilder.build(
+            segments = snapshot,
+            segmentUrl = { sequence -> segmentUrl(resourceId, sequence) },
+            configuredTargetDurationSeconds = REMUX_TARGET_SEGMENT_SECONDS,
+        )
+    }
+
+    fun segmentBytes(sequence: Int): ByteArray? = synchronized(bufferLock) { buffer.segment(sequence)?.bytes }
+
+    private fun isBufferEmpty(): Boolean = synchronized(bufferLock) { buffer.isEmpty }
+
+    /** Reads from [currentResponse] until it ends (EOF or an [IOException]), then - while still
+     * [running] - reconnects and keeps going, rather than treating a dropped connection as the end
+     * of the session. Only gives up once [RemuxReconnectPolicy] does. */
+    private fun readLoop() {
+        var carry = ByteArray(0)
+        var shouldContinue = true
+        while (running && shouldContinue) {
+            val input = currentResponse.body?.byteStream()
+            if (input != null) {
+                carry = readUntilDisconnected(input, carry)
+                runCatching { currentResponse.close() }
+                shouldContinue = running && reconnect()
+                if (shouldContinue) carry = ByteArray(0) // stale trailing partial-packet bytes
+            } else {
+                AppLog.w(TAG) { "Raw TS remux for $resourceId: upstream response had no body" }
+                shouldContinue = false
+            }
+        }
+        segmenter.flush()?.let(::addSegment)
+    }
+
+    /** Feeds [input] to the segmenter until it hits EOF or an [IOException] (both just mean "the
+     * connection ended", not necessarily an error worth failing the whole session over - see
+     * [reconnect]). Returns the trailing incomplete packet bytes to prepend to the next read. */
+    private fun readUntilDisconnected(input: InputStream, initialCarry: ByteArray): ByteArray {
+        var carry = initialCarry
+        val chunk = ByteArray(REMUX_READ_CHUNK_BYTES)
+        try {
+            while (running) {
+                val read = input.read(chunk)
+                if (read == -1) return carry
+                carry = consumePackets(if (carry.isEmpty()) chunk.copyOf(read) else carry + chunk.copyOf(read))
+            }
+        } catch (e: IOException) {
+            AppLog.w(TAG) { "Raw TS remux reader for $resourceId lost the connection: ${e.javaClass.simpleName}" }
+        }
+        return carry
+    }
+
+    /** Backoff-retries the upstream connection (see [RemuxReconnectPolicy]) and marks the next
+     * segment produced as a discontinuity on success. Returns false once the policy gives up or
+     * [stop] is called mid-backoff - the caller should end the session in that case. */
+    private fun reconnect(): Boolean {
+        segmenter.onReconnect()?.let(::addSegment)
+        var attempt = 0
+        var reconnected = false
+        var giveUp = false
+        while (running && !reconnected && !giveUp) {
+            when (val decision = RemuxReconnectPolicy.onDisconnected(attempt)) {
+                is RemuxReconnectPolicy.Decision.Retry -> {
+                    attempt = decision.nextAttempt
+                    reconnected = attemptReconnect(decision.delayMillis, attempt)
+                    giveUp = !reconnected && !running
+                }
+                RemuxReconnectPolicy.Decision.GiveUp -> {
+                    AppLog.w(TAG) { "Raw TS remux for $resourceId: giving up after repeated reconnect failures" }
+                    giveUp = true
+                }
+            }
+        }
+        return reconnected
+    }
+
+    /** One reconnect attempt: waits out the backoff delay, then re-issues the same origin request.
+     * Returns false both when the request fails and when [stop] interrupts the backoff wait -
+     * [reconnect]'s loop tells those apart via [running], which [stop] clears first. */
+    private fun attemptReconnect(delayMillis: Long, attempt: Int): Boolean {
+        if (!sleepUnlessInterrupted(delayMillis)) return false
+        val newResponse = runCatching { httpClient.newCall(currentResponse.request).execute() }.getOrNull()
+        val usable = newResponse != null && newResponse.isSuccessful && newResponse.body != null
+        if (usable) {
+            currentResponse = requireNotNull(newResponse)
+            AppLog.d(TAG) { "Raw TS remux for $resourceId: reconnected upstream" }
+        } else {
+            runCatching { newResponse?.close() }
+            AppLog.w(TAG) { "Raw TS remux for $resourceId: reconnect attempt $attempt failed" }
+        }
+        return usable
+    }
+
+    /** Sleeps for [delayMillis], returning false (instead of throwing) if interrupted - e.g. [stop]
+     * was called mid-backoff - so [reconnect]'s own control flow can stay a flat single-return. */
+    private fun sleepUnlessInterrupted(delayMillis: Long): Boolean = try {
+        Thread.sleep(delayMillis)
+        true
+    } catch (e: InterruptedException) {
+        Thread.currentThread().interrupt()
+        false
+    }
+
+    /** Extracts every complete, sync-aligned packet from [data] (byte-scanning forward to resync
+     * after any misaligned byte, same idea as [com.uacastplayer.cast.TsProgramInfoParser]),
+     * feeding each to [segmenter]. Returns the trailing incomplete bytes to prepend to the next
+     * read. */
+    private fun consumePackets(data: ByteArray): ByteArray {
+        var offset = 0
+        while (offset + TS_PACKET_SIZE <= data.size) {
+            if ((data[offset].toInt() and 0xFF) == TS_SYNC_BYTE) {
+                segmenter.feed(data.copyOfRange(offset, offset + TS_PACKET_SIZE))?.let(::addSegment)
+                offset += TS_PACKET_SIZE
+            } else {
+                offset++
+            }
+        }
+        return data.copyOfRange(offset, data.size)
+    }
+
+    private fun addSegment(segment: TsSegment) {
+        synchronized(bufferLock) { buffer.add(segment) }
     }
 }
