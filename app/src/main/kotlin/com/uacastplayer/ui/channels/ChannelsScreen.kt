@@ -82,6 +82,7 @@ import com.uacastplayer.ui.components.GroupIconCollage
 import com.uacastplayer.ui.components.IconHeader
 import com.uacastplayer.ui.components.IconTierBanner
 import com.uacastplayer.ui.components.StatusPillVariant
+import com.uacastplayer.ui.components.rememberDebounced
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
@@ -370,7 +371,9 @@ private fun GroupsOverviewGrid(
     val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(GroupTileMinWidth)
 
     var query by rememberSaveable { mutableStateOf("") }
-    val trimmedQuery = query.trim()
+    // Debounced: this search runs across the whole playlist (not just one group), so re-running it
+    // on every keystroke while typing causes visible jank on larger playlists.
+    val trimmedQuery = rememberDebounced(query.trim())
     val searchOutcome = remember(groups, trimmedQuery) {
         if (trimmedQuery.isEmpty()) null else ChannelSearch.search(groups, trimmedQuery)
     }
@@ -481,33 +484,42 @@ private fun ChannelSearchResultsList(
     onToggleFavorite: (M3uChannel) -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
 ) {
+    // One LazyColumn item per result - see the itemsIndexed usage in SingleGroupChannelList for
+    // why this must not collapse back into a single item wrapping a forEachIndexed Column.
     LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
-        item {
+        itemsIndexed(
+            results,
+            key = { index, result -> ChannelListKeys.keyFor(index, result.channel.streamUrl) },
+        ) { index, result ->
+            val rounding = ChannelRowShape.roundingFor(index, results.lastIndex)
+            val shape = RoundedCornerShape(
+                topStart = if (rounding.top) RadiusList else 0.dp,
+                topEnd = if (rounding.top) RadiusList else 0.dp,
+                bottomStart = if (rounding.bottom) RadiusList else 0.dp,
+                bottomEnd = if (rounding.bottom) RadiusList else 0.dp,
+            )
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(RadiusList))
-                    .background(UaTheme.palette.surface1)
-                    .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusList)),
+                    .clip(shape)
+                    .background(UaTheme.palette.surface1),
             ) {
-                results.forEachIndexed { index, result ->
-                    ChannelSearchResultRow(
-                        result = result,
-                        iconRefreshKey = iconRefreshKey,
-                        resolveIcon = resolveIcon,
-                        isFavorite = isFavorite(result.channel),
-                        onToggleFavorite = { onToggleFavorite(result.channel) },
-                        onClick = { onChannelClick(result.channel) },
+                ChannelSearchResultRow(
+                    result = result,
+                    iconRefreshKey = iconRefreshKey,
+                    resolveIcon = resolveIcon,
+                    isFavorite = isFavorite(result.channel),
+                    onToggleFavorite = { onToggleFavorite(result.channel) },
+                    onClick = { onChannelClick(result.channel) },
+                )
+                if (!rounding.bottom) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = HairlineInsetChannels)
+                            .height(1.dp)
+                            .background(UaTheme.palette.hairline),
                     )
-                    if (index != results.lastIndex) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = HairlineInsetChannels)
-                                .height(1.dp)
-                                .background(UaTheme.palette.hairline),
-                        )
-                    }
                 }
             }
         }
@@ -665,7 +677,7 @@ private fun SingleGroupChannelList(
     onLongPressChannel: (M3uChannel) -> Unit,
 ) {
     var query by rememberSaveable(groupDisplayKey(grouped.group)) { mutableStateOf("") }
-    val trimmedQuery = query.trim()
+    val trimmedQuery = rememberDebounced(query.trim())
     val filteredChannels = remember(grouped.channels, trimmedQuery) {
         if (trimmedQuery.isEmpty()) {
             grouped.channels
