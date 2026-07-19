@@ -117,7 +117,7 @@ class TsSegmenterTest {
 
     @Test
     fun `does not cut on a keyframe before the target duration`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 5_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, startupSegments = 0)
         assertNull(segmenter.feed(patPacket()))
         assertNull(segmenter.feed(pmtPacket()))
         assertNull(segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0))))
@@ -126,7 +126,7 @@ class TsSegmenterTest {
 
     @Test
     fun `cuts at the first keyframe at or after the target duration`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 5_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, startupSegments = 0)
         segmenter.feed(patPacket())
         segmenter.feed(pmtPacket())
         segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
@@ -140,7 +140,7 @@ class TsSegmenterTest {
 
     @Test
     fun `the cutting packet starts the next segment, not the completed one`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 1_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 1_000, startupSegments = 0)
         segmenter.feed(patPacket())
         segmenter.feed(pmtPacket())
         segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
@@ -153,7 +153,7 @@ class TsSegmenterTest {
 
     @Test
     fun `sequence numbers increase across multiple cuts`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 1_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 1_000, startupSegments = 0)
         segmenter.feed(patPacket())
         segmenter.feed(pmtPacket())
         segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
@@ -185,7 +185,7 @@ class TsSegmenterTest {
 
     @Test
     fun `reads PCR from a separate PCR PID declared in the PMT, not the video PID`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 5_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, startupSegments = 0)
         segmenter.feed(patPacket())
         segmenter.feed(pmtPacket(pcrPid = PCR_ONLY_PID))
         // Video packets here never carry their own PCR - if PCR were (incorrectly) only ever read
@@ -239,6 +239,63 @@ class TsSegmenterTest {
     }
 
     @Test
+    fun `the first startupSegments segments cut at the shorter startup target`() {
+        val segmenter = TsSegmenter(
+            targetDurationMillis = 5_000,
+            startupSegments = 2,
+            startupTargetDurationMillis = 2_000,
+        )
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        // 2.5s < the configured 5s target, but past the 2s startup target - segment 0 cuts here.
+        val first = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(2.5)))
+        assertEquals(0, first?.sequence)
+
+        // Segment 1 is still within startupSegments (index 1 < 2), so it also uses the short target.
+        val second = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(4.7)))
+        assertEquals(1, second?.sequence)
+    }
+
+    @Test
+    fun `segments at or after startupSegments use the configured target again`() {
+        val segmenter = TsSegmenter(
+            targetDurationMillis = 5_000,
+            startupSegments = 1,
+            startupTargetDurationMillis = 2_000,
+        )
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        // Segment 0 uses the 2s startup target.
+        val first = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(2.1)))
+        assertEquals(0, first?.sequence)
+
+        // Segment 1 is no longer within startupSegments (1) - 2.5s isn't enough to cut at the
+        // normal 5s target, only the still-short startup one, so this must NOT cut yet.
+        assertNull(segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(2.5))))
+    }
+
+    @Test
+    fun `ramped startup segments still respect the byte safety valve`() {
+        val maxBytes = 1_000
+        val segmenter = TsSegmenter(
+            maxSegmentBytes = maxBytes,
+            startupSegments = 2,
+            startupTargetDurationMillis = 2_000,
+        )
+        var cutCount = 0
+        repeat(20) {
+            val completed = segmenter.feed(videoPacket(pusi = false, keyframe = false))
+            if (completed != null) {
+                cutCount++
+                assertTrue(completed.bytes.size <= maxBytes + 188)
+            }
+        }
+        assertTrue(cutCount > 0)
+    }
+
+    @Test
     fun `flush returns null when nothing is buffered`() {
         val segmenter = TsSegmenter()
         assertNull(segmenter.flush())
@@ -257,7 +314,7 @@ class TsSegmenterTest {
 
     @Test
     fun `the first segment produced after a reconnect is marked as a discontinuity`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 1_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 1_000, startupSegments = 0)
         segmenter.feed(patPacket())
         segmenter.feed(pmtPacket())
         segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
@@ -276,7 +333,7 @@ class TsSegmenterTest {
 
     @Test
     fun `onReconnect on an empty buffer returns null but still arms the discontinuity flag`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 1_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 1_000, startupSegments = 0)
         assertNull(segmenter.onReconnect())
 
         segmenter.feed(patPacket())

@@ -56,11 +56,19 @@ private val VIDEO_STREAM_TYPES = setOf(0x01, 0x02, 0x10, 0x1B, 0x20, 0x24, 0x42)
  * forever, which either starves segmentation (buffer grows unbounded) or force-cuts every single
  * packet. Independent of the clock, [maxSegmentBytes] force-cuts a segment the instant it would
  * exceed that size, so a segment can never grow unbounded regardless of what the PCR is doing.
+ *
+ * The first [startupSegments] segments use [startupTargetDurationMillis] instead of
+ * [targetDurationMillis] - a receiver's very first playlist fetch has to wait for that many
+ * segments to exist at all (see `RawTsRemuxSession.awaitInitialPlaylist`), so ramping those first
+ * few segments shorter gets a cast session playing noticeably sooner, at the cost of slightly
+ * smaller (and thus more numerous) segments only at the very start of the channel.
  */
 class TsSegmenter(
     private val targetDurationMillis: Long = 5_000,
     private val maxSegmentDurationMillis: Long = targetDurationMillis * 2,
     private val maxSegmentBytes: Int = DEFAULT_MAX_SEGMENT_BYTES,
+    private val startupSegments: Int = 2,
+    private val startupTargetDurationMillis: Long = 2_000,
 ) {
     private var pmtPid: Int? = null
     private var videoPid: Int? = null
@@ -129,9 +137,14 @@ class TsSegmenter(
 
     private fun shouldCut(isKeyframeBoundary: Boolean, elapsed: Long): Boolean =
         buffer.size() > 0 &&
-            ((isKeyframeBoundary && elapsed >= targetDurationMillis) ||
+            ((isKeyframeBoundary && elapsed >= effectiveTargetDurationMillis()) ||
                 elapsed >= maxSegmentDurationMillis ||
                 buffer.size() >= maxSegmentBytes)
+
+    /** [nextSequence] is the sequence number the segment currently being built will get once it
+     * completes, so this is "am I still building one of the first [startupSegments] segments". */
+    private fun effectiveTargetDurationMillis(): Long =
+        if (nextSequence < startupSegments) startupTargetDurationMillis else targetDurationMillis
 
     private fun completeSegment(): TsSegment {
         val segment = TsSegment(nextSequence, buffer.toByteArray(), elapsedMillis(lastPcrTicks), pendingDiscontinuity)

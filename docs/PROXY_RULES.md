@@ -91,6 +91,10 @@ owns a dedicated background thread for the rest of that channel's lifetime:
     a segment the instant it would exceed that size, even mid-frame with no keyframe or PCR signal
     at all. This is the actual OOM backstop - the keyframe/duration logic above assumes a working
     clock, and this doesn't.
+  - **Startup ramp**: the first 2 segments cut at a shorter 2s target instead of the usual 5s -
+    `awaitInitialPlaylist` blocks until enough segments exist for a non-empty playlist, so shorter
+    early segments get a cast session's very first playlist (and thus playback) noticeably sooner,
+    at the cost of a couple of smaller-than-usual segments only at the very start of the channel.
 - `proxy/RemuxSegmentBuffer.kt` keeps a sliding window of the most recent segments, capped at 20MB
   total, evicting the oldest first.
 - `proxy/LiveHlsPlaylistBuilder.kt` turns the buffer's current contents into a live (no
