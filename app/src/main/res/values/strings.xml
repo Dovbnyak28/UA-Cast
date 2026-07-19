@@ -67,6 +67,11 @@
     <string name="channels_no_search_results">No channels match "%1$s"</string>
     <string name="channels_search_all_hint">Search all channels</string>
     <string name="channels_search_too_broad">Too many matches — refine your search. Showing the first %1$d.</string>
+    <string name="channels_group_pin">Pin group</string>
+    <string name="channels_group_unpin">Unpin group</string>
+    <string name="channels_group_hide">Hide group</string>
+    <string name="settings_hidden_groups">Hidden groups (%1$d)</string>
+    <string name="settings_hidden_groups_restore">Restore</string>
     <plurals name="channel_groups_count">
         <item quantity="one">%1$d group</item>
         <item quantity="other">%1$d groups</item>

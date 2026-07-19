@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.uacastplayer.app.BackupController
 import com.uacastplayer.app.EpgController
+import com.uacastplayer.app.GroupVisibilityController
 import com.uacastplayer.app.IconController
 import com.uacastplayer.app.PlaylistController
 import com.uacastplayer.app.SettingsController
@@ -25,6 +26,7 @@ import com.uacastplayer.data.epg.EpgRepository
 import com.uacastplayer.data.favorites.FavoritesRepository
 import com.uacastplayer.data.icons.IconPrefetcher
 import com.uacastplayer.data.icons.IconRepository
+import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.data.prefs.BufferSize
@@ -81,6 +83,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val iconRepository = IconRepository(application)
     private val iconPrefetcher = IconPrefetcher(application, iconRepository)
     private val favoritesRepository = FavoritesRepository(application)
+    private val groupVisibilityStore = GroupVisibilityStore(application)
 
     private val baseDeviceTier: DeviceTier = DeviceSpecsProvider.current(application).let { specs ->
         DevicePerformanceClassifier.classify(specs.totalRamBytes, specs.cpuCoreCount, specs.sdkInt)
@@ -105,6 +108,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val playlistState: StateFlow<PlaylistUiState> = playlistController.playlistState
     val playlistSources: StateFlow<List<PlaylistSource>> = playlistController.playlistSources
     val activePlaylistSourceId: StateFlow<String?> = playlistController.activePlaylistSourceId
+
+    private val groupVisibilityController = GroupVisibilityController(groupVisibilityStore, viewModelScope)
+    val pinnedGroupKeys: StateFlow<Set<String>> = groupVisibilityController.pinnedKeys
+    val hiddenGroupKeys: StateFlow<Set<String>> = groupVisibilityController.hiddenKeys
 
     private val epgController = EpgController(
         preferences = preferences,
@@ -160,6 +167,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         playlistController.loadInitialSource()
         epgController.loadInitial()
         epgController.startTicking()
+        groupVisibilityController.loadInitial()
+        viewModelScope.launch {
+            activePlaylistSourceId.collect { groupVisibilityController.setActiveSource(it) }
+        }
         viewModelScope.launch {
             castState.map { it.isSessionConnected }.distinctUntilChanged().collect { connected ->
                 if (connected) maybeOfferBatteryOptimizationHint()
@@ -216,6 +227,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun switchPlaylistSource(source: PlaylistSource) = playlistController.switchPlaylistSource(source)
 
     fun removePlaylistSource(id: String) = playlistController.removePlaylistSource(id)
+
+    fun pinGroup(groupKey: String) = groupVisibilityController.pinGroup(groupKey)
+
+    fun hideGroup(groupKey: String) = groupVisibilityController.hideGroup(groupKey)
+
+    /** Clears any pin/hide override for [groupKey] in the active source, returning it to the
+     * default order/visibility - used both to unpin and to restore a hidden group. */
+    fun clearGroupOverride(groupKey: String) = groupVisibilityController.clearOverride(groupKey)
 
     fun selectEpgSource(source: EpgSource) = epgController.selectEpgSource(source)
 

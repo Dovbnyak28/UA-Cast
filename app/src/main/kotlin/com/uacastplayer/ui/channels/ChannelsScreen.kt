@@ -67,10 +67,12 @@ import com.uacastplayer.epg.ProgrammeProgress
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.ChannelListKeys
+import com.uacastplayer.playlist.groupDisplayKey
 import com.uacastplayer.playlist.ChannelRowShape
 import com.uacastplayer.playlist.ChannelSearch
 import com.uacastplayer.playlist.ChannelSearchOutcome
 import com.uacastplayer.playlist.ChannelSearchResult
+import com.uacastplayer.playlist.GroupOrderPolicy
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.NameQualityBadge
@@ -127,6 +129,11 @@ fun ChannelsScreen(
     showIconTierBanner: Boolean,
     onEnableIcons: () -> Unit,
     onDismissIconTierBanner: () -> Unit,
+    pinnedGroupKeys: Set<String>,
+    hiddenGroupKeys: Set<String>,
+    onPinGroup: (String) -> Unit,
+    onHideGroup: (String) -> Unit,
+    onClearGroupOverride: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
@@ -201,6 +208,11 @@ fun ChannelsScreen(
                     onCloseGroup = { openGroupKey = null },
                     onChannelSelected = onChannelSelected,
                     onLongPressChannel = { guideChannel = it },
+                    pinnedGroupKeys = pinnedGroupKeys,
+                    hiddenGroupKeys = hiddenGroupKeys,
+                    onPinGroup = onPinGroup,
+                    onHideGroup = onHideGroup,
+                    onClearGroupOverride = onClearGroupOverride,
                 )
             }
         } else {
@@ -222,6 +234,11 @@ fun ChannelsScreen(
                 onCloseGroup = { openGroupKey = null },
                 onChannelSelected = onChannelSelected,
                 onLongPressChannel = { guideChannel = it },
+                pinnedGroupKeys = pinnedGroupKeys,
+                hiddenGroupKeys = hiddenGroupKeys,
+                onPinGroup = onPinGroup,
+                onHideGroup = onHideGroup,
+                onClearGroupOverride = onClearGroupOverride,
             )
         }
     }
@@ -255,6 +272,11 @@ private fun ChannelsContent(
     onCloseGroup: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     onLongPressChannel: (M3uChannel) -> Unit,
+    pinnedGroupKeys: Set<String>,
+    hiddenGroupKeys: Set<String>,
+    onPinGroup: (String) -> Unit,
+    onHideGroup: (String) -> Unit,
+    onClearGroupOverride: (String) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -278,6 +300,11 @@ private fun ChannelsContent(
                             val index = flatChannels.indexOf(channel)
                             if (index >= 0) onChannelSelected(flatChannels, index)
                         },
+                        pinnedGroupKeys = pinnedGroupKeys,
+                        hiddenGroupKeys = hiddenGroupKeys,
+                        onPinGroup = onPinGroup,
+                        onHideGroup = onHideGroup,
+                        onClearGroupOverride = onClearGroupOverride,
                     )
                 } else {
                     SingleGroupChannelList(
@@ -366,8 +393,19 @@ private fun GroupsOverviewGrid(
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
+    pinnedGroupKeys: Set<String>,
+    hiddenGroupKeys: Set<String>,
+    onPinGroup: (String) -> Unit,
+    onHideGroup: (String) -> Unit,
+    onClearGroupOverride: (String) -> Unit,
 ) {
-    val totalChannels = remember(groups) { groups.sumOf { it.channels.size } }
+    // Search (below) deliberately keeps searching every group, hidden ones included - hiding a
+    // group only affects the overview grid; its channels stay reachable via global search.
+    val orderedGroups = remember(groups, pinnedGroupKeys, hiddenGroupKeys) {
+        GroupOrderPolicy.order(groups, pinnedGroupKeys, hiddenGroupKeys)
+    }
+    var groupActionsFor by remember { mutableStateOf<GroupedChannels?>(null) }
+    val totalChannels = remember(orderedGroups) { orderedGroups.sumOf { it.channels.size } }
     // LIST mode stays a literal single column (a list of group cards); GRID/LARGE_ICONS lets the
     // width fit as many ~GroupTileMinWidth tiles as the screen allows, unlike a fixed column count.
     val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(GroupTileMinWidth)
@@ -393,7 +431,11 @@ private fun GroupsOverviewGrid(
                     color = UaTheme.palette.labelPrimary,
                 )
                 Text(
-                    text = pluralStringResource(R.plurals.channel_groups_count, groups.size, groups.size) +
+                    text = pluralStringResource(
+                        R.plurals.channel_groups_count,
+                        orderedGroups.size,
+                        orderedGroups.size,
+                    ) +
                         " · " +
                         pluralStringResource(R.plurals.channels_total_count, totalChannels, totalChannels),
                     style = Caption,
@@ -422,12 +464,13 @@ private fun GroupsOverviewGrid(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(groups, key = { groupDisplayKey(it.group) }) { grouped ->
+                items(orderedGroups, key = { groupDisplayKey(it.group) }) { grouped ->
                     GroupCard(
                         grouped = grouped,
                         iconRefreshKey = iconRefreshKey,
                         cachedIconFile = cachedIconFile,
                         onClick = { onGroupClick(grouped) },
+                        onLongClick = { groupActionsFor = grouped },
                     )
                 }
             }
@@ -462,6 +505,18 @@ private fun GroupsOverviewGrid(
                 )
             }
         }
+    }
+
+    groupActionsFor?.let { grouped ->
+        val key = groupDisplayKey(grouped.group)
+        val isPinned = key in pinnedGroupKeys
+        GroupActionsSheet(
+            groupLabel = groupLabel(grouped.group),
+            isPinned = isPinned,
+            onTogglePin = { if (isPinned) onClearGroupOverride(key) else onPinGroup(key) },
+            onHide = { onHideGroup(key) },
+            onDismiss = { groupActionsFor = null },
+        )
     }
 }
 
@@ -593,6 +648,7 @@ private fun GroupCard(
     iconRefreshKey: Any,
     cachedIconFile: suspend (M3uChannel) -> File?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -609,7 +665,12 @@ private fun GroupCard(
             // Inside a LazyVerticalGrid (GroupsOverviewGrid) - shadow = false, see
             // docs/DESIGN_SYSTEM.md "§D Depth".
             .raisedSurface(shape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(16.dp),
     ) {
         GroupIconCollage(
@@ -1008,18 +1069,9 @@ private fun ChannelTile(
     }
 }
 
-// Prefixed per subtype so a provider's raw custom group title can never collide with a Known
-// group's key constant or the Ungrouped sentinel - e.g. a real playlist with a literal custom
-// group titled "ungrouped" would otherwise produce the same key as ChannelGroup.Ungrouped and
-// crash the LazyVerticalGrid the first time both were visible together.
-private fun groupDisplayKey(group: ChannelGroup): String = when (group) {
-    is ChannelGroup.Known -> "known:${group.key}"
-    is ChannelGroup.Custom -> "custom:${group.rawTitle}"
-    ChannelGroup.Ungrouped -> "ungrouped"
-}
-
+/** Shared with SettingsScreen's hidden-groups list - not just ChannelsScreen's own use. */
 @Composable
-private fun groupLabel(group: ChannelGroup): String = when (group) {
+internal fun groupLabel(group: ChannelGroup): String = when (group) {
     is ChannelGroup.Known -> stringResource(group.labelRes())
     is ChannelGroup.Custom -> group.rawTitle
     ChannelGroup.Ungrouped -> stringResource(R.string.group_ungrouped)

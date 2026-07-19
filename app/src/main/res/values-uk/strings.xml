@@ -67,6 +67,11 @@
     <string name="channels_no_search_results">Немає каналів за запитом «%1$s»</string>
     <string name="channels_search_all_hint">Пошук по всіх каналах</string>
     <string name="channels_search_too_broad">Забагато збігів — уточніть запит. Показано перші %1$d.</string>
+    <string name="channels_group_pin">Закріпити групу</string>
+    <string name="channels_group_unpin">Відкріпити групу</string>
+    <string name="channels_group_hide">Приховати групу</string>
+    <string name="settings_hidden_groups">Приховані групи (%1$d)</string>
+    <string name="settings_hidden_groups_restore">Відновити</string>
     <plurals name="channel_groups_count">
         <item quantity="one">%1$d група</item>
         <item quantity="few">%1$d групи</item>

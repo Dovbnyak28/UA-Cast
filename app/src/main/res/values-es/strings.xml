@@ -67,6 +67,11 @@
     <string name="channels_no_search_results">Ningún canal coincide con "%1$s"</string>
     <string name="channels_search_all_hint">Buscar en todos los canales</string>
     <string name="channels_search_too_broad">Demasiadas coincidencias — afina tu búsqueda. Mostrando las primeras %1$d.</string>
+    <string name="channels_group_pin">Fijar grupo</string>
+    <string name="channels_group_unpin">Dejar de fijar grupo</string>
+    <string name="channels_group_hide">Ocultar grupo</string>
+    <string name="settings_hidden_groups">Grupos ocultos (%1$d)</string>
+    <string name="settings_hidden_groups_restore">Restaurar</string>
     <plurals name="channel_groups_count">
         <item quantity="one">%1$d grupo</item>
         <item quantity="many">%1$d grupos</item>

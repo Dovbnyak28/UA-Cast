@@ -25,3 +25,14 @@ sealed class ChannelGroup {
         const val KEY_REGIONAL = "regional"
     }
 }
+
+// Prefixed per subtype so a provider's raw custom group title can never collide with a Known
+// group's key constant or the Ungrouped sentinel - e.g. a real playlist with a literal custom
+// group titled "ungrouped" would otherwise produce the same key as ChannelGroup.Ungrouped and
+// crash the LazyVerticalGrid the first time both were visible together. Also the stable identity
+// GroupVisibilityStore/GroupOrderPolicy persist pin/hide state against - see docs there.
+fun groupDisplayKey(group: ChannelGroup): String = when (group) {
+    is ChannelGroup.Known -> "known:${group.key}"
+    is ChannelGroup.Custom -> "custom:${group.rawTitle}"
+    ChannelGroup.Ungrouped -> "ungrouped"
+}

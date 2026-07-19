@@ -506,6 +506,7 @@
     <ID>TooGenericExceptionCaught:CastWakeLocks.kt$CastWakeLocks$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EpgRepository.kt$EpgRepository$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EpgSnapshotStore.kt$EpgSnapshotStore$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GroupVisibilityStore.kt$GroupVisibilityStore$e: Exception</ID>
     <ID>TooGenericExceptionCaught:FavoritesStore.kt$FavoritesStore$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PlayerRenderersFactoryProvider.kt$PlayerRenderersFactoryProvider$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PlaylistRepository.kt$PlaylistRepository$e: Exception</ID>

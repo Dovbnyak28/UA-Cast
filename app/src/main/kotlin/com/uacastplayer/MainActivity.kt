@@ -75,6 +75,8 @@ class MainActivity : FragmentActivity() {
             val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
             val playlistSources by viewModel.playlistSources.collectAsStateWithLifecycle()
             val activePlaylistSourceId by viewModel.activePlaylistSourceId.collectAsStateWithLifecycle()
+            val pinnedGroupKeys by viewModel.pinnedGroupKeys.collectAsStateWithLifecycle()
+            val hiddenGroupKeys by viewModel.hiddenGroupKeys.collectAsStateWithLifecycle()
             val epgState by viewModel.epgState.collectAsStateWithLifecycle()
             val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
             val castState by viewModel.castState.collectAsStateWithLifecycle()
@@ -216,6 +218,11 @@ class MainActivity : FragmentActivity() {
                             activePlaylistSourceId = activePlaylistSourceId,
                             onSwitchPlaylistSource = viewModel::switchPlaylistSource,
                             onRemovePlaylistSource = { viewModel.removePlaylistSource(it.id) },
+                            pinnedGroupKeys = pinnedGroupKeys,
+                            hiddenGroupKeys = hiddenGroupKeys,
+                            onPinGroup = viewModel::pinGroup,
+                            onHideGroup = viewModel::hideGroup,
+                            onRestoreGroup = viewModel::clearGroupOverride,
                             focusChannelsToken = focusChannelsToken,
                             onChannelSelected = { channels, startIndex ->
                                 playerRequest = PlayerRequest(channels, startIndex)

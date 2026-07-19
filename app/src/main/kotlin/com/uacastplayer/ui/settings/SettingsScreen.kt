@@ -19,12 +19,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +56,10 @@ import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.performance.DeviceTier
+import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.playlist.groupDisplayKey
+import com.uacastplayer.ui.channels.groupLabel
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
@@ -68,6 +74,7 @@ import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.RadiusItem
+import com.uacastplayer.ui.theme.Title
 
 @Composable
 fun SettingsScreen(
@@ -84,6 +91,8 @@ fun SettingsScreen(
     settingsState: SettingsUiState,
     playlistState: PlaylistUiState,
     onOpenAddPlaylist: () -> Unit,
+    hiddenGroupKeys: Set<String>,
+    onRestoreGroup: (String) -> Unit,
     onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
     onListDensitySelected: (ListDensity) -> Unit,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
@@ -176,6 +185,22 @@ fun SettingsScreen(
                 onClick = onOpenAddPlaylist,
                 modifier = Modifier.padding(top = 12.dp),
             )
+            if (hiddenGroupKeys.isNotEmpty()) {
+                var showHiddenGroups by rememberSaveable { mutableStateOf(false) }
+                PlaylistActionRow(
+                    label = stringResource(R.string.settings_hidden_groups, hiddenGroupKeys.size),
+                    icon = AppIcons.Channels,
+                    onClick = { showHiddenGroups = true },
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                if (showHiddenGroups) {
+                    HiddenGroupsSheet(
+                        groups = playlistState.groups.filter { groupDisplayKey(it.group) in hiddenGroupKeys },
+                        onRestore = onRestoreGroup,
+                        onDismiss = { showHiddenGroups = false },
+                    )
+                }
+            }
         }
 
         SettingsSection(title = stringResource(R.string.settings_section_playback), icon = AppIcons.Play) {
@@ -411,6 +436,40 @@ private fun PlaylistActionRow(label: String, icon: ImageVector, onClick: () -> U
             tint = UaTheme.palette.labelSecondary,
             modifier = Modifier.size(16.dp).rotate(-90f),
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HiddenGroupsSheet(groups: List<GroupedChannels>, onRestore: (String) -> Unit, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+            Text(
+                text = stringResource(R.string.settings_hidden_groups, groups.size),
+                style = Title,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            for (grouped in groups) {
+                val key = groupDisplayKey(grouped.group)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = groupLabel(grouped.group),
+                        style = BodyRegular,
+                        color = UaTheme.palette.labelPrimary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SecondaryButton(
+                        text = stringResource(R.string.settings_hidden_groups_restore),
+                        onClick = { onRestore(key) },
+                    )
+                }
+            }
+        }
     }
 }
 

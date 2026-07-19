@@ -83,6 +83,11 @@ fun RootScaffold(
     activePlaylistSourceId: String?,
     onSwitchPlaylistSource: (PlaylistSource) -> Unit,
     onRemovePlaylistSource: (PlaylistSource) -> Unit,
+    pinnedGroupKeys: Set<String>,
+    hiddenGroupKeys: Set<String>,
+    onPinGroup: (String) -> Unit,
+    onHideGroup: (String) -> Unit,
+    onRestoreGroup: (String) -> Unit,
     focusChannelsToken: Int,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     epgState: EpgUiState,
@@ -225,6 +230,11 @@ fun RootScaffold(
                     showIconTierBanner = settingsState.showIconTierBanner,
                     onEnableIcons = { onIconDisplayModeSelected(IconDisplayMode.CACHE_LIMITED) },
                     onDismissIconTierBanner = onDismissIconTierBanner,
+                    pinnedGroupKeys = pinnedGroupKeys,
+                    hiddenGroupKeys = hiddenGroupKeys,
+                    onPinGroup = onPinGroup,
+                    onHideGroup = onHideGroup,
+                    onClearGroupOverride = onRestoreGroup,
                     modifier = content,
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(
@@ -274,6 +284,8 @@ fun RootScaffold(
                     onOpenTerms = onOpenTerms,
                     playlistState = playlistState,
                     onOpenAddPlaylist = onOpenAddPlaylist,
+                    hiddenGroupKeys = hiddenGroupKeys,
+                    onRestoreGroup = onRestoreGroup,
                     modifier = content,
                 )
             }
