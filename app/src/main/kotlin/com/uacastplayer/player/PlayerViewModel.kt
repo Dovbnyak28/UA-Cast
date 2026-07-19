@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -80,6 +81,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val deadIndices = mutableSetOf<Int>()
     private var retryState = RetryState()
     private var liveWindowRecoveryHistory: List<Long> = emptyList()
+    private var stallState = StallDetectionPolicy.StallState.NONE
+    private var lastStallRecoveryAtMillis: Long? = null
     private var pendingSwitchJob: Job? = null
     private var retryJob: Job? = null
 
@@ -130,6 +133,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             castRepository.sideEffects.collect { effect -> handleCastSideEffect(effect) }
+        }
+        viewModelScope.launch {
+            while (isActive) {
+                delay(STALL_SAMPLE_INTERVAL_MILLIS)
+                sampleForStall()
+            }
         }
     }
 
@@ -214,6 +223,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun switchToIndexImmediate(index: Int) {
         if (index !in channels.indices) return
         currentIndex = index
+        stallState = StallDetectionPolicy.StallState.NONE
         val channel = channels[index]
         preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
@@ -261,21 +271,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     exoPlayer.prepare()
                 }
             }
-            RetryDecision.GiveUp -> {
-                deadIndices += currentIndex
-                val next = if (autoSkipDeadEnabled) {
-                    ChannelNavigator.nextPlayableIndex(currentIndex, channels.size, wrapAroundEnabled) {
-                        it in deadIndices
-                    }
-                } else {
-                    null
-                }
-                if (next != null) {
-                    switchToIndexImmediate(next)
-                } else {
-                    _uiState.update { it.copy(fatalError = true, isBuffering = false) }
-                }
+            RetryDecision.GiveUp -> giveUpOnCurrentChannel()
+        }
+    }
+
+    private fun giveUpOnCurrentChannel() {
+        deadIndices += currentIndex
+        val next = if (autoSkipDeadEnabled) {
+            ChannelNavigator.nextPlayableIndex(currentIndex, channels.size, wrapAroundEnabled) {
+                it in deadIndices
             }
+        } else {
+            null
+        }
+        if (next != null) {
+            switchToIndexImmediate(next)
+        } else {
+            _uiState.update { it.copy(fatalError = true, isBuffering = false) }
         }
     }
 
@@ -300,6 +312,48 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         exoPlayer.seekToDefaultPosition()
         exoPlayer.prepare()
         return true
+    }
+
+    /**
+     * Catches a "silent" stall - a stream that stopped delivering bytes without ever breaking the
+     * connection, so [onPlayerError] never fires - via periodic sampling (see the init block).
+     * Skipped entirely while casting (the local player isn't the one actually playing then, see
+     * [LocalPlaybackPolicy]) or while paused (nothing to stall).
+     */
+    private fun sampleForStall() {
+        if (isCasting || currentIndex !in channels.indices || !exoPlayer.playWhenReady) return
+
+        val tick = StallDetectionPolicy.Tick(
+            nowMillis = System.currentTimeMillis(),
+            positionMs = exoPlayer.currentPosition,
+            phase = when (exoPlayer.playbackState) {
+                Player.STATE_BUFFERING -> StallDetectionPolicy.PlaybackPhase.BUFFERING
+                Player.STATE_READY -> StallDetectionPolicy.PlaybackPhase.READY
+                else -> StallDetectionPolicy.PlaybackPhase.OTHER
+            },
+            playWhenReady = exoPlayer.playWhenReady,
+            isLive = exoPlayer.isCurrentMediaItemLive,
+        )
+        val threshold = StallDetectionPolicy.thresholdMillisFor(preferences.bufferSize)
+        val result = StallDetectionPolicy.evaluate(tick, stallState, threshold)
+        stallState = result.state
+        if (result.health != StallDetectionPolicy.Health.STALLED) return
+        stallState = StallDetectionPolicy.StallState.NONE
+
+        val lastRecovery = lastStallRecoveryAtMillis
+        val withinCooldown = lastRecovery != null && tick.nowMillis - lastRecovery < STALL_RECOVERY_COOLDOWN_MILLIS
+        if (withinCooldown) {
+            // Recovered less than 30s ago and already stalled again - a silent stop/prepare/play
+            // isn't fixing this stream, so stop pretending it will.
+            AppLog.d(TAG) { "Stall recovery cooldown active - giving up on this channel" }
+            giveUpOnCurrentChannel()
+        } else {
+            lastStallRecoveryAtMillis = tick.nowMillis
+            AppLog.d(TAG) { "Recovering from a silent stall (stop/prepare/play, channel preserved)" }
+            exoPlayer.stop()
+            exoPlayer.prepare()
+            exoPlayer.play()
+        }
     }
 
     private fun updateSeekability() {
@@ -419,6 +473,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         const val TAG = "PlayerViewModel"
         const val CHANNEL_SWITCH_DEBOUNCE_MILLIS = 220L
         const val MAX_PREVIEW_SIZE = 20
+        const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
+        const val STALL_RECOVERY_COOLDOWN_MILLIS = 30_000L
     }
 }
 
