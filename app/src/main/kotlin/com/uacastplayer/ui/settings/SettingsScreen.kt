@@ -59,6 +59,8 @@ import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.SegmentedControl
+import com.uacastplayer.ui.components.uaTextFieldColors
+import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.BodyRegular
@@ -145,8 +147,15 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(RadiusItem))
-                    .background(UaTheme.palette.surface1)
+                    // Settings uses a plain verticalScroll Column, not a Lazy* list, so a shadow
+                    // here doesn't re-trigger per-frame compositing on scroll - see
+                    // docs/DESIGN_SYSTEM.md "§D Depth".
+                    .raisedSurface(
+                        RoundedCornerShape(RadiusItem),
+                        UaTheme.palette.surface1,
+                        edgeColor = UaTheme.palette.hairline,
+                        shadow = true,
+                    )
                     .padding(16.dp),
             ) {
                 Text(
@@ -379,8 +388,12 @@ private fun PlaylistActionRow(label: String, icon: ImageVector, onClick: () -> U
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(RadiusItem))
-            .background(UaTheme.palette.surface1)
+            .raisedSurface(
+                RoundedCornerShape(RadiusItem),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = true,
+            )
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -552,6 +565,7 @@ private fun IconSourcesSection(
                     keyboardType = KeyboardType.Uri,
                     capitalization = KeyboardCapitalization.None,
                 ),
+                colors = uaTextFieldColors(),
             )
             IconButton(onClick = {
                 if (newSourceUrl.isNotBlank()) {

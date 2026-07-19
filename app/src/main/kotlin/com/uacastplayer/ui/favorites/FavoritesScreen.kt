@@ -49,6 +49,7 @@ import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.AppIcons
 
 @Composable
@@ -69,8 +70,12 @@ fun FavoritesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = GapL)
-                    .clip(RoundedCornerShape(RadiusCard))
-                    .background(UaTheme.palette.surface1)
+                    .raisedSurface(
+                        RoundedCornerShape(RadiusCard),
+                        UaTheme.palette.surface1,
+                        edgeColor = UaTheme.palette.hairline,
+                        shadow = true,
+                    )
                     .padding(CardPadding),
             ) {
                 Text(

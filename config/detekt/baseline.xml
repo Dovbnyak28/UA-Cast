@@ -213,8 +213,6 @@
     <ID>MagicNumber:AppIcons.kt$AppIcons$9.8f</ID>
     <ID>MagicNumber:AppIcons.kt$AppIcons$9.9f</ID>
     <ID>MagicNumber:AppIcons.kt$AppIcons$9f</ID>
-    <ID>MagicNumber:CastSessionRepository.kt$CastSessionRepository$10</ID>
-    <ID>MagicNumber:CastSessionRepository.kt$CastSessionRepository$15</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x1FF2EDE2</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x33F2EDE2</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x33FFFFFF</ID>
@@ -269,9 +267,6 @@
     <ID>MagicNumber:DevicePerformanceClassifier.kt$DevicePerformanceClassifier$5000</ID>
     <ID>MagicNumber:DevicePerformanceClassifier.kt$DevicePerformanceClassifier$8</ID>
     <ID>MagicNumber:EmptyState.kt$220</ID>
-    <ID>MagicNumber:EpgRepository.kt$EpgRepository$15</ID>
-    <ID>MagicNumber:EpgRepository.kt$EpgRepository$60</ID>
-    <ID>MagicNumber:GlassTabBar.kt$0xE6121214</ID>
     <ID>MagicNumber:HttpRetryPolicy.kt$HttpRetryPolicy$500</ID>
     <ID>MagicNumber:HttpRetryPolicy.kt$HttpRetryPolicy$599</ID>
     <ID>MagicNumber:IconFailurePolicy.kt$IconFailurePolicy$400</ID>
@@ -279,8 +274,6 @@
     <ID>MagicNumber:IconFailurePolicy.kt$IconFailurePolicy$403</ID>
     <ID>MagicNumber:IconFailurePolicy.kt$IconFailurePolicy$404</ID>
     <ID>MagicNumber:IconFailurePolicy.kt$IconFailurePolicy$410</ID>
-    <ID>MagicNumber:IconRepository.kt$IconRepository$10</ID>
-    <ID>MagicNumber:IconRepository.kt$IconRepository$15</ID>
     <ID>MagicNumber:ImageFormat.kt$ImageFormatDetector$0x0A</ID>
     <ID>MagicNumber:ImageFormat.kt$ImageFormatDetector$0x1A</ID>
     <ID>MagicNumber:ImageFormat.kt$ImageFormatDetector$0x47</ID>
@@ -304,8 +297,6 @@
     <ID>MagicNumber:PlayerGesturePolicy.kt$PlayerGesturePolicy$3f</ID>
     <ID>MagicNumber:PlayerScreen.kt$0.01f</ID>
     <ID>MagicNumber:PlayerScreen.kt$0.6f</ID>
-    <ID>MagicNumber:PlayerScreen.kt$0x33FFFFFF</ID>
-    <ID>MagicNumber:PlayerScreen.kt$0x66000000</ID>
     <ID>MagicNumber:PlayerScreen.kt$16f</ID>
     <ID>MagicNumber:PlayerScreen.kt$9f</ID>
     <ID>MagicNumber:PlayerScreen.kt$PipController$16</ID>
@@ -320,8 +311,6 @@
     <ID>MagicNumber:PlaylistDetector.kt$PlaylistDetector$0xBB</ID>
     <ID>MagicNumber:PlaylistDetector.kt$PlaylistDetector$0xBF</ID>
     <ID>MagicNumber:PlaylistDetector.kt$PlaylistDetector$0xEF</ID>
-    <ID>MagicNumber:PlaylistRepository.kt$PlaylistRepository$15</ID>
-    <ID>MagicNumber:PlaylistRepository.kt$PlaylistRepository$30</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$0xFF</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$15_000</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$200</ID>
@@ -415,12 +404,7 @@
     <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$60_000L</ID>
     <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$8</ID>
     <ID>MatchingDeclarationName:GlassTabBar.kt$TabBarItem</ID>
-    <ID>MaxLineLength:AddPlaylistScreen.kt$Text(text = stringResource(R.string.add_playlist_status_label), style = SectionLabel, color = LabelSecondary)</ID>
     <ID>MaxLineLength:AppViewModel.kt$AppViewModel$/** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]); manufacturer battery managers (MIUI/HyperOS and friends) otherwise silently kill the cast proxy in the background. */</ID>
-    <ID>MaxLineLength:AppViewModel.kt$AppViewModel$/** [DeviceTierDefaults] only apply until the user picks explicitly; [AppPreferences.hasChosenIconDisplayMode] tracks that. */</ID>
-    <ID>MaxLineLength:AppViewModel.kt$AppViewModel$if (preferences.hasChosenIconDisplayMode) preferences.iconDisplayMode else DeviceTierDefaults.iconDisplayMode(tier)</ID>
-    <ID>MaxLineLength:AppViewModel.kt$AppViewModel$updateReminderDue = LogoUpdateReminder.isDue(preferences.lastIconPrefetchAtMillis, System.currentTimeMillis())</ID>
-    <ID>MaxLineLength:AppViewModel.kt$AppViewModel$val effectiveTier = DevicePerformanceClassifier.adjustForContentSize(baseDeviceTier, playlistChannelCount, epgProgrammeCount)</ID>
     <ID>MaxLineLength:BoundedByteReader.kt$BoundedByteReader$/** Same streaming-with-early-bailout shape as [com.uacastplayer.playlist.BoundedTextReader], for binary content (the EPG gzip blob is stored as-is and must not go through text decoding). */</ID>
     <ID>MaxLineLength:CachePaths.kt$CachePaths$/** Mirrors the literal path segments each cache store already uses under `filesDir`, kept in one place for cache-management UI. */</ID>
     <ID>MaxLineLength:CastCompatibilityPolicy.kt$CastCompatibilityPolicy$videoCodec != null &amp;&amp; videoCodec != VideoCodec.H264 -&gt; CastCompatibilityVerdict.IncompatibleVideo(videoCodec)</ID>
@@ -431,7 +415,6 @@
     <ID>MaxLineLength:CastSessionRepository.kt$CastSessionRepository$private</ID>
     <ID>MaxLineLength:ChannelGroupNormalizer.kt$ChannelGroupNormalizer$put(ChannelGroup.KEY_KIDS, "kids|cartoons|дети|детские|дитячі|діти|мультфильмы|мультфільми|infantil|niños|ninos")</ID>
     <ID>MaxLineLength:ChannelsScreen.kt$Column</ID>
-    <ID>MaxLineLength:ChannelsScreen.kt$is GroupBadge.Glyph -&gt; Icon(badge.icon, contentDescription = null, tint = Azure, modifier = Modifier.size(22.dp))</ID>
     <ID>MaxLineLength:ChannelsScreen.kt$val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth</ID>
     <ID>MaxLineLength:DayScheduleBuilderTest.kt$DayScheduleBuilderTest$EpgProgramme(channelId = "ch", startMillis = startMillis, stopMillis = stopMillis, title = id, description = null)</ID>
     <ID>MaxLineLength:DesignSystemControls.kt$fun</ID>
@@ -447,7 +430,6 @@
     <ID>MaxLineLength:FavoritesScreen.kt$val targetIndex = (state.draggedIndex + delta).coerceIn(orderedFavorites.indices)</ID>
     <ID>MaxLineLength:FingerprintTest.kt$FingerprintTest$assertEquals(Fingerprint.of("http://example.com/playlist.m3u"), Fingerprint.of("http://example.com/playlist.m3u"))</ID>
     <ID>MaxLineLength:HomeScreen.kt$Column</ID>
-    <ID>MaxLineLength:HomeScreen.kt$Text(text = stringResource(R.string.home_active_playlist_label), style = SectionLabel, color = LabelSecondary)</ID>
     <ID>MaxLineLength:IconDisplayMode.kt$IconDisplayMode$/** PLACEHOLDERS never shows a real logo; CACHE behaves normally (network + cache); CACHE_LIMITED only ever shows what's already cached. */</ID>
     <ID>MaxLineLength:IconPrefetcher.kt$IconPrefetcher$/** Registers [onUnmeteredAvailable] to fire once an unmetered network becomes available, so a deferred prefetch can resume. Caller must [AutoCloseable.close] the result to unregister. */</ID>
     <ID>MaxLineLength:IncompatibilityMemoryPolicyTest.kt$IncompatibilityMemoryPolicyTest$assertFalse(IncompatibilityMemoryPolicy.isExpired(record, nowMillis = IncompatibilityMemoryPolicy.TTL_MILLIS - 1))</ID>
@@ -458,8 +440,6 @@
     <ID>MaxLineLength:MiniJsonTest.kt$MiniJsonTest$assertEquals(emptyList&lt;Map&lt;String, String?&gt;&gt;(), MiniJson.parseArrayOfObjects(MiniJson.writeArrayOfObjects(emptyList())))</ID>
     <ID>MaxLineLength:PlayerScreen.kt$.</ID>
     <ID>MaxLineLength:PlayerScreen.kt$SmallRoundIconButton(icon = AppIcons.ArrowBack, onClick = onExit, contentDescription = stringResource(R.string.common_back))</ID>
-    <ID>MaxLineLength:PlayerScreen.kt$if (!iconTrailing) Icon(icon, contentDescription = null, tint = LabelPrimary, modifier = Modifier.size(18.dp).padding(end = 8.dp))</ID>
-    <ID>MaxLineLength:PlayerScreen.kt$if (iconTrailing) Icon(icon, contentDescription = null, tint = LabelPrimary, modifier = Modifier.size(18.dp).padding(start = 8.dp))</ID>
     <ID>MaxLineLength:PlayerScreen.kt$private</ID>
     <ID>MaxLineLength:PlayerViewModel.kt$PlayerViewModel$castRepository.setActiveChannel(index, channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)</ID>
     <ID>MaxLineLength:PlayerViewModel.kt$PlayerViewModel$private</ID>
@@ -474,15 +454,9 @@
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_coil_label, settingsState.cacheSizes.coilCacheBytes) { onClearCache(CacheKind.COIL) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_icons_label, settingsState.cacheSizes.iconCacheBytes) { onClearCache(CacheKind.ICONS) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_playlist_label, settingsState.cacheSizes.playlistBytes) { onClearCache(CacheKind.PLAYLIST) }</ID>
-    <ID>MaxLineLength:SettingsScreen.kt$Icon(AppIcons.ChevronDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp).rotate(-90f))</ID>
-    <ID>MaxLineLength:SettingsScreen.kt$Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))</ID>
     <ID>MaxLineLength:SettingsScreen.kt$SwitchRow(stringResource(R.string.settings_auto_skip_label), settingsState.autoSkipDeadEnabled, onAutoSkipChanged)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$SwitchRow(stringResource(R.string.settings_wrap_around_label), settingsState.wrapAroundEnabled, onWrapAroundChanged)</ID>
-    <ID>MaxLineLength:SettingsScreen.kt$icon != null -&gt; { { Icon(icon, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) } }</ID>
-    <ID>MaxLineLength:SettingsScreen.kt$isSelected -&gt; { { Icon(AppIcons.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) } }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes())</ID>
-    <ID>MaxLineLength:TermsScreen.kt$Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = LabelPrimary)</ID>
-    <ID>MaxLineLength:Theme.kt$/** UA Cast Player is dark-only by design; [androidx.compose.foundation.isSystemInDarkTheme] is intentionally not consulted. */</ID>
     <ID>MaxLineLength:TsFirstSegmentDiagnostic.kt$TsFirstSegmentDiagnostic$val</ID>
     <ID>MaxLineLength:TsProgramInfoParser.kt$TsProgramInfoParser$private val AUDIO_STREAM_TYPES = setOf(0x03, 0x04, 0x06, 0x0F, 0x11, 0x1C, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x8A)</ID>
     <ID>NestedBlockDepth:ChannelSearch.kt$ChannelSearch$fun search(groups: List&lt;GroupedChannels&gt;, query: String): ChannelSearchOutcome</ID>
@@ -548,6 +522,7 @@
     <ID>TooManyFunctions:ProxyServer.kt$ProxyServer</ID>
     <ID>TooManyFunctions:SettingsController.kt$SettingsController</ID>
     <ID>TooManyFunctions:SettingsScreen.kt$com.uacastplayer.ui.settings.SettingsScreen.kt</ID>
+    <ID>TopLevelPropertyNaming:Motion.kt$/** Unified pressed-state darkening (rule 2 extension, see ui/theme/Depth.kt's [darken]) - how much * darker a [com.uacastplayer.ui.theme.raisedSurface]'s base color gets while pressed, instead of * each control picking its own ad-hoc pressed color. */ const val PressedDarkenFraction = 0.10f</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$// Press-scale targets (rule 2) const val PressScalePlay = 0.94f</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$const val BreatheMs = 2000</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$const val DurEnter = 700</ID>

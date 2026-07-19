@@ -83,6 +83,7 @@ import com.uacastplayer.ui.components.IconHeader
 import com.uacastplayer.ui.components.IconTierBanner
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
@@ -104,6 +105,7 @@ import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.SectionLabel
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -409,6 +411,7 @@ private fun GroupsOverviewGrid(
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
+            colors = uaTextFieldColors(),
             modifier = Modifier.fillMaxWidth().padding(top = GapM),
         )
 
@@ -498,6 +501,9 @@ private fun ChannelSearchResultsList(
                 bottomStart = if (rounding.bottom) RadiusList else 0.dp,
                 bottomEnd = if (rounding.bottom) RadiusList else 0.dp,
             )
+            // flat by design: each row's own rounding varies (see ChannelRowShape) so adjacent
+            // rows read as one continuous card with hairline dividers between them - a per-row
+            // raisedSurface border would draw a seam at every row instead.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -600,9 +606,9 @@ private fun GroupCard(
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
-            .clip(shape)
-            .background(UaTheme.palette.surface1)
-            .border(1.dp, UaTheme.palette.hairline, shape)
+            // Inside a LazyVerticalGrid (GroupsOverviewGrid) - shadow = false, see
+            // docs/DESIGN_SYSTEM.md "§D Depth".
+            .raisedSurface(shape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(16.dp),
     ) {
@@ -615,8 +621,7 @@ private fun GroupCard(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(RadiusItem))
-                        .background(UaTheme.palette.surface2),
+                        .raisedSurface(RoundedCornerShape(RadiusItem), UaTheme.palette.surface2, shadow = false),
                     contentAlignment = Alignment.Center,
                 ) {
                     when (val badge = groupBadge(grouped.group, groupLabel(grouped.group))) {
@@ -715,6 +720,7 @@ private fun SingleGroupChannelList(
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
+            colors = uaTextFieldColors(),
             modifier = Modifier.fillMaxWidth().padding(top = GapM),
         )
 
@@ -740,6 +746,9 @@ private fun SingleGroupChannelList(
                         bottomStart = if (rounding.bottom) RadiusList else 0.dp,
                         bottomEnd = if (rounding.bottom) RadiusList else 0.dp,
                     )
+                    // flat by design: each row's own rounding varies (see ChannelRowShape) so
+                    // adjacent rows read as one continuous card with hairline dividers between
+                    // them - a per-row raisedSurface border would draw a seam at every row instead.
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -960,9 +969,8 @@ private fun ChannelTile(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(tileShape)
-            .background(UaTheme.palette.surface1)
-            .border(1.dp, UaTheme.palette.hairline, tileShape)
+            // Inside a LazyVerticalGrid - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
+            .raisedSurface(tileShape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
             .clickable(onClick = onClick)
             .padding(12.dp),
     ) {

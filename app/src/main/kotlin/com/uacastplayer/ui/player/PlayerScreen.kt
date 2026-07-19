@@ -109,6 +109,7 @@ import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.RadiusField
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.Title
 import androidx.compose.material3.Button
 import com.uacastplayer.ui.components.ChannelIcon
@@ -570,6 +571,8 @@ private fun applyStreamVolume(audioManager: AudioManager, level: Float) {
 @Composable
 private fun GestureLevelIndicator(kind: GestureIndicatorKind, level: Float, modifier: Modifier = Modifier) {
     Column(
+        // flat by design: deliberately mirrors the system volume/brightness overlay's minimal
+        // look (see the KDoc above), not the app's own raised chrome.
         modifier = modifier
             .width(44.dp)
             .height(150.dp)
@@ -664,8 +667,7 @@ private fun InlineVideoControls(isPlaying: Boolean, onPlayPause: () -> Unit, onT
 private fun PillButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, iconTrailing: Boolean = false) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(UaTheme.palette.surface1)
+            .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
@@ -699,8 +701,7 @@ private fun PillButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 private fun CastCodecIncompatibilityBanner(kind: CodecIncompatibilityKind, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(UaTheme.palette.surface1)
+            .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
             .padding(horizontal = CardPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -736,8 +737,12 @@ private fun ChannelInfoCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenHPadding)
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(UaTheme.palette.surface1)
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = true,
+            )
             .padding(CardPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -761,8 +766,12 @@ private fun QuickSettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenHPadding, vertical = GapM)
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(UaTheme.palette.surface1)
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = true,
+            )
             .padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
@@ -778,7 +787,9 @@ private fun QuickSettingsRow(
 private fun QuickSettingItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
         Box(
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(UaTheme.palette.surface2),
+            modifier = Modifier
+                .size(40.dp)
+                .raisedSurface(RoundedCornerShape(12.dp), UaTheme.palette.surface2, shadow = false),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(18.dp))
@@ -818,9 +829,9 @@ private fun NextChannelsRail(
         ) {
             items(channels, key = { it.index }) { indexed ->
                 Column(
+                    // Inside a LazyRow - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
-                        .clip(RoundedCornerShape(RadiusCard))
-                        .background(UaTheme.palette.surface1)
+                        .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
                         .clickable { onSelect(indexed) }
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,

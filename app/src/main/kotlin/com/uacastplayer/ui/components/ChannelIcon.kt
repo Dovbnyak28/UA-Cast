@@ -1,7 +1,6 @@
 package com.uacastplayer.ui.components
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +21,7 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
 import com.uacastplayer.ui.theme.ChannelLogoSize
+import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
 /**
@@ -58,8 +58,7 @@ fun ChannelIcon(
         Box(
             modifier = modifier
                 .size(size)
-                .clip(RoundedCornerShape(ChannelLogoRadius))
-                .background(UaTheme.palette.surface2),
+                .raisedSurface(RoundedCornerShape(ChannelLogoRadius), UaTheme.palette.surface2, shadow = false),
             contentAlignment = Alignment.Center,
         ) {
             Text(text = initialsFor(channel.displayName), style = Caption, color = UaTheme.palette.labelSecondary)

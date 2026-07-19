@@ -1,5 +1,9 @@
 package com.uacastplayer.ui.components
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.darken
+import com.uacastplayer.ui.theme.pressedSurface
+import com.uacastplayer.ui.theme.raisedSurface
+import com.uacastplayer.ui.theme.sunkenSurface
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -21,7 +25,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,9 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
@@ -57,9 +61,28 @@ import com.uacastplayer.ui.theme.RoundButtonSize
 import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.SecondaryButtonStyle
 import com.uacastplayer.ui.theme.TabLabel
-
-private const val SEGMENT_PILL_HIGHLIGHT_HEIGHT_PX = 24f
 private const val GHOST_BUTTON_PRESSED_ALPHA = 0.12f
+
+/**
+ * Colors for `OutlinedTextField` that give it the app's "sunken"/recessed input look and an
+ * accent-colored focus indicator, instead of Material3's defaults - see docs/DESIGN_SYSTEM.md
+ * "§D Depth". `TextFieldColors`' container is a flat `Color`, not a `Brush`, so this can't reuse
+ * [sunkenSurface]'s actual gradient directly - [darken] alone (the same fraction sunkenSurface
+ * uses) gives the equivalent flat "darker than the surrounding surface" tone instead.
+ */
+@Composable
+fun uaTextFieldColors(): TextFieldColors {
+    val palette = UaTheme.palette
+    val container = darken(palette.surface1, palette.surfaceLiftAmount)
+    return OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = container,
+        unfocusedContainerColor = container,
+        disabledContainerColor = container,
+        focusedBorderColor = palette.azure,
+        unfocusedBorderColor = palette.hairline,
+        cursorColor = palette.azure,
+    )
+}
 
 /** §5.1 - the main circular play/pause control. */
 @Composable
@@ -80,9 +103,14 @@ fun GradientPlayButton(
         modifier = modifier
             .size(PlayButtonSize)
             .scale(scale)
+            // One of the three places in the app allowed to glow - see docs/DESIGN_SYSTEM.md "§D
+            // Depth". The edge-highlight border below is the same raisedSurface(fill = Brush)
+            // treatment used elsewhere, kept manual here since the glow shadow needs its own
+            // spotColor that raisedSurface's shared shadowSoft tone doesn't provide.
             .shadow(10.dp, CircleShape, spotColor = UaTheme.palette.azureGlow)
             .clip(CircleShape)
             .background(UaTheme.palette.accentGradient)
+            .border(1.dp, UaTheme.palette.edgeHighlightAccent, CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -114,8 +142,7 @@ fun RoundIconButton(
             .minimumInteractiveComponentSize()
             .size(RoundButtonSize)
             .scale(scale)
-            .clip(CircleShape)
-            .background(if (pressed) UaTheme.palette.surface2 else UaTheme.palette.surface1)
+            .raisedSurface(CircleShape, pressedSurface(UaTheme.palette.surface1, pressed), shadow = false)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -154,8 +181,7 @@ fun SmallRoundIconButton(
             .minimumInteractiveComponentSize()
             .size(IconButtonSize)
             .scale(scale)
-            .clip(CircleShape)
-            .background(background)
+            .raisedSurface(CircleShape, pressedSurface(background, pressed), shadow = false)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -212,11 +238,11 @@ fun GlowStatusDot(variant: StatusPillVariant, modifier: Modifier = Modifier, siz
 }
 
 /**
- * §5.4 - equal-width segmented control with an animated sliding highlight. Shape/fill follow
- * [UaPalette.pillButtons]: Azure keeps the flat rounded-rect card with a solid highlight; Cinema
- * (pillButtons = true) becomes a fully-rounded pill with the gold accent gradient behind the
- * selected segment, [UaPalette.accentOnFill] text, and a soft top highlight suggesting a raised
- * bevel - see docs/DESIGN_SYSTEM.md "Themes". Mechanics/behavior are unchanged either way.
+ * §5.4 - equal-width segmented control with an animated sliding highlight. The container is a
+ * [sunkenSurface] (it's a recessed track the highlight slides in); the selected segment is a
+ * [raisedSurface] filled with [UaPalette.accentGradient] - see docs/DESIGN_SYSTEM.md "§D Depth".
+ * Shape follows [UaPalette.pillButtons]: Cinema is a fully-rounded pill, Azure a rounded rect -
+ * see docs/DESIGN_SYSTEM.md "Themes". Mechanics/behavior are otherwise unchanged.
  */
 @Composable
 fun SegmentedControl(
@@ -247,8 +273,7 @@ fun SegmentedControl(
             // height from its non-fillMaxHeight children (the Row of labels), then hand that
             // bounded height down, so fillMaxHeight actually has something to fill.
             .height(IntrinsicSize.Min)
-            .clip(containerShape)
-            .background(UaTheme.palette.surface1)
+            .sunkenSurface(containerShape, palette.surface1)
             .padding(3.dp)
             .onSizeChanged { containerSizePx = it }
             .selectableGroup(),
@@ -259,21 +284,7 @@ fun SegmentedControl(
                     .offset(x = offsetX)
                     .width(with(density) { segmentWidthPx.toDp() })
                     .fillMaxHeight()
-                    .shadow(8.dp, segmentShape, ambientColor = Color.Black.copy(alpha = 0.35f))
-                    .clip(segmentShape)
-                    .background(if (palette.pillButtons) palette.accentGradient else SolidColor(palette.surface2))
-                    .then(
-                        if (palette.pillButtons) {
-                            Modifier.background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
-                                    endY = SEGMENT_PILL_HIGHLIGHT_HEIGHT_PX,
-                                ),
-                            )
-                        } else {
-                            Modifier
-                        },
-                    ),
+                    .raisedSurface(segmentShape, palette.accentGradient, shadow = true),
             )
         }
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -292,11 +303,7 @@ fun SegmentedControl(
                     Text(
                         text = label,
                         style = com.uacastplayer.ui.theme.CaptionSemibold,
-                        color = when {
-                            selected && palette.pillButtons -> palette.accentOnFill
-                            selected -> palette.labelPrimary
-                            else -> palette.labelSecondary
-                        },
+                        color = if (selected) palette.accentOnFill else palette.labelSecondary,
                     )
                 }
             }
@@ -309,6 +316,8 @@ fun SegmentedControl(
 fun TrackProgress(progress: Float, modifier: Modifier = Modifier, bold: Boolean = false) {
     val height = if (bold) com.uacastplayer.ui.theme.ProgressHeightBold else com.uacastplayer.ui.theme.ProgressHeightThin
     Box(
+        // flat by design: a progress track reads as a groove the fill moves along, not raised
+        // chrome - and it's used inside list rows, where shadows are forbidden regardless.
         modifier = modifier
             .fillMaxWidth()
             .height(height)
@@ -349,19 +358,21 @@ fun SecondaryButton(
     )
     val shape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusItem)
     val isGhost = palette.secondaryButtonStyle == SecondaryButtonStyle.GHOST
-    val background = when {
-        isGhost && pressed -> palette.azure.copy(alpha = GHOST_BUTTON_PRESSED_ALPHA)
-        isGhost -> Color.Transparent
-        pressed -> palette.surface2
-        else -> palette.surface1
-    }
-    val borderColor = if (isGhost) palette.azure else palette.hairline
     Box(
         modifier = modifier
             .scale(scale)
-            .clip(shape)
-            .background(background)
-            .border(1.dp, borderColor, shape)
+            .let { m ->
+                if (isGhost) {
+                    val ghostBackground = if (pressed) {
+                        palette.azure.copy(alpha = GHOST_BUTTON_PRESSED_ALPHA)
+                    } else {
+                        Color.Transparent
+                    }
+                    m.clip(shape).background(ghostBackground).border(1.dp, palette.azure, shape)
+                } else {
+                    m.raisedSurface(shape, pressedSurface(palette.surface1, pressed), shadow = false)
+                }
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -379,13 +390,16 @@ fun SecondaryButton(
     }
 }
 
-/** §5.9 tab bar label chrome - shared by GlassTabBar items. */
+/** §5.9 tab bar label chrome - shared by GlassTabBar items. [selected]'s pill background is now a
+ * full-strength [UaPalette.accentGradient] (see GlassTabBar's TabBarButton) rather than a
+ * translucent azure tint, so the label needs [UaPalette.accentOnFill]'s contrast rather than
+ * [UaPalette.azure] on selected - the same content-on-filled-accent-surface rule the icon follows. */
 @Composable
 fun TabBarLabel(text: String, selected: Boolean) {
     Text(
         text = text,
         style = TabLabel,
-        color = if (selected) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
+        color = if (selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
         maxLines = 1,
         softWrap = false,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

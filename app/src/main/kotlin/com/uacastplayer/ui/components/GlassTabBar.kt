@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.PressScaleIcon
+import com.uacastplayer.ui.theme.raisedSurface
 
 data class TabBarItem(
     val label: String,
@@ -82,9 +83,11 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .then(
                     if (item.selected) {
-                        Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(UaTheme.palette.azure.copy(alpha = 0.16f))
+                        Modifier.raisedSurface(
+                            RoundedCornerShape(16.dp),
+                            UaTheme.palette.accentGradient,
+                            shadow = false,
+                        )
                     } else {
                         Modifier
                     },
@@ -95,7 +98,9 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
             Icon(
                 item.icon,
                 contentDescription = item.label,
-                tint = if (item.selected) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
+                // Selected pill is now a full-strength accentGradient (see the Modifier above),
+                // not a translucent tint - needs accentOnFill's contrast, same as TabBarLabel.
+                tint = if (item.selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
                 modifier = Modifier.height(22.dp).padding(bottom = 2.dp),
             )
             TabBarLabel(text = item.label, selected = item.selected)

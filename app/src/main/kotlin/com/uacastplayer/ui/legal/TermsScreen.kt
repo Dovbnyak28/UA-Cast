@@ -37,6 +37,7 @@ import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.LargeTitle
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.raisedSurface
 
 /**
  * Renders the Terms of Use text. Used two ways:
@@ -116,10 +117,15 @@ fun TermsScreen(
             }
             items(sections, key = { it.first }) { (titleRes, bodyRes) ->
                 Column(
+                    // Inside a LazyColumn item - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(RadiusCard))
-                        .background(UaTheme.palette.surface1)
+                        .raisedSurface(
+                            RoundedCornerShape(RadiusCard),
+                            UaTheme.palette.surface1,
+                            edgeColor = UaTheme.palette.hairline,
+                            shadow = false,
+                        )
                         .padding(CardPadding),
                 ) {
                     Text(text = stringResource(titleRes), style = CardTitle, color = UaTheme.palette.labelPrimary)

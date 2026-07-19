@@ -41,6 +41,14 @@ fun darken(color: Color, fraction: Float): Color {
 }
 
 /**
+ * [base], darkened by [PressedDarkenFraction] while [pressed] - the one pressed-state color rule
+ * every [raisedSurface] user should share, instead of each control picking its own ad-hoc pressed
+ * tone (e.g. swapping to a whole different palette surface).
+ */
+fun pressedSurface(base: Color, pressed: Boolean): Color =
+    if (pressed) darken(base, PressedDarkenFraction) else base
+
+/**
  * A subtly "raised" surface: a top-to-bottom gradient from a lightened [base] to [base] itself
  * (see [UaPalette.surfaceLiftAmount]), plus a thin edge highlight border. Set [shadow] = true only
  * outside scrolling lists - a per-item shadow inside a `LazyColumn`/`LazyGrid` re-triggers layer
@@ -74,6 +82,34 @@ fun Modifier.raisedSurface(
         }
         .clip(shape)
         .background(brush)
+        .border(1.dp, edgeColor, shape)
+}
+
+/**
+ * The [fill]-brush counterpart to [raisedSurface] - same shadow/edge-highlight-border treatment,
+ * but for a surface whose fill is already a full [Brush] (e.g. [UaPalette.accentGradient]) rather
+ * than a flat color this modifier would need to lighten itself. [edgeColor] defaults to
+ * [UaPalette.edgeHighlightAccent] since an accent-filled raised surface calls for an accent-tinted
+ * rim, not the neutral one plain [raisedSurface] uses.
+ */
+@Composable
+fun Modifier.raisedSurface(
+    shape: Shape,
+    fill: Brush,
+    edgeColor: Color = UaTheme.palette.edgeHighlightAccent,
+    shadow: Boolean = false,
+): Modifier {
+    val shadowColor = UaTheme.palette.shadowSoft
+    return this
+        .let { modifier ->
+            if (shadow) {
+                modifier.shadow(RaisedShadowElevation, shape, ambientColor = shadowColor, spotColor = shadowColor)
+            } else {
+                modifier
+            }
+        }
+        .clip(shape)
+        .background(fill)
         .border(1.dp, edgeColor, shape)
 }
 

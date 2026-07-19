@@ -31,6 +31,7 @@ import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.raisedSurface
 
 /**
  * Static, "lite" Q&A-style help: what the app's main pieces are and how they relate, for a user who
@@ -80,10 +81,15 @@ fun HelpScreen(onBackClick: () -> Unit, modifier: Modifier = Modifier) {
         ) {
             items(entries, key = { it.first }) { (titleRes, bodyRes) ->
                 Column(
+                    // Inside a LazyColumn item - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(RadiusCard))
-                        .background(UaTheme.palette.surface1)
+                        .raisedSurface(
+                            RoundedCornerShape(RadiusCard),
+                            UaTheme.palette.surface1,
+                            edgeColor = UaTheme.palette.hairline,
+                            shadow = false,
+                        )
                         .padding(CardPadding),
                 ) {
                     Text(text = stringResource(titleRes), style = CardTitle, color = UaTheme.palette.labelPrimary)

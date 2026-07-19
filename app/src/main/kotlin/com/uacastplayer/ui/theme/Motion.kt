@@ -15,3 +15,8 @@ const val BreatheMs = 2000
 const val PressScalePlay = 0.94f
 const val PressScaleRound = 0.88f
 const val PressScaleIcon = 0.90f
+
+/** Unified pressed-state darkening (rule 2 extension, see ui/theme/Depth.kt's [darken]) - how much
+ * darker a [com.uacastplayer.ui.theme.raisedSurface]'s base color gets while pressed, instead of
+ * each control picking its own ad-hoc pressed color. */
+const val PressedDarkenFraction = 0.10f

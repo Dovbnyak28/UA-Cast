@@ -2,7 +2,6 @@ package com.uacastplayer.ui.home
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -61,6 +60,7 @@ import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.SectionLabel
 import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
 @Composable
@@ -120,9 +120,12 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = GapL)
-                    .clip(RoundedCornerShape(RadiusCard))
-                    .background(UaTheme.palette.surface1)
-                    .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusCard))
+                    .raisedSurface(
+                        RoundedCornerShape(RadiusCard),
+                        UaTheme.palette.surface1,
+                        edgeColor = UaTheme.palette.hairline,
+                        shadow = true,
+                    )
                     .clickable { showSourceSheet = true }
                     .padding(CardPadding),
             ) {
@@ -297,9 +300,12 @@ private fun ContinueWatchingCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(UaTheme.palette.surface1)
-            .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusCard))
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = true,
+            )
             .clickable(onClick = onClick)
             .padding(CardPadding),
     ) {
