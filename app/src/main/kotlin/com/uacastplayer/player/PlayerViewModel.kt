@@ -491,8 +491,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
 /**
  * SMALL favors fast channel switching/startup on stable connections at the risk of more
- * rebuffering; LARGE trades that latency for resilience on slow or unstable networks. MEDIUM
- * matches [DefaultLoadControl]'s own defaults.
+ * rebuffering; LARGE trades that latency for resilience on slow or unstable networks. MEDIUM's
+ * min/max match [DefaultLoadControl]'s own defaults (cruise-time resilience is unchanged), but its
+ * bufferForPlayback* values are their own tier below that - the *startup* threshold (how much must
+ * be buffered before playback begins, or resumes after a rebuffer) is a completely different
+ * tradeoff from the *cruise* buffer (how much this player is willing to hold once playing, to ride
+ * out network hiccups without rebuffering) and always waiting for DefaultLoadControl's full 2.5s
+ * default before ever starting a channel is the single biggest contributor to channel-switch
+ * latency. LARGE keeps that same split, just at correspondingly higher absolute values for a
+ * genuinely unstable connection.
  */
 @UnstableApi
 private fun buildLoadControl(bufferSize: BufferSize): DefaultLoadControl {
@@ -501,13 +508,14 @@ private fun buildLoadControl(bufferSize: BufferSize): DefaultLoadControl {
         BufferSize.MEDIUM -> BufferProfile(
             DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
             DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
-            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+            1_000,
+            2_500,
         )
-        BufferSize.LARGE -> BufferProfile(30_000, 90_000, 5_000, 10_000)
+        BufferSize.LARGE -> BufferProfile(30_000, 90_000, 2_000, 5_000)
     }
     return DefaultLoadControl.Builder()
         .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs)
+        .setPrioritizeTimeOverSizeThresholds(true)
         .build()
 }
 

@@ -10,7 +10,7 @@
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(markerClass = [UnstableApi::class]) @Composable fun PlayerScreen( viewModel: PlayerViewModel, onExit: () -&gt; Unit, isFavorite: (M3uChannel) -&gt; Boolean, onToggleFavorite: (M3uChannel) -&gt; Unit, resolveIcon: suspend (M3uChannel) -&gt; File?, epgState: EpgUiState, iconPrefetchState: IconPrefetchUiState, modifier: Modifier = Modifier, )</ID>
     <ID>CyclomaticComplexMethod:ProxyServer.kt$ProxyServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
     <ID>CyclomaticComplexMethod:XmlTvTimeParser.kt$XmlTvTimeParser$fun parse(value: String): Long?</ID>
-    <ID>DestructuringDeclarationWithTooManyEntries:PlayerViewModel.kt$val (minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs) = when (bufferSize) { BufferSize.SMALL -&gt; BufferProfile(10_000, 20_000, 1_000, 2_000) BufferSize.MEDIUM -&gt; BufferProfile( DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS, DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS, ) BufferSize.LARGE -&gt; BufferProfile(30_000, 90_000, 5_000, 10_000) }</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:PlayerViewModel.kt$val (minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs) = when (bufferSize) { BufferSize.SMALL -&gt; BufferProfile(10_000, 20_000, 1_000, 2_000) BufferSize.MEDIUM -&gt; BufferProfile( DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, 1_000, 2_500, ) BufferSize.LARGE -&gt; BufferProfile(30_000, 90_000, 2_000, 5_000) }</ID>
     <ID>LargeClass:AppIcons.kt$AppIcons</ID>
     <ID>LongMethod:M3uParser.kt$M3uParser$fun parse(text: String): M3uParseResult</ID>
     <ID>LongMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
@@ -305,6 +305,7 @@
     <ID>MagicNumber:PlayerViewModel.kt$1_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$20_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$2_000</ID>
+    <ID>MagicNumber:PlayerViewModel.kt$2_500</ID>
     <ID>MagicNumber:PlayerViewModel.kt$30_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$5_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$90_000</ID>
@@ -511,7 +512,6 @@
     <ID>TooGenericExceptionCaught:PlaylistSnapshotStore.kt$PlaylistSnapshotStore$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PlaylistSourceStore.kt$PlaylistSourceStore$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ProxyServer.kt$ProxyServer$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ProxyServer.kt$RawTsRemuxSession$e: Exception</ID>
     <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : AndroidViewModel</ID>
     <ID>TooManyFunctions:CastSessionRepository.kt$CastSessionRepository</ID>
     <ID>TooManyFunctions:ChannelsScreen.kt$com.uacastplayer.ui.channels.ChannelsScreen.kt</ID>
