@@ -26,11 +26,42 @@ and feeding it through one of these two.
 
 A stream that's geo-restricted or VPN-only often doesn't error out on the receiver - it just
 buffers forever. So after a direct load, if the receiver isn't `PLAYING` within **4 seconds**, the
-app falls back to the proxy silently (`CastSessionRepository.loadDirectWithWatchdog`). This is
-raced against `proxy/MpegTsSniffer`-based diagnostics fetching the stream's first segment; if that
-comes back with a known-unsupported codec (MPEG-2 video, MP2 audio - see
-`proxy/TsCompatibilityPolicy.kt`) the fallback fires immediately rather than waiting out the full
-4 seconds.
+app falls back to the proxy (`CastSessionRepository.loadDirectWithWatchdog`). This is raced against
+`data/cast/TsFirstSegmentDiagnostic` probing the stream for its actual declared video/audio codecs
+(`cast/TsProgramInfoParser.kt`, reading PAT/PMT).
+
+The stream URL can point at either an HLS playlist or a raw MPEG-TS origin - IPTV origins routinely
+use tokenized/extensionless URLs that give no hint which, and feeding raw TS bytes into a text
+playlist parser just silently finds no segments. The diagnostic classifies the initial probe first
+(`data/cast/TsSourceClassifier.kt`, reusing `proxy/PlaylistDetector.kt` and `proxy/MpegTsSniffer.kt`
+so it agrees with the proxy's own routing) before deciding how to read codecs: HLS fetches its
+first segment separately; raw TS is sniffed directly, no second request.
+
+### Routing table
+
+`cast/CastCompatibilityPolicy.kt` turns the probed codecs into a verdict, and
+`cast/CastDeliveryStrategy.onDiagnosticResult(verdict, sourceKind)` turns *that* into a routing
+decision the moment the diagnostic resolves - even mid-watchdog-window, not just at the 4s mark:
+
+| Verdict | Source kind | Action |
+|---|---|---|
+| `IncompatibleVideo` / `IncompatibleAudio` | any | **Blocked** - never proxy (remuxing the container never fixes a codec problem); report the specific codec to the UI and record the (stream, receiver) pair as incompatible immediately, not on a later receiver-side failure. |
+| `Compatible` | raw TS | **ProxyImmediately** - skip the direct attempt outright. A receiver never plays a bare MPEG-TS URL directly (it needs HLS/DASH wrapping), so trying direct first is a guaranteed 4s wait for nothing. |
+| `Compatible` | HLS | **NoAction** - unchanged: direct, then watchdog, then proxy (rewrite, not remux - nothing to remux, it's already HLS). |
+| `Unknown` (PAT/PMT not found in the probe window) | any | **NoAction** - unchanged: direct, then watchdog, then proxy. If that proxy attempt turns out to be raw TS, `proxy/RawTsRemuxActivation.kt` still remuxes it (an Unknown verdict isn't a confirmed problem, and a raw-TS passthrough is never playable either way - only a confirmed `Incompatible*` verdict skips remux there). |
+
+A blocked verdict sets `CastPlaybackState.codecIncompatibility` (a `CodecIncompatibility.Video`/
+`.Audio` carrying the real codec, rendered via `cast/CodecDisplayName.kt` as e.g. "MPEG-2" or "MP2"
+- see `cast_incompatible_video_message`/`cast_incompatible_audio_message`) so the player can explain
+*why* to the user, instead of local playback silently taking over with no explanation. If the
+receiver still goes idle/error after all that (a genuinely unreachable proxy URL, a malformed
+playlist, etc.), `CastPlaybackState.receiverLoadFailed` covers the generic case with
+`cast_receiver_load_failed_message`; either way the Cast session itself stays connected and local
+playback keeps going, so the user can pick a different channel without reconnecting to the TV.
+
+Every routing decision also logs one self-contained line - `AppLog.d("CastSessionRepository")`:
+`cast route: verdict=... source=... action=... video=... audio=...` - deliberately never the
+stream URL, so a field logcat alone is enough to diagnose why a specific channel didn't cast.
 
 ## Incompatibility memory
 
