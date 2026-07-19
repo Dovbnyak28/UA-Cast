@@ -103,7 +103,7 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
                 // Selected pill is now a full-strength accentGradient (see the Modifier above),
                 // not a translucent tint - needs accentOnFill's contrast, same as TabBarLabel.
                 tint = if (item.selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
-                modifier = Modifier.height(22.dp).padding(bottom = 2.dp),
+                modifier = Modifier.height(26.dp).padding(bottom = 2.dp),
             )
             TabBarLabel(text = item.label, selected = item.selected)
         }

@@ -60,7 +60,7 @@ val RingValue = TextStyle(
     fontFeatureSettings = TabularNums,
 )
 val TabLabel = TextStyle(
-    fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
+    fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
     fontFeatureSettings = TabularNums,
 )
 
