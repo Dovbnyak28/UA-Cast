@@ -182,7 +182,7 @@ class CastSessionRepository private constructor(context: Context) {
                 // codec incompatibility is reported to the UI instead of triggering a fallback
                 // that could not possibly help. Compatible/Unknown fall through to the timeout
                 // below, same as before this diagnostic existed.
-                when (CastCompatibilityPolicy.classify(diagnostic.await())) {
+                when (CastCompatibilityPolicy.classify(diagnostic.await()?.programInfo)) {
                     is CastCompatibilityVerdict.IncompatibleAudio ->
                         reportCodecIncompatibility(CodecIncompatibilityKind.AUDIO)
                     is CastCompatibilityVerdict.IncompatibleVideo ->

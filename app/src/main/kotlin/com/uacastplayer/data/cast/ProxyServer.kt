@@ -10,6 +10,7 @@ import com.uacastplayer.playlist.BoundedReadResult
 import com.uacastplayer.playlist.BoundedTextReader
 import com.uacastplayer.proxy.LiveHlsPlaylistBuilder
 import com.uacastplayer.proxy.M3u8Rewriter
+import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.PlaylistDetector
 import com.uacastplayer.proxy.RawTsRemuxActivation
 import com.uacastplayer.proxy.RemuxReconnectPolicy
@@ -255,7 +256,7 @@ class ProxyServer(private val httpClient: OkHttpClient) {
 
     private fun shouldRemuxUpstream(response: Response): Boolean {
         val tsProbe = if (response.body != null) response.peekBody(TS_PROBE_BYTES).bytes() else ByteArray(0)
-        val looksLikeTs = looksLikeMpegTs(tsProbe)
+        val looksLikeTs = MpegTsSniffer.looksLikeMpegTs(tsProbe)
         val verdict = if (looksLikeTs) {
             CastCompatibilityPolicy.classify(TsProgramInfoParser.parse(tsProbe))
         } else {
@@ -306,11 +307,6 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         )
         if (method == "GET") output.write(bytes)
         output.flush()
-    }
-
-    private fun looksLikeMpegTs(bytes: ByteArray): Boolean {
-        if (bytes.size < TS_PACKET_SIZE * 2) return bytes.isNotEmpty() && (bytes[0].toInt() and 0xFF) == TS_SYNC_BYTE
-        return (bytes[0].toInt() and 0xFF) == TS_SYNC_BYTE && (bytes[TS_PACKET_SIZE].toInt() and 0xFF) == TS_SYNC_BYTE
     }
 
     internal fun servePlaylist(response: Response, method: String, output: OutputStream, parent: ResourceEntry) {
