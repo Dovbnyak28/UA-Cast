@@ -13,6 +13,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
 import com.uacastplayer.cast.CastSessionRepository
@@ -45,6 +47,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val dataSourceFactory = PlayerDataSourceFactory.create(application)
 
+    // Many real-world IPTV origins send TS streams with non-standard headers (non-IDR keyframes
+    // marked as random-access points, PES packets that don't cleanly align to access units) that
+    // the default TS extractor rejects outright, failing playback before it starts. These flags
+    // only relax TS parsing tolerance - they don't touch the (separate) HLS extraction path.
+    private val extractorsFactory = DefaultExtractorsFactory().setTsExtractorFlags(
+        DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+            DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
+    )
+
     // handleAudioFocus=true lets ExoPlayer request/abandon audio focus and duck/pause on its own
     // for calls and other apps' audio; setHandleAudioBecomingNoisy pauses when headphones/BT
     // disconnect so playback doesn't suddenly blast through the speaker. Both only ever touch this
@@ -53,7 +64,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // has nothing local to pause; the cast receiver's playback state is owned entirely by
     // CastSessionRepository and is unreachable from this player's focus/noisy callbacks.
     private val exoPlayer: ExoPlayer = ExoPlayer.Builder(application, PlayerRenderersFactoryProvider.create(application))
-        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory))
         .setLoadControl(buildLoadControl(preferences.bufferSize))
         .setAudioAttributes(
             AudioAttributes.Builder()
