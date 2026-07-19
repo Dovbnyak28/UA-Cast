@@ -11,7 +11,9 @@ enum class AppTheme {
     AZURE, CINEMA;
 
     companion object {
-        val DEFAULT = AZURE
+        // Cinema (warm charcoal + champagne-gold, radial vignette on every screen) is the default
+        // look for new installs - see docs/DESIGN_SYSTEM.md "Themes" for the full palette.
+        val DEFAULT = CINEMA
         fun fromId(id: String?): AppTheme = entries.firstOrNull { it.name == id } ?: DEFAULT
     }
 }
