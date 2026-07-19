@@ -50,4 +50,43 @@ class CastDeliveryStrategyTest {
         assertTrue(CastDeliveryStrategy.isTerminalFailure(CastDeliveryMode.Proxy))
         assertFalse(CastDeliveryStrategy.isTerminalFailure(CastDeliveryMode.Direct))
     }
+
+    @Test
+    fun `an incompatible video verdict is blocked regardless of source kind`() {
+        val verdict = CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Mpeg2Video)
+        val expected = CastRouteDecision.Blocked(verdict)
+        assertEquals(expected, CastDeliveryStrategy.onDiagnosticResult(verdict, TsSourceKind.RawTs))
+        assertEquals(expected, CastDeliveryStrategy.onDiagnosticResult(verdict, TsSourceKind.Hls))
+    }
+
+    @Test
+    fun `an incompatible audio verdict is blocked regardless of source kind`() {
+        val verdict = CastCompatibilityVerdict.IncompatibleAudio(AudioCodec.Mp2)
+        val result = CastDeliveryStrategy.onDiagnosticResult(verdict, TsSourceKind.Unknown)
+        assertEquals(CastRouteDecision.Blocked(verdict), result)
+    }
+
+    @Test
+    fun `a compatible raw-TS verdict skips straight to the proxy`() {
+        val result = CastDeliveryStrategy.onDiagnosticResult(CastCompatibilityVerdict.Compatible, TsSourceKind.RawTs)
+        assertEquals(CastRouteDecision.ProxyImmediately, result)
+    }
+
+    @Test
+    fun `a compatible HLS verdict takes no action - direct-then-watchdog continues`() {
+        val result = CastDeliveryStrategy.onDiagnosticResult(CastCompatibilityVerdict.Compatible, TsSourceKind.Hls)
+        assertEquals(CastRouteDecision.NoAction, result)
+    }
+
+    @Test
+    fun `an unknown verdict takes no action regardless of source kind`() {
+        assertEquals(
+            CastRouteDecision.NoAction,
+            CastDeliveryStrategy.onDiagnosticResult(CastCompatibilityVerdict.Unknown, TsSourceKind.RawTs),
+        )
+        assertEquals(
+            CastRouteDecision.NoAction,
+            CastDeliveryStrategy.onDiagnosticResult(CastCompatibilityVerdict.Unknown, TsSourceKind.Hls),
+        )
+    }
 }

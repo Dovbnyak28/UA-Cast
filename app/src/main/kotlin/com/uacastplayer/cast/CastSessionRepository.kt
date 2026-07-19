@@ -174,20 +174,16 @@ class CastSessionRepository private constructor(context: Context) {
 
         watchdogJob = scope.launch {
             val diagnostic = async(Dispatchers.IO) {
-                runCatching { TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient) }.getOrNull()
+                TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient)
             }
             launch {
-                // Proxy fallback re-serves the same bytes over the LAN - it fixes container/URL/
-                // header problems, never a codec the receiver genuinely can't decode - so a known
-                // codec incompatibility is reported to the UI instead of triggering a fallback
-                // that could not possibly help. Compatible/Unknown fall through to the timeout
-                // below, same as before this diagnostic existed.
-                when (CastCompatibilityPolicy.classify(diagnostic.await()?.programInfo)) {
-                    is CastCompatibilityVerdict.IncompatibleAudio ->
-                        reportCodecIncompatibility(CodecIncompatibilityKind.AUDIO)
-                    is CastCompatibilityVerdict.IncompatibleVideo ->
-                        reportCodecIncompatibility(CodecIncompatibilityKind.VIDEO)
-                    CastCompatibilityVerdict.Compatible, CastCompatibilityVerdict.Unknown -> Unit
+                val result = diagnostic.await()
+                val verdict = CastCompatibilityPolicy.classify(result.programInfo)
+                when (val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, result.sourceKind)) {
+                    is CastRouteDecision.Blocked -> onRouteBlocked(streamUrl, decision.verdict)
+                    CastRouteDecision.ProxyImmediately ->
+                        fallBackToProxyIfStillDirect(streamUrl, title, userAgent, referrer, "raw_ts_compatible")
+                    CastRouteDecision.NoAction -> Unit
                 }
             }
             delay(WATCHDOG_TIMEOUT_MILLIS)
@@ -197,8 +193,22 @@ class CastSessionRepository private constructor(context: Context) {
         }
     }
 
+    /** A confirmed-incompatible codec verdict: remuxing the container never fixes a codec problem
+     * (see [com.uacastplayer.proxy.RawTsRemuxActivation]'s own doc), so - unlike the generic
+     * watchdog-timeout fallback - this never proceeds to the proxy at all, and the (stream,
+     * receiver) pair is recorded as incompatible immediately rather than waiting for an actual
+     * receiver-side failure to do it. */
+    private fun onRouteBlocked(streamUrl: String, verdict: CastCompatibilityVerdict) {
+        currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
+        val kind = when (verdict) {
+            is CastCompatibilityVerdict.IncompatibleAudio -> CodecIncompatibilityKind.AUDIO
+            is CastCompatibilityVerdict.IncompatibleVideo -> CodecIncompatibilityKind.VIDEO
+            else -> return
+        }
+        reportCodecIncompatibility(kind)
+    }
+
     private fun reportCodecIncompatibility(kind: CodecIncompatibilityKind) {
-        if (_state.value.deliveryMode != CastDeliveryMode.Direct) return
         AppLog.d(TAG) { "Cast codec incompatibility detected: $kind" }
         _state.update { it.copy(codecIncompatibility = kind) }
     }
@@ -250,7 +260,12 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun handleLoadResult(result: CastLoadResult, streamUrl: String, title: String, userAgent: String?, referrer: String?) {
-        if (result is CastLoadResult.Failure && _state.value.deliveryMode == CastDeliveryMode.Direct) {
+        // A confirmed-incompatible codec (see onRouteBlocked) means the proxy could never have
+        // helped even if the diagnostic resolved after this failure - don't waste a proxy attempt
+        // chasing a load that was already known to be futile.
+        val isDirectFailure = result is CastLoadResult.Failure && _state.value.deliveryMode == CastDeliveryMode.Direct
+        val stillWorthProxying = _state.value.codecIncompatibility == null
+        if (isDirectFailure && stillWorthProxying) {
             watchdogJob?.cancel()
             _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
             startProxyAndLoad(streamUrl, title, userAgent, referrer)
