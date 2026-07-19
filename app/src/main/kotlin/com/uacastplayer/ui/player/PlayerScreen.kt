@@ -7,7 +7,9 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.os.Build
+import android.provider.Settings
 import android.util.Rational
+import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,6 +80,7 @@ import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.player.AudioChannelLayout
+import com.uacastplayer.player.BrightnessGestureStart
 import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerGesturePolicy
@@ -151,7 +154,9 @@ fun PlayerScreen(
 
     // Tracks the app's own brightness/volume overrides across drags - re-reading the system value
     // every frame would fight the WindowManager override this same gesture just applied.
-    var brightnessLevel by remember { mutableStateOf(DEFAULT_BRIGHTNESS_LEVEL) }
+    var brightnessLevel by remember(activity) {
+        mutableStateOf(activity?.let(::initialBrightnessLevel) ?: DEFAULT_BRIGHTNESS_LEVEL)
+    }
     var volumeLevel by remember(audioManager) { mutableStateOf(audioManager.currentVolumeFraction()) }
     var gestureIndicator by remember { mutableStateOf<GestureIndicatorKind?>(null) }
     var gestureIndicatorNonce by remember { mutableStateOf(0) }
@@ -181,6 +186,13 @@ fun PlayerScreen(
     DisposableEffect(activity, isFullscreen) {
         activity?.let { FullscreenController.apply(it, isFullscreen) }
         onDispose { activity?.let { FullscreenController.apply(it, enabled = false) } }
+    }
+
+    // The brightness drag gesture below overrides the window's brightness directly - without this,
+    // leaving the player (including via PiP teardown, which also disposes this composable) would
+    // permanently pin the screen at whatever level the gesture last set, even in other apps.
+    DisposableEffect(activity) {
+        onDispose { activity?.let(::restoreWindowBrightness) }
     }
 
     // Keep the screen on only while this device is actually rendering the stream - while casting,
@@ -526,6 +538,25 @@ private fun applyWindowBrightness(activity: Activity, level: Float) {
     val params = window.attributes
     params.screenBrightness = level.coerceIn(0.01f, 1f)
     window.attributes = params
+}
+
+/** Restores the window to following the system/auto brightness - undoes [applyWindowBrightness]. */
+private fun restoreWindowBrightness(activity: Activity) {
+    val window = activity.window
+    val params = window.attributes
+    params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+    window.attributes = params
+}
+
+private const val MAX_SYSTEM_BRIGHTNESS = 255f
+
+private fun initialBrightnessLevel(activity: Activity): Float {
+    val systemBrightness = try {
+        Settings.System.getInt(activity.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / MAX_SYSTEM_BRIGHTNESS
+    } catch (_: Settings.SettingNotFoundException) {
+        null
+    }
+    return BrightnessGestureStart.level(activity.window.attributes.screenBrightness, systemBrightness)
 }
 
 private fun applyStreamVolume(audioManager: AudioManager, level: Float) {
