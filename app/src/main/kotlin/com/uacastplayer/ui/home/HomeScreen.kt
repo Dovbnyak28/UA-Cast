@@ -223,12 +223,19 @@ fun HomeScreen(
                 )
             }
         } else {
-            IconHeader(
-                icon = AppIcons.Upload,
-                title = stringResource(R.string.home_empty_message),
-                subtitle = stringResource(R.string.home_empty_subtitle),
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth().padding(top = GapL, bottom = GapL),
-            )
+            ) {
+                IconHeader(
+                    icon = AppIcons.Upload,
+                    title = stringResource(R.string.home_empty_message),
+                    subtitle = stringResource(R.string.home_empty_subtitle),
+                )
+                Button(onClick = onOpenAddPlaylist, modifier = Modifier.padding(top = GapM)) {
+                    Text(stringResource(R.string.home_add_playlist_button))
+                }
+            }
         }
     }
 

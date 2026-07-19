@@ -125,7 +125,6 @@ fun ChannelsScreen(
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
     onRefreshPlaylist: () -> Unit,
-    onOpenAddPlaylist: () -> Unit,
     showIconTierBanner: Boolean,
     onEnableIcons: () -> Unit,
     onDismissIconTierBanner: () -> Unit,
@@ -203,7 +202,6 @@ fun ChannelsScreen(
                     onChannelLayoutSelected = onChannelLayoutSelected,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
-                    onOpenAddPlaylist = onOpenAddPlaylist,
                     onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
                     onCloseGroup = { openGroupKey = null },
                     onChannelSelected = onChannelSelected,
@@ -229,7 +227,6 @@ fun ChannelsScreen(
                 onChannelLayoutSelected = onChannelLayoutSelected,
                 isFavorite = isFavorite,
                 onToggleFavorite = onToggleFavorite,
-                onOpenAddPlaylist = onOpenAddPlaylist,
                 onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
                 onCloseGroup = { openGroupKey = null },
                 onChannelSelected = onChannelSelected,
@@ -267,7 +264,6 @@ private fun ChannelsContent(
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
-    onOpenAddPlaylist: () -> Unit,
     onOpenGroup: (GroupedChannels) -> Unit,
     onCloseGroup: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
@@ -328,7 +324,7 @@ private fun ChannelsContent(
             }
             playlistState.isLoading -> LoadingState()
             playlistState.error != null -> ErrorState(playlistState.error)
-            else -> EmptyState(onOpenAddPlaylist)
+            else -> EmptyState()
         }
     }
 }
@@ -361,18 +357,17 @@ private fun ErrorState(error: PlaylistError) {
 }
 
 /** No playlist loaded at all - unlike [ErrorState] (a load that failed) or the search's
- * [NoSearchResults] (a query with no matches), this dead end needs a way out. */
+ * [NoSearchResults] (a query with no matches), this dead end needs a way out, but the action
+ * itself now lives on Home (see [com.uacastplayer.ui.home.HomeScreen]'s own empty state) rather
+ * than being duplicated here. */
 @Composable
-private fun EmptyState(onOpenAddPlaylist: () -> Unit) {
+private fun EmptyState() {
     Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         IconHeader(
             icon = AppIcons.Channels,
             title = stringResource(R.string.channels_empty_message),
             subtitle = stringResource(R.string.channels_empty_subtitle),
         )
-        Button(onClick = onOpenAddPlaylist, modifier = Modifier.padding(top = GapM)) {
-            Text(stringResource(R.string.home_add_playlist_button))
-        }
     }
 }
 

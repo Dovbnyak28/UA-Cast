@@ -226,7 +226,6 @@ fun RootScaffold(
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
                     onRefreshPlaylist = onRefreshPlaylist,
-                    onOpenAddPlaylist = onOpenAddPlaylist,
                     showIconTierBanner = settingsState.showIconTierBanner,
                     onEnableIcons = { onIconDisplayModeSelected(IconDisplayMode.CACHE_LIMITED) },
                     onDismissIconTierBanner = onDismissIconTierBanner,
