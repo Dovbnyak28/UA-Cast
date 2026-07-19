@@ -215,9 +215,12 @@
     <ID>MagicNumber:AppIcons.kt$AppIcons$9f</ID>
     <ID>MagicNumber:CastSessionRepository.kt$CastSessionRepository$10</ID>
     <ID>MagicNumber:CastSessionRepository.kt$CastSessionRepository$15</ID>
+    <ID>MagicNumber:CinemaPalette.kt$0x1FF2EDE2</ID>
+    <ID>MagicNumber:CinemaPalette.kt$0x33F2EDE2</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x33FFFFFF</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x40D4B780</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x66000000</ID>
+    <ID>MagicNumber:CinemaPalette.kt$0x73D4B780</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x80D4B780</ID>
     <ID>MagicNumber:CinemaPalette.kt$0x99C9695A</ID>
     <ID>MagicNumber:CinemaPalette.kt$0xE6141210</ID>
@@ -234,7 +237,11 @@
     <ID>MagicNumber:CinemaPalette.kt$0xFFEAD6A4</ID>
     <ID>MagicNumber:CinemaPalette.kt$0xFFF2EDE2</ID>
     <ID>MagicNumber:Color.kt$0x14FFFFFF</ID>
+    <ID>MagicNumber:Color.kt$0x1FFFFFFF</ID>
+    <ID>MagicNumber:Color.kt$0x33FFFFFF</ID>
+    <ID>MagicNumber:Color.kt$0x4D000000</ID>
     <ID>MagicNumber:Color.kt$0x4DEBEBF5</ID>
+    <ID>MagicNumber:Color.kt$0x730A84FF</ID>
     <ID>MagicNumber:Color.kt$0x800A84FF</ID>
     <ID>MagicNumber:Color.kt$0x80FFD60A</ID>
     <ID>MagicNumber:Color.kt$0x9930D158</ID>

@@ -67,6 +67,21 @@ data class UaPalette(
     val glassTone: Color,
     /** Serif in Cinema, the platform default elsewhere - see Type.kt DisplayTitle/DisplayName. */
     val displayFontFamily: FontFamily,
+    /** Edge-highlight tone for [raisedSurface]'s border - the default, used on ordinary raised
+     * chrome (round buttons, cards). Warm/ivory-tinted in Cinema rather than pure white - see
+     * ui/theme/Depth.kt and docs/DESIGN_SYSTEM.md "§D Depth". */
+    val edgeHighlightNeutral: Color,
+    /** A brighter edge highlight for surfaces that need to read as more prominently raised (e.g.
+     * the selected SegmentedControl segment) than [edgeHighlightNeutral] alone provides. */
+    val edgeHighlightStrong: Color,
+    /** Accent-tinted edge highlight, for raised surfaces that are themselves an accent-colored
+     * control (e.g. a focused text field's underline glow). */
+    val edgeHighlightAccent: Color,
+    /** Ambient/spot shadow color for [raisedSurface] when `shadow = true`. */
+    val shadowSoft: Color,
+    /** How much lighter [raisedSurface]'s top edge gets relative to its base color, as a
+     * [lighten] fraction (0f..1f) - the actual "raised" look, independent of the border. */
+    val surfaceLiftAmount: Float,
     /** Radial "spotlight" background instead of the plain top-to-bottom gradient - see appBackground(). */
     val vignette: Boolean,
     /** Pill-shaped (fully rounded) primary/secondary buttons instead of RadiusItem corners. */
@@ -102,6 +117,11 @@ val AzureUaPalette = UaPalette(
     overlayHighlight = Color(0x33FFFFFF),
     glassTone = Color(0xE6121214),
     displayFontFamily = FontFamily.Default,
+    edgeHighlightNeutral = EdgeHighlightNeutral,
+    edgeHighlightStrong = EdgeHighlightStrong,
+    edgeHighlightAccent = EdgeHighlightAccent,
+    shadowSoft = ShadowSoft,
+    surfaceLiftAmount = 0.06f,
     vignette = false,
     pillButtons = false,
     secondaryButtonStyle = SecondaryButtonStyle.RAISED,

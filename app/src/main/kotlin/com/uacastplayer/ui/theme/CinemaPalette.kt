@@ -26,6 +26,13 @@ private val CinemaLabelTertiary = Color(0xFF6E6555)
 // route-health color meaning should stay recognizable across themes.
 private val CinemaDanger = Color(0xFFC9695A)
 
+// Depth - ivory/gold-tinted instead of Azure's neutral white, so raised edges read as warm chrome
+// rather than a cool mismatch against the charcoal background. See ui/theme/Depth.kt.
+private val CinemaEdgeHighlightNeutral = Color(0x1FF2EDE2)
+private val CinemaEdgeHighlightStrong = Color(0x33F2EDE2)
+private val CinemaEdgeHighlightAccent = Color(0x73D4B780)
+private val CinemaShadowSoft = Color(0x66000000)
+
 /**
  * Warm, "premium cinema" palette: charcoal background, champagne-gold accent, serif display type,
  * pill-shaped buttons, and a radial vignette background - see docs/DESIGN_SYSTEM.md "Themes".
@@ -67,6 +74,11 @@ val CinemaUaPalette = UaPalette(
     // alias: no assets, no network, works everywhere, and still reads as distinctly "premium"
     // against Azure's default sans-serif.
     displayFontFamily = FontFamily.Serif,
+    edgeHighlightNeutral = CinemaEdgeHighlightNeutral,
+    edgeHighlightStrong = CinemaEdgeHighlightStrong,
+    edgeHighlightAccent = CinemaEdgeHighlightAccent,
+    shadowSoft = CinemaShadowSoft,
+    surfaceLiftAmount = 0.06f,
     vignette = true,
     pillButtons = true,
     secondaryButtonStyle = SecondaryButtonStyle.GHOST,

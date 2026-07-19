@@ -155,6 +155,41 @@ text (badges, "view all" links) even when it reads fine on icons or larger text 
 the motivating case, see `UaPalette.kt`'s doc comment on the field. Icon tints and larger accent
 text keep using `UaPalette.azure`; only Caption/Micro-scale text runs should use `accentText`.
 
+## §D Depth (`ui/theme/Depth.kt`)
+
+Flat, single-color surfaces read as cheap - a few subtle "raised"/"sunken" treatments break that up
+without turning into a full skeuomorphic style.
+
+- **Tokens** - `UaPalette.edgeHighlightNeutral`/`edgeHighlightStrong`/`edgeHighlightAccent` (border
+  tones for [raisedSurface]), `shadowSoft` (ambient/spot shadow color), `surfaceLiftAmount` (how
+  much lighter/darker the gradient's far edge gets, as a [lighten]/[darken] fraction). Cinema's
+  edges are ivory/gold-tinted rather than pure white, matching its warm palette - see
+  `CinemaPalette.kt`.
+- **`Modifier.raisedSurface(shape, base, edgeColor, shadow)`** - a top-to-bottom gradient from a
+  lightened `base` to `base`, plus a thin edge-highlight border. `shadow` defaults to `false`.
+- **`Modifier.sunkenSurface(shape, base)`** - the inverse (darkened-to-base gradient), no border, no
+  shadow ever - used for recessed input chrome (text fields).
+- **`lighten(Color, fraction)`/`darken(Color, fraction)`** - pure color-blend functions (no
+  Compose/Android dependency), unit-tested at the 0f/1f/out-of-range boundaries in `DepthTest.kt`.
+
+### Performance rules
+
+- Never allocate a `Brush`/`Paint` directly in a composable body on every recomposition -
+  `raisedSurface`/`sunkenSurface` cache theirs via `remember(base, liftAmount)`, rebuilding only
+  when the surface's own color actually changes, not on every recomposition.
+- **`shadow = true` is forbidden on anything inside a `LazyColumn`/`LazyGrid` item** - a per-row
+  shadow re-triggers layer compositing on every scroll frame for every visible row. Use
+  `raisedSurface(shadow = false)` (the default) for list rows; the gradient/border alone is cheap.
+
+### The three-glow rule
+
+Only three places in the app may use an **accent-colored** glow (`spotColor`/`ambientColor` beyond
+`UaPalette.shadowSoft`'s neutral tone): the play button (`GradientPlayButton`, `azureGlow`), the
+current-programme progress indicator, and the live indicator. Nowhere else - a glow on every raised
+surface reads as visual noise instead of drawing the eye to what's actually live/actionable.
+`raisedSurface` itself never glows for this reason; a glowing control layers its own
+`.shadow(spotColor = ...)` separately, the same way `GradientPlayButton` already does.
+
 ### Serif display type
 
 `UaPalette.displayFontFamily` (`FontFamily.Serif` in Cinema, the platform default elsewhere) is
