@@ -236,6 +236,8 @@
     <string name="player_fullscreen">Fullscreen</string>
     <string name="player_exit_fullscreen">Exit fullscreen</string>
     <string name="player_picture_in_picture">Picture in picture</string>
+    <string name="player_mini_close">Close player</string>
+    <string name="player_mini_on_tv_badge">On TV</string>
     <string name="cast_status_connected">Casting</string>
     <string name="player_audio_track">Audio</string>
     <string name="player_subtitle_track">Subtitles</string>
@@ -272,8 +274,8 @@
 
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Keep casting running in the background</string>
-    <string name="battery_hint_body">Some phone makers (like Xiaomi) aggressively stop apps in the background, which can cut off casting to your TV. Allow UA Cast Player to ignore battery optimizations so playback keeps working.</string>
-    <string name="battery_hint_allow">Allow</string>
+    <string name="battery_hint_body">Some phone makers (like Xiaomi) aggressively stop apps in the background, which can cut off casting to your TV. Open battery settings, find UA Cast Player in the list, and turn off its battery optimization so playback keeps working.</string>
+    <string name="battery_hint_allow">Open settings</string>
     <string name="battery_hint_later">Later</string>
     <string name="settings_battery_optimization_label">Background battery optimization</string>
     <string name="settings_battery_optimization_button">Open</string>

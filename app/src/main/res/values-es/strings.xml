@@ -236,6 +236,8 @@
     <string name="player_fullscreen">Pantalla completa</string>
     <string name="player_exit_fullscreen">Salir de pantalla completa</string>
     <string name="player_picture_in_picture">Imagen en imagen</string>
+    <string name="player_mini_close">Cerrar reproductor</string>
+    <string name="player_mini_on_tv_badge">En la TV</string>
     <string name="cast_status_connected">Transmitiendo</string>
     <string name="player_audio_track">Audio</string>
     <string name="player_subtitle_track">Subtítulos</string>
@@ -272,8 +274,8 @@
 
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Evita que la transmisión se detenga en segundo plano</string>
-    <string name="battery_hint_body">Algunos fabricantes (como Xiaomi) detienen agresivamente las apps en segundo plano, lo que puede cortar la transmisión a tu TV. Permite que UA Cast Player ignore la optimización de batería para que la reproducción no se interrumpa.</string>
-    <string name="battery_hint_allow">Permitir</string>
+    <string name="battery_hint_body">Algunos fabricantes (como Xiaomi) detienen agresivamente las apps en segundo plano, lo que puede cortar la transmisión a tu TV. Abre la configuración de batería, busca UA Cast Player en la lista y desactiva la optimización de batería para que la reproducción no se interrumpa.</string>
+    <string name="battery_hint_allow">Abrir configuración</string>
     <string name="battery_hint_later">Más tarde</string>
     <string name="settings_battery_optimization_label">Optimización de batería en segundo plano</string>
     <string name="settings_battery_optimization_button">Abrir</string>

@@ -238,6 +238,8 @@
     <string name="player_fullscreen">Во весь экран</string>
     <string name="player_exit_fullscreen">Выйти из полноэкранного режима</string>
     <string name="player_picture_in_picture">Картинка в картинке</string>
+    <string name="player_mini_close">Закрыть плеер</string>
+    <string name="player_mini_on_tv_badge">На ТВ</string>
     <string name="cast_status_connected">Трансляция</string>
     <string name="player_audio_track">Аудио</string>
     <string name="player_subtitle_track">Субтитры</string>
@@ -274,8 +276,8 @@
 
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Не останавливать трансляцию в фоне</string>
-    <string name="battery_hint_body">Некоторые производители телефонов (например, Xiaomi) агрессивно останавливают приложения в фоне, из-за чего трансляция на TV может прерваться. Разрешите UA Cast Player игнорировать оптимизацию батареи, чтобы воспроизведение не прерывалось.</string>
-    <string name="battery_hint_allow">Разрешить</string>
+    <string name="battery_hint_body">Некоторые производители телефонов (например, Xiaomi) агрессивно останавливают приложения в фоне, из-за чего трансляция на TV может прерваться. Откройте настройки батареи, найдите UA Cast Player в списке и отключите для него оптимизацию батареи, чтобы воспроизведение не прерывалось.</string>
+    <string name="battery_hint_allow">Открыть настройки</string>
     <string name="battery_hint_later">Позже</string>
     <string name="settings_battery_optimization_label">Оптимизация батареи в фоне</string>
     <string name="settings_battery_optimization_button">Открыть</string>
