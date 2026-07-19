@@ -6,13 +6,14 @@ import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.data.cast.IncompatibilityMemoryStore
 import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
 import com.uacastplayer.data.cast.TsFirstSegmentDiagnostic
+import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.log.AppLog
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,12 +28,17 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 
 private const val TAG = "CastSessionRepository"
 private const val WATCHDOG_TIMEOUT_MILLIS = 4_000L
 
-private data class ActiveChannel(val index: Int, val streamUrl: String, val title: String)
+private data class ActiveChannel(
+    val index: Int,
+    val streamUrl: String,
+    val title: String,
+    val userAgent: String?,
+    val referrer: String?,
+)
 
 /**
  * App-wide singleton (not a ViewModel, since a Cast session must survive navigating away from and
@@ -47,11 +53,9 @@ private data class ActiveChannel(val index: Int, val streamUrl: String, val titl
 class CastSessionRepository private constructor(context: Context) {
 
     private val appContext = context.applicationContext
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
     private val proxyServer = ProxyServer(httpClient)
+    private val preferences = AppPreferences(appContext)
     private val incompatibilityStore = IncompatibilityMemoryStore(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -103,11 +107,11 @@ class CastSessionRepository private constructor(context: Context) {
      * connected this both queues the index as pending (for handoff on disconnect) and starts
      * delivering the new channel to the receiver immediately.
      */
-    fun setActiveChannel(index: Int, streamUrl: String, title: String) {
-        activeChannel = ActiveChannel(index, streamUrl, title)
+    fun setActiveChannel(index: Int, streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null) {
+        activeChannel = ActiveChannel(index, streamUrl, title, userAgent, referrer)
         if (currentSession != null) {
             _state.value = CastReceiverStatusReducer.requestChannelSwitch(_state.value, index)
-            startPlayback(streamUrl, title)
+            startPlayback(streamUrl, title, userAgent, referrer)
         }
     }
 
@@ -115,7 +119,11 @@ class CastSessionRepository private constructor(context: Context) {
         currentSession = session
         currentReceiverId = session.castDevice?.deviceId
         session.remoteMediaClient?.registerCallback(remoteMediaClientCallback)
-        activeChannel?.let { startPlayback(it.streamUrl, it.title) }
+        // Covers starting a session from the player while a channel is already open, not just
+        // switching channels mid-session: setActiveChannel() records every channel the player
+        // opens (including the very first one, via start()), so activeChannel is already set by
+        // the time a session connects here even if no switch happened while casting was active.
+        activeChannel?.let { startPlayback(it.streamUrl, it.title, it.userAgent, it.referrer) }
     }
 
     private fun onSessionInactive() {
@@ -126,58 +134,85 @@ class CastSessionRepository private constructor(context: Context) {
         applyResult(CastReceiverStatusReducer.reduce(_state.value, ReceiverStatus.DISCONNECTED))
     }
 
-    private fun startPlayback(streamUrl: String, title: String) {
+    private fun startPlayback(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         watchdogJob?.cancel()
         val receiverId = currentReceiverId.orEmpty()
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
         val mode = CastDeliveryStrategy.initialMode(knownIncompatible)
-        _state.update { it.copy(deliveryMode = mode) }
+        _state.update { it.copy(deliveryMode = mode, codecIncompatibility = null) }
 
         when (mode) {
-            CastDeliveryMode.Direct -> loadDirectWithWatchdog(streamUrl, title)
-            CastDeliveryMode.Proxy -> startProxyAndLoad(streamUrl, title)
+            CastDeliveryMode.Direct -> loadDirectWithWatchdog(streamUrl, title, userAgent, referrer)
+            CastDeliveryMode.Proxy -> startProxyAndLoad(streamUrl, title, userAgent, referrer)
         }
     }
 
-    private fun loadDirectWithWatchdog(streamUrl: String, title: String) {
-        loadOnReceiver(streamUrl, title, originalStreamUrl = streamUrl)
+    private fun loadDirectWithWatchdog(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
+        loadOnReceiver(streamUrl, title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
 
         watchdogJob = scope.launch {
             val diagnostic = async(Dispatchers.IO) {
-                runCatching { TsFirstSegmentDiagnostic.isKnownUnsupported(streamUrl, httpClient) }.getOrDefault(false)
+                runCatching { TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient) }.getOrNull()
             }
             launch {
-                if (diagnostic.await()) fallBackToProxyIfStillDirect(streamUrl, title, "unsupported_codec_detected")
+                // Proxy fallback re-serves the same bytes over the LAN - it fixes container/URL/
+                // header problems, never a codec the receiver genuinely can't decode - so a known
+                // codec incompatibility is reported to the UI instead of triggering a fallback
+                // that could not possibly help. Compatible/Unknown fall through to the timeout
+                // below, same as before this diagnostic existed.
+                when (CastCompatibilityPolicy.classify(diagnostic.await())) {
+                    is CastCompatibilityVerdict.IncompatibleAudio ->
+                        reportCodecIncompatibility(CodecIncompatibilityKind.AUDIO)
+                    is CastCompatibilityVerdict.IncompatibleVideo ->
+                        reportCodecIncompatibility(CodecIncompatibilityKind.VIDEO)
+                    CastCompatibilityVerdict.Compatible, CastCompatibilityVerdict.Unknown -> Unit
+                }
             }
             delay(WATCHDOG_TIMEOUT_MILLIS)
-            if (_state.value.receiverStatus != ReceiverStatus.PLAYING) {
-                fallBackToProxyIfStillDirect(streamUrl, title, "watchdog_timeout")
+            if (_state.value.receiverStatus != ReceiverStatus.PLAYING && _state.value.codecIncompatibility == null) {
+                fallBackToProxyIfStillDirect(streamUrl, title, userAgent, referrer, "watchdog_timeout")
             }
         }
     }
 
-    private fun fallBackToProxyIfStillDirect(streamUrl: String, title: String, reason: String) {
+    private fun reportCodecIncompatibility(kind: CodecIncompatibilityKind) {
+        if (_state.value.deliveryMode != CastDeliveryMode.Direct) return
+        AppLog.d(TAG) { "Cast codec incompatibility detected: $kind" }
+        _state.update { it.copy(codecIncompatibility = kind) }
+    }
+
+    private fun fallBackToProxyIfStillDirect(streamUrl: String, title: String, userAgent: String?, referrer: String?, reason: String) {
         if (_state.value.deliveryMode != CastDeliveryMode.Direct) return
         AppLog.d(TAG) { "Falling back to proxy: $reason" }
         _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
-        startProxyAndLoad(streamUrl, title)
+        startProxyAndLoad(streamUrl, title, userAgent, referrer)
     }
 
-    private fun startProxyAndLoad(streamUrl: String, title: String) {
+    private fun startProxyAndLoad(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         val host = LocalNetworkAddress.currentIpv4Address()
         if (host == null) {
             AppLog.w(TAG) { "No LAN address available; cannot start proxy fallback" }
             giveUp(streamUrl)
             return
         }
-        proxyServer.start(sessionToken = UUID.randomUUID().toString(), host = host)
+        proxyServer.start(
+            sessionToken = UUID.randomUUID().toString(),
+            host = host,
+            remuxEnabled = preferences.rawTsRemuxEnabled,
+        )
         applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)
-        val resourceId = proxyServer.registerPlaylist(streamUrl)
-        loadOnReceiver(proxyServer.buildLocalUrl(resourceId), title, originalStreamUrl = streamUrl)
+        val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
+        loadOnReceiver(proxyServer.buildLocalUrl(resourceId), title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
     }
 
-    private fun loadOnReceiver(urlToLoad: String, title: String, originalStreamUrl: String) {
+    private fun loadOnReceiver(
+        urlToLoad: String,
+        title: String,
+        originalStreamUrl: String,
+        userAgent: String? = null,
+        referrer: String? = null,
+    ) {
         val client = currentSession?.remoteMediaClient ?: return
         _state.update { it.copy(loadPhase = CastLoadPhase.LOADING) }
         val request = CastMediaLoader.buildRequest(urlToLoad, title)
@@ -187,15 +222,15 @@ class CastSessionRepository private constructor(context: Context) {
             } else {
                 CastLoadResult.Failure("status_${result.status.statusCode}")
             }
-            handleLoadResult(loadResult, originalStreamUrl, title)
+            handleLoadResult(loadResult, originalStreamUrl, title, userAgent, referrer)
         }
     }
 
-    private fun handleLoadResult(result: CastLoadResult, streamUrl: String, title: String) {
+    private fun handleLoadResult(result: CastLoadResult, streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         if (result is CastLoadResult.Failure && _state.value.deliveryMode == CastDeliveryMode.Direct) {
             watchdogJob?.cancel()
             _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
-            startProxyAndLoad(streamUrl, title)
+            startProxyAndLoad(streamUrl, title, userAgent, referrer)
             return
         }
         if (result is CastLoadResult.Failure) {
