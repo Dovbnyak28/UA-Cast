@@ -102,12 +102,21 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         executor = pool
         running = true
         acceptThread = thread(name = "ProxyServer-accept") {
-            while (running) {
+            // `running` alone isn't enough to tell this thread's own socket generation apart from
+            // a later one: stop() then a fast start() (e.g. repeated cast fallback retries) can
+            // flip the shared `running` flag back to true while this closure's `socket` is already
+            // closed, and accept() on a closed socket throws immediately rather than blocking -
+            // without this identity check that becomes a tight, unthrottled exception-logging spin
+            // instead of a clean exit. `serverSocket` is reassigned to a new instance on every
+            // start(), so `serverSocket === socket` is false as soon as this generation is stale.
+            while (running && serverSocket === socket) {
                 try {
                     val client = socket.accept()
                     pool.submit { handleConnection(client) }
                 } catch (e: Exception) {
-                    if (running) AppLog.w(TAG) { "accept() failed: ${e.javaClass.simpleName}" }
+                    if (running && serverSocket === socket) {
+                        AppLog.w(TAG) { "accept() failed: ${e.javaClass.simpleName}" }
+                    }
                 }
             }
         }
