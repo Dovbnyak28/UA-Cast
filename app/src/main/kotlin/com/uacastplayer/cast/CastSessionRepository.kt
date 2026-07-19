@@ -119,11 +119,32 @@ class CastSessionRepository private constructor(context: Context) {
         currentSession = session
         currentReceiverId = session.castDevice?.deviceId
         session.remoteMediaClient?.registerCallback(remoteMediaClientCallback)
+        startProxyEagerly()
         // Covers starting a session from the player while a channel is already open, not just
         // switching channels mid-session: setActiveChannel() records every channel the player
         // opens (including the very first one, via start()), so activeChannel is already set by
         // the time a session connects here even if no switch happened while casting was active.
         activeChannel?.let { startPlayback(it.streamUrl, it.title, it.userAgent, it.referrer) }
+    }
+
+    /**
+     * Starts the proxy server (a `ServerSocket` bind + thread pool - cheap, see
+     * docs/PROXY_RULES.md) the moment a cast session connects, rather than waiting for an actual
+     * fallback to need it - if one does turn out to be needed (codec incompatibility, watchdog
+     * timeout), [startProxyAndLoad] doesn't also pay for the server startup at that point, only for
+     * registering the one resource it actually needs. Safe to call unconditionally even for a
+     * session that never falls back: [ProxyServer.start] always stops any previous instance first,
+     * and every session end ([CastReceiverStatusReducer.reduceDisconnected]) unconditionally emits
+     * [CastSideEffect.CloseProxySession], so an eagerly-started-but-never-used proxy still gets torn
+     * down like any other.
+     */
+    private fun startProxyEagerly() {
+        val host = LocalNetworkAddress.currentIpv4Address() ?: return
+        proxyServer.start(
+            sessionToken = UUID.randomUUID().toString(),
+            host = host,
+            remuxEnabled = preferences.rawTsRemuxEnabled,
+        )
     }
 
     private fun onSessionInactive() {

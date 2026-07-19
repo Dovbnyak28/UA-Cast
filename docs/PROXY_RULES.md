@@ -41,6 +41,13 @@ When that happens, the phone re-serves the stream to the receiver over the LAN i
 - Both are released the moment the proxy session ends - on a normal `CloseProxySession` signal
   (session disconnect, playback finishing, or a hard error), **not just** on a full app stop. A
   proxy session that outlives its purpose is a battery leak.
+- `ProxyServer.start()` itself (the `ServerSocket` bind + thread pool - cheap, no wake locks
+  involved) runs the moment any Cast session connects, not lazily on the first fallback - so if a
+  fallback does turn out to be needed, it isn't also paying for server startup at that point. This
+  is separate from (and doesn't advance) the foreground-service/wake-lock lifecycle above, which
+  still only starts once a fallback is actually decided - a purely-direct session's eagerly-started
+  proxy just sits idle, unused, and gets torn down by the same unconditional `CloseProxySession` on
+  disconnect as any other.
 
 ## Diagnostics
 
