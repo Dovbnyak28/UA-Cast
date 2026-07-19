@@ -26,6 +26,7 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.R
 import com.uacastplayer.playlist.M3uChannel
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,9 +82,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // media notification) - a full MediaSessionService with background playback is intentionally
     // out of scope here (this is a live-TV app; playback isn't expected to survive the player
     // screen closing), so this session just lives and dies alongside the ExoPlayer instance.
-    private val mediaSession: MediaSession = MediaSession.Builder(application, exoPlayer)
-        .setCallback(MediaSessionCallback())
-        .build()
+    //
+    // The ID must be explicit and unique: Media3 rejects a second MediaSession sharing an ID with
+    // one still alive in the process, and the default ID is the empty string for every instance.
+    // A NavHost exit-animation overlap (or any fast close-then-reopen) can construct the next
+    // PlayerViewModel before this one's session has released, so relying on teardown timing alone
+    // isn't safe - see playerSessionId(). Session creation is also treated as a convenience, not a
+    // hard dependency: if it still fails for some other reason, the player keeps working without
+    // system media controls rather than crashing the process over headset-button support.
+    private val mediaSession: MediaSession? = try {
+        MediaSession.Builder(application, exoPlayer)
+            .setId(playerSessionId(sessionIdCounter.incrementAndGet()))
+            .setCallback(MediaSessionCallback())
+            .build()
+    } catch (e: IllegalStateException) {
+        AppLog.w(TAG) { "MediaSession creation failed, continuing without system media controls: ${e.message}" }
+        null
+    }
 
     val player: Player get() = exoPlayer
 
@@ -456,7 +471,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         pendingSwitchJob?.cancel()
         retryJob?.cancel()
         exoPlayer.removeListener(listener)
-        mediaSession.release()
+        mediaSession?.release()
         exoPlayer.release()
         super.onCleared()
     }
@@ -498,6 +513,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         const val MAX_PREVIEW_SIZE = 20
         const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
         const val STALL_RECOVERY_COOLDOWN_MILLIS = 30_000L
+
+        // Shared across every PlayerViewModel instance in the process so IDs never repeat, even
+        // across a fast close-then-reopen where the old instance hasn't finished tearing down.
+        val sessionIdCounter = AtomicLong(0)
     }
 }
 
