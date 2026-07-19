@@ -179,7 +179,14 @@ class CastSessionRepository private constructor(context: Context) {
             launch {
                 val result = diagnostic.await()
                 val verdict = CastCompatibilityPolicy.classify(result.programInfo)
-                when (val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, result.sourceKind)) {
+                val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, result.sourceKind)
+                // One self-contained line per routing decision - no URL, just what was found and
+                // what it led to, so a field logcat is enough to diagnose a cast failure on its own.
+                AppLog.d(TAG) {
+                    "cast route: verdict=$verdict source=${result.sourceKind} action=$decision " +
+                        "video=${result.programInfo?.videoCodec} audio=${result.programInfo?.audioCodecs}"
+                }
+                when (decision) {
                     is CastRouteDecision.Blocked -> onRouteBlocked(streamUrl, decision.verdict)
                     CastRouteDecision.ProxyImmediately ->
                         fallBackToProxyIfStillDirect(streamUrl, title, userAgent, referrer, "raw_ts_compatible")
@@ -200,17 +207,17 @@ class CastSessionRepository private constructor(context: Context) {
      * receiver-side failure to do it. */
     private fun onRouteBlocked(streamUrl: String, verdict: CastCompatibilityVerdict) {
         currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
-        val kind = when (verdict) {
-            is CastCompatibilityVerdict.IncompatibleAudio -> CodecIncompatibilityKind.AUDIO
-            is CastCompatibilityVerdict.IncompatibleVideo -> CodecIncompatibilityKind.VIDEO
+        val incompatibility = when (verdict) {
+            is CastCompatibilityVerdict.IncompatibleAudio -> CodecIncompatibility.Audio(verdict.codec)
+            is CastCompatibilityVerdict.IncompatibleVideo -> CodecIncompatibility.Video(verdict.codec)
             else -> return
         }
-        reportCodecIncompatibility(kind)
+        reportCodecIncompatibility(incompatibility)
     }
 
-    private fun reportCodecIncompatibility(kind: CodecIncompatibilityKind) {
-        AppLog.d(TAG) { "Cast codec incompatibility detected: $kind" }
-        _state.update { it.copy(codecIncompatibility = kind) }
+    private fun reportCodecIncompatibility(incompatibility: CodecIncompatibility) {
+        AppLog.d(TAG) { "Cast codec incompatibility detected: $incompatibility" }
+        _state.update { it.copy(codecIncompatibility = incompatibility) }
     }
 
     private fun fallBackToProxyIfStillDirect(streamUrl: String, title: String, userAgent: String?, referrer: String?, reason: String) {

@@ -263,8 +263,8 @@
     <string name="player_tv_guide">Телегид</string>
     <string name="player_previous_channel">Последний канал</string>
     <string name="epg_guide_no_data">Нет телегида для этого канала</string>
-    <string name="cast_incompatible_audio_message">Аудиоформат этого канала не поддерживается Chromecast. Воспроизведение на телефоне продолжается.</string>
-    <string name="cast_incompatible_video_message">Видеоформат этого канала не поддерживается Chromecast. Воспроизведение на телефоне продолжается.</string>
+    <string name="cast_incompatible_audio_message">Канал использует аудио %1$s — Chromecast не поддерживает этот формат. Воспроизведение на телефоне продолжается.</string>
+    <string name="cast_incompatible_video_message">Канал использует видео %1$s — Chromecast не поддерживает этот формат. Воспроизведение на телефоне продолжается.</string>
     <string name="cast_receiver_load_failed_message">Не удалось транслировать этот канал на Chromecast. Воспроизведение на телефоне продолжается.</string>
     <string name="player_resize_fit">Вписать</string>
     <string name="player_resize_fill">Заполнить</string>

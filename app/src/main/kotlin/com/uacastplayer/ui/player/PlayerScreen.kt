@@ -74,7 +74,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import com.uacastplayer.R
-import com.uacastplayer.cast.CodecIncompatibilityKind
+import com.uacastplayer.cast.CodecDisplayName
+import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.epg.EpgUiState
@@ -411,11 +412,12 @@ fun PlayerScreen(
 
             // Codec incompatibility is the more specific, actionable explanation, so it takes
             // precedence in the rare case both could apply (see CastReceiverStatusReducer).
+            val incompatibility = uiState.castCodecIncompatibility
             val castIncompatibilityMessage = when {
-                uiState.castCodecIncompatibility == CodecIncompatibilityKind.AUDIO ->
-                    stringResource(R.string.cast_incompatible_audio_message)
-                uiState.castCodecIncompatibility == CodecIncompatibilityKind.VIDEO ->
-                    stringResource(R.string.cast_incompatible_video_message)
+                incompatibility is CodecIncompatibility.Video ->
+                    stringResource(R.string.cast_incompatible_video_message, CodecDisplayName.of(incompatibility.codec))
+                incompatibility is CodecIncompatibility.Audio ->
+                    stringResource(R.string.cast_incompatible_audio_message, CodecDisplayName.of(incompatibility.codec))
                 uiState.castReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
                 else -> null
             }

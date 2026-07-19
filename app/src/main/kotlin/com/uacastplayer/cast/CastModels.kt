@@ -9,8 +9,12 @@ enum class IdleReason { NONE, FINISHED, ERROR, CANCELLED, INTERRUPTED }
 
 /** Surfaced when [CastCompatibilityPolicy] finds a codec the receiver can't play - proxy fallback
  * would not help (it re-serves the same codecs, see docs/PROXY_RULES.md), so this is shown to the
- * user instead of silently retrying. Cleared whenever a new channel starts casting. */
-enum class CodecIncompatibilityKind { AUDIO, VIDEO }
+ * user - naming the actual codec (see [CodecDisplayName]) rather than a vague "not supported" -
+ * instead of silently retrying. Cleared whenever a new channel starts casting. */
+sealed class CodecIncompatibility {
+    data class Video(val codec: VideoCodec) : CodecIncompatibility()
+    data class Audio(val codec: AudioCodec) : CodecIncompatibility()
+}
 
 data class CastPlaybackState(
     val isSessionConnected: Boolean = false,
@@ -19,7 +23,7 @@ data class CastPlaybackState(
     val idleReason: IdleReason = IdleReason.NONE,
     val pendingChannelIndex: Int? = null,
     val deliveryMode: CastDeliveryMode = CastDeliveryMode.Direct,
-    val codecIncompatibility: CodecIncompatibilityKind? = null,
+    val codecIncompatibility: CodecIncompatibility? = null,
     // The receiver went idle/error even after falling back to the proxy - unlike
     // codecIncompatibility, this covers everything else that can go wrong (the proxy URL
     // unreachable from the receiver's network, a malformed playlist, etc.), where retrying

@@ -1,7 +1,7 @@
 package com.uacastplayer.player
 
 import androidx.media3.common.TrackGroup
-import com.uacastplayer.cast.CodecIncompatibilityKind
+import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.playlist.M3uChannel
 
@@ -36,7 +36,7 @@ data class PlayerUiState(
     val isCasting: Boolean = false,
     /** Mirrors [com.uacastplayer.cast.CastPlaybackState.codecIncompatibility] - see
      * [com.uacastplayer.cast.CastCompatibilityPolicy] for how it's decided. */
-    val castCodecIncompatibility: CodecIncompatibilityKind? = null,
+    val castCodecIncompatibility: CodecIncompatibility? = null,
     /** Mirrors [com.uacastplayer.cast.CastPlaybackState.receiverLoadFailed]. */
     val castReceiverLoadFailed: Boolean = false,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,

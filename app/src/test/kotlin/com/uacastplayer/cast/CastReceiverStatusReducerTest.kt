@@ -121,7 +121,8 @@ class CastReceiverStatusReducerTest {
 
     @Test
     fun `DISCONNECTED clears a lingering codec incompatibility warning`() {
-        val state = CastPlaybackState(isSessionConnected = true, codecIncompatibility = CodecIncompatibilityKind.AUDIO)
+        val incompatibility = CodecIncompatibility.Audio(AudioCodec.Mp2)
+        val state = CastPlaybackState(isSessionConnected = true, codecIncompatibility = incompatibility)
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
         assertNull(result.state.codecIncompatibility)
     }

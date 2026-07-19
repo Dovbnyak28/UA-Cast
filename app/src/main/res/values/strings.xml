@@ -261,8 +261,8 @@
     <string name="player_tv_guide">TV guide</string>
     <string name="player_previous_channel">Last channel</string>
     <string name="epg_guide_no_data">No TV guide for this channel</string>
-    <string name="cast_incompatible_audio_message">This channel\'s audio format isn\'t supported by Chromecast. Local playback continues.</string>
-    <string name="cast_incompatible_video_message">This channel\'s video format isn\'t supported by Chromecast. Local playback continues.</string>
+    <string name="cast_incompatible_audio_message">This channel uses %1$s audio - Chromecast doesn\'t support this format. Local playback continues.</string>
+    <string name="cast_incompatible_video_message">This channel uses %1$s video - Chromecast doesn\'t support this format. Local playback continues.</string>
     <string name="cast_receiver_load_failed_message">Couldn\'t cast this channel to your Chromecast. Local playback continues.</string>
     <string name="player_resize_fit">Fit</string>
     <string name="player_resize_fill">Fill</string>
