@@ -1,0 +1,124 @@
+package com.uacastplayer.app
+
+import com.uacastplayer.data.icons.IconPrefetcher
+import com.uacastplayer.data.icons.IconRepository
+import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.data.prefs.IconDisplayMode
+import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.icons.LogoUpdateReminder
+import com.uacastplayer.playlist.M3uChannel
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/**
+ * Owns icon resolution, background prefetch, and custom icon sources - moved out of
+ * [com.uacastplayer.AppViewModel] as a move-only split (see B1 in the consolidated fix plan);
+ * behavior is unchanged, this is still thin impure glue over [IconRepository]/[IconPrefetcher].
+ *
+ * Icon *display mode* itself (the setting that decides whether prefetch/resolve run at all)
+ * lives in [SettingsUiState][com.uacastplayer.settings.SettingsUiState] on AppViewModel, not
+ * here - callers pass the current mode in where it's needed instead of this controller reading
+ * settings state directly.
+ *
+ * [onPrefetchFinished] is AppViewModel's hook into the cross-controller cache-size-refresh
+ * concern that doesn't belong to icon state itself.
+ */
+class IconController(
+    private val preferences: AppPreferences,
+    private val iconRepository: IconRepository,
+    private val iconPrefetcher: IconPrefetcher,
+    private val scope: CoroutineScope,
+    private val onPrefetchFinished: () -> Unit,
+) {
+    private val _iconPrefetchState = MutableStateFlow(
+        IconPrefetchUiState(
+            wifiOnly = preferences.iconWifiOnly,
+            updateReminderDue = LogoUpdateReminder.isDue(
+                preferences.lastIconPrefetchAtMillis,
+                System.currentTimeMillis(),
+            ),
+        )
+    )
+    val iconPrefetchState: StateFlow<IconPrefetchUiState> = _iconPrefetchState.asStateFlow()
+
+    private var unmeteredNetworkWatcher: AutoCloseable? = null
+    private var lastPrefetchChannels: List<M3uChannel> = emptyList()
+    private var iconPrefetchJob: Job? = null
+
+    fun customIconSources(): List<String> = iconRepository.customIconSources()
+
+    fun addCustomIconSource(url: String) = iconRepository.addCustomIconSource(url)
+
+    fun removeCustomIconSource(url: String) = iconRepository.removeCustomIconSource(url)
+
+    suspend fun resolveChannelIcon(channel: M3uChannel, iconDisplayMode: IconDisplayMode, epgIconUrl: String?): File? {
+        if (iconDisplayMode == IconDisplayMode.PLACEHOLDERS) return null
+        return iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrl, channel.tvgId)
+    }
+
+    /** For GroupIconCollage - a disk-cache-only lookup, never fetches. See [IconRepository.cachedIconFile]. */
+    suspend fun cachedChannelIcon(channel: M3uChannel, iconDisplayMode: IconDisplayMode, epgIconUrl: String?): File? {
+        if (iconDisplayMode == IconDisplayMode.PLACEHOLDERS) return null
+        return iconRepository.cachedIconFile(channel.tvgLogo, epgIconUrl, channel.tvgId)
+    }
+
+    fun setIconWifiOnly(enabled: Boolean) {
+        preferences.iconWifiOnly = enabled
+        _iconPrefetchState.update { it.copy(wifiOnly = enabled) }
+    }
+
+    fun triggerPrefetch(channels: List<M3uChannel>, iconDisplayMode: IconDisplayMode) {
+        lastPrefetchChannels = channels
+        unmeteredNetworkWatcher?.close()
+        unmeteredNetworkWatcher = iconPrefetcher.awaitUnmeteredNetwork {
+            iconPrefetchJob?.cancel()
+            iconPrefetchJob = scope.launch { runPrefetch(lastPrefetchChannels, iconDisplayMode) }
+        }
+        iconPrefetchJob?.cancel()
+        iconPrefetchJob = scope.launch { runPrefetch(channels, iconDisplayMode) }
+    }
+
+    /** Cancels any in-flight prefetch without waiting for it to actually stop - pair with
+     * [awaitPrefetchStopped] when the caller needs to be sure it has (e.g. before deleting the
+     * icon cache directory it may still be writing into). */
+    fun cancelPrefetch() {
+        iconPrefetchJob?.cancel()
+        _iconPrefetchState.update { it.copy(isRunning = false) }
+    }
+
+    /** Cancellation is cooperative, not instant - joins the prefetch coroutine so the caller knows
+     * it has actually unwound. */
+    suspend fun awaitPrefetchStopped() {
+        iconPrefetchJob?.join()
+    }
+
+    fun invalidateMemoryCache() = iconRepository.invalidateMemoryCache()
+
+    fun dispose() {
+        unmeteredNetworkWatcher?.close()
+    }
+
+    private suspend fun runPrefetch(channels: List<M3uChannel>, iconDisplayMode: IconDisplayMode) {
+        if (channels.isEmpty()) return
+        if (iconDisplayMode != IconDisplayMode.CACHE) return
+        _iconPrefetchState.update { it.copy(isRunning = true, completed = 0, total = channels.size) }
+        iconPrefetcher.prefetch(channels, preferences.iconWifiOnly) { progress ->
+            _iconPrefetchState.update { it.copy(completed = progress.completed, total = progress.total) }
+        }
+        preferences.lastIconPrefetchAtMillis = System.currentTimeMillis()
+        _iconPrefetchState.update {
+            it.copy(isRunning = false, updateReminderDue = false, completedRuns = it.completedRuns + 1)
+        }
+        // Prefetch may have just written icon files for channels that previously cached a negative
+        // (no-icon) memory result - drop the cache so those channels get re-resolved from disk.
+        // completedRuns above is the signal ChannelIcon's refreshKey uses to actually re-render.
+        iconRepository.invalidateMemoryCache()
+        onPrefetchFinished()
+    }
+}
