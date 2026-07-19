@@ -252,6 +252,7 @@
     <string name="player_quality_unknown">Desconocida</string>
     <string name="player_track_unknown">Pista %1$d</string>
     <string name="player_tv_guide">Guía de TV</string>
+    <string name="player_previous_channel">Último canal</string>
     <string name="epg_guide_no_data">No hay guía de TV para este canal</string>
     <string name="cast_incompatible_audio_message">El formato de audio de este canal no es compatible con Chromecast. La reproducción local continúa.</string>
     <string name="cast_incompatible_video_message">El formato de video de este canal no es compatible con Chromecast. La reproducción local continúa.</string>

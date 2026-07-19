@@ -254,6 +254,7 @@
     <string name="player_quality_unknown">Невідомо</string>
     <string name="player_track_unknown">Доріжка %1$d</string>
     <string name="player_tv_guide">Телегід</string>
+    <string name="player_previous_channel">Останній канал</string>
     <string name="epg_guide_no_data">Немає телегіда для цього каналу</string>
     <string name="cast_incompatible_audio_message">Аудіоформат цього каналу не підтримується Chromecast. Відтворення на телефоні триває.</string>
     <string name="cast_incompatible_video_message">Відеоформат цього каналу не підтримується Chromecast. Відтворення на телефоні триває.</string>

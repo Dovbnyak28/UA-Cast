@@ -252,6 +252,7 @@
     <string name="player_quality_unknown">Unknown</string>
     <string name="player_track_unknown">Track %1$d</string>
     <string name="player_tv_guide">TV guide</string>
+    <string name="player_previous_channel">Last channel</string>
     <string name="epg_guide_no_data">No TV guide for this channel</string>
     <string name="cast_incompatible_audio_message">This channel\'s audio format isn\'t supported by Chromecast. Local playback continues.</string>
     <string name="cast_incompatible_video_message">This channel\'s video format isn\'t supported by Chromecast. Local playback continues.</string>

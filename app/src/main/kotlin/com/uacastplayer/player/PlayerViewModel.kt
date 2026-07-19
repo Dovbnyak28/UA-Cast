@@ -94,6 +94,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var liveWindowRecoveryHistory: List<Long> = emptyList()
     private var stallState = StallDetectionPolicy.StallState.NONE
     private var lastStallRecoveryAtMillis: Long? = null
+    private var channelHistory = ChannelHistoryPolicy.State(current = null, previous = null)
     private var pendingSwitchJob: Job? = null
     private var retryJob: Job? = null
 
@@ -198,6 +199,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         requestSwitch(previous)
     }
 
+    /** Jumps back to whatever channel was current right before the last switch - like a TV
+     * remote's last-channel button, not list-adjacency (see [requestPrevious] for that). Pressing
+     * it again jumps right back, since [ChannelHistoryPolicy.onSwitch] swaps current/previous on
+     * every switch to a genuinely different channel. */
+    fun requestPreviousChannel() {
+        val previous = channelHistory.previous ?: return
+        requestSwitch(previous)
+    }
+
     fun seekTo(positionMs: Long) {
         if (!_uiState.value.canSeek) return
         exoPlayer.seekTo(positionMs)
@@ -233,6 +243,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchToIndexImmediate(index: Int) {
         if (index !in channels.indices) return
+        channelHistory = ChannelHistoryPolicy.onSwitch(channelHistory, index)
         currentIndex = index
         stallState = StallDetectionPolicy.StallState.NONE
         val channel = channels[index]
@@ -254,6 +265,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 badges = PlaybackBadgesState(),
                 nextChannelsPreview = buildPreview(index),
                 fatalError = false,
+                hasPreviousChannel = channelHistory.previous != null,
             )
         }
     }

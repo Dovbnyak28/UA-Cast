@@ -1,6 +1,8 @@
 package com.uacastplayer.player
 
 import androidx.media3.common.TrackGroup
+import com.uacastplayer.cast.CodecIncompatibilityKind
+import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.playlist.M3uChannel
 
 data class IndexedChannel(val index: Int, val channel: M3uChannel)
@@ -29,4 +31,14 @@ data class PlayerUiState(
     val textTracks: List<SelectableTrack> = emptyList(),
     val canSeek: Boolean = false,
     val fatalError: Boolean = false,
+    /** Mirrors the view model's private isCasting flag so the UI can decide things like
+     * keepScreenOn - the phone screen doesn't need to stay awake for a receiver it isn't driving. */
+    val isCasting: Boolean = false,
+    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.codecIncompatibility] - see
+     * [com.uacastplayer.cast.CastCompatibilityPolicy] for how it's decided. */
+    val castCodecIncompatibility: CodecIncompatibilityKind? = null,
+    val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
+    /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
+     * distinct channel has ever loaded this session. */
+    val hasPreviousChannel: Boolean = false,
 )

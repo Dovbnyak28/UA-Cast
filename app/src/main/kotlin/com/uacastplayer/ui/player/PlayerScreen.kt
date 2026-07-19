@@ -449,6 +449,7 @@ fun PlayerScreen(
                     resizeModeToastNonce++
                 },
                 onGuideClick = { showGuideSheet = true },
+                onPreviousChannelClick = if (uiState.hasPreviousChannel) viewModel::requestPreviousChannel else null,
             )
 
             if (uiState.nextChannelsPreview.isNotEmpty()) {
@@ -761,6 +762,7 @@ private fun QuickSettingsRow(
     onQualityClick: () -> Unit,
     onAspectRatioClick: () -> Unit,
     onGuideClick: () -> Unit,
+    onPreviousChannelClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -775,6 +777,11 @@ private fun QuickSettingsRow(
             .padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
+        // Only shown once there's actually somewhere to jump back to - see
+        // PlayerUiState.hasPreviousChannel.
+        onPreviousChannelClick?.let {
+            QuickSettingItem(AppIcons.Refresh, stringResource(R.string.player_previous_channel), it)
+        }
         QuickSettingItem(AppIcons.Storage, stringResource(R.string.player_audio_track), onAudioClick)
         QuickSettingItem(AppIcons.HelpCircle, stringResource(R.string.player_subtitle_track), onSubtitlesClick)
         QuickSettingItem(AppIcons.Image, stringResource(R.string.player_quality), onQualityClick)
