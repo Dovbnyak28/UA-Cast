@@ -8,7 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.i18n.withAppLocale
 import com.uacastplayer.favorites.FavoriteKey
+import com.uacastplayer.player.PlayerContainerStateMachine
 import java.time.LocalDate
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
@@ -35,6 +40,9 @@ import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.player.PlayerHost
+import com.uacastplayer.ui.theme.GlassTabBarHeight
+import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
+import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaCastTheme
 
 private data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
@@ -97,8 +105,24 @@ class MainActivity : FragmentActivity() {
             ) { uri -> uri?.let(viewModel::importBackupFrom) }
 
             var playerRequest by remember { mutableStateOf<PlayerRequest?>(null) }
+            var playerContainerState by rememberSaveable {
+                mutableStateOf(PlayerContainerStateMachine.State.CLOSED)
+            }
             var savedPlayerRequest by rememberSaveable(stateSaver = SavedPlayerRequestSaver) {
                 mutableStateOf<SavedPlayerRequest?>(null)
+            }
+            val openPlayer = { channels: List<M3uChannel>, startIndex: Int ->
+                playerRequest = PlayerRequest(channels, startIndex)
+                playerContainerState =
+                    PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Open)
+            }
+            val closePlayer = {
+                playerRequest = null
+                playerContainerState = PlayerContainerStateMachine.State.CLOSED
+                // Home's "continue watching" card only needs to catch up here, not reactively -
+                // AppPreferences isn't itself observable, and refreshing on every write from
+                // PlayerViewModel would be needless churn while the player is still open anyway.
+                viewModel.refreshLastWatchedChannel()
             }
             var showHelp by remember { mutableStateOf(false) }
             var showTerms by remember { mutableStateOf(false) }
@@ -141,7 +165,16 @@ class MainActivity : FragmentActivity() {
                 val flatChannels = playlistState.groups.flatMap { it.channels }
                 val index = flatChannels.indexOfFirst { FavoriteKey.of(it) == saved.channelKey }
                 if (index >= 0) {
+                    // playerContainerState is itself rememberSaveable, so the Expanded/Collapsed
+                    // layout the user left it in normally survives process death on its own - this
+                    // only needs to force it open if that somehow didn't happen (fresh state).
                     playerRequest = PlayerRequest(flatChannels, index)
+                    if (playerContainerState == PlayerContainerStateMachine.State.CLOSED) {
+                        playerContainerState = PlayerContainerStateMachine.reduce(
+                            playerContainerState,
+                            PlayerContainerStateMachine.Event.Open,
+                        )
+                    }
                 } else {
                     savedPlayerRequest = null
                 }
@@ -149,34 +182,18 @@ class MainActivity : FragmentActivity() {
 
             UaCastTheme(theme = uiState.appTheme) {
                 val request = playerRequest
+                val isPlayerExpanded =
+                    request != null && playerContainerState == PlayerContainerStateMachine.State.EXPANDED
+                val isPlayerCollapsed =
+                    request != null && playerContainerState == PlayerContainerStateMachine.State.COLLAPSED
+
+                Box(modifier = Modifier.fillMaxSize()) {
                 when {
                     uiState.needsLanguagePicker ->
                         LanguagePickerScreen(onLanguageConfirmed = viewModel::selectLanguage)
 
                     uiState.needsTermsAcceptance ->
                         TermsScreen(onAccept = viewModel::acceptTerms, onDecline = { finish() })
-
-                    request != null -> {
-                        val exitPlayer = {
-                            playerRequest = null
-                            // Home's "continue watching" card only needs to catch up here, not
-                            // reactively - AppPreferences isn't itself observable, and refreshing
-                            // on every write from PlayerViewModel would be needless churn while
-                            // the player is still open anyway.
-                            viewModel.refreshLastWatchedChannel()
-                        }
-                        BackHandler(onBack = exitPlayer)
-                        PlayerHost(
-                            channels = request.channels,
-                            startIndex = request.startIndex,
-                            onExit = exitPlayer,
-                            isFavorite = viewModel::isFavorite,
-                            onToggleFavorite = viewModel::toggleFavorite,
-                            resolveIcon = viewModel::resolveChannelIcon,
-                            epgState = epgState,
-                            iconPrefetchState = iconPrefetchState,
-                        )
-                    }
 
                     showHelp -> {
                         BackHandler { showHelp = false }
@@ -204,6 +221,11 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
+                    // Stays mounted (including while the fullscreen player covers it as an opaque
+                    // overlay below) rather than being replaced by an `isPlayerExpanded` branch -
+                    // RootScaffold owns its own bottom-tab selection as local state, which would
+                    // otherwise reset to Home every time the player expands/collapses, since that
+                    // state doesn't survive this composable leaving and re-entering composition.
                     else -> Box(modifier = Modifier.fillMaxSize()) {
                         RootScaffold(
                             currentLanguage = uiState.language,
@@ -224,9 +246,7 @@ class MainActivity : FragmentActivity() {
                             onHideGroup = viewModel::hideGroup,
                             onRestoreGroup = viewModel::clearGroupOverride,
                             focusChannelsToken = focusChannelsToken,
-                            onChannelSelected = { channels, startIndex ->
-                                playerRequest = PlayerRequest(channels, startIndex)
-                            },
+                            onChannelSelected = { channels, startIndex -> openPlayer(channels, startIndex) },
                             epgState = epgState,
                             onEpgSourceSelected = viewModel::selectEpgSource,
                             onUseSuggestedEpgUrl = viewModel::useSuggestedEpgUrl,
@@ -274,11 +294,61 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
+                // A single stable PlayerHost call site, always composed whenever a channel is
+                // loaded regardless of layout, drawn as a later sibling so it overlays whatever the
+                // `when` above is showing - this must never be duplicated into a second call site
+                // (e.g. one per branch), since PlayerHost owns its own NavHost/PlayerViewModel/
+                // ExoPlayer and a second call site would mean a second, independent instance of all
+                // three. Its own modifier decides fullscreen (opaque, covers RootScaffold - see its
+                // mounting comment above) vs the small floating bar; the bar is a plain overlay, not
+                // routed through RootScaffold's Scaffold, for the same "one call site" reason.
+                if (request != null) {
+                    BackHandler(enabled = isPlayerExpanded) {
+                        playerContainerState = PlayerContainerStateMachine.reduce(
+                            playerContainerState,
+                            PlayerContainerStateMachine.Event.Back,
+                        )
+                    }
+                    // Disabled while a sheet-like screen (Help/Terms/AddPlaylist) has its own
+                    // BackHandler active, so back closes that first - otherwise this collapsed-bar
+                    // handler, composed later, would intercept back before the sheet's own does.
+                    BackHandler(enabled = isPlayerCollapsed && !showHelp && !showTerms && !showAddPlaylist) {
+                        closePlayer()
+                    }
+                    PlayerHost(
+                        channels = request.channels,
+                        startIndex = request.startIndex,
+                        collapsed = !isPlayerExpanded,
+                        onExit = closePlayer,
+                        onTapCollapsed = {
+                            playerContainerState = PlayerContainerStateMachine.reduce(
+                                playerContainerState,
+                                PlayerContainerStateMachine.Event.Tap,
+                            )
+                        },
+                        isFavorite = viewModel::isFavorite,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        resolveIcon = viewModel::resolveChannelIcon,
+                        epgState = epgState,
+                        iconPrefetchState = iconPrefetchState,
+                        modifier = if (isPlayerExpanded) {
+                            Modifier.fillMaxSize()
+                        } else {
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .windowInsetsPadding(WindowInsets.navigationBars)
+                                .padding(horizontal = ScreenHPadding)
+                                .padding(bottom = GlassTabBarHeight + GlassTabBarVerticalPadding * 2)
+                        },
+                    )
+                }
+
                 if (showBatteryOptimizationHint) {
                     BatteryOptimizationDialog(
                         onAllow = viewModel::dismissBatteryOptimizationHint,
                         onDismiss = viewModel::dismissBatteryOptimizationHint,
                     )
+                }
                 }
             }
         }

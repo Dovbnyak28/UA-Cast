@@ -25,9 +25,22 @@ val RoundButtonSize = 46.dp
 val IconButtonSize = 38.dp
 val TouchTargetMin = 48.dp
 
+// Adaptive grids
+val GroupTileMinWidth = 160.dp
+val ChannelTileMinWidth = 110.dp
+val ChannelTileMinWidthLarge = 150.dp
+
 // Lists
 val ChannelLogoSize = 44.dp
 val ChannelLogoRadius = 13.dp
+val MiniPlayerBarHeight = 64.dp
+
+/** [GlassTabBar][com.uacastplayer.ui.components.GlassTabBar]'s own content height/vertical
+ * padding - named (not just literals inside GlassTabBar.kt) so
+ * [MiniPlayerBar][com.uacastplayer.ui.player.MiniPlayerBar] positioning code, which floats above
+ * the tab bar from outside RootScaffold's own Scaffold layout, can stay in sync with it. */
+val GlassTabBarHeight = 64.dp
+val GlassTabBarVerticalPadding = 8.dp
 val NpLogoSize = 54.dp
 val NpLogoRadius = 16.dp
 val ProgressHeightThin = 3.dp

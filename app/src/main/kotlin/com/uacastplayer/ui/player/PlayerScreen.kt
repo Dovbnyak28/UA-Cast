@@ -330,8 +330,12 @@ fun PlayerScreen(
         }
     } else {
         Column(
+            // An explicit opaque background - since RootScaffold now stays mounted underneath the
+            // fullscreen player rather than unmounting (see MainActivity's PlayerHost overlay
+            // comment), any transparent gap here would let it bleed through visually.
             modifier = modifier
                 .fillMaxSize()
+                .background(UaTheme.palette.void)
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .verticalScroll(rememberScrollState()),
         ) {
@@ -630,9 +634,11 @@ private fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifie
     }
 }
 
+/** internal, not private - reused by [com.uacastplayer.ui.player.MiniPlayerBar] to show the same
+ * live video output at a smaller size when the player is collapsed, rather than a separate surface. */
 @OptIn(markerClass = [UnstableApi::class])
 @Composable
-private fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
+internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {

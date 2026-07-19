@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
+import com.uacastplayer.ui.theme.GlassTabBarHeight
+import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.theme.PressScaleIcon
 import com.uacastplayer.ui.theme.raisedSurface
 
@@ -48,10 +50,10 @@ fun GlassTabBar(items: List<TabBarItem>, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = GlassTabBarVerticalPadding)
             .clip(RoundedCornerShape(24.dp))
             .background(glassTone)
-            .height(64.dp),
+            .height(GlassTabBarHeight),
     ) {
         for (item in items) {
             TabBarButton(item = item, modifier = Modifier.weight(1f))
