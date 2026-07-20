@@ -224,6 +224,10 @@ fun PlayerScreen(
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             },
+            update = { view -> if (view.player !== viewModel.player) view.player = viewModel.player },
+            // See VideoSurface's own onRelease - a disposed PlayerView must not keep holding the
+            // Player, or entering/leaving PiP races the surface with whichever PlayerView mounts next.
+            onRelease = { it.player = null },
             modifier = modifier.fillMaxSize(),
         )
         return
@@ -656,8 +660,10 @@ private fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifie
     }
 }
 
-/** internal, not private - reused by [com.uacastplayer.ui.player.MiniPlayerBar] to show the same
- * live video output at a smaller size when the player is collapsed, rather than a separate surface. */
+/** internal, not private - reused by [com.uacastplayer.ui.player.MiniPlayerBar], and called from
+ * two different sites within this file (inline and fullscreen) - each call site is a distinct
+ * composition node, so switching between them (e.g. collapsing fullscreen into the mini-bar)
+ * disposes one `PlayerView` and creates another. */
 @OptIn(markerClass = [UnstableApi::class])
 @Composable
 internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
@@ -668,7 +674,19 @@ internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier:
                 useController = false
             }
         },
-        update = { view -> view.resizeMode = resizeMode },
+        update = { view ->
+            // update() can run on every recomposition of this call site even though the Player
+            // instance hasn't changed - reassigning PlayerView.player unconditionally resets its
+            // internal surface binding each time, which is what caused an occasional black frame
+            // right after a fullscreen<->mini-bar transition (the newly composed PlayerView and the
+            // about-to-be-disposed old one briefly both held the same live Player).
+            if (view.player !== viewModel.player) view.player = viewModel.player
+            view.resizeMode = resizeMode
+        },
+        // Without this, a disposed PlayerView keeps its `player` reference alive - the Player
+        // itself thinks it still has a video output attached here even though this View is gone,
+        // which is exactly the dangling-surface race the black-frame bug above comes from.
+        onRelease = { it.player = null },
         modifier = modifier,
     )
 }
