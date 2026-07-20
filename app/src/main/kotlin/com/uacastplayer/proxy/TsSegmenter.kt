@@ -99,6 +99,12 @@ class TsSegmenter(
         // last one seen if this packet doesn't carry one) - a keyframe packet's own timestamp is
         // what decides whether *it* is a valid cut point, not the packet before it.
         val elapsed = elapsedMillis(pcr ?: lastPcrTicks)
+        // `pid == videoPid` short-circuits isKeyframeStart(packet) for every other PID - a broadcast
+        // routinely carries other PIDs (teletext, DVB subtitles) with PES structures this segmenter
+        // has no business parsing, and some real-world feeds send persistently malformed PES on
+        // those specific PIDs. Content on a non-video PID must never be inspected for a keyframe
+        // flag at all, regardless of what its bytes happen to look like - see TsSegmenterTest's
+        // "garbage PID" regression test.
         val isKeyframeBoundary = videoPid != null && pid == videoPid && isKeyframeStart(packet)
         val shouldCut = shouldCut(isKeyframeBoundary, elapsed)
 

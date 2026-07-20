@@ -204,6 +204,30 @@ class TsSegmenterTest {
     }
 
     @Test
+    fun `keyframe-like bytes on a foreign PID never count as a keyframe boundary`() {
+        val garbagePid = 0x105
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, startupSegments = 0)
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        // A packet on an unrelated PID (teletext/DVB subtitles in the field report this guards
+        // against) with the exact same payload_unit_start + adaptation-field random_access_indicator
+        // bit pattern as a genuine video keyframe packet - if keyframe detection ever inspected this
+        // packet's content instead of filtering by videoPid first, this alone would wrongly count as
+        // a keyframe boundary and could cut a segment years before the target duration.
+        val garbageLooksLikeKeyframe = videoPacket(pusi = true, keyframe = true, pcrBase = null)
+        garbageLooksLikeKeyframe[1] = (0x40 or ((garbagePid shr 8) and 0x1F)).toByte()
+        garbageLooksLikeKeyframe[2] = (garbagePid and 0xFF).toByte()
+        assertNull(segmenter.feed(garbageLooksLikeKeyframe))
+
+        // The segmenter behaves exactly as if the garbage packet had never been fed: only a real
+        // video-PID keyframe at or after the target duration actually cuts.
+        assertNull(segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(3.0))))
+        val completed = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(5.2)))
+        assertEquals(0, completed?.sequence)
+    }
+
+    @Test
     fun `never reads PCR from anywhere once the PMT declares PCR_PID none (0x1FFF)`() {
         val maxBytes = 2_000
         val segmenter = TsSegmenter(targetDurationMillis = 5_000, maxSegmentBytes = maxBytes)
