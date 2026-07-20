@@ -102,6 +102,10 @@ class CastSessionRepository private constructor(context: Context) {
     private var playingSinceMillis: Long? = null
     private var recoveryJob: Job? = null
 
+    // Whether PLAYING has been observed at all this casting episode (across every recovery
+    // reload) - see IncompatibilityRecordingPolicy. Reset per channel in startPlayback.
+    private var everReachedPlaying = false
+
     private val _state = MutableStateFlow(CastPlaybackState())
     val state: StateFlow<CastPlaybackState> = _state.asStateFlow()
 
@@ -134,6 +138,7 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun trackPlayingWindow(status: ReceiverStatus) {
+        if (status == ReceiverStatus.PLAYING) everReachedPlaying = true
         playingSinceMillis = if (status == ReceiverStatus.PLAYING) {
             playingSinceMillis ?: System.currentTimeMillis()
         } else {
@@ -154,16 +159,26 @@ class CastSessionRepository private constructor(context: Context) {
 
     /** Returns true if a reload was scheduled (the caller must skip the normal give-up reduction);
      * false means [CastRecoveryPolicy] said Ignore or GiveUp, and the normal reducer path - which
-     * already handles both of those correctly on its own - should run instead. */
+     * already handles both of those correctly on its own - should run instead. A GiveUp additionally
+     * records this (stream, receiver) pair first, if [IncompatibilityRecordingPolicy] says the
+     * failure was genuine rather than transient. */
     private fun tryRecover(idleReason: IdleReason, selfInitiated: Boolean): Boolean {
         val channel = activeChannel ?: return false
         val decision = recoveryDecisionFor(idleReason, selfInitiated)
+        if (decision == CastRecoveryDecision.GiveUp) recordIfGenuinelyIncompatible(channel.streamUrl)
         return if (decision is CastRecoveryDecision.Reload) {
             scheduleReload(channel, decision)
             true
         } else {
             false
         }
+    }
+
+    private fun recordIfGenuinelyIncompatible(streamUrl: String) {
+        val isConfirmedIncompatible = _state.value.codecIncompatibility != null
+        val shouldRecord = IncompatibilityRecordingPolicy.shouldRecord(isConfirmedIncompatible, everReachedPlaying)
+        if (!shouldRecord) return
+        currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
     }
 
     private fun recoveryDecisionFor(idleReason: IdleReason, selfInitiated: Boolean): CastRecoveryDecision {
@@ -272,6 +287,7 @@ class CastSessionRepository private constructor(context: Context) {
         recoveryJob?.cancel()
         recoveryAttempts = 0
         playingSinceMillis = null
+        everReachedPlaying = false
         val receiverId = currentReceiverId.orEmpty()
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())

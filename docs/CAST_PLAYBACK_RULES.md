@@ -137,6 +137,16 @@ fails - is remembered on disk (`data/cast/IncompatibilityMemoryStore.kt`, keyed 
 starts straight on the proxy instead of wasting 4 seconds re-discovering the same failure. Writes
 are debounced (minimum 2 seconds apart) so a flaky reconnect loop can't hammer the store.
 
+Recording only happens where `cast/IncompatibilityRecordingPolicy.kt` (pure) says the failure is
+genuine, not transient - either a confirmed `IncompatibleVideo` verdict, or a channel that never
+reached `PLAYING` at all across the whole casting episode including every recovery reload (see
+"Recovery" above). A channel that played, however briefly, before eventually giving up is treated
+as a one-off blip, not evidence the pair doesn't work - recording it anyway would skip a channel
+that's actually fine straight to the proxy for the next 30 days over a single bad moment.
+`IncompatibilityMemoryStore` bumped its on-disk schema version for this change and wipes every
+existing entry once on first run after the update, since an entry written under the old
+"record every failure" rule can't be told apart from one that would still qualify under the new one.
+
 ## Pending channel switch
 
 Switching channels while casting doesn't touch the local player (it's paused/idle for the whole
