@@ -217,6 +217,12 @@ class CastSessionRepository private constructor(context: Context) {
             }
             launch {
                 val result = diagnostic.await()
+                // The diagnostic runs on the IO dispatcher, genuinely concurrently with the user
+                // zapping to another channel on the Main dispatcher - see StaleChannelGuard.
+                if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) {
+                    AppLog.d(TAG) { "cast route: stale diagnostic result ignored, channel no longer active" }
+                    return@launch
+                }
                 lastKnownSourceKind = result.sourceKind
                 val verdict = CastCompatibilityPolicy.classify(result.programInfo)
                 val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, result.sourceKind)
@@ -251,6 +257,7 @@ class CastSessionRepository private constructor(context: Context) {
      * receiver) pair is recorded as incompatible immediately rather than waiting for an actual
      * receiver-side failure to do it. */
     private fun onRouteBlocked(streamUrl: String, verdict: CastCompatibilityVerdict.IncompatibleVideo) {
+        if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return
         currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
         reportCodecIncompatibility(CodecIncompatibility.Video(verdict.codec))
     }
@@ -262,6 +269,7 @@ class CastSessionRepository private constructor(context: Context) {
 
     private fun fallBackToProxyIfStillDirect(streamUrl: String, title: String, userAgent: String?, referrer: String?, reason: String) {
         if (_state.value.deliveryMode != CastDeliveryMode.Direct) return
+        if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return
         AppLog.d(TAG) { "Falling back to proxy: $reason" }
         _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
         startProxyAndLoad(streamUrl, title, userAgent, referrer)

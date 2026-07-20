@@ -43,6 +43,18 @@ status update after this app itself issued a load - and ignores that specific ID
 when it's set; an `IDLE` that's actually `ERROR` or `FINISHED` still goes through normal handling
 even if self-initiated, since a real error is still an error.
 
+## Stale channel guard
+
+A watchdog timeout and a diagnostic result are both deferred continuations holding a `streamUrl`
+captured in a closure - the diagnostic in particular runs on the IO dispatcher, genuinely
+concurrently with the user zapping to another channel on the Main dispatcher, not just racing
+coroutine cancellation timing. `cast/StaleChannelGuard.isCurrent(streamUrl, activeStreamUrl)` is
+checked before any of the three places such a continuation could act on a channel that's no longer
+current (`fallBackToProxyIfStillDirect`, `onRouteBlocked`, and the diagnostic-result handler
+itself) - without it, a late-arriving continuation for an abandoned channel could load the WRONG
+(already zapped-away-from) channel onto the receiver, or attribute a codec incompatibility banner to
+whatever channel happens to be on screen instead of the one it was actually diagnosed for.
+
 ## Watchdog
 
 A stream that's geo-restricted or VPN-only often doesn't error out on the receiver - it just
