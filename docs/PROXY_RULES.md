@@ -4,6 +4,18 @@ The local HLS proxy (`data/cast/ProxyServer.kt`) exists for one reason: some Cas
 play a stream directly (wrong codec, geo/VPN restriction, TLS quirks) even though the phone can.
 When that happens, the phone re-serves the stream to the receiver over the LAN instead.
 
+## Known limitation: IPv6-only networks
+
+The proxy is IPv4-only end to end - `LocalNetworkAddress.currentIpv4Address` is the only address a
+receiver on the same LAN could plausibly reach, and there's no IPv6 equivalent implemented. On a
+network that genuinely has no IPv4 address for the phone (IPv6-only, no NAT64/DHCP fallback), a
+proxy fallback is not just harder, it's impossible - no address exists to hand the receiver. This is
+detected explicitly rather than left to fail silently: `CastSessionRepository` shows
+`cast_proxy_ipv4_unavailable_message` ("Backup streaming isn't available on this network") instead
+of quietly recording a false incompatibility or bouncing to local playback with no explanation - and
+critically, the direct-mode attempt already in flight is left running rather than being cancelled in
+favor of a fallback that could never have worked on this network anyway.
+
 ## Server
 
 - A plain `ServerSocket` bound to `0.0.0.0` on a random port (the receiver is a different device on

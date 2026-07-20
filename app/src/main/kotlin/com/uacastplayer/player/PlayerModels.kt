@@ -45,6 +45,8 @@ data class PlayerUiState(
     val castLikelyCompatibilityHint: CastCompatibilityVerdict.LikelyCompatible? = null,
     /** Mirrors [com.uacastplayer.cast.CastPlaybackState.isRecovering]. */
     val castIsRecovering: Boolean = false,
+    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.proxyUnavailableIpv4Only]. */
+    val castProxyUnavailableIpv4Only: Boolean = false,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */

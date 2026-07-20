@@ -266,6 +266,7 @@
     <string name="cast_likely_incompatible_video_message">Couldn\'t play this on Chromecast. Likely cause: %1$s video isn\'t supported by your device. Local playback continues.</string>
     <string name="cast_likely_incompatible_audio_message">Couldn\'t play this on Chromecast. Likely cause: %1$s audio isn\'t supported by your device. Local playback continues.</string>
     <string name="cast_recovering_message">Recovering the stream…</string>
+    <string name="cast_proxy_ipv4_unavailable_message">Backup streaming isn\'t available on this network (an IPv4 address is required).</string>
     <string name="player_resize_fit">Fit</string>
     <string name="player_resize_fill">Fill</string>
     <string name="player_resize_zoom">Zoom</string>

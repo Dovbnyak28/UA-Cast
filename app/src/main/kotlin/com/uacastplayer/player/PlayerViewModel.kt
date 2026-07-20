@@ -159,6 +159,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         castReceiverLoadFailed = state.receiverLoadFailed,
                         castLikelyCompatibilityHint = state.likelyCompatibilityHint,
                         castIsRecovering = state.isRecovering,
+                        castProxyUnavailableIpv4Only = state.proxyUnavailableIpv4Only,
                     )
                 }
                 updateSeekability()

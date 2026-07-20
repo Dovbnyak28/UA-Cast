@@ -81,6 +81,7 @@ object CastReceiverStatusReducer {
             receiverLoadFailed = false,
             likelyCompatibilityHint = null,
             isRecovering = false,
+            proxyUnavailableIpv4Only = false,
         )
         return CastReducerResult(newState, effects)
     }

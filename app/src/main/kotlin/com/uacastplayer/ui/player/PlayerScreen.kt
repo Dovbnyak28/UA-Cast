@@ -423,6 +423,7 @@ fun PlayerScreen(
                 incompatibility is CodecIncompatibility.Video ->
                     stringResource(R.string.cast_incompatible_video_message, CodecDisplayName.of(incompatibility.codec))
                 uiState.castIsRecovering -> stringResource(R.string.cast_recovering_message)
+                uiState.castProxyUnavailableIpv4Only -> stringResource(R.string.cast_proxy_ipv4_unavailable_message)
                 uiState.castReceiverLoadFailed && hint?.videoHint != null ->
                     stringResource(R.string.cast_likely_incompatible_video_message, CodecDisplayName.of(hint.videoHint))
                 uiState.castReceiverLoadFailed && hint?.audioHint != null ->

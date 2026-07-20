@@ -344,6 +344,7 @@ class CastSessionRepository private constructor(context: Context) {
                 codecIncompatibility = null,
                 receiverLoadFailed = false,
                 isRecovering = false,
+                proxyUnavailableIpv4Only = false,
                 likelyCompatibilityHint = null,
             )
         }
@@ -418,19 +419,38 @@ class CastSessionRepository private constructor(context: Context) {
         _state.update { it.copy(codecIncompatibility = incompatibility) }
     }
 
+    /** Checks IPv4 availability *before* committing to the proxy - the receiver needs the phone's
+     * LAN address to fetch from (see [LocalNetworkAddress]), and an IPv6-only network simply has
+     * none, no matter how many times this is retried. Bailing out here rather than inside
+     * [startProxyAndLoad] leaves [CastPlaybackState.deliveryMode] at Direct - the direct attempt
+     * that's already in flight (or already finished on its own) is never cancelled or superseded
+     * by a proxy fallback that could never have worked anyway. */
     private fun fallBackToProxyIfStillDirect(streamUrl: String, title: String, userAgent: String?, referrer: String?, reason: String) {
-        if (_state.value.deliveryMode != CastDeliveryMode.Direct) return
-        if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return
+        val isStillDirect = _state.value.deliveryMode == CastDeliveryMode.Direct
+        val isStillCurrent = StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)
+        if (!isStillDirect || !isStillCurrent) return
+        if (LocalNetworkAddress.currentIpv4Address(appContext) == null) {
+            reportProxyUnavailableIpv4Only()
+            return
+        }
         AppLog.d(TAG) { "Falling back to proxy: $reason" }
         _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
         startProxyAndLoad(streamUrl, title, userAgent, referrer)
     }
 
+    /** Surfaced instead of silently giving up when no IPv4 LAN address is available at all (an
+     * IPv6-only network) - a genuinely unfixable-by-retrying limitation (see
+     * docs/PROXY_RULES.md), worth telling the user about explicitly rather than casting quietly
+     * failing with no explanation. */
+    private fun reportProxyUnavailableIpv4Only() {
+        AppLog.w(TAG) { "No IPv4 LAN address available; proxy fallback unavailable on this network" }
+        _state.update { it.copy(proxyUnavailableIpv4Only = true) }
+    }
+
     private fun startProxyAndLoad(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         val host = LocalNetworkAddress.currentIpv4Address(appContext)
         if (host == null) {
-            AppLog.w(TAG) { "No LAN address available; cannot start proxy fallback" }
-            giveUp(streamUrl)
+            reportProxyUnavailableIpv4Only()
             return
         }
         proxyServer.ensureStarted(
@@ -519,11 +539,6 @@ class CastSessionRepository private constructor(context: Context) {
                 CastProxyService.start(appContext, channelTitle.orEmpty(), receiverName.orEmpty())
             ProxyServiceCommand.StopForeground -> CastProxyService.stop(appContext)
         }
-    }
-
-    private fun giveUp(streamUrl: String) {
-        currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
-        applyResult(CastLoadResultReducer.reduce(_state.value, CastLoadResult.Failure("proxy_unavailable")))
     }
 
     private fun applyResult(result: CastReducerResult) {

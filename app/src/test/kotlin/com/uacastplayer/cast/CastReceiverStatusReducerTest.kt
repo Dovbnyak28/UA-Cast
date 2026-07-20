@@ -142,6 +142,13 @@ class CastReceiverStatusReducerTest {
     }
 
     @Test
+    fun `DISCONNECTED clears a lingering IPv4-unavailable flag`() {
+        val state = CastPlaybackState(isSessionConnected = true, proxyUnavailableIpv4Only = true)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
+        assertFalse(result.state.proxyUnavailableIpv4Only)
+    }
+
+    @Test
     fun `DISCONNECTED clears a lingering recovering flag`() {
         val state = CastPlaybackState(isSessionConnected = true, isRecovering = true)
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)

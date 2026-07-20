@@ -268,6 +268,7 @@
     <string name="cast_likely_incompatible_video_message">Не удалось воспроизвести на Chromecast. Вероятная причина: видео %1$s не поддерживается вашим устройством. Воспроизведение на телефоне продолжается.</string>
     <string name="cast_likely_incompatible_audio_message">Не удалось воспроизвести на Chromecast. Вероятная причина: аудио %1$s не поддерживается вашим устройством. Воспроизведение на телефоне продолжается.</string>
     <string name="cast_recovering_message">Восстановление трансляции…</string>
+    <string name="cast_proxy_ipv4_unavailable_message">Резервная трансляция недоступна в этой сети (нужен IPv4-адрес).</string>
     <string name="player_resize_fit">Вписать</string>
     <string name="player_resize_fill">Заполнить</string>
     <string name="player_resize_zoom">Увеличить</string>
