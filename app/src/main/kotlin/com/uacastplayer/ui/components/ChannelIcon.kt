@@ -24,6 +24,12 @@ import com.uacastplayer.ui.theme.ChannelLogoSize
 import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
+// Compiled once at class-init rather than inside initialsFor() - that function runs on every
+// recomposition of every channel row falling back to initials (no icon yet, or a decode error),
+// including the swipe-preview rail shown live during playback, so a fresh Regex per call there was
+// a real per-frame allocation source, not just a one-off.
+private val WHITESPACE_REGEX = Regex("\\s+")
+
 /**
  * A channel's resolved logo, falling back to its initials in a plain box while resolving, if none
  * is available, or if Coil fails to decode the file [resolveIcon] returned - a file IconDiskCache
@@ -67,4 +73,4 @@ fun ChannelIcon(
 }
 
 fun initialsFor(name: String): String =
-    name.trim().split(Regex("\\s+")).mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
+    name.trim().split(WHITESPACE_REGEX).mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
