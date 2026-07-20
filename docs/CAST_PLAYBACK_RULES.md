@@ -22,6 +22,27 @@ and feeding it through one of these two.
   is where the handoff back to local playback happens, including applying any channel switch that
   was requested (and queued, not applied) while casting was active.
 
+## Load generations and status classification
+
+`CastSessionRepository` issues a second `load()` request whenever the watchdog, a codec-routing
+decision, or a fast channel switch supersedes an in-flight one - the *first* request's own SDK
+result callback still fires after that, often with a status code that looks like a failure (2103
+`REPLACED`, or the media-queue noise of 2002) but isn't one. Every `loadOnReceiver` call increments
+a monotonic `loadGeneration` counter *before* calling the SDK; a result callback whose generation no
+longer matches the current one is dropped immediately (`cast load: gen=<g> status=stale
+action=ignored`), and `cast/LoadStatusClassifier.kt` further tells a `Superseded` status (SDK-level
+noise from being replaced, always ignored) apart from a `Rejected`/`Failed` status (a genuine
+failure of that specific request, which still goes through the normal direct-fails-to-proxy path).
+Every outcome logs one line: `cast load: gen=<g> status=<NAME(code)> action=<...>`.
+
+The receiver's own status stream (`RemoteMediaClient.Callback.onStatusUpdated`) has the same
+problem from a different angle: issuing a new load naturally interrupts whatever the receiver was
+doing, and the SDK reports that as an ordinary `IDLE` (`CANCELLED`/`INTERRUPTED`/`NONE`), not an
+error. `CastReceiverStatusReducer.reduce` takes a `selfInitiated` flag - true only for the first
+status update after this app itself issued a load - and ignores that specific IDLE shape entirely
+when it's set; an `IDLE` that's actually `ERROR` or `FINISHED` still goes through normal handling
+even if self-initiated, since a real error is still an error.
+
 ## Watchdog
 
 A stream that's geo-restricted or VPN-only often doesn't error out on the receiver - it just

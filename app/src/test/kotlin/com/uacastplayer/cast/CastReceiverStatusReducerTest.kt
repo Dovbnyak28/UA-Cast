@@ -141,4 +141,62 @@ class CastReceiverStatusReducerTest {
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
         assertNull(result.state.likelyCompatibilityHint)
     }
+
+    @Test
+    fun `self-initiated IDLE with INTERRUPTED is ignored entirely`() {
+        val result = CastReceiverStatusReducer.reduce(
+            CastPlaybackState(),
+            ReceiverStatus.IDLE,
+            IdleReason.INTERRUPTED,
+            selfInitiated = true,
+        )
+        assertTrue(result.effects.isEmpty())
+        assertFalse(result.state.receiverLoadFailed)
+        assertEquals(ReceiverStatus.IDLE, result.state.receiverStatus)
+    }
+
+    @Test
+    fun `self-initiated IDLE with CANCELLED is ignored entirely`() {
+        val result = CastReceiverStatusReducer.reduce(
+            CastPlaybackState(),
+            ReceiverStatus.IDLE,
+            IdleReason.CANCELLED,
+            selfInitiated = true,
+        )
+        assertTrue(result.effects.isEmpty())
+    }
+
+    @Test
+    fun `self-initiated IDLE with ERROR still goes through the normal error handling`() {
+        val result = CastReceiverStatusReducer.reduce(
+            CastPlaybackState(),
+            ReceiverStatus.IDLE,
+            IdleReason.ERROR,
+            selfInitiated = true,
+        )
+        assertTrue(result.state.receiverLoadFailed)
+        assertTrue(result.effects.contains(CastSideEffect.ResumeLocalPlayer))
+    }
+
+    @Test
+    fun `self-initiated IDLE with FINISHED still closes the proxy session`() {
+        val result = CastReceiverStatusReducer.reduce(
+            CastPlaybackState(),
+            ReceiverStatus.IDLE,
+            IdleReason.FINISHED,
+            selfInitiated = true,
+        )
+        assertEquals(listOf(CastSideEffect.CloseProxySession), result.effects)
+    }
+
+    @Test
+    fun `a non-self-initiated IDLE with INTERRUPTED behaves as before - no special effects either way`() {
+        val result = CastReceiverStatusReducer.reduce(
+            CastPlaybackState(),
+            ReceiverStatus.IDLE,
+            IdleReason.INTERRUPTED,
+            selfInitiated = false,
+        )
+        assertTrue(result.effects.isEmpty())
+    }
 }

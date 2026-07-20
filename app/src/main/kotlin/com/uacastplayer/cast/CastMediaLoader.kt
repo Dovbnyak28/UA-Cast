@@ -3,17 +3,12 @@ package com.uacastplayer.cast
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
-import com.uacastplayer.player.StreamMimeClassifier
-import com.uacastplayer.player.StreamType
 
 /** Builds a direct-to-receiver load request for a channel's stream URL. */
 object CastMediaLoader {
 
-    fun buildRequest(streamUrl: String, title: String): MediaLoadRequestData {
-        val mimeType = when (StreamMimeClassifier.classify(streamUrl)) {
-            StreamType.HLS -> "application/x-mpegurl"
-            StreamType.DASH -> "application/dash+xml"
-        }
+    fun buildRequest(streamUrl: String, title: String, sourceKind: TsSourceKind? = null): MediaLoadRequestData {
+        val mimeType = CastContentType.of(streamUrl, sourceKind)
         val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_GENERIC).apply {
             putString(MediaMetadata.KEY_TITLE, title)
         }

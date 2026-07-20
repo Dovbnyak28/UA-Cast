@@ -14,6 +14,7 @@ import com.uacastplayer.data.cast.TsFirstSegmentDiagnostic
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.log.AppLog
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,6 +35,14 @@ private const val WATCHDOG_TIMEOUT_MILLIS = 4_000L
 
 private data class ActiveChannel(
     val index: Int,
+    val streamUrl: String,
+    val title: String,
+    val userAgent: String?,
+    val referrer: String?,
+)
+
+/** What [CastSessionRepository.applyLoadResult] needs to retry on the proxy if a direct load fails. */
+private data class LoadRetryContext(
     val streamUrl: String,
     val title: String,
     val userAgent: String?,
@@ -65,6 +74,20 @@ class CastSessionRepository private constructor(context: Context) {
     private var activeChannel: ActiveChannel? = null
     private var watchdogJob: Job? = null
 
+    // See loadOnReceiver/handleLoadResult: every load() bumps this before the SDK call, so a
+    // result callback for a load a newer one has already superseded (a watchdog fallback or a fast
+    // channel switch) can be told apart from the result of the current, still-relevant request.
+    private val loadGeneration = AtomicLong(0)
+
+    // True only until the very next receiver status update - see CastReceiverStatusReducer.reduce.
+    private var selfInitiatedTransition = false
+
+    // Not a real cache (see cast/CastRecoveryPolicy and the diagnostic's own LruCache for that) -
+    // just the most recently resolved sourceKind for the in-flight channel, so a load issued after
+    // the diagnostic already answered (proxy fallback, a future reload) gets the right Cast
+    // content-type instead of falling back to a URL guess. Reset per channel in startPlayback.
+    private var lastKnownSourceKind: TsSourceKind? = null
+
     private val _state = MutableStateFlow(CastPlaybackState())
     val state: StateFlow<CastPlaybackState> = _state.asStateFlow()
 
@@ -89,7 +112,9 @@ class CastSessionRepository private constructor(context: Context) {
             val receiverStatus = mapPlayerState(status.playerState)
             if (receiverStatus == ReceiverStatus.PLAYING) watchdogJob?.cancel()
             val idleReason = mapIdleReason(status.idleReason)
-            applyResult(CastReceiverStatusReducer.reduce(_state.value, receiverStatus, idleReason))
+            val selfInitiated = selfInitiatedTransition
+            selfInitiatedTransition = false
+            applyResult(CastReceiverStatusReducer.reduce(_state.value, receiverStatus, idleReason, selfInitiated))
         }
     }
 
@@ -161,6 +186,7 @@ class CastSessionRepository private constructor(context: Context) {
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
         val mode = CastDeliveryStrategy.initialMode(knownIncompatible)
+        lastKnownSourceKind = null
         _state.update {
             it.copy(
                 deliveryMode = mode,
@@ -185,6 +211,7 @@ class CastSessionRepository private constructor(context: Context) {
             }
             launch {
                 val result = diagnostic.await()
+                lastKnownSourceKind = result.sourceKind
                 val verdict = CastCompatibilityPolicy.classify(result.programInfo)
                 val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, result.sourceKind)
                 // One self-contained line per routing decision - no URL, just what was found and
@@ -261,19 +288,43 @@ class CastSessionRepository private constructor(context: Context) {
         referrer: String? = null,
     ) {
         val client = currentSession?.remoteMediaClient ?: return
+        val generation = loadGeneration.incrementAndGet()
+        selfInitiatedTransition = true
         _state.update { it.copy(loadPhase = CastLoadPhase.LOADING) }
-        val request = CastMediaLoader.buildRequest(urlToLoad, title)
+        val request = CastMediaLoader.buildRequest(urlToLoad, title, lastKnownSourceKind)
+        val context = LoadRetryContext(originalStreamUrl, title, userAgent, referrer)
         client.load(request).setResultCallback { result ->
             val loadResult = if (result.status.isSuccess) {
                 CastLoadResult.Success
             } else {
                 CastLoadResult.Failure("status_${result.status.statusCode}")
             }
-            handleLoadResult(loadResult, originalStreamUrl, title, userAgent, referrer)
+            handleLoadResult(generation, result.status.statusCode, loadResult, context)
         }
     }
 
-    private fun handleLoadResult(result: CastLoadResult, streamUrl: String, title: String, userAgent: String?, referrer: String?) {
+    /** First ignores anything from a load a newer request has already superseded - see
+     * [loadGeneration] - then, for a same-generation failure, tells apart a status the Cast SDK
+     * only reports *because* this request got superseded (see [LoadStatusOutcome.Superseded]) from
+     * a genuine failure of this specific request, which still goes through the normal fail path. */
+    private fun handleLoadResult(generation: Long, statusCode: Int, result: CastLoadResult, context: LoadRetryContext) {
+        if (generation != loadGeneration.get()) {
+            AppLog.d(TAG) { "cast load: gen=$generation status=stale action=ignored" }
+            return
+        }
+        logLoadOutcome(generation, statusCode, result, context)
+    }
+
+    private fun logLoadOutcome(generation: Long, statusCode: Int, result: CastLoadResult, context: LoadRetryContext) {
+        val outcome = (result as? CastLoadResult.Failure)?.let { LoadStatusClassifier.classify(statusCode) }
+        val superseded = outcome is LoadStatusOutcome.Superseded
+        val statusLabel = outcome?.let { "${it.statusName}($statusCode)" } ?: "SUCCESS"
+        val action = if (outcome == null) "loaded" else if (superseded) "ignored" else "handled"
+        AppLog.d(TAG) { "cast load: gen=$generation status=$statusLabel action=$action" }
+        if (!superseded) applyLoadResult(result, context)
+    }
+
+    private fun applyLoadResult(result: CastLoadResult, context: LoadRetryContext) {
         // A confirmed-incompatible codec (see onRouteBlocked) means the proxy could never have
         // helped even if the diagnostic resolved after this failure - don't waste a proxy attempt
         // chasing a load that was already known to be futile.
@@ -282,11 +333,8 @@ class CastSessionRepository private constructor(context: Context) {
         if (isDirectFailure && stillWorthProxying) {
             watchdogJob?.cancel()
             _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
-            startProxyAndLoad(streamUrl, title, userAgent, referrer)
+            startProxyAndLoad(context.streamUrl, context.title, context.userAgent, context.referrer)
             return
-        }
-        if (result is CastLoadResult.Failure) {
-            currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
         }
         applyResult(CastLoadResultReducer.reduce(_state.value, result))
     }
