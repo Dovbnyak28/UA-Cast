@@ -12,7 +12,13 @@ sealed class VideoCodec {
 sealed class AudioCodec {
     data object Aac : AudioCodec()
     data object AacLatm : AudioCodec()
-    data object Mp2 : AudioCodec()
+
+    /** PMT stream_type 0x03/0x04 ("MPEG-1/2 audio") doesn't distinguish MP2 from MP3 - both use
+     * the same stream_type, and telling them apart needs an actual bitstream parse, not a PMT
+     * read. Chromecast's Default Receiver officially plays MP3, and real receivers overwhelmingly
+     * play MP2 too, so this is never treated as a hard incompatibility (see
+     * [CastCompatibilityPolicy]) - only named in a post-failure message if casting doesn't pan out. */
+    data object MpegAudio : AudioCodec()
     data object Ac3 : AudioCodec()
     data object Eac3 : AudioCodec()
     data class Unknown(val streamType: Int) : AudioCodec()
@@ -164,7 +170,7 @@ object TsProgramInfoParser {
     }
 
     private fun audioCodecFor(streamType: Int): AudioCodec = when (streamType) {
-        0x03, 0x04 -> AudioCodec.Mp2
+        0x03, 0x04 -> AudioCodec.MpegAudio
         0x0F -> AudioCodec.Aac
         0x11 -> AudioCodec.AacLatm
         0x81 -> AudioCodec.Ac3

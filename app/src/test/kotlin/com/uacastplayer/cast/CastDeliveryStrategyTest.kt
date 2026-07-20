@@ -60,10 +60,17 @@ class CastDeliveryStrategyTest {
     }
 
     @Test
-    fun `an incompatible audio verdict is blocked regardless of source kind`() {
-        val verdict = CastCompatibilityVerdict.IncompatibleAudio(AudioCodec.Mp2)
-        val result = CastDeliveryStrategy.onDiagnosticResult(verdict, TsSourceKind.Unknown)
-        assertEquals(CastRouteDecision.Blocked(verdict), result)
+    fun `a LikelyCompatible verdict on raw TS skips straight to the proxy, same as Compatible`() {
+        val verdict = CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.MpegAudio, videoHint = null)
+        val result = CastDeliveryStrategy.onDiagnosticResult(verdict, TsSourceKind.RawTs)
+        assertEquals(CastRouteDecision.ProxyImmediately, result)
+    }
+
+    @Test
+    fun `a LikelyCompatible verdict on HLS takes no action, same as Compatible`() {
+        val verdict = CastCompatibilityVerdict.LikelyCompatible(audioHint = null, videoHint = VideoCodec.Hevc)
+        val result = CastDeliveryStrategy.onDiagnosticResult(verdict, TsSourceKind.Hls)
+        assertEquals(CastRouteDecision.NoAction, result)
     }
 
     @Test

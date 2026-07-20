@@ -161,7 +161,14 @@ class CastSessionRepository private constructor(context: Context) {
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
         val mode = CastDeliveryStrategy.initialMode(knownIncompatible)
-        _state.update { it.copy(deliveryMode = mode, codecIncompatibility = null, receiverLoadFailed = false) }
+        _state.update {
+            it.copy(
+                deliveryMode = mode,
+                codecIncompatibility = null,
+                receiverLoadFailed = false,
+                likelyCompatibilityHint = null,
+            )
+        }
 
         when (mode) {
             CastDeliveryMode.Direct -> loadDirectWithWatchdog(streamUrl, title, userAgent, referrer)
@@ -186,6 +193,11 @@ class CastSessionRepository private constructor(context: Context) {
                     "cast route: verdict=$verdict source=${result.sourceKind} action=$decision " +
                         "video=${result.programInfo?.videoCodec} audio=${result.programInfo?.audioCodecs}"
                 }
+                // Never blocks or reroutes anything by itself - just remembered in case
+                // receiverLoadFailed ends up true later, so that message can name a likely cause.
+                if (verdict is CastCompatibilityVerdict.LikelyCompatible) {
+                    _state.update { it.copy(likelyCompatibilityHint = verdict) }
+                }
                 when (decision) {
                     is CastRouteDecision.Blocked -> onRouteBlocked(streamUrl, decision.verdict)
                     CastRouteDecision.ProxyImmediately ->
@@ -205,14 +217,9 @@ class CastSessionRepository private constructor(context: Context) {
      * watchdog-timeout fallback - this never proceeds to the proxy at all, and the (stream,
      * receiver) pair is recorded as incompatible immediately rather than waiting for an actual
      * receiver-side failure to do it. */
-    private fun onRouteBlocked(streamUrl: String, verdict: CastCompatibilityVerdict) {
+    private fun onRouteBlocked(streamUrl: String, verdict: CastCompatibilityVerdict.IncompatibleVideo) {
         currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
-        val incompatibility = when (verdict) {
-            is CastCompatibilityVerdict.IncompatibleAudio -> CodecIncompatibility.Audio(verdict.codec)
-            is CastCompatibilityVerdict.IncompatibleVideo -> CodecIncompatibility.Video(verdict.codec)
-            else -> return
-        }
-        reportCodecIncompatibility(incompatibility)
+        reportCodecIncompatibility(CodecIncompatibility.Video(verdict.codec))
     }
 
     private fun reportCodecIncompatibility(incompatibility: CodecIncompatibility) {

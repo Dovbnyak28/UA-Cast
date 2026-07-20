@@ -16,7 +16,7 @@ class CodecDisplayNameTest {
     fun `names known audio codecs`() {
         assertEquals("AAC", CodecDisplayName.of(AudioCodec.Aac))
         assertEquals("AAC", CodecDisplayName.of(AudioCodec.AacLatm))
-        assertEquals("MP2", CodecDisplayName.of(AudioCodec.Mp2))
+        assertEquals("MP2", CodecDisplayName.of(AudioCodec.MpegAudio))
         assertEquals("AC-3", CodecDisplayName.of(AudioCodec.Ac3))
         assertEquals("E-AC-3", CodecDisplayName.of(AudioCodec.Eac3))
     }

@@ -16,7 +16,7 @@ object CodecDisplayName {
 
     fun of(codec: AudioCodec): String = when (codec) {
         AudioCodec.Aac, AudioCodec.AacLatm -> "AAC"
-        AudioCodec.Mp2 -> "MP2"
+        AudioCodec.MpegAudio -> "MP2"
         AudioCodec.Ac3 -> "AC-3"
         AudioCodec.Eac3 -> "E-AC-3"
         is AudioCodec.Unknown -> "audio (type ${codec.streamType})"

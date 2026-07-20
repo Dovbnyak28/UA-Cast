@@ -411,13 +411,19 @@ fun PlayerScreen(
             }
 
             // Codec incompatibility is the more specific, actionable explanation, so it takes
-            // precedence in the rare case both could apply (see CastReceiverStatusReducer).
+            // precedence in the rare case both could apply (see CastReceiverStatusReducer). A
+            // LikelyCompatible hint is weaker still - it only ever supplies a likely cause for a
+            // receiverLoadFailed that already happened, never a standalone reason on its own
+            // (video hint over audio hint, matching CastCompatibilityPolicy's own priority).
             val incompatibility = uiState.castCodecIncompatibility
+            val hint = uiState.castLikelyCompatibilityHint
             val castIncompatibilityMessage = when {
                 incompatibility is CodecIncompatibility.Video ->
                     stringResource(R.string.cast_incompatible_video_message, CodecDisplayName.of(incompatibility.codec))
-                incompatibility is CodecIncompatibility.Audio ->
-                    stringResource(R.string.cast_incompatible_audio_message, CodecDisplayName.of(incompatibility.codec))
+                uiState.castReceiverLoadFailed && hint?.videoHint != null ->
+                    stringResource(R.string.cast_likely_incompatible_video_message, CodecDisplayName.of(hint.videoHint))
+                uiState.castReceiverLoadFailed && hint?.audioHint != null ->
+                    stringResource(R.string.cast_likely_incompatible_audio_message, CodecDisplayName.of(hint.audioHint))
                 uiState.castReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
                 else -> null
             }

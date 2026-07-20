@@ -121,7 +121,7 @@ class CastReceiverStatusReducerTest {
 
     @Test
     fun `DISCONNECTED clears a lingering codec incompatibility warning`() {
-        val incompatibility = CodecIncompatibility.Audio(AudioCodec.Mp2)
+        val incompatibility = CodecIncompatibility.Video(VideoCodec.Mpeg2Video)
         val state = CastPlaybackState(isSessionConnected = true, codecIncompatibility = incompatibility)
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
         assertNull(result.state.codecIncompatibility)
@@ -132,5 +132,13 @@ class CastReceiverStatusReducerTest {
         val state = CastPlaybackState(isSessionConnected = true, receiverLoadFailed = true)
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
         assertFalse(result.state.receiverLoadFailed)
+    }
+
+    @Test
+    fun `DISCONNECTED clears a lingering likely-compatibility hint`() {
+        val hint = CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.MpegAudio, videoHint = null)
+        val state = CastPlaybackState(isSessionConnected = true, likelyCompatibilityHint = hint)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
+        assertNull(result.state.likelyCompatibilityHint)
     }
 }

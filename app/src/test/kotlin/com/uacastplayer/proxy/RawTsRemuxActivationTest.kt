@@ -51,7 +51,7 @@ class RawTsRemuxActivationTest {
             RawTsRemuxActivation.shouldActivate(
                 isHlsPlaylist = false,
                 looksLikeMpegTs = true,
-                verdict = CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Hevc),
+                verdict = CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Mpeg2Video),
                 featureEnabled = true,
             ),
         )
@@ -70,12 +70,12 @@ class RawTsRemuxActivationTest {
     }
 
     @Test
-    fun `does not activate for an incompatible audio codec`() {
-        assertFalse(
+    fun `activates for a LikelyCompatible verdict - it never confirms a hard incompatibility`() {
+        assertTrue(
             RawTsRemuxActivation.shouldActivate(
                 isHlsPlaylist = false,
                 looksLikeMpegTs = true,
-                verdict = CastCompatibilityVerdict.IncompatibleAudio(AudioCodec.Mp2),
+                verdict = CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.MpegAudio, videoHint = null),
                 featureEnabled = true,
             ),
         )

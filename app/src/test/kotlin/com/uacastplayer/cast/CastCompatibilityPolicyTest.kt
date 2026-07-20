@@ -18,21 +18,23 @@ class CastCompatibilityPolicyTest {
     }
 
     @Test
-    fun `MP2-only audio is incompatible`() {
-        val info = TsProgramInfo(VideoCodec.H264, listOf(AudioCodec.Mp2))
-        assertEquals(CastCompatibilityVerdict.IncompatibleAudio(AudioCodec.Mp2), CastCompatibilityPolicy.classify(info))
+    fun `MP2-only audio is LikelyCompatible, not blocked`() {
+        val info = TsProgramInfo(VideoCodec.H264, listOf(AudioCodec.MpegAudio))
+        val expected = CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.MpegAudio, videoHint = null)
+        assertEquals(expected, CastCompatibilityPolicy.classify(info))
     }
 
     @Test
-    fun `AC3-only audio is incompatible`() {
+    fun `AC3-only audio is LikelyCompatible, not blocked`() {
         val info = TsProgramInfo(VideoCodec.H264, listOf(AudioCodec.Ac3))
-        assertEquals(CastCompatibilityVerdict.IncompatibleAudio(AudioCodec.Ac3), CastCompatibilityPolicy.classify(info))
+        val expected = CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.Ac3, videoHint = null)
+        assertEquals(expected, CastCompatibilityPolicy.classify(info))
     }
 
     @Test
-    fun `EAC3-only audio is incompatible`() {
+    fun `EAC3-only audio is LikelyCompatible, not blocked`() {
         val info = TsProgramInfo(VideoCodec.H264, listOf(AudioCodec.Eac3))
-        val expected = CastCompatibilityVerdict.IncompatibleAudio(AudioCodec.Eac3)
+        val expected = CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.Eac3, videoHint = null)
         assertEquals(expected, CastCompatibilityPolicy.classify(info))
     }
 
@@ -43,23 +45,32 @@ class CastCompatibilityPolicyTest {
     }
 
     @Test
-    fun `HEVC video is incompatible regardless of audio`() {
+    fun `HEVC video with AAC audio is LikelyCompatible, not blocked`() {
         val info = TsProgramInfo(VideoCodec.Hevc, listOf(AudioCodec.Aac))
-        val expected = CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Hevc)
+        val expected = CastCompatibilityVerdict.LikelyCompatible(audioHint = null, videoHint = VideoCodec.Hevc)
         assertEquals(expected, CastCompatibilityPolicy.classify(info))
     }
 
     @Test
-    fun `MPEG-2 video is incompatible`() {
+    fun `MPEG-2 video is the one hard incompatibility`() {
         val info = TsProgramInfo(VideoCodec.Mpeg2Video, listOf(AudioCodec.Aac))
         val expected = CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Mpeg2Video)
         assertEquals(expected, CastCompatibilityPolicy.classify(info))
     }
 
     @Test
-    fun `bad video wins over bad audio`() {
+    fun `MPEG-2 video blocks even with a compatible audio track`() {
+        val info = TsProgramInfo(VideoCodec.Mpeg2Video, listOf(AudioCodec.Ac3))
+        val expected = CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Mpeg2Video)
+        assertEquals(expected, CastCompatibilityPolicy.classify(info))
+    }
+
+    @Test
+    fun `HEVC video and AC3 audio both surface as hints on the same LikelyCompatible verdict`() {
         val info = TsProgramInfo(VideoCodec.Hevc, listOf(AudioCodec.Ac3))
-        assertEquals(CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Hevc), CastCompatibilityPolicy.classify(info))
+        val expected =
+            CastCompatibilityVerdict.LikelyCompatible(audioHint = AudioCodec.Ac3, videoHint = VideoCodec.Hevc)
+        assertEquals(expected, CastCompatibilityPolicy.classify(info))
     }
 
     @Test

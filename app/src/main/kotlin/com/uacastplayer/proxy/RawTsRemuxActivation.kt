@@ -10,10 +10,10 @@ import com.uacastplayer.cast.CastCompatibilityVerdict
  *   TS segmenter),
  * - [com.uacastplayer.cast.CastCompatibilityPolicy] didn't find a confirmed-incompatible codec (an
  *   incompatible codec would still fail after remuxing - only the *container* problem is fixable
- *   here, see `cast/CastCompatibilityPolicy.kt`). Compatible AND Unknown both pass this: a raw TS
- *   stream is never playable as a bare passthrough URL regardless of codec verdict (the receiver
- *   needs HLS/DASH wrapping either way), so an Unknown verdict - PAT/PMT not found within the
- *   probe window, not a confirmed problem - should still get a chance via remux rather than a
+ *   here, see `cast/CastCompatibilityPolicy.kt`). MPEG-2 video is the only verdict that fails this;
+ *   Compatible, LikelyCompatible, and Unknown all pass: a raw TS stream is never playable as a bare
+ *   passthrough URL regardless of codec verdict (the receiver needs HLS/DASH wrapping either way),
+ *   so anything short of a confirmed problem should still get a chance via remux rather than a
  *   passthrough that's guaranteed useless,
  * - the feature hasn't been switched off (an escape hatch for if keyframe detection turns out
  *   unreliable on some real broadcast - see `AppPreferences.rawTsRemuxEnabled`).
@@ -26,8 +26,7 @@ object RawTsRemuxActivation {
         verdict: CastCompatibilityVerdict,
         featureEnabled: Boolean,
     ): Boolean {
-        val confirmedIncompatible = verdict is CastCompatibilityVerdict.IncompatibleAudio ||
-            verdict is CastCompatibilityVerdict.IncompatibleVideo
+        val confirmedIncompatible = verdict is CastCompatibilityVerdict.IncompatibleVideo
         return featureEnabled && !isHlsPlaylist && looksLikeMpegTs && !confirmedIncompatible
     }
 }

@@ -82,7 +82,7 @@ class TsProgramInfoParserTest {
         val bytes = buildStream(listOf(0x1B to VIDEO_PID, 0x04 to AUDIO_PID))
         val info = TsProgramInfoParser.parse(bytes)
         assertEquals(VideoCodec.H264, info?.videoCodec)
-        assertEquals(listOf(AudioCodec.Mp2), info?.audioCodecs)
+        assertEquals(listOf(AudioCodec.MpegAudio), info?.audioCodecs)
     }
 
     @Test

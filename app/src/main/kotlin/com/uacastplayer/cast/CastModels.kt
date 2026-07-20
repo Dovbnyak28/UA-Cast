@@ -7,13 +7,13 @@ enum class ReceiverStatus { BUFFERING, PLAYING, PAUSED, IDLE, DISCONNECTED }
 
 enum class IdleReason { NONE, FINISHED, ERROR, CANCELLED, INTERRUPTED }
 
-/** Surfaced when [CastCompatibilityPolicy] finds a codec the receiver can't play - proxy fallback
- * would not help (it re-serves the same codecs, see docs/PROXY_RULES.md), so this is shown to the
- * user - naming the actual codec (see [CodecDisplayName]) rather than a vague "not supported" -
- * instead of silently retrying. Cleared whenever a new channel starts casting. */
+/** Surfaced when [CastCompatibilityPolicy] finds a codec that hard-blocks casting (MPEG-2 video
+ * only, see [CastCompatibilityVerdict.IncompatibleVideo]) - proxy fallback would not help (it
+ * re-serves the same codecs, see docs/PROXY_RULES.md), so this is shown to the user - naming the
+ * actual codec (see [CodecDisplayName]) rather than a vague "not supported" - instead of silently
+ * retrying. Cleared whenever a new channel starts casting. */
 sealed class CodecIncompatibility {
     data class Video(val codec: VideoCodec) : CodecIncompatibility()
-    data class Audio(val codec: AudioCodec) : CodecIncompatibility()
 }
 
 data class CastPlaybackState(
@@ -31,6 +31,10 @@ data class CastPlaybackState(
     // side, casting silently reverting to local playback with no explanation looked identical to
     // "casting doesn't work at all".
     val receiverLoadFailed: Boolean = false,
+    // A non-blocking codec hint from CastCompatibilityPolicy.LikelyCompatible - never prevents a
+    // cast attempt, only picked up if receiverLoadFailed ends up true, so the failure message can
+    // name a likely cause instead of a generic "couldn't cast" with no explanation.
+    val likelyCompatibilityHint: CastCompatibilityVerdict.LikelyCompatible? = null,
 )
 
 sealed class CastLoadResult {

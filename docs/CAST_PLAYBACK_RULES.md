@@ -45,19 +45,29 @@ decision the moment the diagnostic resolves - even mid-watchdog-window, not just
 
 | Verdict | Source kind | Action |
 |---|---|---|
-| `IncompatibleVideo` / `IncompatibleAudio` | any | **Blocked** - never proxy (remuxing the container never fixes a codec problem); report the specific codec to the UI and record the (stream, receiver) pair as incompatible immediately, not on a later receiver-side failure. |
-| `Compatible` | raw TS | **ProxyImmediately** - skip the direct attempt outright. A receiver never plays a bare MPEG-TS URL directly (it needs HLS/DASH wrapping), so trying direct first is a guaranteed 4s wait for nothing. |
-| `Compatible` | HLS | **NoAction** - unchanged: direct, then watchdog, then proxy (rewrite, not remux - nothing to remux, it's already HLS). |
-| `Unknown` (PAT/PMT not found in the probe window) | any | **NoAction** - unchanged: direct, then watchdog, then proxy. If that proxy attempt turns out to be raw TS, `proxy/RawTsRemuxActivation.kt` still remuxes it (an Unknown verdict isn't a confirmed problem, and a raw-TS passthrough is never playable either way - only a confirmed `Incompatible*` verdict skips remux there). |
+| `IncompatibleVideo` (MPEG-2 only) | any | **Blocked** - never proxy (remuxing the container never fixes a codec problem); report the codec to the UI and record the (stream, receiver) pair as incompatible immediately, not on a later receiver-side failure. This is the *only* verdict that blocks an attempt. |
+| `Compatible` / `LikelyCompatible` | raw TS | **ProxyImmediately** - skip the direct attempt outright. A receiver never plays a bare MPEG-TS URL directly (it needs HLS/DASH wrapping), so trying direct first is a guaranteed 4s wait for nothing. |
+| `Compatible` / `LikelyCompatible` | HLS | **NoAction** - unchanged: direct, then watchdog, then proxy (rewrite, not remux - nothing to remux, it's already HLS). |
+| `Unknown` (PAT/PMT not found in the probe window) | any | **NoAction** - unchanged: direct, then watchdog, then proxy. If that proxy attempt turns out to be raw TS, `proxy/RawTsRemuxActivation.kt` still remuxes it (an Unknown verdict isn't a confirmed problem, and a raw-TS passthrough is never playable either way - only a confirmed `IncompatibleVideo` verdict skips remux there). |
 
-A blocked verdict sets `CastPlaybackState.codecIncompatibility` (a `CodecIncompatibility.Video`/
-`.Audio` carrying the real codec, rendered via `cast/CodecDisplayName.kt` as e.g. "MPEG-2" or "MP2"
-- see `cast_incompatible_video_message`/`cast_incompatible_audio_message`) so the player can explain
-*why* to the user, instead of local playback silently taking over with no explanation. If the
-receiver still goes idle/error after all that (a genuinely unreachable proxy URL, a malformed
-playlist, etc.), `CastPlaybackState.receiverLoadFailed` covers the generic case with
-`cast_receiver_load_failed_message`; either way the Cast session itself stays connected and local
-playback keeps going, so the user can pick a different channel without reconnecting to the TV.
+`LikelyCompatible` exists because only MPEG-2 video is a *confirmed* incompatibility - HEVC video
+and MP2/AC-3/E-AC-3-only audio are a coin flip that depends on the actual receiver hardware (real
+receivers routinely play them despite Chromecast's Default Receiver not officially guaranteeing
+it), so neither may ever block or reroute an attempt. `LikelyCompatible(audioHint, videoHint)`
+carries whichever of the two is iffy purely so a *later* failure message can name a likely cause -
+it is otherwise routed identically to `Compatible` in the table above.
+
+A blocked verdict sets `CastPlaybackState.codecIncompatibility` (a `CodecIncompatibility.Video`
+carrying the real codec, rendered via `cast/CodecDisplayName.kt` as e.g. "MPEG-2" - see
+`cast_incompatible_video_message`) so the player can explain *why* to the user, instead of local
+playback silently taking over with no explanation. If the receiver still goes idle/error after all
+that (a genuinely unreachable proxy URL, a malformed playlist, an actual HEVC/MP2/AC-3 failure,
+etc.), `CastPlaybackState.receiverLoadFailed` covers the generic case: if a `LikelyCompatible` hint
+was recorded for this attempt, the message names that likely cause
+(`cast_likely_incompatible_video_message`/`cast_likely_incompatible_audio_message`); otherwise it's
+the fully generic `cast_receiver_load_failed_message`. Either way the Cast session itself stays
+connected and local playback keeps going, so the user can pick a different channel without
+reconnecting to the TV.
 
 Every routing decision also logs one self-contained line - `AppLog.d("CastSessionRepository")`:
 `cast route: verdict=... source=... action=... video=... audio=...` - deliberately never the

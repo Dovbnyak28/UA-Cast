@@ -261,9 +261,10 @@
     <string name="player_tv_guide">Guía de TV</string>
     <string name="player_previous_channel">Último canal</string>
     <string name="epg_guide_no_data">No hay guía de TV para este canal</string>
-    <string name="cast_incompatible_audio_message">Este canal usa audio %1$s — Chromecast no admite este formato. La reproducción local continúa.</string>
     <string name="cast_incompatible_video_message">Este canal usa video %1$s — Chromecast no admite este formato. La reproducción local continúa.</string>
     <string name="cast_receiver_load_failed_message">No se pudo transmitir este canal a tu Chromecast. La reproducción local continúa.</string>
+    <string name="cast_likely_incompatible_video_message">No se pudo reproducir en Chromecast. Causa probable: el video %1$s no es compatible con tu dispositivo. La reproducción local continúa.</string>
+    <string name="cast_likely_incompatible_audio_message">No se pudo reproducir en Chromecast. Causa probable: el audio %1$s no es compatible con tu dispositivo. La reproducción local continúa.</string>
     <string name="player_resize_fit">Ajustar</string>
     <string name="player_resize_fill">Rellenar</string>
     <string name="player_resize_zoom">Zoom</string>

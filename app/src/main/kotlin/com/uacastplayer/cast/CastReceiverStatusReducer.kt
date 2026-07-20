@@ -57,6 +57,7 @@ object CastReceiverStatusReducer {
             deliveryMode = CastDeliveryMode.Direct,
             codecIncompatibility = null,
             receiverLoadFailed = false,
+            likelyCompatibilityHint = null,
         )
         return CastReducerResult(newState, effects)
     }

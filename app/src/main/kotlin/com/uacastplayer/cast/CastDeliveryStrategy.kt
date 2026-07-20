@@ -13,7 +13,7 @@ sealed class CastRouteDecision {
     /** The codec is confirmed incompatible - remuxing the container never fixes a codec problem
      * (see [com.uacastplayer.proxy.RawTsRemuxActivation]'s own doc), so there is nothing left to
      * try; report [verdict] and stop touching the receiver for this attempt. */
-    data class Blocked(val verdict: CastCompatibilityVerdict) : CastRouteDecision()
+    data class Blocked(val verdict: CastCompatibilityVerdict.IncompatibleVideo) : CastRouteDecision()
 
     /** A receiver never plays a bare MPEG-TS URL directly (it needs HLS/DASH wrapping), so a
      * direct-mode attempt on confirmed-compatible raw TS is a guaranteed 4s watchdog wait for
@@ -52,9 +52,8 @@ object CastDeliveryStrategy {
      * and just lets the existing watchdog timeout decide, same as before this function existed. */
     fun onDiagnosticResult(verdict: CastCompatibilityVerdict, sourceKind: TsSourceKind): CastRouteDecision =
         when (verdict) {
-            is CastCompatibilityVerdict.IncompatibleAudio, is CastCompatibilityVerdict.IncompatibleVideo ->
-                CastRouteDecision.Blocked(verdict)
-            CastCompatibilityVerdict.Compatible ->
+            is CastCompatibilityVerdict.IncompatibleVideo -> CastRouteDecision.Blocked(verdict)
+            CastCompatibilityVerdict.Compatible, is CastCompatibilityVerdict.LikelyCompatible ->
                 if (sourceKind == TsSourceKind.RawTs) CastRouteDecision.ProxyImmediately else CastRouteDecision.NoAction
             CastCompatibilityVerdict.Unknown -> CastRouteDecision.NoAction
         }
