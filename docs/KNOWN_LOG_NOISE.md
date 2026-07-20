@@ -1,0 +1,22 @@
+# Known log noise
+
+Lines that show up in `logcat` while using this app but come from the platform, GMS/Cast SDK
+internals, or codec enumeration this app never calls into - not from `com.uacastplayer` code, and
+not fixable from this app's side. Documented here so a future audit doesn't spend time re-chasing
+the same lines.
+
+| Log line (pattern) | Source | Why it's harmless |
+|---|---|---|
+| `AudioAttributes: ... stream type -1` | Google Cast SDK | Logged internally while a Cast session is tearing down - the SDK briefly queries an audio stream type on a `MediaRouter`/`AudioManager` object that's already mid-teardown and gets the "unknown" sentinel (`-1`) back. Happens on every normal session disconnect, not just a failure case. |
+| `Unrecognized profile/level for video/mpeg2 (...)`, `... could not parse long range` | `MediaCodecList`/platform codec enumeration | `MediaCodecInfo`'s capability query logs a warning for every installed decoder whose profile/level table it doesn't have a name for - this fires while Media3/ExoPlayer enumerates *all* codecs the device has (most of which this app never selects), not specifically for anything this app is trying to play. |
+| `freeAllBuffers while ... dequeued` | `android.media.MediaCodec` (framework) | Logged when a codec's output surface changes while buffers are still in flight - happens on ordinary events this app triggers on purpose (fullscreen/mini-player surface swap, PiP enter/exit - see `ui/player/PlayerScreen.kt`'s `VideoSurface`/`onRelease` handling in block 2.1). The framework logs it as informational, not an error; buffers are freed and replaced correctly. |
+| `ClassLoaderContext mismatch`, a duplicate `IconCompatParcelizer` class warning | Google Play Services "dynamite" module loading (Cast SDK) | GMS loads part of the Cast SDK as a dynamically-updatable module with its own classloader, which routinely doesn't exactly match the app's own classloader context, and can end up with its own copy of a support-library class the app also has - both warnings are logged by Play Services' own module loader, not app code, and don't affect whether Cast actually works. Not fixable from the app side; would need a Play Services update. |
+| `MediaQueue: ... statusCode=2001` with no active media session | Cast SDK's `RemoteMediaClient`/queue machinery | This app never uses Cast's queue APIs (`MediaQueueItem`, multi-item queues) - see `cast/LoadStatusClassifier.kt` and docs/CAST_PLAYBACK_RULES.md's "Load generations..." section, which already classifies and handles the *load-result* 2001/2002/2103 family this app does care about. This specific line is the SDK's own internal queue bookkeeping polling a session that was never asked to queue anything; nothing in this app subscribes to or reacts to it. |
+| `binderDied`, `WIN DEATH` | Android's Binder/WindowManager (framework) | Logged whenever a process holding a Binder connection or window token dies for any reason (app process killed by the system under memory pressure, a normal `Activity.finish()`, the Cast SDK's own dynamite-module process cycling) - a normal part of process lifecycle logging, not evidence of a crash in this app specifically. Only worth investigating together with an actual `FATAL EXCEPTION`/ANR in the same window naming `com.uacastplayer`. |
+
+## What *isn't* on this list
+
+Anything naming `com.uacastplayer` directly (a `FATAL EXCEPTION` with this app's package, a
+`StrictMode` warning attributed to this app's own PID - see block 2.5's verification method for how
+to tell an app-attributed line apart from a system one) is real and should be investigated, not
+assumed to be noise just because it superficially resembles one of the lines above.
