@@ -47,6 +47,10 @@ val SectionLabel = TextStyle(
     fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.16.em,
     fontFeatureSettings = TabularNums,
 )
+val ButtonLabel = TextStyle(
+    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.01).em,
+    fontFeatureSettings = TabularNums,
+)
 val PillText = TextStyle(
     fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.04.em,
     fontFeatureSettings = TabularNums,
@@ -90,7 +94,14 @@ val AppTypography = Typography(
     bodyLarge = BodyText,
     bodyMedium = BodyRegular,
     bodySmall = Caption,
-    labelLarge = SectionLabel,
+    // labelLarge is what Material3's own Button/OutlinedButton/TextButton use for their text by
+    // default (every plain Button(onClick = ...) { Text(...) } with no explicit style, e.g. the
+    // "Додати плейлист"/"Завантажити та зберегти"/onboarding "Продовжити" buttons) - it was
+    // SectionLabel (9.5sp, meant for small uppercase section headers) until a user report that
+    // button text was unreadably small confirmed it. labelMedium/labelSmall are meant to be
+    // smaller than labelLarge; SectionLabel was actually smaller than both, which was itself a
+    // sign this mapping was a mistake rather than a deliberate small-button-text design choice.
+    labelLarge = ButtonLabel,
     labelMedium = CaptionSemibold,
     labelSmall = Micro,
 )
