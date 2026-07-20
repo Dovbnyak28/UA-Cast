@@ -7,6 +7,7 @@ import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.uacastplayer.core.net.AppHttp
+import com.uacastplayer.data.cast.DiagnosticResultCache
 import com.uacastplayer.data.cast.IncompatibilityMemoryStore
 import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
@@ -19,7 +20,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "CastSessionRepository"
 private const val WATCHDOG_TIMEOUT_MILLIS = 4_000L
@@ -66,6 +67,7 @@ class CastSessionRepository private constructor(context: Context) {
     private val proxyServer = ProxyServer(httpClient)
     private val preferences = AppPreferences(appContext)
     private val incompatibilityStore = IncompatibilityMemoryStore(appContext)
+    private val diagnosticCache = DiagnosticResultCache()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var castContext: CastContext? = null
@@ -101,6 +103,12 @@ class CastSessionRepository private constructor(context: Context) {
     private var recoveryAttempts = 0
     private var playingSinceMillis: Long? = null
     private var recoveryJob: Job? = null
+
+    // Debounced diagnostic warm-up while just browsing locally (not casting) - see
+    // scheduleDiagnosticWarmup. Cancelled by the next channel switch or by casting actually
+    // starting, since an active cast attempt's own probe (loadDirectWithWatchdog) needs an answer
+    // immediately, not after this debounce.
+    private var warmupJob: Job? = null
 
     // Whether PLAYING has been observed at all this casting episode (across every recovery
     // reload) - see IncompatibilityRecordingPolicy. Reset per channel in startPlayback.
@@ -237,7 +245,43 @@ class CastSessionRepository private constructor(context: Context) {
         if (currentSession != null) {
             _state.value = CastReceiverStatusReducer.requestChannelSwitch(_state.value, index)
             startPlayback(streamUrl, title, userAgent, referrer)
+        } else {
+            scheduleDiagnosticWarmup(streamUrl)
         }
+    }
+
+    /** Probes a channel's codecs 1.5s after the user lands on it while just browsing (not
+     * casting) - by the time they actually tap Cast, a channel they've lingered on already has an
+     * answer waiting in [diagnosticCache], skipping the whole direct-then-watchdog race. Zapping
+     * past a channel before the debounce elapses cancels it outright - see [setActiveChannel]/
+     * [startPlayback], both of which replace [warmupJob] with either a new warm-up or an actual
+     * cast attempt. A channel already warm (or mid-TTL for an Unknown verdict) isn't re-probed. */
+    private fun scheduleDiagnosticWarmup(streamUrl: String) {
+        warmupJob?.cancel()
+        if (diagnosticCache.get(streamUrl, System.currentTimeMillis()) != null) return
+        warmupJob = scope.launch {
+            delay(DiagnosticCachePolicy.DEBOUNCE_MILLIS)
+            val result = probeDiagnostic(streamUrl) ?: return@launch
+            // Purely a background warm-up - no cast session exists for this to route (the
+            // currentSession != null branch in setActiveChannel is what starts one), so there's
+            // nothing more to do here beyond having already cached it above.
+            AppLog.d(TAG) { "cast route: warm-up cached verdict=${result.first} source=${result.second}" }
+        }
+    }
+
+    /** The actual HTTP probe + cache merge, shared by [scheduleDiagnosticWarmup] and
+     * [loadDirectWithWatchdog]. Returns null (and leaves the cache untouched) if the channel this
+     * was probing is no longer the active one by the time the probe resolves - see
+     * [StaleChannelGuard]. */
+    private suspend fun probeDiagnostic(streamUrl: String): Pair<CastCompatibilityVerdict, TsSourceKind>? {
+        val result = withContext(Dispatchers.IO) { TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient) }
+        if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) {
+            AppLog.d(TAG) { "cast route: stale diagnostic result ignored, channel no longer active" }
+            return null
+        }
+        val verdict = CastCompatibilityPolicy.classify(result.programInfo)
+        val merged = diagnosticCache.merge(streamUrl, verdict, result.sourceKind, System.currentTimeMillis())
+        return merged to result.sourceKind
     }
 
     private fun onSessionActive(session: CastSession) {
@@ -285,6 +329,7 @@ class CastSessionRepository private constructor(context: Context) {
     private fun startPlayback(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         watchdogJob?.cancel()
         recoveryJob?.cancel()
+        warmupJob?.cancel()
         recoveryAttempts = 0
         playingSinceMillis = null
         everReachedPlaying = false
@@ -312,43 +357,48 @@ class CastSessionRepository private constructor(context: Context) {
     private fun loadDirectWithWatchdog(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         loadOnReceiver(streamUrl, title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
 
+        // A channel already warm (see scheduleDiagnosticWarmup) skips the probe entirely - no need
+        // to race the watchdog for an answer that's already known.
+        val cached = diagnosticCache.get(streamUrl, System.currentTimeMillis())
         watchdogJob = scope.launch {
-            val diagnostic = async(Dispatchers.IO) {
-                TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient)
-            }
             launch {
-                val result = diagnostic.await()
-                // The diagnostic runs on the IO dispatcher, genuinely concurrently with the user
-                // zapping to another channel on the Main dispatcher - see StaleChannelGuard.
-                if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) {
-                    AppLog.d(TAG) { "cast route: stale diagnostic result ignored, channel no longer active" }
-                    return@launch
+                val outcome = if (cached != null) {
+                    AppLog.d(TAG) { "cast route: using cached verdict=${cached.verdict} source=${cached.sourceKind}" }
+                    cached.verdict to cached.sourceKind
+                } else {
+                    probeDiagnostic(streamUrl)
                 }
-                lastKnownSourceKind = result.sourceKind
-                val verdict = CastCompatibilityPolicy.classify(result.programInfo)
-                val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, result.sourceKind)
-                // One self-contained line per routing decision - no URL, just what was found and
-                // what it led to, so a field logcat is enough to diagnose a cast failure on its own.
-                AppLog.d(TAG) {
-                    "cast route: verdict=$verdict source=${result.sourceKind} action=$decision " +
-                        "video=${result.programInfo?.videoCodec} audio=${result.programInfo?.audioCodecs}"
-                }
-                // Never blocks or reroutes anything by itself - just remembered in case
-                // receiverLoadFailed ends up true later, so that message can name a likely cause.
-                if (verdict is CastCompatibilityVerdict.LikelyCompatible) {
-                    _state.update { it.copy(likelyCompatibilityHint = verdict) }
-                }
-                when (decision) {
-                    is CastRouteDecision.Blocked -> onRouteBlocked(streamUrl, decision.verdict)
-                    CastRouteDecision.ProxyImmediately ->
-                        fallBackToProxyIfStillDirect(streamUrl, title, userAgent, referrer, "raw_ts_compatible")
-                    CastRouteDecision.NoAction -> Unit
-                }
+                val (verdict, sourceKind) = outcome ?: return@launch
+                lastKnownSourceKind = sourceKind
+                handleDiagnosticVerdict(LoadRetryContext(streamUrl, title, userAgent, referrer), verdict, sourceKind)
             }
             delay(WATCHDOG_TIMEOUT_MILLIS)
             if (_state.value.receiverStatus != ReceiverStatus.PLAYING && _state.value.codecIncompatibility == null) {
                 fallBackToProxyIfStillDirect(streamUrl, title, userAgent, referrer, "watchdog_timeout")
             }
+        }
+    }
+
+    private fun handleDiagnosticVerdict(context: LoadRetryContext, verdict: CastCompatibilityVerdict, sourceKind: TsSourceKind) {
+        val decision = CastDeliveryStrategy.onDiagnosticResult(verdict, sourceKind)
+        // One self-contained line per routing decision - no URL, just what was found and what it
+        // led to, so a field logcat is enough to diagnose a cast failure on its own.
+        AppLog.d(TAG) { "cast route: verdict=$verdict source=$sourceKind action=$decision" }
+        // Never blocks or reroutes anything by itself - just remembered in case receiverLoadFailed
+        // ends up true later, so that message can name a likely cause.
+        if (verdict is CastCompatibilityVerdict.LikelyCompatible) {
+            _state.update { it.copy(likelyCompatibilityHint = verdict) }
+        }
+        when (decision) {
+            is CastRouteDecision.Blocked -> onRouteBlocked(context.streamUrl, decision.verdict)
+            CastRouteDecision.ProxyImmediately -> fallBackToProxyIfStillDirect(
+                context.streamUrl,
+                context.title,
+                context.userAgent,
+                context.referrer,
+                "raw_ts_compatible",
+            )
+            CastRouteDecision.NoAction -> Unit
         }
     }
 

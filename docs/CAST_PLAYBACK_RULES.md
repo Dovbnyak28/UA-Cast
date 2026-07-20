@@ -63,6 +63,26 @@ app falls back to the proxy (`CastSessionRepository.loadDirectWithWatchdog`). Th
 `data/cast/TsFirstSegmentDiagnostic` probing the stream for its actual declared video/audio codecs
 (`cast/TsProgramInfoParser.kt`, reading PAT/PMT).
 
+### Diagnostic warm-up and cache
+
+Probing a stream is a real HTTP fetch, and casting or re-casting the same channel shouldn't pay for
+it every time. `data/cast/DiagnosticResultCache.kt` (an LRU cache of 32 entries keyed by stream URL,
+governed by `cast/DiagnosticCachePolicy.kt`) remembers the verdict; `loadDirectWithWatchdog` checks
+it first and, on a hit, skips the HTTP probe entirely. A `Compatible`/`LikelyCompatible`/
+`IncompatibleVideo` entry is trusted for the rest of the process's lifetime, but an `Unknown` one
+(PAT/PMT not found in the probe window) only for 10 minutes - it might just have caught the origin
+at a bad moment (mid-ad-break, a transient encoder hiccup). A later probe result for the same URL is
+merged in, never *replacing* a more decisive existing verdict with a less decisive one - a confirmed
+`IncompatibleVideo` can't be silently downgraded back to `Compatible` by a flaky re-probe.
+
+`CastSessionRepository.setActiveChannel` also warms the cache proactively while the player is just
+browsing locally, not casting: 1.5 seconds after landing on a channel (zapping past it before then
+cancels the warm-up outright), it's probed in the background, so a channel the user has actually
+settled on already has an answer cached by the time they tap Cast. This warm-up never touches
+casting UI state on its own - if it happens to still be in flight when casting actually starts,
+`startPlayback` cancels it immediately in favor of the watchdog's own immediate probe, which is
+never gated by the debounce.
+
 The stream URL can point at either an HLS playlist or a raw MPEG-TS origin - IPTV origins routinely
 use tokenized/extensionless URLs that give no hint which, and feeding raw TS bytes into a text
 playlist parser just silently finds no segments. The diagnostic classifies the initial probe first
