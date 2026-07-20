@@ -46,6 +46,7 @@
     <string name="add_playlist_helper">Se admiten listas M3U, M3U8 y TXT. La URL debe empezar por http:// o https://.</string>
     <string name="add_playlist_status_label">Estado</string>
     <string name="add_playlist_status_empty">Pega una URL de lista M3U o M3U8</string>
+    <string name="add_playlist_status_empty_xtream">Introduce la dirección del servidor, el usuario y la contraseña</string>
     <string name="add_playlist_status_loading">Cargando…</string>
     <string name="add_playlist_status_ready">Listo para cargar</string>
     <string name="add_playlist_save_button">Descargar y guardar</string>

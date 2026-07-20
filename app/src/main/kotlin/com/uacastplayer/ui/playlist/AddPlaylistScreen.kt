@@ -166,7 +166,7 @@ fun AddPlaylistScreen(
             )
             val hasInput = hasInput(sourceType, url, xtreamServer, xtreamUsername, xtreamPassword)
             Text(
-                text = statusMessage(playlistState, hasInput),
+                text = statusMessage(playlistState, hasInput, sourceType),
                 style = BodyText,
                 color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(top = 4.dp),
@@ -300,13 +300,18 @@ private fun hasInput(
 }
 
 @Composable
-private fun statusMessage(playlistState: PlaylistUiState, hasInput: Boolean): String = when {
+private fun statusMessage(
+    playlistState: PlaylistUiState,
+    hasInput: Boolean,
+    sourceType: PlaylistSourceType,
+): String = when {
     playlistState.isLoading -> stringResource(R.string.add_playlist_status_loading)
     playlistState.error != null -> when (val error = playlistState.error) {
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
     }
+    !hasInput && sourceType == PlaylistSourceType.XTREAM -> stringResource(R.string.add_playlist_status_empty_xtream)
     !hasInput -> stringResource(R.string.add_playlist_status_empty)
     else -> stringResource(R.string.add_playlist_status_ready)
 }
