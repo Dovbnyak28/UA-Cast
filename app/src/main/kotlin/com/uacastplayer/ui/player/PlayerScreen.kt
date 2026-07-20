@@ -13,8 +13,10 @@ import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -239,15 +241,18 @@ fun PlayerScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { controlsVisible = !controlsVisible },
-                        onDoubleTap = {
-                            if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                    )
-                }
+                // See the inline branch's video Box below for why this is combinedClickable and not
+                // a raw pointerInput(Unit) { detectTapGestures {...} } - it would race
+                // PlayerControlsOverlay's own button clicks for the same down/up events.
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { controlsVisible = !controlsVisible },
+                    onDoubleClick = {
+                        if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                )
                 .pointerInput(activity, audioManager) {
                     var zone = PlayerGesturePolicy.GestureZone.CENTER
                     var horizontalTravel = 0f
@@ -375,7 +380,17 @@ fun PlayerScreen(
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(RadiusCard))
                     .background(Color.Black)
-                    .pointerInput(Unit) { detectTapGestures { controlsVisible = !controlsVisible } },
+                    // A raw pointerInput(Unit) { detectTapGestures {...} } here would race the
+                    // InlineVideoControls buttons' own clickable() for the same down/up events -
+                    // Compose's gesture-consumption arbitration between two independent detectors
+                    // covering the same area is unreliable and could make a button silently eat a
+                    // tap with neither callback firing. clickable() nests correctly with child
+                    // clickables (innermost wins), so it doesn't have that race.
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { controlsVisible = !controlsVisible },
+                    ),
             ) {
                 VideoSurface(viewModel = viewModel, resizeMode = videoResizeMode, modifier = Modifier.fillMaxSize())
 
