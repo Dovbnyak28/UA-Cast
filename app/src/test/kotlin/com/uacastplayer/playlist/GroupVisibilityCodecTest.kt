@@ -46,4 +46,17 @@ class GroupVisibilityCodecTest {
         val json = """[{"sourceId":"s","state":"PINNED"}]"""
         assertTrue(GroupVisibilityCodec.decode(json).isEmpty())
     }
+
+    @Test
+    fun `decoding a pre-source-scoping entry with no sourceId field tags it as legacy instead of dropping it`() {
+        val json = """[{"groupKey":"known:sports","state":"PINNED"}]"""
+        val expected = listOf(GroupVisibilityEntry(LEGACY_SOURCE_ID, "known:sports", GroupVisibilityState.PINNED))
+        assertEquals(expected, GroupVisibilityCodec.decode(json))
+    }
+
+    @Test
+    fun `a legacy entry round-trips once its sourceId is populated`() {
+        val migrated = listOf(GroupVisibilityEntry("source-1", "known:sports", GroupVisibilityState.PINNED))
+        assertEquals(migrated, GroupVisibilityCodec.decode(GroupVisibilityCodec.encode(migrated)))
+    }
 }

@@ -3,6 +3,7 @@ package com.uacastplayer.app
 import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.playlist.GroupVisibilityEntry
 import com.uacastplayer.playlist.GroupVisibilityState
+import com.uacastplayer.playlist.LEGACY_SOURCE_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +39,19 @@ class GroupVisibilityController(
 
     fun setActiveSource(sourceId: String?) {
         activeSourceId = sourceId
+        if (sourceId != null) migrateLegacyEntries(sourceId)
         refreshActiveSource()
+    }
+
+    /** A record decoded from a pre-source-scoping file (format version 1) is tagged
+     * [LEGACY_SOURCE_ID] rather than dropped (see [com.uacastplayer.playlist.GroupVisibilityCodec.decode]) -
+     * migrated onto whichever source connects first, since that's the best available guess for
+     * whose pin/hide list it originally was (the old format only ever supported one playlist at a
+     * time). A no-op once migrated: no more [LEGACY_SOURCE_ID] entries remain to match. */
+    private fun migrateLegacyEntries(targetSourceId: String) {
+        if (allEntries.none { it.sourceId == LEGACY_SOURCE_ID }) return
+        allEntries = allEntries.map { if (it.sourceId == LEGACY_SOURCE_ID) it.copy(sourceId = targetSourceId) else it }
+        scope.launch { store.save(allEntries) }
     }
 
     fun pinGroup(groupKey: String) = setState(groupKey, GroupVisibilityState.PINNED)

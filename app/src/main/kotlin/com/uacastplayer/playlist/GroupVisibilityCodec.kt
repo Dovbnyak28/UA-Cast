@@ -15,9 +15,13 @@ object GroupVisibilityCodec {
             }
         )
 
+    /** A record with no `sourceId` field at all (format version 1 - see [LEGACY_SOURCE_ID]) is
+     * tagged [LEGACY_SOURCE_ID] rather than dropped, so a pre-source-scoping pin/hide list isn't
+     * silently destroyed by decoding it under the current format - see
+     * `app/GroupVisibilityController`'s migration. */
     fun decode(json: String): List<GroupVisibilityEntry> = try {
         MiniJson.parseArrayOfObjects(json).mapNotNull { fields ->
-            val sourceId = fields["sourceId"] ?: return@mapNotNull null
+            val sourceId = fields["sourceId"] ?: LEGACY_SOURCE_ID
             val groupKey = fields["groupKey"] ?: return@mapNotNull null
             val state = fields["state"]
                 ?.let { name -> runCatching { GroupVisibilityState.valueOf(name) }.getOrNull() }
