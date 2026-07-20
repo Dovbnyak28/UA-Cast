@@ -1,5 +1,4 @@
 package com.uacastplayer.ui.favorites
-import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,7 +18,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,15 +40,19 @@ import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.favorites.FavoritesSorter
 import com.uacastplayer.favorites.ReorderPolicy
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.ItemPadding
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.AppIcons
+import java.io.File
 
 @Composable
 fun FavoritesScreen(
@@ -62,6 +64,7 @@ fun FavoritesScreen(
     onRemove: (key: String) -> Unit,
     onReorder: (List<FavoriteChannel>) -> Unit,
     onOpenChannels: () -> Unit,
+    resolveIcon: suspend (M3uChannel) -> File?,
     modifier: Modifier = Modifier,
 ) {
     if (favorites.isEmpty()) {
@@ -164,20 +167,21 @@ fun FavoritesScreen(
                                 Modifier
                             },
                         )
-                        .padding(vertical = 10.dp),
+                        .padding(ItemPadding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    ChannelIcon(channels[index], resolveIcon)
                     Text(
                         text = favorite.displayName,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
+                        style = BodyText,
+                        color = UaTheme.palette.labelPrimary,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp),
                     )
                     IconButton(onClick = { onRemove(favorite.key) }) {
                         Icon(
                             AppIcons.Delete,
                             contentDescription = stringResource(R.string.favorites_remove_content_description),
-                            tint = MaterialTheme.colorScheme.error,
+                            tint = UaTheme.palette.routeRed,
                         )
                     }
                 }

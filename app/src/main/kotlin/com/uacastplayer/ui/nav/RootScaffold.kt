@@ -250,6 +250,7 @@ fun RootScaffold(
                     onChannelSelected = onChannelSelected,
                     onRemove = onRemoveFavorite,
                     onReorder = onReorderFavorites,
+                    resolveIcon = resolveIcon,
                     onOpenChannels = {
                         navState = NavBackStackReducer.reduce(
                             navState,
