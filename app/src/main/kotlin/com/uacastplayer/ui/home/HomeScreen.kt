@@ -63,24 +63,48 @@ import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
+/** Everything HomeScreen needs about the active playlist's own content - grouped so the composable
+ * signature doesn't take each of these as a separate top-level parameter (was 15 total; see block
+ * 2.4 in the consolidated fix plan). */
+data class HomeContentState(
+    val playlistState: PlaylistUiState,
+    val epgState: EpgUiState,
+    val iconPrefetchState: IconPrefetchUiState,
+    val favorites: List<FavoriteChannel>,
+    val lastWatchedChannelKey: String?,
+)
+
+/** Everything HomeScreen needs about the playlist *source* switcher (the active-playlist card's
+ * tap target, and the sheet it opens) - see [HomeContentState]. */
+data class HomeSourceState(
+    val playlistSources: List<PlaylistSource>,
+    val activePlaylistSourceId: String?,
+    val onSwitchPlaylistSource: (PlaylistSource) -> Unit,
+    val onRemovePlaylistSource: (PlaylistSource) -> Unit,
+    val onOpenAddPlaylist: () -> Unit,
+    val onRefreshPlaylist: () -> Unit,
+)
+
 @Composable
 fun HomeScreen(
-    playlistState: PlaylistUiState,
-    epgState: EpgUiState,
-    iconPrefetchState: IconPrefetchUiState,
-    favorites: List<FavoriteChannel>,
-    lastWatchedChannelKey: String?,
+    content: HomeContentState,
+    source: HomeSourceState,
     resolveIcon: suspend (M3uChannel) -> File?,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     onOpenChannels: () -> Unit,
-    onRefreshPlaylist: () -> Unit,
-    playlistSources: List<PlaylistSource>,
-    activePlaylistSourceId: String?,
-    onSwitchPlaylistSource: (PlaylistSource) -> Unit,
-    onRemovePlaylistSource: (PlaylistSource) -> Unit,
-    onOpenAddPlaylist: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val playlistState = content.playlistState
+    val epgState = content.epgState
+    val iconPrefetchState = content.iconPrefetchState
+    val favorites = content.favorites
+    val lastWatchedChannelKey = content.lastWatchedChannelKey
+    val playlistSources = source.playlistSources
+    val activePlaylistSourceId = source.activePlaylistSourceId
+    val onSwitchPlaylistSource = source.onSwitchPlaylistSource
+    val onRemovePlaylistSource = source.onRemovePlaylistSource
+    val onOpenAddPlaylist = source.onOpenAddPlaylist
+    val onRefreshPlaylist = source.onRefreshPlaylist
     // Same idea as ChannelsScreen's iconRefreshKey - forces the icons below to re-resolve once EPG
     // data arrives or a prefetch run finishes writing new files.
     val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns

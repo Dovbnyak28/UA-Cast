@@ -15,6 +15,20 @@ import com.uacastplayer.player.PlayerViewModel
 import com.uacastplayer.playlist.M3uChannel
 import java.io.File
 
+/** [isFavorite]/[onToggleFavorite] bundled since [PlayerHost] only ever threads them through
+ * together to [PlayerScreen]/[MiniPlayerBar] - see block 2.4 in the consolidated fix plan. */
+data class PlayerFavoriteActions(
+    val isFavorite: (M3uChannel) -> Boolean,
+    val onToggleFavorite: (M3uChannel) -> Unit,
+)
+
+/** [epgState]/[iconPrefetchState] are both supplementary enrichment data neither [PlayerScreen] nor
+ * [MiniPlayerBar] treats separately - see [PlayerFavoriteActions]. */
+data class PlayerEnrichmentState(
+    val epgState: EpgUiState,
+    val iconPrefetchState: IconPrefetchUiState,
+)
+
 /**
  * Wraps the player screen in its own single-destination NavHost purely so its ViewModelStore -
  * and with it [PlayerViewModel] and the single ExoPlayer instance it owns - is torn down the
@@ -35,13 +49,13 @@ fun PlayerHost(
     collapsed: Boolean,
     onExit: () -> Unit,
     onTapCollapsed: () -> Unit,
-    isFavorite: (M3uChannel) -> Boolean,
-    onToggleFavorite: (M3uChannel) -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
-    epgState: EpgUiState,
-    iconPrefetchState: IconPrefetchUiState,
+    favoriteActions: PlayerFavoriteActions,
+    enrichment: PlayerEnrichmentState,
     modifier: Modifier = Modifier,
 ) {
+    val (isFavorite, onToggleFavorite) = favoriteActions
+    val (epgState, iconPrefetchState) = enrichment
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "player", modifier = modifier) {

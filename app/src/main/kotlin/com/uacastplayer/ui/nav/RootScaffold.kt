@@ -55,7 +55,9 @@ import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.components.GlassTabBar
 import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
+import com.uacastplayer.ui.home.HomeContentState
 import com.uacastplayer.ui.home.HomeScreen
+import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.settings.SettingsScreen
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.DisplayTitle
@@ -192,11 +194,21 @@ fun RootScaffold(
             val content = Modifier.padding(innerPadding)
             when (destination) {
                 BottomDestination.HOME -> HomeScreen(
-                    playlistState = playlistState,
-                    epgState = epgState,
-                    iconPrefetchState = iconPrefetchState,
-                    favorites = favorites,
-                    lastWatchedChannelKey = lastWatchedChannelKey,
+                    content = HomeContentState(
+                        playlistState = playlistState,
+                        epgState = epgState,
+                        iconPrefetchState = iconPrefetchState,
+                        favorites = favorites,
+                        lastWatchedChannelKey = lastWatchedChannelKey,
+                    ),
+                    source = HomeSourceState(
+                        playlistSources = playlistSources,
+                        activePlaylistSourceId = activePlaylistSourceId,
+                        onSwitchPlaylistSource = onSwitchPlaylistSource,
+                        onRemovePlaylistSource = onRemovePlaylistSource,
+                        onOpenAddPlaylist = onOpenAddPlaylist,
+                        onRefreshPlaylist = onRefreshPlaylist,
+                    ),
                     resolveIcon = resolveIcon,
                     onChannelSelected = onChannelSelected,
                     onOpenChannels = {
@@ -205,12 +217,6 @@ fun RootScaffold(
                             BottomNavEvent.Select(BottomDestination.CHANNELS),
                         ).state
                     },
-                    onRefreshPlaylist = onRefreshPlaylist,
-                    playlistSources = playlistSources,
-                    activePlaylistSourceId = activePlaylistSourceId,
-                    onSwitchPlaylistSource = onSwitchPlaylistSource,
-                    onRemovePlaylistSource = onRemovePlaylistSource,
-                    onOpenAddPlaylist = onOpenAddPlaylist,
                     modifier = content,
                 )
                 BottomDestination.CHANNELS -> ChannelsScreen(
