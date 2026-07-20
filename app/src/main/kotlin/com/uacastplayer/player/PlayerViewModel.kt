@@ -1,6 +1,8 @@
 package com.uacastplayer.player
 
 import android.app.Application
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -17,6 +19,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
+import com.uacastplayer.MainActivity
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
 import com.uacastplayer.data.prefs.AppPreferences
@@ -94,6 +97,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         MediaSession.Builder(application, exoPlayer)
             .setId(playerSessionId(sessionIdCounter.incrementAndGet()))
             .setCallback(MediaSessionCallback())
+            // Without an explicit session activity, Media3 falls back to building its own implicit
+            // "open the app" intent to satisfy the system media notification/lock-screen controls -
+            // on API 30+, an implicit intent with no explicit component often can't be resolved at
+            // all (package-visibility restrictions), logging "Unresolvable implicit intent" and
+            // leaving the session without a way to bring the app back to the foreground from those
+            // system surfaces. An explicit PendingIntent to this app's own MainActivity always
+            // resolves.
+            .setSessionActivity(
+                PendingIntent.getActivity(
+                    application,
+                    0,
+                    Intent(application, MainActivity::class.java),
+                    PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
             .build()
     } catch (e: IllegalStateException) {
         AppLog.w(TAG) { "MediaSession creation failed, continuing without system media controls: ${e.message}" }
