@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -820,21 +821,58 @@ private fun QuickSettingsRow(
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         // Only shown once there's actually somewhere to jump back to - see
-        // PlayerUiState.hasPreviousChannel.
+        // PlayerUiState.hasPreviousChannel. Each item gets an equal weight() share of the row so a
+        // 6th item (this one) doesn't squeeze the others' labels into character-by-character wrap -
+        // see docs/DESIGN_SYSTEM.md "§E Equal-share rows".
         onPreviousChannelClick?.let {
-            QuickSettingItem(AppIcons.Refresh, stringResource(R.string.player_previous_channel), it)
+            QuickSettingItem(
+                AppIcons.Refresh,
+                stringResource(R.string.player_previous_channel),
+                it,
+                modifier = Modifier.weight(1f),
+            )
         }
-        QuickSettingItem(AppIcons.Storage, stringResource(R.string.player_audio_track), onAudioClick)
-        QuickSettingItem(AppIcons.HelpCircle, stringResource(R.string.player_subtitle_track), onSubtitlesClick)
-        QuickSettingItem(AppIcons.Image, stringResource(R.string.player_quality), onQualityClick)
-        QuickSettingItem(AppIcons.Fullscreen, stringResource(R.string.player_aspect_ratio), onAspectRatioClick)
-        QuickSettingItem(AppIcons.Tv, stringResource(R.string.player_tv_guide), onGuideClick)
+        QuickSettingItem(
+            AppIcons.Storage,
+            stringResource(R.string.player_audio_track),
+            onAudioClick,
+            modifier = Modifier.weight(1f),
+        )
+        QuickSettingItem(
+            AppIcons.HelpCircle,
+            stringResource(R.string.player_subtitle_track),
+            onSubtitlesClick,
+            modifier = Modifier.weight(1f),
+        )
+        QuickSettingItem(
+            AppIcons.Image,
+            stringResource(R.string.player_quality),
+            onQualityClick,
+            modifier = Modifier.weight(1f),
+        )
+        QuickSettingItem(
+            AppIcons.Fullscreen,
+            stringResource(R.string.player_aspect_ratio),
+            onAspectRatioClick,
+            modifier = Modifier.weight(1f),
+        )
+        QuickSettingItem(
+            AppIcons.Tv,
+            stringResource(R.string.player_tv_guide),
+            onGuideClick,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
 @Composable
-private fun QuickSettingItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+private fun RowScope.QuickSettingItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.clickable(onClick = onClick)) {
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -847,6 +885,8 @@ private fun QuickSettingItem(icon: androidx.compose.ui.graphics.vector.ImageVect
             text = label,
             style = Caption,
             color = UaTheme.palette.labelSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 2,
             modifier = Modifier.padding(top = 6.dp),
         )
     }

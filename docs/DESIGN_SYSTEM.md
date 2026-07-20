@@ -203,3 +203,16 @@ blocked the query since microG doesn't implement that provider, so it fell back 
 default with no error. `FontFamily.Serif` has none of that risk (no network, no GMS dependency) at
 the cost of not being a specific named typeface. A future iteration could swap in an actually-bundled
 OFL font file by changing just `CinemaPalette.kt`'s `displayFontFamily` value.
+
+## §E Equal-share rows
+
+A `Row` of labeled icon buttons whose item count can vary at runtime (a conditional item like
+`PlayerScreen`'s "previous channel" quick-setting, only shown once `PlayerUiState.hasPreviousChannel`
+is true) must give every item `Modifier.weight(1f)`. Without it, `Arrangement.SpaceEvenly` only
+affects *positioning*, not the width each child is measured with - each `Column` sizes to its label's
+intrinsic width, and once the row runs out of room the last items get squeezed into whatever space is
+left, wrapping their `Text` character-by-character instead of onto a clean second line. Pair
+`weight(1f)` with `textAlign = TextAlign.Center` and `maxLines = 2` on the label so a longer label
+(`"Співвідношення"`) wraps cleanly rather than clipping or overflowing. This was found on
+`PlayerScreen`'s `QuickSettingsRow` going from 5 to 6 items; the same risk applies to any other
+variable-count icon row built the same way.
