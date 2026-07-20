@@ -13,7 +13,14 @@ When that happens, the phone re-serves the stream to the receiver over the LAN i
 - Only `GET` and `HEAD` are served; anything else gets `405`.
 - Request headers are capped at 16KB; anything larger gets rejected rather than parsed.
 - Every path is `/hls/<sessionToken>/<resourceId>`, where `resourceId = SHA-256("type:url")` -
-  never the raw URL. The session token changes every time the proxy (re)starts.
+  never the raw URL. The session token is scoped to a whole cast session (`CastSessionRepository`
+  generates one per connect, not per channel), not to a single load - a mid-session channel switch
+  calls `ProxyServer.ensureStarted` with that same token and is a no-op if the server is already
+  running for it, reusing the same port/resources/remux session; only an actual new cast session or
+  a host change (a genuinely different `(sessionToken, host)` pair) forces a real restart via
+  `ProxyServer.start`, which tears everything down and rebinds a fresh port. Calling `start`
+  directly for a mid-session switch - the previous behavior - meant every channel switch during a
+  proxy-mode cast session silently invalidated the URL the receiver was still fetching from.
 - The resource table is an LRU map capped at 512 entries (`LinkedHashMap` with access-order
   eviction) - old entries are simply forgotten, not actively invalidated.
 
@@ -41,9 +48,10 @@ When that happens, the phone re-serves the stream to the receiver over the LAN i
 - Both are released the moment the proxy session ends - on a normal `CloseProxySession` signal
   (session disconnect, playback finishing, or a hard error), **not just** on a full app stop. A
   proxy session that outlives its purpose is a battery leak.
-- `ProxyServer.start()` itself (the `ServerSocket` bind + thread pool - cheap, no wake locks
-  involved) runs the moment any Cast session connects, not lazily on the first fallback - so if a
-  fallback does turn out to be needed, it isn't also paying for server startup at that point. This
+- `ProxyServer.ensureStarted()` (the `ServerSocket` bind + thread pool - cheap, no wake locks
+  involved, a no-op if already running for the current session) runs the moment any Cast session
+  connects, not lazily on the first fallback - so if a fallback does turn out to be needed, it isn't
+  also paying for server startup at that point. This
   is separate from (and doesn't advance) the foreground-service/wake-lock lifecycle above, which
   still only starts once a fallback is actually decided - a purely-direct session's eagerly-started
   proxy just sits idle, unused, and gets torn down by the same unconditional `CloseProxySession` on
@@ -111,9 +119,19 @@ owns a dedicated background thread for the rest of that channel's lifetime:
 The channel's normal playlist URL (`/hls/<token>/<resourceId>`) serves this generated playlist
 instead of an upstream fetch once remuxing is active; segments are served from
 `/hls/<token>/<resourceId>/seg<N>.ts`, read straight out of the in-memory buffer. Only one remux
-session runs per proxy session (same rule as "one active channel"), and switching channels or
-stopping the proxy always tears down the old one - the reader thread's blocking read is unblocked
-by closing the upstream response, not by any polling.
+session is *active* per proxy session, and stopping the proxy always tears down every session
+outright - the reader thread's blocking read is unblocked by closing the upstream response, not by
+any polling.
+
+**Handoff on a channel switch** (`proxy/RemuxHandoffPolicy.kt`, pure): a channel switch replaces the
+active remux session, but the replaced one isn't stopped immediately - the receiver may still have
+an in-flight request for it (a segment fetch already issued, a stale playlist poll) during the brief
+switch window, and killing it on the spot would turn a successful switch into a visible glitch. It's
+kept "draining" - still servable, both for its playlist and its segments - until either the new
+channel is confirmed loaded on the receiver (`ProxyServer.confirmActiveSession`, called from
+`CastSessionRepository` on a successful load) or 10 seconds elapse, whichever comes first. Only one
+session ever drains at a time; a session that's still draining when a *third* switch lands has
+already waited long enough and is stopped immediately to make room.
 
 ### Upstream reconnect
 

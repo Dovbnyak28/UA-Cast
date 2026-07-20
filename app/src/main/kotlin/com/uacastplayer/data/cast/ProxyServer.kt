@@ -13,6 +13,7 @@ import com.uacastplayer.proxy.M3u8Rewriter
 import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.PlaylistDetector
 import com.uacastplayer.proxy.RawTsRemuxActivation
+import com.uacastplayer.proxy.RemuxHandoffPolicy
 import com.uacastplayer.proxy.RemuxReconnectPolicy
 import com.uacastplayer.proxy.RemuxSegmentBuffer
 import com.uacastplayer.proxy.TsSegment
@@ -85,12 +86,37 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     }
     private val resourcesLock = Any()
 
-    // "One active remux stream per session" (docs/PROXY_RULES.md) - a channel switch always goes
-    // through start(), which tears down whatever the previous channel had running.
+    // "One active remux stream per session" (docs/PROXY_RULES.md) - a channel switch replaces
+    // activeRemuxSession, but doesn't stop() the whole server (see ensureStarted); the replaced
+    // session is instead handed off gracefully, see RemuxHandoffPolicy.
     private var remuxEnabled = true
     private var activeRemuxSession: RawTsRemuxSession? = null
+    private var drainingRemuxSession: RawTsRemuxSession? = null
     private val remuxLock = Any()
 
+    /**
+     * Starts the server if it isn't already running for this exact `(sessionToken, host)` pair -
+     * otherwise a no-op that reuses the running socket, port, and every resource/remux session
+     * already registered on it. A cast session's channel switches all share one `sessionToken` (see
+     * `cast/CastSessionRepository`), so a mid-session switch that calls this instead of [start]
+     * doesn't tear down and rebind a fresh port out from under a receiver that's still fetching the
+     * previous channel's URL - which is exactly what a raw [start] call does unconditionally (see
+     * its own doc). Only an actual new cast session (a new token) or a host change forces a real
+     * [start].
+     */
+    fun ensureStarted(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
+        val currentPort = boundPort
+        val sameSession = this.sessionToken == sessionToken && this.host == host
+        if (running && currentPort != null && sameSession) {
+            this.remuxEnabled = remuxEnabled
+            return currentPort
+        }
+        return start(sessionToken, host, remuxEnabled)
+    }
+
+    /** Always tears down and rebinds a fresh socket/port, discarding every resource and remux
+     * session - appropriate for an actual new cast session, not a mid-session channel switch (see
+     * [ensureStarted], which every caller other than this class's own tests should prefer). */
     fun start(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
         stop()
         this.sessionToken = sessionToken
@@ -138,6 +164,22 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         synchronized(remuxLock) {
             activeRemuxSession?.stop()
             activeRemuxSession = null
+            drainingRemuxSession?.stop()
+            drainingRemuxSession = null
+        }
+    }
+
+    /** Called once the new channel's load is confirmed to have succeeded on the receiver (see
+     * `cast/CastSessionRepository`) - lets a still-draining previous remux session be torn down
+     * right away instead of waiting out the rest of [RemuxHandoffPolicy.DRAIN_TIMEOUT_MILLIS]. A
+     * harmless no-op when nothing is draining. */
+    fun confirmActiveSession() {
+        synchronized(remuxLock) {
+            val draining = drainingRemuxSession ?: return@synchronized
+            if (RemuxHandoffPolicy.shouldKillDraining(confirmed = true, elapsedMillis = 0)) {
+                draining.stop()
+                drainingRemuxSession = null
+            }
         }
     }
 
@@ -215,10 +257,12 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         output: OutputStream,
     ) {
         // A second (or third, ...) poll of a channel already being remuxed - serve the live
-        // playlist as it stands right now, no upstream fetch involved.
-        val activeSession = synchronized(remuxLock) { activeRemuxSession }?.takeIf { it.resourceId == resourceId }
-        if (activeSession != null) {
-            writePlaylistText(activeSession.currentPlaylist(), request.method, output)
+        // playlist as it stands right now, no upstream fetch involved. Falls back to a still-
+        // draining previous session (see RemuxHandoffPolicy) so an in-flight poll for the channel
+        // just switched away from doesn't 404 mid-handoff.
+        val existingSession = remuxSessionFor(resourceId)
+        if (existingSession != null) {
+            writePlaylistText(existingSession.currentPlaylist(), request.method, output)
             return
         }
 
@@ -273,16 +317,44 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     private fun startRemuxSession(resourceId: String, response: Response): RawTsRemuxSession {
         val session = RawTsRemuxSession(resourceId, response, httpClient, ::buildRemuxSegmentUrl)
         synchronized(remuxLock) {
-            activeRemuxSession?.stop()
+            val previous = activeRemuxSession
             activeRemuxSession = session
+            if (previous != null && previous.resourceId != resourceId) beginDraining(previous) else previous?.stop()
         }
         session.start()
         return session
     }
 
+    /** See [RemuxHandoffPolicy]: keeps [previous] servable for a grace period instead of stopping
+     * it the instant it's replaced, so an in-flight request for the channel just switched away from
+     * doesn't turn a successful switch into a visible glitch. Only one session ever drains at a
+     * time - a session already draining when a newer replacement lands has waited long enough. */
+    private fun beginDraining(previous: RawTsRemuxSession) {
+        drainingRemuxSession?.stop()
+        drainingRemuxSession = previous
+        val startedAt = System.currentTimeMillis()
+        thread(name = "ProxyServer-drain-${previous.resourceId}") {
+            Thread.sleep(RemuxHandoffPolicy.DRAIN_TIMEOUT_MILLIS)
+            synchronized(remuxLock) {
+                val elapsed = System.currentTimeMillis() - startedAt
+                val stillDraining = drainingRemuxSession === previous
+                val expired = RemuxHandoffPolicy.shouldKillDraining(confirmed = false, elapsedMillis = elapsed)
+                if (stillDraining && expired) {
+                    previous.stop()
+                    drainingRemuxSession = null
+                }
+            }
+        }
+    }
+
+    private fun remuxSessionFor(resourceId: String): RawTsRemuxSession? = synchronized(remuxLock) {
+        activeRemuxSession?.takeIf { it.resourceId == resourceId }
+            ?: drainingRemuxSession?.takeIf { it.resourceId == resourceId }
+    }
+
     private fun serveRemuxSegment(resourceId: String, segmentPathPart: String, output: OutputStream) {
         val sequence = parseSegmentSequence(segmentPathPart)
-        val session = synchronized(remuxLock) { activeRemuxSession }?.takeIf { it.resourceId == resourceId }
+        val session = remuxSessionFor(resourceId)
         val bytes = sequence?.let { session?.segmentBytes(it) }
         if (bytes == null) {
             writeError(output, 404, "Not Found")

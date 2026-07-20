@@ -88,6 +88,11 @@ class CastSessionRepository private constructor(context: Context) {
     // content-type instead of falling back to a URL guess. Reset per channel in startPlayback.
     private var lastKnownSourceKind: TsSourceKind? = null
 
+    // One token for the whole cast session, not per load - see ProxyServer.ensureStarted. Every
+    // channel switch during that session reuses it so the proxy's port/resources/remux session
+    // survive the switch instead of being torn down and rebuilt from under the receiver.
+    private var proxySessionToken: String = ""
+
     private val _state = MutableStateFlow(CastPlaybackState())
     val state: StateFlow<CastPlaybackState> = _state.asStateFlow()
 
@@ -143,6 +148,7 @@ class CastSessionRepository private constructor(context: Context) {
     private fun onSessionActive(session: CastSession) {
         currentSession = session
         currentReceiverId = session.castDevice?.deviceId
+        proxySessionToken = UUID.randomUUID().toString()
         session.remoteMediaClient?.registerCallback(remoteMediaClientCallback)
         startProxyEagerly()
         // Covers starting a session from the player while a channel is already open, not just
@@ -158,15 +164,15 @@ class CastSessionRepository private constructor(context: Context) {
      * fallback to need it - if one does turn out to be needed (codec incompatibility, watchdog
      * timeout), [startProxyAndLoad] doesn't also pay for the server startup at that point, only for
      * registering the one resource it actually needs. Safe to call unconditionally even for a
-     * session that never falls back: [ProxyServer.start] always stops any previous instance first,
-     * and every session end ([CastReceiverStatusReducer.reduceDisconnected]) unconditionally emits
-     * [CastSideEffect.CloseProxySession], so an eagerly-started-but-never-used proxy still gets torn
-     * down like any other.
+     * session that never falls back: [ProxyServer.ensureStarted] is a no-op if already running for
+     * this session's token, and every session end ([CastReceiverStatusReducer.reduceDisconnected])
+     * unconditionally emits [CastSideEffect.CloseProxySession], so an eagerly-started-but-never-used
+     * proxy still gets torn down like any other.
      */
     private fun startProxyEagerly() {
         val host = LocalNetworkAddress.currentIpv4Address(appContext) ?: return
-        proxyServer.start(
-            sessionToken = UUID.randomUUID().toString(),
+        proxyServer.ensureStarted(
+            sessionToken = proxySessionToken,
             host = host,
             remuxEnabled = preferences.rawTsRemuxEnabled,
         )
@@ -268,8 +274,8 @@ class CastSessionRepository private constructor(context: Context) {
             giveUp(streamUrl)
             return
         }
-        proxyServer.start(
-            sessionToken = UUID.randomUUID().toString(),
+        proxyServer.ensureStarted(
+            sessionToken = proxySessionToken,
             host = host,
             remuxEnabled = preferences.rawTsRemuxEnabled,
         )
@@ -325,6 +331,10 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun applyLoadResult(result: CastLoadResult, context: LoadRetryContext) {
+        // Lets a still-draining previous channel's remux session (see ProxyServer/RemuxHandoffPolicy)
+        // be torn down right away instead of waiting out its grace period - a harmless no-op if this
+        // load wasn't on the proxy or nothing was draining.
+        if (result is CastLoadResult.Success) proxyServer.confirmActiveSession()
         // A confirmed-incompatible codec (see onRouteBlocked) means the proxy could never have
         // helped even if the diagnostic resolved after this failure - don't waste a proxy attempt
         // chasing a load that was already known to be futile.
