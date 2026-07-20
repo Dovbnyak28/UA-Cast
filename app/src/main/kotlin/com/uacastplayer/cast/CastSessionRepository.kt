@@ -93,6 +93,15 @@ class CastSessionRepository private constructor(context: Context) {
     // survive the switch instead of being torn down and rebuilt from under the receiver.
     private var proxySessionToken: String = ""
 
+    // See tryRecover/CastRecoveryPolicy: how many reload attempts have been spent on the current
+    // failure episode, and when the current unbroken PLAYING streak started (null while not
+    // PLAYING) - both reset per channel in startPlayback, and recoveryAttempts is additionally
+    // reset early once CastRecoveryPolicy.shouldResetAttemptCounter says the stream has been
+    // stable long enough that a new failure deserves a fresh budget.
+    private var recoveryAttempts = 0
+    private var playingSinceMillis: Long? = null
+    private var recoveryJob: Job? = null
+
     private val _state = MutableStateFlow(CastPlaybackState())
     val state: StateFlow<CastPlaybackState> = _state.asStateFlow()
 
@@ -119,7 +128,78 @@ class CastSessionRepository private constructor(context: Context) {
             val idleReason = mapIdleReason(status.idleReason)
             val selfInitiated = selfInitiatedTransition
             selfInitiatedTransition = false
-            applyResult(CastReceiverStatusReducer.reduce(_state.value, receiverStatus, idleReason, selfInitiated))
+            trackPlayingWindow(receiverStatus)
+            handleReceiverStatus(receiverStatus, idleReason, selfInitiated)
+        }
+    }
+
+    private fun trackPlayingWindow(status: ReceiverStatus) {
+        playingSinceMillis = if (status == ReceiverStatus.PLAYING) {
+            playingSinceMillis ?: System.currentTimeMillis()
+        } else {
+            null
+        }
+    }
+
+    /** [CastRecoveryPolicy.Reload] short-circuits the normal reduce() give-up path entirely - no
+     * proxy teardown, no local-playback resume, just a delayed reload of the exact same channel.
+     * Anything else (Ignore, GiveUp, or a status this isn't even about) falls through to the
+     * existing reducer unchanged. */
+    private fun handleReceiverStatus(status: ReceiverStatus, idleReason: IdleReason, selfInitiated: Boolean) {
+        val isFailureReason = idleReason == IdleReason.ERROR || idleReason == IdleReason.FINISHED
+        val isRecoverableIdle = status == ReceiverStatus.IDLE && isFailureReason
+        if (isRecoverableIdle && tryRecover(idleReason, selfInitiated)) return
+        applyResult(CastReceiverStatusReducer.reduce(_state.value, status, idleReason, selfInitiated))
+    }
+
+    /** Returns true if a reload was scheduled (the caller must skip the normal give-up reduction);
+     * false means [CastRecoveryPolicy] said Ignore or GiveUp, and the normal reducer path - which
+     * already handles both of those correctly on its own - should run instead. */
+    private fun tryRecover(idleReason: IdleReason, selfInitiated: Boolean): Boolean {
+        val channel = activeChannel ?: return false
+        val decision = recoveryDecisionFor(idleReason, selfInitiated)
+        return if (decision is CastRecoveryDecision.Reload) {
+            scheduleReload(channel, decision)
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun recoveryDecisionFor(idleReason: IdleReason, selfInitiated: Boolean): CastRecoveryDecision {
+        val stablePlayingMs = playingSinceMillis?.let { System.currentTimeMillis() - it } ?: 0L
+        if (CastRecoveryPolicy.shouldResetAttemptCounter(stablePlayingMs)) recoveryAttempts = 0
+        val isConfirmedIncompatible = _state.value.codecIncompatibility != null
+        val decision =
+            CastRecoveryPolicy.onReceiverIdle(idleReason, isConfirmedIncompatible, recoveryAttempts, selfInitiated)
+        AppLog.d(TAG) {
+            val mode = _state.value.deliveryMode
+            "cast status: state=IDLE idleReason=$idleReason mode=$mode playedMs=$stablePlayingMs action=$decision"
+        }
+        return decision
+    }
+
+    private fun scheduleReload(channel: ActiveChannel, decision: CastRecoveryDecision.Reload) {
+        recoveryAttempts = decision.attempt
+        _state.update { it.copy(isRecovering = true) }
+        recoveryJob?.cancel()
+        recoveryJob = scope.launch {
+            delay(decision.backoffMillis)
+            if (StaleChannelGuard.isCurrent(channel.streamUrl, activeChannel?.streamUrl)) performRecoveryReload(channel)
+        }
+    }
+
+    private fun performRecoveryReload(channel: ActiveChannel) {
+        when (_state.value.deliveryMode) {
+            CastDeliveryMode.Direct -> loadOnReceiver(
+                channel.streamUrl,
+                channel.title,
+                originalStreamUrl = channel.streamUrl,
+                userAgent = channel.userAgent,
+                referrer = channel.referrer,
+            )
+            CastDeliveryMode.Proxy ->
+                startProxyAndLoad(channel.streamUrl, channel.title, channel.userAgent, channel.referrer)
         }
     }
 
@@ -180,6 +260,7 @@ class CastSessionRepository private constructor(context: Context) {
 
     private fun onSessionInactive() {
         watchdogJob?.cancel()
+        recoveryJob?.cancel()
         currentSession?.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
         currentSession = null
         currentReceiverId = null
@@ -188,6 +269,9 @@ class CastSessionRepository private constructor(context: Context) {
 
     private fun startPlayback(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
         watchdogJob?.cancel()
+        recoveryJob?.cancel()
+        recoveryAttempts = 0
+        playingSinceMillis = null
         val receiverId = currentReceiverId.orEmpty()
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
@@ -198,6 +282,7 @@ class CastSessionRepository private constructor(context: Context) {
                 deliveryMode = mode,
                 codecIncompatibility = null,
                 receiverLoadFailed = false,
+                isRecovering = false,
                 likelyCompatibilityHint = null,
             )
         }

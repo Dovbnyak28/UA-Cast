@@ -31,6 +31,13 @@ class CastReceiverStatusReducerTest {
     }
 
     @Test
+    fun `PLAYING clears a recovering flag - the reload succeeded`() {
+        val state = CastPlaybackState(isSessionConnected = true, isRecovering = true)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.PLAYING)
+        assertFalse(result.state.isRecovering)
+    }
+
+    @Test
     fun `PAUSED updates status with no side effects`() {
         val result = CastReceiverStatusReducer.reduce(CastPlaybackState(), ReceiverStatus.PAUSED)
         assertEquals(ReceiverStatus.PAUSED, result.state.receiverStatus)
@@ -132,6 +139,13 @@ class CastReceiverStatusReducerTest {
         val state = CastPlaybackState(isSessionConnected = true, receiverLoadFailed = true)
         val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
         assertFalse(result.state.receiverLoadFailed)
+    }
+
+    @Test
+    fun `DISCONNECTED clears a lingering recovering flag`() {
+        val state = CastPlaybackState(isSessionConnected = true, isRecovering = true)
+        val result = CastReceiverStatusReducer.reduce(state, ReceiverStatus.DISCONNECTED)
+        assertFalse(result.state.isRecovering)
     }
 
     @Test

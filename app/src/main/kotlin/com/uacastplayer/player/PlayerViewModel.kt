@@ -158,6 +158,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         castCodecIncompatibility = state.codecIncompatibility,
                         castReceiverLoadFailed = state.receiverLoadFailed,
                         castLikelyCompatibilityHint = state.likelyCompatibilityHint,
+                        castIsRecovering = state.isRecovering,
                     )
                 }
                 updateSeekability()

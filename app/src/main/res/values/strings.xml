@@ -265,6 +265,7 @@
     <string name="cast_receiver_load_failed_message">Couldn\'t cast this channel to your Chromecast. Local playback continues.</string>
     <string name="cast_likely_incompatible_video_message">Couldn\'t play this on Chromecast. Likely cause: %1$s video isn\'t supported by your device. Local playback continues.</string>
     <string name="cast_likely_incompatible_audio_message">Couldn\'t play this on Chromecast. Likely cause: %1$s audio isn\'t supported by your device. Local playback continues.</string>
+    <string name="cast_recovering_message">Recovering the stream…</string>
     <string name="player_resize_fit">Fit</string>
     <string name="player_resize_fill">Fill</string>
     <string name="player_resize_zoom">Zoom</string>

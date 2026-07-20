@@ -37,7 +37,7 @@ object CastReceiverStatusReducer {
         val effects = mutableListOf<CastSideEffect>()
         when {
             status == ReceiverStatus.PLAYING -> {
-                newState = newState.copy(receiverLoadFailed = false)
+                newState = newState.copy(receiverLoadFailed = false, isRecovering = false)
                 effects += CastSideEffect.PauseLocalPlayer
             }
             status == ReceiverStatus.IDLE && idleReason == IdleReason.ERROR -> {
@@ -80,6 +80,7 @@ object CastReceiverStatusReducer {
             codecIncompatibility = null,
             receiverLoadFailed = false,
             likelyCompatibilityHint = null,
+            isRecovering = false,
         )
         return CastReducerResult(newState, effects)
     }

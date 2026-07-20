@@ -35,6 +35,10 @@ data class CastPlaybackState(
     // cast attempt, only picked up if receiverLoadFailed ends up true, so the failure message can
     // name a likely cause instead of a generic "couldn't cast" with no explanation.
     val likelyCompatibilityHint: CastCompatibilityVerdict.LikelyCompatible? = null,
+    // True while CastRecoveryPolicy is retrying a receiver that went idle mid-playback - see
+    // CastSessionRepository.tryRecover. Shown to the user instead of silently bouncing to local
+    // playback and back on a transient hiccup that a same-channel reload will likely fix.
+    val isRecovering: Boolean = false,
 )
 
 sealed class CastLoadResult {

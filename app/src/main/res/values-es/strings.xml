@@ -265,6 +265,7 @@
     <string name="cast_receiver_load_failed_message">No se pudo transmitir este canal a tu Chromecast. La reproducción local continúa.</string>
     <string name="cast_likely_incompatible_video_message">No se pudo reproducir en Chromecast. Causa probable: el video %1$s no es compatible con tu dispositivo. La reproducción local continúa.</string>
     <string name="cast_likely_incompatible_audio_message">No se pudo reproducir en Chromecast. Causa probable: el audio %1$s no es compatible con tu dispositivo. La reproducción local continúa.</string>
+    <string name="cast_recovering_message">Recuperando la transmisión…</string>
     <string name="player_resize_fit">Ajustar</string>
     <string name="player_resize_fill">Rellenar</string>
     <string name="player_resize_zoom">Zoom</string>

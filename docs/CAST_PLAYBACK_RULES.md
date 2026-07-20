@@ -106,6 +106,28 @@ Every routing decision also logs one self-contained line - `AppLog.d("CastSessio
 `cast route: verdict=... source=... action=... video=... audio=...` - deliberately never the
 stream URL, so a field logcat alone is enough to diagnose why a specific channel didn't cast.
 
+## Recovery
+
+A receiver going idle mid-playback (`IDLE` with `ERROR`, or `FINISHED` - which for this app's
+exclusively-live channels always means an unexpected drop, never legitimate end of content) is
+often just a momentary hiccup rather than a real failure - a brief blip on the TV's own Wi-Fi, an
+origin server hiccup. `cast/CastRecoveryPolicy.kt` (pure) decides whether to retry: up to 3 reload
+attempts with 2s/4s/8s backoff, `Ignore` for a self-initiated IDLE (see "Load generations..." above)
+or a `CANCELLED`/`INTERRUPTED`/`NONE` idle reason, and an immediate `GiveUp` for a confirmed
+`IncompatibleVideo` verdict (reloading can never fix a codec problem) or once the attempt budget is
+spent. `CastSessionRepository.tryRecover` intercepts a recoverable IDLE *before* it ever reaches
+`CastReceiverStatusReducer.reduce`'s normal give-up branch: `Reload` schedules a delayed reload of
+the exact same channel via the exact same delivery mode (direct or proxy - the proxy path reuses the
+running server per "Proxy starts once per cast session" above, so a reload never rebinds anything),
+setting `CastPlaybackState.isRecovering` so the UI shows "Recovering the stream…"
+(`cast_recovering_message`) instead of silently bouncing to local playback and back; `Ignore` and
+`GiveUp` both fall through to the reducer's existing behavior unchanged. The attempt counter resets
+early - before evaluating a new failure - once the stream has held a stable, continuous `PLAYING`
+for `CastRecoveryPolicy.STABLE_PLAYING_RESET_MILLIS` (60s), so a channel that's been fine for hours
+doesn't inherit a nearly-exhausted budget from a brief flaky patch hours earlier. Every recovery
+decision logs one line: `cast status: state=IDLE idleReason=<...> mode=<...> playedMs=<...>
+action=<...>`.
+
 ## Incompatibility memory
 
 A (stream-fingerprint, receiver-fingerprint) pair that fails - direct fails **and** the proxy also

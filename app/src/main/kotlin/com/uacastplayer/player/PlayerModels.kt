@@ -43,6 +43,8 @@ data class PlayerUiState(
     /** Mirrors [com.uacastplayer.cast.CastPlaybackState.likelyCompatibilityHint] - only consulted
      * when [castReceiverLoadFailed] is true, to name a likely cause instead of a generic message. */
     val castLikelyCompatibilityHint: CastCompatibilityVerdict.LikelyCompatible? = null,
+    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.isRecovering]. */
+    val castIsRecovering: Boolean = false,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */
