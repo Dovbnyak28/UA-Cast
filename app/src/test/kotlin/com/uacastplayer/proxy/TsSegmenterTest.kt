@@ -113,6 +113,24 @@ private fun videoPacket(pusi: Boolean, keyframe: Boolean, pcrBase: Long? = null)
 
 private fun secondsToTicks(seconds: Double): Long = (seconds * PCR_HZ).toLong()
 
+/** Builds a single 188-byte packet on [PMT_PID] whose section (after the payload-only adaptation
+ * field and pointer_field are skipped) is exactly [sectionSize] bytes, table_id 0x02 (PMT) if any
+ * bytes exist at all and everything else zeroed - a stand-in for a PMT cut short mid-broadcast. */
+private fun truncatedPmtPacket(sectionSize: Int): ByteArray {
+    val packet = ByteArray(188)
+    packet[0] = 0x47.toByte()
+    packet[1] = (0x40 or ((PMT_PID shr 8) and 0x1F)).toByte()
+    packet[2] = (PMT_PID and 0xFF).toByte()
+    packet[3] = 0x10
+    val pointerField = (183 - sectionSize).coerceIn(0, 255)
+    packet[4] = pointerField.toByte()
+    val sectionStart = 5 + pointerField
+    if (sectionSize > 0 && sectionStart < 188) packet[sectionStart] = 0x02
+    return packet
+}
+
+private val TRUNCATED_SECTION_SIZES = listOf(0, 1, 5, 11, 12, 13)
+
 class TsSegmenterTest {
 
     @Test
@@ -372,6 +390,21 @@ class TsSegmenterTest {
         val segmenter = TsSegmenter()
         assertNull(segmenter.feed(ByteArray(188)))
         assertNull(segmenter.flush())
+    }
+
+    @Test
+    fun `feed ignores a packet shorter than 188 bytes without throwing`() {
+        val segmenter = TsSegmenter()
+        assertNull(segmenter.feed(ByteArray(50)))
+    }
+
+    @Test
+    fun `feed never throws on a PMT section truncated mid-header, at every size boundary`() {
+        for (size in TRUNCATED_SECTION_SIZES) {
+            val segmenter = TsSegmenter()
+            assertNull(segmenter.feed(patPacket()))
+            assertNull(segmenter.feed(truncatedPmtPacket(size)))
+        }
     }
 
     @Test
