@@ -72,6 +72,27 @@ class ProxyServerTest {
         assertEquals(null, mediaEntry.referrer)
     }
 
+    @Test
+    fun `every response carries CORS headers for the receiver's web app`() {
+        server.start(sessionToken = "test-session", host = "127.0.0.1")
+        val parent = ResourceEntry(
+            type = RESOURCE_TYPE_PLAYLIST,
+            originalUrl = "https://origin.example/playlist.m3u8",
+            userAgent = "CustomAgent/1.0",
+            referrer = null,
+        )
+        val output = ByteArrayOutputStream()
+
+        val upstream = fakeResponse("https://origin.example/playlist.m3u8", "#EXTM3U\nseg.ts")
+        server.servePlaylist(upstream, "GET", output, parent)
+
+        // The Default Media Receiver fetches everything via cross-origin XHR - a response without
+        // this header is silently discarded by the receiver's browser, killing playback.
+        val response = output.toString(Charsets.ISO_8859_1.name())
+        assertTrue(response.contains("Access-Control-Allow-Origin: *"))
+        assertTrue(response.contains("Access-Control-Expose-Headers: Content-Length, Content-Range"))
+    }
+
     @Test(expected = IllegalStateException::class)
     fun `buildLocalUrl fails fast when the server is not running`() {
         server.registerPlaylist("https://origin.example/playlist.m3u8")

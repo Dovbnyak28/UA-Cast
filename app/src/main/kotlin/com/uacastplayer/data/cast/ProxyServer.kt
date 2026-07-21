@@ -50,6 +50,8 @@ private const val REMUX_POLL_INTERVAL_MILLIS = 100L
 private const val REMUX_READ_CHUNK_BYTES = 64 * 1024
 private const val REMUX_READER_JOIN_TIMEOUT_MILLIS = 1_000L
 private const val HTTP_SERVICE_UNAVAILABLE = 503
+private const val HTTP_NO_CONTENT = 204
+private const val CORS_MAX_AGE_SECONDS = "86400"
 
 internal const val RESOURCE_TYPE_PLAYLIST = "playlist"
 internal const val RESOURCE_TYPE_MEDIA = "media"
@@ -223,15 +225,14 @@ class ProxyServer(private val httpClient: OkHttpClient) {
                 val input = BufferedInputStream(socket.getInputStream())
                 val output = BufferedOutputStream(socket.getOutputStream())
                 val request = readRequest(input)
-                if (request == null) {
-                    writeError(output, 400, "Bad Request")
-                    return
+                when {
+                    request == null -> writeError(output, 400, "Bad Request")
+                    request.method == "OPTIONS" ->
+                        writeCorsPreflight(output, request.headers["access-control-request-headers"])
+                    request.method != "GET" && request.method != "HEAD" ->
+                        writeError(output, 405, "Method Not Allowed")
+                    else -> serveRequest(request, output)
                 }
-                if (request.method != "GET" && request.method != "HEAD") {
-                    writeError(output, 405, "Method Not Allowed")
-                    return
-                }
-                serveRequest(request, output)
             } catch (e: Exception) {
                 AppLog.w(TAG) { "Connection error: ${e.javaClass.simpleName}" }
             }
@@ -516,11 +517,35 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     // hangs or corrupts the next request on that socket - worse for a Chromecast receiver than
     // the extra per-segment TCP handshake this trades away. Revisit only with a real framing
     // layer (chunked-encoding support included), not a quick loop around handleConnection.
+    //
+    // CORS on every response is not optional: the Default Media Receiver is a web app, so every
+    // playlist/segment fetch it makes is a cross-origin XHR - without Access-Control-Allow-Origin
+    // the receiver's browser blocks the response *after* it arrives, and playback dies within
+    // seconds as IDLE/ERROR (playedMs=0) even though this server behaved perfectly. Field
+    // signature: direct cast fails (origin without CORS), proxy fallback then fails identically.
     private fun writeHeaders(output: OutputStream, status: Int, statusText: String, headers: Map<String, String>) {
         val builder = StringBuilder("HTTP/1.1 $status $statusText\r\n")
         for ((key, value) in headers) builder.append("$key: $value\r\n")
+        builder.append("Access-Control-Allow-Origin: *\r\n")
+        builder.append("Access-Control-Expose-Headers: Content-Length, Content-Range\r\n")
         builder.append("Connection: close\r\n\r\n")
         output.write(builder.toString().toByteArray(Charsets.ISO_8859_1))
+    }
+
+    /** A CORS preflight (the receiver's browser sends OPTIONS before any XHR with a non-safelisted
+     * header - its Range segment requests qualify) must succeed generically: it carries no
+     * credentials and gets no body, so there's nothing to protect by rejecting it - while a 405
+     * here would fail the actual media request that follows before it's ever made. The requested
+     * headers are echoed back verbatim; the fallback list covers what HLS players actually send. */
+    private fun writeCorsPreflight(output: OutputStream, requestedHeaders: String?) {
+        val headers = linkedMapOf(
+            "Access-Control-Allow-Methods" to "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers" to (requestedHeaders ?: "Range, Content-Type"),
+            "Access-Control-Max-Age" to CORS_MAX_AGE_SECONDS,
+            "Content-Length" to "0",
+        )
+        writeHeaders(output, HTTP_NO_CONTENT, "No Content", headers)
+        output.flush()
     }
 
     private fun writeError(output: OutputStream, status: Int, statusText: String) {
