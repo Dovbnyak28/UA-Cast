@@ -301,17 +301,27 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     private fun shouldRemuxUpstream(response: Response): Boolean {
         val tsProbe = if (response.body != null) response.peekBody(TS_PROBE_BYTES).bytes() else ByteArray(0)
         val looksLikeTs = MpegTsSniffer.looksLikeMpegTs(tsProbe)
-        val verdict = if (looksLikeTs) {
-            CastCompatibilityPolicy.classify(TsProgramInfoParser.parse(tsProbe))
-        } else {
-            CastCompatibilityVerdict.Unknown
-        }
+        val verdict = if (looksLikeTs) classifyTsProbe(tsProbe) else CastCompatibilityVerdict.Unknown
         return RawTsRemuxActivation.shouldActivate(
             isHlsPlaylist = false,
             looksLikeMpegTs = looksLikeTs,
             verdict = verdict,
             featureEnabled = remuxEnabled,
         )
+    }
+
+    /** [CastCompatibilityPolicy.classify]/[TsProgramInfoParser.parse] are expected to already
+     * degrade to null/[CastCompatibilityVerdict.Unknown] on malformed input (see both), but this is
+     * still an arbitrary third-party byte stream feeding a hand-written binary parser - any future
+     * defect in that parsing must fail into "don't know, act conservatively" here, not propagate up
+     * through [handleConnection]'s catch and silently drop the connection with no HTTP response at
+     * all (which looks like a timeout to the receiver, not a clean error). */
+    @Suppress("TooGenericExceptionCaught")
+    private fun classifyTsProbe(tsProbe: ByteArray): CastCompatibilityVerdict = try {
+        CastCompatibilityPolicy.classify(TsProgramInfoParser.parse(tsProbe))
+    } catch (e: Exception) {
+        AppLog.e(TAG, e) { "Failed to classify a probed TS stream's codecs; treating as Unknown" }
+        CastCompatibilityVerdict.Unknown
     }
 
     private fun startRemuxSession(resourceId: String, response: Response): RawTsRemuxSession {
