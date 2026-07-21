@@ -293,6 +293,9 @@ class ProxyServer(private val httpClient: OkHttpClient) {
             request.headers["range"]?.let { header("Range", it) }
         }.build()
         val response = httpClient.newCall(upstreamRequest).execute()
+        if (!response.isSuccessful) {
+            AppLog.w(TAG) { "Upstream fetch for resource $resourceId returned ${response.code}" }
+        }
 
         // The resource's registered type is only a hint used when it was discovered inside a
         // parent playlist (see servePlaylist below) - it can be wrong for extensionless/tokenized
@@ -563,6 +566,15 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     }
 
     private fun servePassthrough(response: Response, method: String, output: OutputStream) {
+        // A non-2xx here is forwarded to the receiver as-is (below) - which looks identical to a
+        // genuine codec/network failure on the sender's own logs, since the receiver just goes
+        // IDLE/ERROR a moment later either way. This confirmed-single-connection-per-account
+        // origin is expected to reject an occasional segment fetch under rapid channel switching
+        // (multiple proxy fetches racing for the one slot) - this line is what tells that apart
+        // from a genuine proxy defect on the next field capture.
+        if (!response.isSuccessful) {
+            AppLog.w(TAG) { "Passthrough upstream returned ${response.code} for ${response.request.url.encodedPath}" }
+        }
         val headers = linkedMapOf("Content-Type" to (response.header("Content-Type") ?: "application/octet-stream"))
         response.header("Content-Range")?.let { headers["Content-Range"] = it }
         response.header("Accept-Ranges")?.let { headers["Accept-Ranges"] = it }
