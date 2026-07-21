@@ -49,6 +49,7 @@ private const val REMUX_INITIAL_PLAYLIST_WAIT_MILLIS = 4_000L
 private const val REMUX_POLL_INTERVAL_MILLIS = 100L
 private const val REMUX_READ_CHUNK_BYTES = 64 * 1024
 private const val REMUX_READER_JOIN_TIMEOUT_MILLIS = 1_000L
+private const val HTTP_SERVICE_UNAVAILABLE = 503
 
 internal const val RESOURCE_TYPE_PLAYLIST = "playlist"
 internal const val RESOURCE_TYPE_MEDIA = "media"
@@ -259,9 +260,13 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         // A second (or third, ...) poll of a channel already being remuxed - serve the live
         // playlist as it stands right now, no upstream fetch involved. Falls back to a still-
         // draining previous session (see RemuxHandoffPolicy) so an in-flight poll for the channel
-        // just switched away from doesn't 404 mid-handoff.
+        // just switched away from doesn't 404 mid-handoff. A session whose reader has died (gave
+        // up reconnecting - see RawTsRemuxSession.hasEnded) must NOT short-circuit here: its
+        // playlist is frozen forever, so serving it would make every recovery reload of this same
+        // URL (see cast/CastRecoveryPolicy) a guaranteed failure. Falling through starts a fresh
+        // remux session instead, which also stops and replaces the dead one (see startRemuxSession).
         val existingSession = remuxSessionFor(resourceId)
-        if (existingSession != null) {
+        if (existingSession != null && !existingSession.hasEnded) {
             writePlaylistText(existingSession.currentPlaylist(), request.method, output)
             return
         }
@@ -284,13 +289,24 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         }
 
         if (shouldRemuxUpstream(response)) {
-            // Ownership of `response` passes to the remux session's background reader thread from
-            // here on - it is deliberately NOT wrapped in .use{} on this thread, and is closed by
-            // the session itself once the reader loop ends (stream EOF, stop(), or an error).
-            val session = startRemuxSession(resourceId, response)
-            writePlaylistText(session.awaitInitialPlaylist(), request.method, output)
+            serveRemuxedUpstream(resourceId, response, request.method, output)
         } else {
             response.use { servePassthrough(it, request.method, output) }
+        }
+    }
+
+    /** Ownership of [response] passes to the remux session's background reader thread - it is
+     * deliberately NOT wrapped in .use{} here, and is closed by the session itself once the reader
+     * loop ends (stream EOF, stop(), or an error). A null session means the server was stopped
+     * while this request's upstream fetch was in flight (see [startRemuxSession]) - the session was
+     * never started, [response] is already closed, and the client gets a clean 503 rather than a
+     * playlist from a server that no longer exists. */
+    private fun serveRemuxedUpstream(resourceId: String, response: Response, method: String, output: OutputStream) {
+        val session = startRemuxSession(resourceId, response)
+        if (session == null) {
+            writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
+        } else {
+            writePlaylistText(session.awaitInitialPlaylist(), method, output)
         }
     }
 
@@ -324,9 +340,19 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         CastCompatibilityVerdict.Unknown
     }
 
-    private fun startRemuxSession(resourceId: String, response: Response): RawTsRemuxSession {
+    /** Returns null - with [response] closed - if the server was stopped while this request's
+     * upstream fetch was in flight. Without that check, a connection handler racing [stop] (the
+     * receiver polls its playlist right as the cast session ends) could install and start a fresh
+     * reader session *after* stop() already cleared everything, leaving a background thread reading
+     * the upstream live stream indefinitely with no owner left to ever stop it. Both this check and
+     * stop()'s cleanup run under [remuxLock], so whichever runs second sees the other's effect. */
+    private fun startRemuxSession(resourceId: String, response: Response): RawTsRemuxSession? {
         val session = RawTsRemuxSession(resourceId, response, httpClient, ::buildRemuxSegmentUrl)
         synchronized(remuxLock) {
+            if (!running) {
+                runCatching { response.close() }
+                return null
+            }
             val previous = activeRemuxSession
             activeRemuxSession = session
             if (previous != null && previous.resourceId != resourceId) beginDraining(previous) else previous?.stop()
@@ -514,6 +540,14 @@ internal class RawTsRemuxSession(
     @Volatile private var running = true
     private var readerThread: Thread? = null
 
+    /** True once [readLoop] has exited for good - reconnect policy gave up, natural stream end, or
+     * [stop] - meaning [currentPlaylist] is frozen and will never grow again. [ProxyServer] checks
+     * this before serving an existing session's playlist: a dead session must be replaced with a
+     * fresh one, not polled forever (see servePlaylistOrMediaResource). Buffered segments are still
+     * servable after this flips - only the playlist short-circuit cares. */
+    @Volatile var hasEnded = false
+        private set
+
     // Only ever read/written from the reader thread itself - readLoop() owns it exclusively once
     // start() has been called, so it doesn't need the same synchronization as `buffer`.
     private var currentResponse = initialResponse
@@ -541,10 +575,18 @@ internal class RawTsRemuxSession(
      * connection forever). */
     fun awaitInitialPlaylist(): String {
         val deadline = System.currentTimeMillis() + REMUX_INITIAL_PLAYLIST_WAIT_MILLIS
-        while (running && isBufferEmpty() && System.currentTimeMillis() < deadline) {
+        while (shouldAwaitMoreSegments(deadline)) {
             Thread.sleep(REMUX_POLL_INTERVAL_MILLIS)
         }
         return currentPlaylist()
+    }
+
+    /** [hasEnded] means no further segment can ever arrive (the final flush happens before the
+     * flag flips), so once it's set whatever the buffer holds now is all there will ever be -
+     * waiting out the rest of the deadline would just stall the request thread for nothing. */
+    private fun shouldAwaitMoreSegments(deadline: Long): Boolean {
+        if (!running || hasEnded) return false
+        return isBufferEmpty() && System.currentTimeMillis() < deadline
     }
 
     fun currentPlaylist(): String {
@@ -580,6 +622,7 @@ internal class RawTsRemuxSession(
             }
         }
         segmenter.flush()?.let(::addSegment)
+        hasEnded = true
     }
 
     /** Feeds [input] to the segmenter until it hits EOF, or *any* exception - not just an

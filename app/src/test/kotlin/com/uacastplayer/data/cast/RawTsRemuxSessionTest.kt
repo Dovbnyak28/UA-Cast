@@ -167,6 +167,28 @@ class RawTsRemuxSessionTest {
     }
 
     @Test
+    fun `hasEnded is false while the reader is alive and true once the session stops`() {
+        val session = RawTsRemuxSession(
+            resourceId = "resource-1",
+            initialResponse = fakeResponse(syntheticTsStream()),
+            httpClient = OkHttpClient(),
+            segmentUrl = { _, sequence -> "seg$sequence.ts" },
+        )
+        session.start()
+        try {
+            session.awaitInitialPlaylist()
+            // The reader is still alive here (EOF sends it into reconnect backoff, not exit).
+            assertEquals(false, session.hasEnded)
+        } finally {
+            session.stop()
+        }
+        // stop() interrupts the backoff wait and joins the reader; readLoop's single exit point
+        // sets the flag - the same exit the reconnect-give-up path goes through, which is what
+        // ProxyServer's dead-session check actually exists for.
+        assertTrue(session.hasEnded)
+    }
+
+    @Test
     fun `an unknown segment sequence resolves to null`() {
         val session = RawTsRemuxSession(
             resourceId = "resource-1",
