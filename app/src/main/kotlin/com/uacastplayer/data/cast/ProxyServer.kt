@@ -301,9 +301,18 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         // reader below. The probes themselves read from the connection and can throw on a flaky
         // upstream - the response must be closed before that exception continues on to
         // handleConnection's catch, or the half-read connection leaks.
+        // Remux is only ever eligible for a TOP-LEVEL resource (registered by the sender, always
+        // RESOURCE_TYPE_PLAYLIST - see registerPlaylist): it exists for endless raw-TS streams. A
+        // RESOURCE_TYPE_MEDIA entry was discovered INSIDE a parent playlist, i.e. it is one of
+        // that playlist's finite SEGMENTS - and a segment's bytes are, of course, MPEG-TS, so the
+        // content sniff alone can't tell it from a live stream. Field-confirmed failure without
+        // this: every segment fetch of an ordinary HLS channel spun up its own remux session that
+        // re-downloaded the same 10s segment in a loop and answered the receiver with M3U8 text
+        // where it expected segment bytes.
+        val remuxEligible = resource.type == RESOURCE_TYPE_PLAYLIST
         val (isPlaylist, shouldRemux) = runCatching {
             val isPlaylist = isUpstreamPlaylist(response)
-            isPlaylist to (!isPlaylist && shouldRemuxUpstream(response))
+            isPlaylist to (!isPlaylist && remuxEligible && shouldRemuxUpstream(response))
         }.onFailure { runCatching { response.close() } }.getOrThrow()
 
         if (isPlaylist) {
@@ -765,6 +774,12 @@ internal class RawTsRemuxSession(
                 shouldContinue = false
             }
         }
+        // Idempotent last-resort close: normally currentResponse is already closed above, but a
+        // stop() that lands while attemptReconnect is mid-flight can leave the freshly swapped-in
+        // response unclosed (stop() closed the OLD one, the loop then exits on !running before
+        // ever reading the new one) - field-confirmed as OkHttp connection-leak warnings against
+        // the upstream segment hosts.
+        runCatching { currentResponse.close() }
         segmenter.flush()?.let(::addSegment)
         hasEnded = true
     }
