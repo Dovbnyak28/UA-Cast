@@ -356,11 +356,14 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun loadDirectWithWatchdog(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
+        // A channel already warm (see scheduleDiagnosticWarmup) skips the probe entirely - no need
+        // to race the watchdog for an answer that's already known. Read BEFORE the first load so
+        // its sourceKind informs that load's Cast content-type too (see CastContentType.of) - the
+        // whole point of warming the cache - instead of only benefiting later reloads.
+        val cached = diagnosticCache.get(streamUrl, System.currentTimeMillis())
+        if (cached != null) lastKnownSourceKind = cached.sourceKind
         loadOnReceiver(streamUrl, title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
 
-        // A channel already warm (see scheduleDiagnosticWarmup) skips the probe entirely - no need
-        // to race the watchdog for an answer that's already known.
-        val cached = diagnosticCache.get(streamUrl, System.currentTimeMillis())
         watchdogJob = scope.launch {
             launch {
                 val outcome = if (cached != null) {
