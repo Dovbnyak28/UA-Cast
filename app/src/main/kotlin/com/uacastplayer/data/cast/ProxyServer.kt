@@ -282,13 +282,20 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         // parent playlist (see servePlaylist below) - it can be wrong for extensionless/tokenized
         // URLs, so what actually gets served is decided from the real response via peekBody(),
         // which does not consume the body available to servePlaylist/servePassthrough/the remux
-        // reader below.
-        if (isUpstreamPlaylist(response)) {
+        // reader below. The probes themselves read from the connection and can throw on a flaky
+        // upstream - the response must be closed before that exception continues on to
+        // handleConnection's catch, or the half-read connection leaks.
+        val (isPlaylist, shouldRemux) = runCatching {
+            val isPlaylist = isUpstreamPlaylist(response)
+            isPlaylist to (!isPlaylist && shouldRemuxUpstream(response))
+        }.onFailure { runCatching { response.close() } }.getOrThrow()
+
+        if (isPlaylist) {
             response.use { servePlaylist(it, request.method, output, resource) }
             return
         }
 
-        if (shouldRemuxUpstream(response)) {
+        if (shouldRemux) {
             serveRemuxedUpstream(resourceId, response, request.method, output)
         } else {
             response.use { servePassthrough(it, request.method, output) }
