@@ -48,8 +48,17 @@ class PlaylistUnwrapPolicyTest {
     }
 
     @Test
-    fun `multiple URIs mean a real playlist, not a wrapper`() {
-        val playlist = "#EXTM3U\nhttp://origin.example/a.ts\nhttp://origin.example/b.ts"
+    fun `a multi-source wrapper unwraps to its first stream URL`() {
+        // Main + backup source list - the field case that first shipped as single-URI-only and
+        // silently fell back to the broken rewrite path.
+        val playlist = "#EXTM3U\n#EXTINF:-1,Ch\nhttp://origin.example/a/stream\n" +
+            "#EXTINF:-1,Ch\nhttp://backup.example/b/stream"
+        assertEquals("http://origin.example/a/stream", PlaylistUnwrapPolicy.unwrapTarget(playlist, BASE))
+    }
+
+    @Test
+    fun `a mixed list with any playlist URL is not treated as a wrapper`() {
+        val playlist = "#EXTM3U\nhttp://origin.example/a.ts\nhttp://origin.example/b.m3u8"
         assertNull(PlaylistUnwrapPolicy.unwrapTarget(playlist, BASE))
     }
 

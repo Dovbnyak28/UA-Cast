@@ -46,7 +46,11 @@ private const val TS_PROBE_BYTES = 128L * 1024
 private const val TS_PACKET_SIZE = 188
 private const val TS_SYNC_BYTE = 0x47
 private const val REMUX_TARGET_SEGMENT_SECONDS = 5
-private const val REMUX_INITIAL_PLAYLIST_WAIT_MILLIS = 4_000L
+// Long enough to cover a slow origin's first startup segment (a keyframe-less broadcast only cuts
+// at the startup force-cut ceiling, ~4s of stream time, plus connect/read overhead) - an EMPTY
+// initial playlist makes the receiver give up outright, which is strictly worse than it waiting a
+// few extra seconds on its first manifest request.
+private const val REMUX_INITIAL_PLAYLIST_WAIT_MILLIS = 8_000L
 private const val REMUX_POLL_INTERVAL_MILLIS = 100L
 private const val REMUX_READ_CHUNK_BYTES = 64 * 1024
 private const val REMUX_READER_JOIN_TIMEOUT_MILLIS = 1_000L

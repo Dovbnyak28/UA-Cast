@@ -183,13 +183,31 @@ class TsSegmenterTest {
 
     @Test
     fun `force-cuts at the max duration when no keyframe is ever flagged`() {
-        val segmenter = TsSegmenter(targetDurationMillis = 5_000, maxSegmentDurationMillis = 8_000)
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, maxSegmentDurationMillis = 8_000, startupSegments = 0)
         segmenter.feed(patPacket())
         segmenter.feed(pmtPacket())
         segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(0.0)))
         assertNull(segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(7.0))))
         val completed = segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(9.0)))
         assertTrue(completed != null)
+    }
+
+    @Test
+    fun `startup segments force-cut at twice the startup target when no keyframe is flagged`() {
+        val segmenter = TsSegmenter(
+            targetDurationMillis = 5_000,
+            startupSegments = 2,
+            startupTargetDurationMillis = 2_000,
+        )
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(0.0)))
+        // 3.5s is under the steady-state 10s ceiling but not yet at the 4s startup ceiling.
+        assertNull(segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(3.5))))
+        // 4.2s crosses the startup ceiling (2 x 2s) - segment 0 must cut without any keyframe,
+        // so the receiver's first playlist fetch isn't starved by a keyframe-less broadcast.
+        val completed = segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(4.2)))
+        assertEquals(0, completed?.sequence)
     }
 
     @Test

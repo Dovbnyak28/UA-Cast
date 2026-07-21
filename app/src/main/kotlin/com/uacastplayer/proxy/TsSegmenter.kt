@@ -153,13 +153,26 @@ class TsSegmenter(
     private fun shouldCut(isKeyframeBoundary: Boolean, elapsed: Long): Boolean =
         buffer.size() > 0 &&
             ((isKeyframeBoundary && elapsed >= effectiveTargetDurationMillis()) ||
-                elapsed >= maxSegmentDurationMillis ||
+                elapsed >= effectiveMaxSegmentDurationMillis() ||
                 buffer.size() >= maxSegmentBytes)
 
     /** [nextSequence] is the sequence number the segment currently being built will get once it
      * completes, so this is "am I still building one of the first [startupSegments] segments". */
     private fun effectiveTargetDurationMillis(): Long =
         if (nextSequence < startupSegments) startupTargetDurationMillis else targetDurationMillis
+
+    /** The force-cut ceiling must ramp down with the startup target too: a broadcast that never
+     * flags keyframes only ever cuts at this ceiling, and a first segment that takes the full
+     * steady-state [maxSegmentDurationMillis] to appear starves the receiver's very first playlist
+     * fetch (see `RawTsRemuxSession.awaitInitialPlaylist`) - confirmed in the field as an empty
+     * initial playlist and the receiver silently giving up. Same 2x ratio as the steady-state
+     * default, never above the configured ceiling. */
+    private fun effectiveMaxSegmentDurationMillis(): Long =
+        if (nextSequence < startupSegments) {
+            minOf(maxSegmentDurationMillis, startupTargetDurationMillis * 2)
+        } else {
+            maxSegmentDurationMillis
+        }
 
     private fun completeSegment(): TsSegment {
         val segment = TsSegment(nextSequence, buffer.toByteArray(), elapsedMillis(lastPcrTicks), pendingDiscontinuity)

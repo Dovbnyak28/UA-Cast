@@ -17,16 +17,20 @@ package com.uacastplayer.proxy
  */
 object PlaylistUnwrapPolicy {
 
-    /** The single wrapped stream URL - resolved against [baseUrl] - or null when [playlistText]
-     * is a real media/master playlist that should go through the normal rewrite path. */
+    /** The wrapped stream URL - resolved against [baseUrl] - or null when [playlistText] is a
+     * real media/master playlist that should go through the normal rewrite path. A wrapper with
+     * SEVERAL stream URLs (a main + backup source list, confirmed in the field by the receiver
+     * spinning up one remux per entry) unwraps to the FIRST one - the same pick an ordinary
+     * player makes; the rest are alternates for manual failover, not simultaneous streams. All
+     * entries must be non-playlist URLs for the wrapper reading to apply at all. */
     fun unwrapTarget(playlistText: String, baseUrl: String): String? {
         val lines = playlistText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
         val isRealPlaylist = lines.any {
             it.startsWith("#EXT-X-STREAM-INF") || it.startsWith("#EXT-X-TARGETDURATION")
         }
-        val single = lines.filter { !it.startsWith("#") }.singleOrNull()
-        val isWrapper = !isRealPlaylist && single != null && !looksLikePlaylistUrl(single)
-        return if (isWrapper) M3u8Rewriter.resolveUrl(baseUrl, requireNotNull(single)) else null
+        val uris = lines.filter { !it.startsWith("#") }
+        val isWrapper = !isRealPlaylist && uris.isNotEmpty() && uris.none { looksLikePlaylistUrl(it) }
+        return if (isWrapper) M3u8Rewriter.resolveUrl(baseUrl, uris.first()) else null
     }
 
     private fun looksLikePlaylistUrl(url: String): Boolean {
