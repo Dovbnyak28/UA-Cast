@@ -272,13 +272,11 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         // A second (or third, ...) poll of a channel already being remuxed - serve the live
         // playlist as it stands right now, no upstream fetch involved. Falls back to a still-
         // draining previous session (see RemuxHandoffPolicy) so an in-flight poll for the channel
-        // just switched away from doesn't 404 mid-handoff. A session whose reader has died (gave
-        // up reconnecting - see RawTsRemuxSession.hasEnded) must NOT short-circuit here: its
-        // playlist is frozen forever, so serving it would make every recovery reload of this same
-        // URL (see cast/CastRecoveryPolicy) a guaranteed failure. Falling through starts a fresh
-        // remux session instead, which also stops and replaces the dead one (see startRemuxSession).
-        val existingSession = remuxSessionFor(resourceId)
-        if (existingSession != null && !existingSession.hasEnded) {
+        // just switched away from doesn't 404 mid-handoff. Falling through (null) starts a fresh
+        // remux session, which also stops and replaces the dead one - see remuxSessionForPlaylist
+        // for exactly which sessions are served vs. restarted.
+        val existingSession = remuxSessionForPlaylist(resourceId)
+        if (existingSession != null) {
             writePlaylistText(existingSession.currentPlaylist(), request.method, output)
             return
         }
@@ -409,9 +407,29 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         }
     }
 
+    /** Which session a *segment* fetch is served from - dead or alive, since a dead session's
+     * already-buffered segments are still perfectly servable. Playlist polls use
+     * [remuxSessionForPlaylist] instead, which is stricter about dead sessions. */
     private fun remuxSessionFor(resourceId: String): RawTsRemuxSession? = synchronized(remuxLock) {
         activeRemuxSession?.takeIf { it.resourceId == resourceId }
             ?: drainingRemuxSession?.takeIf { it.resourceId == resourceId }
+    }
+
+    /** Which session a *playlist* poll is served from, or null to fall through to a fresh upstream
+     * fetch (and thus a fresh remux session - see [serveRemuxedUpstream]). The distinction that
+     * matters is WHICH slot a dead session (see [RawTsRemuxSession.hasEnded]) occupies:
+     * - a dead ACTIVE session reads as absent, so the poll restarts it - its playlist is frozen
+     *   forever, and serving it would make every [com.uacastplayer.cast.CastRecoveryPolicy] reload
+     *   of this same URL a guaranteed failure;
+     * - a DRAINING session is served as-is even when dead: it's the channel just switched away
+     *   from, and falling through for it would hand the OLD channel's resourceId to
+     *   [startRemuxSession], which would then demote (and within the drain window kill) the LIVE
+     *   active session of the CURRENT channel. A frozen playlist is exactly what a drained-out
+     *   channel is allowed to end on. */
+    private fun remuxSessionForPlaylist(resourceId: String): RawTsRemuxSession? = synchronized(remuxLock) {
+        val active = activeRemuxSession?.takeIf { it.resourceId == resourceId }
+        if (active != null) return@synchronized active.takeIf { !it.hasEnded }
+        drainingRemuxSession?.takeIf { it.resourceId == resourceId }
     }
 
     private fun serveRemuxSegment(resourceId: String, segmentPathPart: String, method: String, output: OutputStream) {
