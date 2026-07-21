@@ -93,6 +93,7 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     private var remuxEnabled = true
     private var activeRemuxSession: RawTsRemuxSession? = null
     private var drainingRemuxSession: RawTsRemuxSession? = null
+    private var drainTimerThread: Thread? = null
     private val remuxLock = Any()
 
     /**
@@ -167,6 +168,10 @@ class ProxyServer(private val httpClient: OkHttpClient) {
             activeRemuxSession = null
             drainingRemuxSession?.stop()
             drainingRemuxSession = null
+            // Wake a pending drain timer (see beginDraining) so it exits now instead of sleeping
+            // out the rest of its grace period against a server that no longer exists.
+            drainTimerThread?.interrupt()
+            drainTimerThread = null
         }
     }
 
@@ -180,6 +185,8 @@ class ProxyServer(private val httpClient: OkHttpClient) {
             if (RemuxHandoffPolicy.shouldKillDraining(confirmed = true, elapsedMillis = 0)) {
                 draining.stop()
                 drainingRemuxSession = null
+                drainTimerThread?.interrupt()
+                drainTimerThread = null
             }
         }
     }
@@ -380,9 +387,16 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     private fun beginDraining(previous: RawTsRemuxSession) {
         drainingRemuxSession?.stop()
         drainingRemuxSession = previous
+        drainTimerThread?.interrupt() // the session it was timing is stopped just above
         val startedAt = System.currentTimeMillis()
-        thread(name = "ProxyServer-drain-${previous.resourceId}") {
-            Thread.sleep(RemuxHandoffPolicy.DRAIN_TIMEOUT_MILLIS)
+        drainTimerThread = thread(name = "ProxyServer-drain-${previous.resourceId}") {
+            // An interrupt (stop(), or a newer drain replacing this one) just means "check now
+            // instead of later" - the state checks below already handle every such case as a no-op.
+            try {
+                Thread.sleep(RemuxHandoffPolicy.DRAIN_TIMEOUT_MILLIS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
             synchronized(remuxLock) {
                 val elapsed = System.currentTimeMillis() - startedAt
                 val stillDraining = drainingRemuxSession === previous
