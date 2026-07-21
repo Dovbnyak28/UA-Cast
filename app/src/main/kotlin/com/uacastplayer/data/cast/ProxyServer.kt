@@ -438,9 +438,15 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         val session = remuxSessionFor(resourceId)
         val bytes = sequence?.let { session?.segmentBytes(it) }
         if (bytes == null) {
+            // Field-debugging aid (resourceId is a SHA fingerprint, never a raw URL): tells apart
+            // "receiver asked for a segment that already rolled off / never existed" from
+            // "receiver never asked for segments at all", which a sender-side logcat otherwise
+            // can't distinguish - both just look like the receiver idling until IDLE/ERROR.
+            AppLog.d(TAG) { "Remux segment miss: $segmentPathPart of $resourceId (session=${session != null})" }
             writeError(output, 404, "Not Found")
             return
         }
+        AppLog.d(TAG) { "Remux segment served: seq=$sequence ${bytes.size}B of $resourceId" }
         val headers = mapOf("Content-Type" to "video/MP2T", "Content-Length" to bytes.size.toString())
         writeHeaders(output, 200, "OK", headers)
         // HEAD gets the same headers (Content-Length included) with no body, same as
@@ -662,6 +668,12 @@ internal class RawTsRemuxSession(
 
     fun currentPlaylist(): String {
         val snapshot = synchronized(bufferLock) { buffer.snapshot() }
+        // One line per receiver playlist poll - shows whether the live window is actually growing
+        // between polls (segments being produced) and what range the receiver gets to pick from.
+        AppLog.d(TAG) {
+            "Remux $resourceId playlist poll: ${snapshot.size} segments" +
+                " [${snapshot.firstOrNull()?.sequence}..${snapshot.lastOrNull()?.sequence}]"
+        }
         return LiveHlsPlaylistBuilder.build(
             segments = snapshot,
             segmentUrl = { sequence -> segmentUrl(resourceId, sequence) },
@@ -793,5 +805,9 @@ internal class RawTsRemuxSession(
 
     private fun addSegment(segment: TsSegment) {
         synchronized(bufferLock) { buffer.add(segment) }
+        AppLog.d(TAG) {
+            "Remux $resourceId segment cut: seq=${segment.sequence} ${segment.bytes.size}B" +
+                " ${segment.durationMillis}ms disc=${segment.discontinuity}"
+        }
     }
 }
