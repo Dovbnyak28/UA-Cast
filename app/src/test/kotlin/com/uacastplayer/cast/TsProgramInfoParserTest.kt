@@ -67,6 +67,25 @@ private fun buildStream(streams: List<Pair<Int, Int>>): ByteArray {
     return pat + pmt
 }
 
+/** Builds a single 188-byte packet whose section (after the payload-only adaptation field and
+ * pointer_field are skipped) is exactly [sectionSize] bytes, with [tableId] as its first byte (if
+ * any bytes exist at all) and everything else zeroed - a stand-in for a PAT/PMT table cut short
+ * mid-broadcast, to probe every section-size boundary the parser's bounds checks care about. */
+private fun truncatedSectionPacket(pid: Int, tableId: Int, sectionSize: Int): ByteArray {
+    val packet = ByteArray(188)
+    packet[0] = 0x47.toByte()
+    packet[1] = (0x40 or ((pid shr 8) and 0x1F)).toByte()
+    packet[2] = (pid and 0xFF).toByte()
+    packet[3] = 0x10 // payload-only, no adaptation field
+    val pointerField = (183 - sectionSize).coerceIn(0, 255)
+    packet[4] = pointerField.toByte()
+    val sectionStart = 5 + pointerField
+    if (sectionSize > 0 && sectionStart < 188) packet[sectionStart] = tableId.toByte()
+    return packet
+}
+
+private val TRUNCATED_SECTION_SIZES = listOf(0, 1, 5, 11, 12, 13)
+
 class TsProgramInfoParserTest {
 
     @Test
@@ -122,6 +141,23 @@ class TsProgramInfoParserTest {
     @Test
     fun `returns null for too short input`() {
         assertNull(TsProgramInfoParser.parse(ByteArray(10)))
+    }
+
+    @Test
+    fun `truncated PAT sections at every size boundary never throw and yield null`() {
+        for (size in TRUNCATED_SECTION_SIZES) {
+            val pat = truncatedSectionPacket(0x0000, tableId = 0x00, sectionSize = size)
+            assertNull(TsProgramInfoParser.parse(pat))
+        }
+    }
+
+    @Test
+    fun `truncated PMT sections at every size boundary never throw and yield null`() {
+        for (size in TRUNCATED_SECTION_SIZES) {
+            val pat = tsPacket(0x0000, buildPatSection(PROGRAM_NUMBER, PMT_PID))
+            val pmt = truncatedSectionPacket(PMT_PID, tableId = 0x02, sectionSize = size)
+            assertNull(TsProgramInfoParser.parse(pat + pmt))
+        }
     }
 
     @Test

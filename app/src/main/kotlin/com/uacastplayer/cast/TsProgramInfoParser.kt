@@ -110,6 +110,7 @@ object TsProgramInfoParser {
     }
 
     private fun sectionLength(section: ByteArray): Int {
+        if (section.size < 3) return 0
         val b1 = section[1].toInt() and 0xFF
         val b2 = section[2].toInt() and 0xFF
         return ((b1 and 0x0F) shl 8) or b2
@@ -133,7 +134,10 @@ object TsProgramInfoParser {
 
     private fun parsePmtStreamTypes(packet: ByteArray): List<Int> {
         val section = sectionPayload(packet) ?: return emptyList()
-        if (section.isEmpty() || (section[0].toInt() and 0xFF) != 0x02) return emptyList()
+        // Must fit the fixed PMT header through program_info_length (bytes 0-11, see below) before
+        // any of it can be read - a truncated/malformed section must degrade to "no streams found",
+        // never throw, since this reads bytes from an arbitrary upstream server.
+        if (section.size < 12 || (section[0].toInt() and 0xFF) != 0x02) return emptyList()
         val length = sectionLength(section)
         val programInfoLength = ((section[10].toInt() and 0x0F) shl 8) or (section[11].toInt() and 0xFF)
         var offset = 12 + programInfoLength
