@@ -12,6 +12,7 @@ import com.uacastplayer.proxy.LiveHlsPlaylistBuilder
 import com.uacastplayer.proxy.M3u8Rewriter
 import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.PlaylistDetector
+import com.uacastplayer.proxy.PlaylistUnwrapPolicy
 import com.uacastplayer.proxy.RawTsRemuxActivation
 import com.uacastplayer.proxy.RemuxHandoffPolicy
 import com.uacastplayer.proxy.RemuxReconnectPolicy
@@ -302,7 +303,7 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         }.onFailure { runCatching { response.close() } }.getOrThrow()
 
         if (isPlaylist) {
-            response.use { servePlaylist(it, request.method, output, resource) }
+            serveUpstreamPlaylist(resourceId, resource, response, request.method, output)
             return
         }
 
@@ -470,21 +471,77 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         output.flush()
     }
 
+    /**
+     * A playlist response from the origin is either a real HLS playlist (rewritten and served) or
+     * an IPTV "wrapper" - a playlist-shaped pointer at a single endless raw-TS URL (see
+     * [PlaylistUnwrapPolicy]). The wrapper case must be unwrapped HERE, at the top-level playlist
+     * resource: letting the receiver discover the TS URL as a "segment" of the rewritten playlist
+     * makes the proxy remux it one level down and answer that segment fetch with M3U8 *text* where
+     * the receiver expects MPEG-TS *bytes* - confirmed in the field as the receiver going
+     * permanently silent after its very first playlist fetch. The remux session is registered
+     * under THIS resource's id, so the receiver's playlist polls and segment fetches route
+     * straight back to it.
+     */
+    private fun serveUpstreamPlaylist(
+        resourceId: String,
+        resource: ResourceEntry,
+        response: Response,
+        method: String,
+        output: OutputStream,
+    ) {
+        val finalUrl = response.request.url.toString()
+        val text = response.use { readPlaylistText(it, output) } ?: return
+        val unwrapTarget = if (remuxEnabled) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
+        if (unwrapTarget == null) {
+            serveRewrittenPlaylist(text, finalUrl, method, output, resource)
+            return
+        }
+        AppLog.d(TAG) { "Unwrapping single-stream wrapper playlist for resource $resourceId" }
+        val mediaResponse = httpClient.newCall(
+            Request.Builder().url(unwrapTarget).apply {
+                header("User-Agent", resource.userAgent)
+                resource.referrer?.let { header("Referer", it) }
+            }.build(),
+        ).execute()
+        val shouldRemux = runCatching { shouldRemuxUpstream(mediaResponse) }
+            .onFailure { runCatching { mediaResponse.close() } }
+            .getOrThrow()
+        if (shouldRemux) {
+            serveRemuxedUpstream(resourceId, mediaResponse, method, output)
+        } else {
+            mediaResponse.use { servePassthrough(it, method, output) }
+        }
+    }
+
     internal fun servePlaylist(response: Response, method: String, output: OutputStream, parent: ResourceEntry) {
+        val text = readPlaylistText(response, output) ?: return
+        serveRewrittenPlaylist(text, response.request.url.toString(), method, output, parent)
+    }
+
+    /** Null means an error response has already been written to [output]. */
+    private fun readPlaylistText(response: Response, output: OutputStream): String? {
         val body = response.body
         if (body == null) {
             writeError(output, 502, "Bad Gateway")
-            return
+            return null
         }
-        val text = when (val bounded = BoundedTextReader.readText(body.byteStream(), MAX_PLAYLIST_BYTES)) {
+        return when (val bounded = BoundedTextReader.readText(body.byteStream(), MAX_PLAYLIST_BYTES)) {
             is BoundedReadResult.Success -> bounded.text
             BoundedReadResult.SizeLimitExceeded -> {
                 AppLog.w(TAG) { "Upstream playlist exceeded $MAX_PLAYLIST_BYTES bytes; rejecting" }
                 writeError(output, 502, "Bad Gateway")
-                return
+                null
             }
         }
-        val finalUrl = response.request.url.toString()
+    }
+
+    private fun serveRewrittenPlaylist(
+        text: String,
+        finalUrl: String,
+        method: String,
+        output: OutputStream,
+        parent: ResourceEntry,
+    ) {
         val rewritten = M3u8Rewriter.rewrite(text, finalUrl) { absoluteUrl ->
             val type = if (looksLikePlaylist(absoluteUrl)) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_MEDIA
             buildLocalUrl(registerResource(type, absoluteUrl, parent.userAgent, parent.referrer))
