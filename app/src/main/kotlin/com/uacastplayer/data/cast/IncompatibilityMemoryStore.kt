@@ -16,7 +16,13 @@ private const val SCHEMA_VERSION_KEY = "schema_version"
 class IncompatibilityMemoryStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences("uacast_cast_incompatibility", Context.MODE_PRIVATE)
-    private var lastWriteAtMillis = 0L
+
+    // Per key, not one global timestamp: the interval exists to absorb repeated records of the
+    // SAME failure (a burst of receiver errors for one channel), and a global stamp would also
+    // silently drop a legitimate first record for a different (stream, receiver) pair that
+    // happened to arrive within the window. Bounded by the number of distinct failing pairs seen
+    // this process lifetime - tiny in practice.
+    private val lastWriteAtMillisByKey = mutableMapOf<String, Long>()
 
     init {
         migrateIfNeeded()
@@ -37,9 +43,11 @@ class IncompatibilityMemoryStore(context: Context) {
     }
 
     fun record(streamUrl: String, receiverId: String, nowMillis: Long = System.currentTimeMillis()) {
+        val key = keyFor(streamUrl, receiverId)
+        val lastWriteAtMillis = lastWriteAtMillisByKey[key] ?: 0L
         if (nowMillis - lastWriteAtMillis < MIN_WRITE_INTERVAL_MILLIS) return
-        lastWriteAtMillis = nowMillis
-        prefs.edit().putLong(keyFor(streamUrl, receiverId), nowMillis).apply()
+        lastWriteAtMillisByKey[key] = nowMillis
+        prefs.edit().putLong(key, nowMillis).apply()
     }
 
     private fun keyFor(streamUrl: String, receiverId: String): String = Fingerprint.of("$streamUrl|$receiverId")

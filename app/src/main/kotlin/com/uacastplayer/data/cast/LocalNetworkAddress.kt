@@ -29,7 +29,9 @@ object LocalNetworkAddress {
             ?.let(connectivityManager::getLinkProperties)
             ?.linkAddresses
             ?.mapNotNull { it.address as? Inet4Address }
-            ?.firstOrNull { !it.isLoopbackAddress }
+            // Link-local (169.254.x.x) means DHCP failed - an address the receiver can't route
+            // to any better than loopback, so handing it out would just fail more slowly.
+            ?.firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }
             ?.hostAddress
     }
 
