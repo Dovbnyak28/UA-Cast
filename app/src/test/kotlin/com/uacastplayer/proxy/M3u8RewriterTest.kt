@@ -93,6 +93,14 @@ class M3u8RewriterTest {
     }
 
     @Test
+    fun `resolveUrl tolerates unencoded spaces by percent-encoding them`() {
+        assertEquals(
+            "http://example.com/live%20tv/chan%201.ts",
+            M3u8Rewriter.resolveUrl("http://example.com/live tv/playlist.m3u8", "chan 1.ts"),
+        )
+    }
+
+    @Test
     fun `mapUrl returning null leaves the original reference untouched`() {
         val playlist = "#EXTM3U\nsegment1.ts"
         val result = M3u8Rewriter.rewrite(playlist, "http://example.com/live/playlist.m3u8") { null }

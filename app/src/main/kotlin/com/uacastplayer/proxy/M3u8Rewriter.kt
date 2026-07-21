@@ -44,11 +44,21 @@ object M3u8Rewriter {
         return mapUrl(absolute)
     }
 
-    fun resolveUrl(baseUrl: String, reference: String): String? = try {
+    /** IPTV playlists routinely carry unencoded spaces in paths ("live tv/chan 1.ts"), which
+     * [URI] rejects outright - the retry with spaces percent-encoded only ever runs where the
+     * strict parse already failed, so it can only turn a dropped (unrewritten) reference into a
+     * working one, never break a URL the strict parse accepted. */
+    fun resolveUrl(baseUrl: String, reference: String): String? =
+        resolveStrict(baseUrl, reference)
+            ?: resolveStrict(encodeSpaces(baseUrl), encodeSpaces(reference))
+
+    private fun resolveStrict(baseUrl: String, reference: String): String? = try {
         URI(baseUrl).resolve(URI(reference)).toString()
     } catch (_: Exception) {
         null
     }
+
+    private fun encodeSpaces(url: String): String = url.replace(" ", "%20")
 
     private fun isSupportedScheme(url: String): Boolean {
         val scheme = url.substringBefore(':', missingDelimiterValue = "").lowercase()
