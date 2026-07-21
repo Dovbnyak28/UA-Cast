@@ -235,7 +235,12 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         val segments = request.path.substringBefore('?').split('/').filter { it.isNotEmpty() }
 
         if (segments.size == 4 && segments[0] == "hls" && isSessionToken(segments[1])) {
-            serveRemuxSegment(resourceId = segments[2], segmentPathPart = segments[3], output = output)
+            serveRemuxSegment(
+                resourceId = segments[2],
+                segmentPathPart = segments[3],
+                method = request.method,
+                output = output,
+            )
             return
         }
         if (segments.size != 3 || segments[0] != "hls" || !isSessionToken(segments[1])) {
@@ -395,7 +400,7 @@ class ProxyServer(private val httpClient: OkHttpClient) {
             ?: drainingRemuxSession?.takeIf { it.resourceId == resourceId }
     }
 
-    private fun serveRemuxSegment(resourceId: String, segmentPathPart: String, output: OutputStream) {
+    private fun serveRemuxSegment(resourceId: String, segmentPathPart: String, method: String, output: OutputStream) {
         val sequence = parseSegmentSequence(segmentPathPart)
         val session = remuxSessionFor(resourceId)
         val bytes = sequence?.let { session?.segmentBytes(it) }
@@ -405,7 +410,9 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         }
         val headers = mapOf("Content-Type" to "video/MP2T", "Content-Length" to bytes.size.toString())
         writeHeaders(output, 200, "OK", headers)
-        output.write(bytes)
+        // HEAD gets the same headers (Content-Length included) with no body, same as
+        // writePlaylistText/servePassthrough already do for their resources.
+        if (method == "GET") output.write(bytes)
         output.flush()
     }
 
