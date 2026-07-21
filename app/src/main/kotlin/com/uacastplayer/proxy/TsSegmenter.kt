@@ -30,6 +30,15 @@ private const val PCR_PID_FIELD_END = 10
 
 private const val DEFAULT_MAX_SEGMENT_BYTES = 4 * 1024 * 1024
 
+/** Seam letting [com.uacastplayer.data.cast.RawTsRemuxSession] accept a substitute in tests (e.g.
+ * one that throws from [feed] to exercise that session's crash-recovery path) - [TsSegmenter] is
+ * the only production implementation. */
+interface TsPacketSegmenter {
+    fun feed(packet: ByteArray): TsSegment?
+    fun flush(): TsSegment?
+    fun onReconnect(): TsSegment?
+}
+
 // The PCR base field is 33 bits, so it wraps roughly every 26.5 hours - see wrapAwareDelta.
 private const val PCR_BASE_MODULUS = 1L shl 33
 
@@ -69,7 +78,7 @@ class TsSegmenter(
     private val maxSegmentBytes: Int = DEFAULT_MAX_SEGMENT_BYTES,
     private val startupSegments: Int = 2,
     private val startupTargetDurationMillis: Long = 2_000,
-) {
+) : TsPacketSegmenter {
     private var pmtPid: Int? = null
     private var videoPid: Int? = null
 
@@ -89,7 +98,7 @@ class TsSegmenter(
     /** Feed one 188-byte TS packet (anything else is ignored). Returns a completed [TsSegment]
      * when this packet lands on a cut point, in which case the packet itself starts the *next*
      * segment (it is never dropped). */
-    fun feed(packet: ByteArray): TsSegment? {
+    override fun feed(packet: ByteArray): TsSegment? {
         if (packet.size != PACKET_SIZE || (packet[0].toInt() and 0xFF) != SYNC_BYTE) return null
         val pid = pidOf(packet)
         discoverProgramInfo(pid, packet)
@@ -121,7 +130,7 @@ class TsSegmenter(
 
     /** Emits whatever's been buffered so far as a final (possibly short) segment - call once the
      * upstream connection ends. Returns null if nothing was buffered. */
-    fun flush(): TsSegment? = if (buffer.size() > 0) completeSegment() else null
+    override fun flush(): TsSegment? = if (buffer.size() > 0) completeSegment() else null
 
     /**
      * Call when the upstream connection has just been re-established after a drop (see
@@ -133,7 +142,7 @@ class TsSegmenter(
      * produced by [feed] is marked [TsSegment.discontinuity] so [LiveHlsPlaylistBuilder] can signal
      * the gap to the receiver.
      */
-    fun onReconnect(): TsSegment? {
+    override fun onReconnect(): TsSegment? {
         val flushed = flush()
         segmentStartPcrTicks = null
         lastPcrTicks = null

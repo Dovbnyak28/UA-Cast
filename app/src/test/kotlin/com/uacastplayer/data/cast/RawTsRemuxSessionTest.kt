@@ -1,5 +1,9 @@
 package com.uacastplayer.data.cast
 
+import com.uacastplayer.proxy.TsPacketSegmenter
+import com.uacastplayer.proxy.TsSegment
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -122,6 +126,41 @@ class RawTsRemuxSessionTest {
             assertNotNull(segmentBytes)
             // PAT + PMT + the first keyframe packet, before the 6s keyframe triggers the cut.
             assertEquals(3 * 188, segmentBytes?.size)
+        } finally {
+            session.stop()
+        }
+    }
+
+    /** Always throws from [feed] - stands in for the *next* not-yet-found bounds bug in
+     * TsSegmenter's own byte parsing, to prove RawTsRemuxSession's reader thread survives it. */
+    private class ThrowingSegmenter : TsPacketSegmenter {
+        val reconnectCalled = CountDownLatch(1)
+
+        @Suppress("TooGenericExceptionThrown")
+        override fun feed(packet: ByteArray): TsSegment? = throw RuntimeException("simulated parser bug")
+        override fun flush(): TsSegment? = null
+        override fun onReconnect(): TsSegment? {
+            reconnectCalled.countDown()
+            return null
+        }
+    }
+
+    @Test
+    fun `a feed() exception is caught and routed to reconnect instead of crashing the reader thread`() {
+        val fakeSegmenter = ThrowingSegmenter()
+        val session = RawTsRemuxSession(
+            resourceId = "resource-1",
+            initialResponse = fakeResponse(syntheticTsStream()),
+            httpClient = OkHttpClient(),
+            segmentUrl = { _, sequence -> "seg$sequence.ts" },
+            segmenter = fakeSegmenter,
+        )
+        session.start()
+        try {
+            // reconnect() is only ever reached once readUntilDisconnected's catch has swallowed the
+            // RuntimeException from feed() - if it propagated instead, this thread would die
+            // uncaught and onReconnect() would never fire.
+            assertTrue(fakeSegmenter.reconnectCalled.await(5, TimeUnit.SECONDS))
         } finally {
             session.stop()
         }

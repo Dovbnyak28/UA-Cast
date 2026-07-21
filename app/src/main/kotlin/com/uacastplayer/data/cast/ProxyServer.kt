@@ -16,12 +16,12 @@ import com.uacastplayer.proxy.RawTsRemuxActivation
 import com.uacastplayer.proxy.RemuxHandoffPolicy
 import com.uacastplayer.proxy.RemuxReconnectPolicy
 import com.uacastplayer.proxy.RemuxSegmentBuffer
+import com.uacastplayer.proxy.TsPacketSegmenter
 import com.uacastplayer.proxy.TsSegment
 import com.uacastplayer.proxy.TsSegmenter
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
-import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
@@ -497,8 +497,8 @@ internal class RawTsRemuxSession(
     initialResponse: Response,
     private val httpClient: OkHttpClient,
     private val segmentUrl: (resourceId: String, sequence: Int) -> String,
+    private val segmenter: TsPacketSegmenter = TsSegmenter(targetDurationMillis = REMUX_TARGET_SEGMENT_SECONDS * 1000L),
 ) {
-    private val segmenter = TsSegmenter(targetDurationMillis = REMUX_TARGET_SEGMENT_SECONDS * 1000L)
     private val buffer = RemuxSegmentBuffer()
     private val bufferLock = Any()
     @Volatile private var running = true
@@ -550,9 +550,10 @@ internal class RawTsRemuxSession(
 
     private fun isBufferEmpty(): Boolean = synchronized(bufferLock) { buffer.isEmpty }
 
-    /** Reads from [currentResponse] until it ends (EOF or an [IOException]), then - while still
-     * [running] - reconnects and keeps going, rather than treating a dropped connection as the end
-     * of the session. Only gives up once [RemuxReconnectPolicy] does. */
+    /** Reads from [currentResponse] until it ends (EOF, a dropped connection, or an uncaught
+     * parsing error - see [readUntilDisconnected]), then - while still [running] - reconnects and
+     * keeps going, rather than treating any of those as the end of the session. Only gives up once
+     * [RemuxReconnectPolicy] does. */
     private fun readLoop() {
         var carry = ByteArray(0)
         var shouldContinue = true
@@ -571,9 +572,18 @@ internal class RawTsRemuxSession(
         segmenter.flush()?.let(::addSegment)
     }
 
-    /** Feeds [input] to the segmenter until it hits EOF or an [IOException] (both just mean "the
-     * connection ended", not necessarily an error worth failing the whole session over - see
-     * [reconnect]). Returns the trailing incomplete packet bytes to prepend to the next read. */
+    /** Feeds [input] to the segmenter until it hits EOF, or *any* exception - not just an
+     * IOException - reading or parsing this chunk. This is deliberately broad: [segmenter] is a
+     * raw-byte parser fed directly from an arbitrary third-party server, and a corrupted packet
+     * getting past [TsProgramInfoParser]/[TsSegmenter]'s own bounds checks must end this read
+     * cycle and fall through to [reconnect], not crash the process (see [reconnect]'s caller,
+     * [readLoop]) - the same guarantee an IOException from a dropped socket already got.
+     * [TsSegmenter.feed] only mutates its internal buffer *after* it has finished parsing a packet
+     * (see its source), so an exception thrown mid-parse never leaves it with a half-written
+     * buffer - reusing the same [segmenter] instance across this catch and the next connection
+     * attempt is safe, unlike a genuine reconnect where the PCR clock itself resets.
+     * Returns the trailing incomplete packet bytes to prepend to the next read. */
+    @Suppress("TooGenericExceptionCaught")
     private fun readUntilDisconnected(input: InputStream, initialCarry: ByteArray): ByteArray {
         var carry = initialCarry
         val chunk = ByteArray(REMUX_READ_CHUNK_BYTES)
@@ -583,8 +593,8 @@ internal class RawTsRemuxSession(
                 if (read == -1) return carry
                 carry = consumePackets(if (carry.isEmpty()) chunk.copyOf(read) else carry + chunk.copyOf(read))
             }
-        } catch (e: IOException) {
-            AppLog.w(TAG) { "Raw TS remux reader for $resourceId lost the connection: ${e.javaClass.simpleName}" }
+        } catch (e: Exception) {
+            AppLog.e(TAG, e) { "Raw TS remux reader for $resourceId lost the connection or hit a parsing error" }
         }
         return carry
     }
