@@ -479,6 +479,15 @@ class CastSessionRepository private constructor(context: Context) {
         val generation = loadGeneration.incrementAndGet()
         selfInitiatedTransition = true
         _state.update { it.copy(loadPhase = CastLoadPhase.LOADING) }
+        // Free the phone's own upstream connection BEFORE the receiver (or the proxy's remux
+        // reader) needs one - waiting for the load-Success reducer to pause local playback is too
+        // late for single-connection IPTV origins, where the still-open local stream blocks the
+        // receiver's fetch and the load can never succeed in the first place. A failed/abandoned
+        // load still resumes local playback through the existing reducer paths (Failure,
+        // receiver error, DISCONNECTED all emit ResumeLocalPlayer).
+        if (!_sideEffects.tryEmit(CastSideEffect.PauseLocalPlayer)) {
+            AppLog.w(TAG) { "Dropped cast side effect, no buffer space: PauseLocalPlayer" }
+        }
         val request = CastMediaLoader.buildRequest(urlToLoad, title, lastKnownSourceKind)
         val context = LoadRetryContext(originalStreamUrl, title, userAgent, referrer)
         client.load(request).setResultCallback { result ->

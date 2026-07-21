@@ -196,7 +196,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleCastSideEffect(effect: CastSideEffect) {
         when (effect) {
-            CastSideEffect.PauseLocalPlayer -> exoPlayer.pause()
+            // stop(), not pause(): a paused live stream keeps its upstream connection (and often
+            // keeps buffering), and IPTV providers routinely enforce ONE connection per account -
+            // as long as the phone holds that slot, the receiver's own fetch (direct mode) or the
+            // proxy's remux reader can never get a working connection, so casting starves forever.
+            // The media item survives stop(), and ResumeLocalPlayer's prepare()+play() below fully
+            // recovers from it. sampleForStall can't fight this: it bails while isCasting.
+            CastSideEffect.PauseLocalPlayer -> exoPlayer.stop()
             CastSideEffect.ResumeLocalPlayer -> {
                 // While casting, switchToIndexImmediate() skips prepare() for whatever channel is
                 // current (see there) so the phone isn't buffering the same stream twice in
@@ -488,7 +494,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun trackLabel(language: String?, label: String?, index: Int): String {
         if (!label.isNullOrBlank()) return label
-        if (!language.isNullOrBlank()) return Locale.Builder().setLanguage(language).build().displayLanguage
+        if (!language.isNullOrBlank()) {
+            return try {
+                Locale.Builder().setLanguage(language).build().displayLanguage.ifBlank { language }
+            } catch (_: Exception) {
+                language
+            }
+        }
         return getApplication<Application>().getString(R.string.player_track_unknown, index)
     }
 
