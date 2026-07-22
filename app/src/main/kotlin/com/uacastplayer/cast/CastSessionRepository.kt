@@ -216,10 +216,7 @@ class CastSessionRepository private constructor(context: Context) {
         when (_state.value.deliveryMode) {
             CastDeliveryMode.Direct -> loadOnReceiver(
                 channel.streamUrl,
-                channel.title,
-                originalStreamUrl = channel.streamUrl,
-                userAgent = channel.userAgent,
-                referrer = channel.referrer,
+                LoadRetryContext(channel.streamUrl, channel.title, channel.userAgent, channel.referrer),
             )
             CastDeliveryMode.Proxy ->
                 startProxyAndLoad(channel.streamUrl, channel.title, channel.userAgent, channel.referrer)
@@ -362,7 +359,11 @@ class CastSessionRepository private constructor(context: Context) {
         // whole point of warming the cache - instead of only benefiting later reloads.
         val cached = diagnosticCache.get(streamUrl, System.currentTimeMillis())
         if (cached != null) lastKnownSourceKind = cached.sourceKind
-        loadOnReceiver(streamUrl, title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
+        loadOnReceiver(
+            streamUrl,
+            LoadRetryContext(streamUrl, title, userAgent, referrer),
+            scheduleStallWatchdog = false,
+        )
 
         watchdogJob = scope.launch {
             launch {
@@ -465,15 +466,13 @@ class CastSessionRepository private constructor(context: Context) {
         val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
         val localUrl = proxyServer.buildLocalUrl(resourceId)
         AppLog.d(TAG) { "Proxy fallback loading receiver from $localUrl" }
-        loadOnReceiver(localUrl, title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)
+        loadOnReceiver(localUrl, LoadRetryContext(streamUrl, title, userAgent, referrer))
     }
 
     private fun loadOnReceiver(
         urlToLoad: String,
-        title: String,
-        originalStreamUrl: String,
-        userAgent: String? = null,
-        referrer: String? = null,
+        context: LoadRetryContext,
+        scheduleStallWatchdog: Boolean = true,
     ) {
         val client = currentSession?.remoteMediaClient ?: return
         val generation = loadGeneration.incrementAndGet()
@@ -488,8 +487,7 @@ class CastSessionRepository private constructor(context: Context) {
         if (!_sideEffects.tryEmit(CastSideEffect.PauseLocalPlayer)) {
             AppLog.w(TAG) { "Dropped cast side effect, no buffer space: PauseLocalPlayer" }
         }
-        val request = CastMediaLoader.buildRequest(urlToLoad, title, lastKnownSourceKind)
-        val context = LoadRetryContext(originalStreamUrl, title, userAgent, referrer)
+        val request = CastMediaLoader.buildRequest(urlToLoad, context.title, lastKnownSourceKind)
         client.load(request).setResultCallback { result ->
             val loadResult = if (result.status.isSuccess) {
                 CastLoadResult.Success
@@ -497,6 +495,32 @@ class CastSessionRepository private constructor(context: Context) {
                 CastLoadResult.Failure("status_${result.status.statusCode}")
             }
             handleLoadResult(generation, result.status.statusCode, loadResult, context)
+        }
+        if (scheduleStallWatchdog) scheduleStallWatchdog(generation, context.streamUrl)
+    }
+
+    /** Catches a receiver that quietly never reaches PLAYING after this load - stuck buffering
+     * forever without ever reporting IDLE/ERROR, which [CastRecoveryPolicy]'s reload cycle can
+     * only ever react to via an actual receiver-reported idle status. Field-confirmed gap: once a
+     * load leaves [loadDirectWithWatchdog]'s own one-shot direct-mode watchdog (which only covers
+     * a channel's very first direct attempt, and decides a different question - the direct-\>proxy
+     * MODE switch, not "reload the same thing") - a proxy-mode load or any recovery reload had no
+     * timeout at all. Synthesizing the same IDLE/ERROR path [handleReceiverStatus] already handles
+     * for a genuine receiver failure - reload with backoff, eventually give up - means a silent
+     * stall gets the same bounded recovery a loud one does, instead of none. Not scheduled for
+     * [loadDirectWithWatchdog]'s own initial call - see [loadOnReceiver]'s scheduleStallWatchdog
+     * parameter - so that path isn't double-covered by two competing timeouts. */
+    private fun scheduleStallWatchdog(generation: Long, streamUrl: String) {
+        scope.launch {
+            delay(WATCHDOG_TIMEOUT_MILLIS)
+            if (generation != loadGeneration.get()) return@launch
+            if (_state.value.receiverStatus == ReceiverStatus.PLAYING) return@launch
+            if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return@launch
+            AppLog.w(TAG) {
+                "cast status: stall watchdog fired, receiverStatus=${_state.value.receiverStatus} " +
+                    "mode=${_state.value.deliveryMode}"
+            }
+            handleReceiverStatus(ReceiverStatus.IDLE, IdleReason.ERROR, selfInitiated = false)
         }
     }
 
