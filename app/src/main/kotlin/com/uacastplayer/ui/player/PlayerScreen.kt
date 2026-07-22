@@ -686,7 +686,12 @@ private fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifie
 internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
-            PlayerView(ctx).apply {
+            // Inflated from res/layout/player_view.xml instead of PlayerView(ctx) purely to get
+            // surface_type=texture_view applied - see that file's doc for why: a SurfaceView (the
+            // constructor default) under Compose overlay buttons in the same Box was swallowing
+            // their taps. useController is still set here since app:use_controller in that layout
+            // only seeds PlayerView's initial value, not a persistent binding.
+            (android.view.LayoutInflater.from(ctx).inflate(R.layout.player_view, null) as PlayerView).apply {
                 player = viewModel.player
                 useController = false
             }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inflated by ui/player/PlayerScreen.kt's VideoSurface instead of constructing PlayerView(ctx)
+     directly, purely to set surface_type=texture_view - PlayerView has no programmatic setter for
+     it, only this XML attribute. SurfaceView (the default) is a separate hardware-composited
+     layer that SurfaceFlinger punches a hole for; Compose's own click-consuming Play/Pause button
+     drawn on top of it in the same Box was found to never receive the tap (it fell through to the
+     Box's own "toggle controls" click instead, field-confirmed via a tap that always logged the
+     wrong handler) - a known category of Compose+SurfaceView touch-dispatch interop issue.
+     TextureView is a normal View that participates in the ordinary view/touch hierarchy, at the
+     cost of software composition - an acceptable trade for an embedded/fullscreen player box that
+     was never full 4K to begin with. -->
+<androidx.media3.ui.PlayerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/player_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:surface_type="texture_view"
+    app:use_controller="false" />
