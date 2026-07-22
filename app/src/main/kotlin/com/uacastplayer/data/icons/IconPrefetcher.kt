@@ -24,6 +24,7 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
     suspend fun prefetch(
         channels: List<M3uChannel>,
         wifiOnly: Boolean,
+        epgIconUrlFor: (M3uChannel) -> String? = { null },
         onProgress: (PrefetchProgress) -> Unit,
     ) {
         if (!PrefetchGate.canPrefetchNow(wifiOnly, isConnected(), isMetered())) return
@@ -36,7 +37,7 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
             channels.map { channel ->
                 async {
                     semaphore.withPermit {
-                        iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrl = null, tvgId = channel.tvgId)
+                        iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrlFor(channel), tvgId = channel.tvgId)
                     }
                     completed++
                     onProgress(PrefetchProgress(completed, channels.size))

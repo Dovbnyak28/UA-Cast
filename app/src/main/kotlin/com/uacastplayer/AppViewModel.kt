@@ -92,13 +92,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val castState: StateFlow<CastPlaybackState> = CastSessionRepository.getInstance(application).state
     val favorites: StateFlow<List<FavoriteChannel>> = favoritesRepository.favorites
 
-    private val playlistController = PlaylistController(
+    private val playlistController: PlaylistController = PlaylistController(
         preferences = preferences,
         playlistRepository = playlistRepository,
         scope = viewModelScope,
         onLoaded = { channels, epgUrls, fromCache ->
             recomputeDeviceTierDefaults()
-            iconController.triggerPrefetch(channels, settingsState.value.iconDisplayMode)
+            iconController.triggerPrefetch(channels, settingsState.value.iconDisplayMode, ::epgIconUrlFor)
             // Only on an actual load, never a startup cache restore - see
             // EpgController.handleEpgAutoDetect's doc.
             if (!fromCache) epgController.handleEpgAutoDetect(epgUrls)
@@ -120,6 +120,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         onLoaded = {
             recomputeDeviceTierDefaults()
             refreshCacheSizes()
+            // The initial prefetch (triggered right after the playlist loads - see
+            // PlaylistController's onLoaded above) fires before EPG data exists for a fresh load,
+            // so channels whose only icon comes from the EPG match (the "built-in" cdn.epg.one
+            // source, resolved via epgIconUrlFor - see IconResolver) never got a chance at a bulk
+            // background fetch: they only picked up their icon later, one row at a time, whenever
+            // the user happened to scroll past that channel. Re-running prefetch here - now that
+            // an epgIconUrlFor lookup actually resolves to something - gives those icons the same
+            // bulk background download (with the same visible banner) instead.
+            val channels = playlistController.playlistState.value.groups.flatMap { it.channels }
+            if (channels.isNotEmpty()) {
+                iconController.triggerPrefetch(channels, settingsState.value.iconDisplayMode, ::epgIconUrlFor)
+            }
         },
     )
     val epgState: StateFlow<EpgUiState> = epgController.epgState
@@ -242,15 +254,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setIconWifiOnly(enabled: Boolean) = iconController.setIconWifiOnly(enabled)
 
+    /** The channel's icon URL from the matching EPG entry, if any - the "built-in" cdn.epg.one
+     * source is only ever reachable this way (see [IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL]'s
+     * own candidate being cache-only), so this is also passed to icon prefetch - see
+     * [epgController]'s onLoaded above - not just to the interactive per-row resolve below. */
+    private fun epgIconUrlFor(channel: M3uChannel): String? = epgState.value.data?.index?.match(channel)?.iconUrl
+
     suspend fun resolveChannelIcon(channel: M3uChannel): File? {
-        val epgIconUrl = epgState.value.data?.index?.match(channel)?.iconUrl
-        return iconController.resolveChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrl)
+        return iconController.resolveChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))
     }
 
     /** For GroupIconCollage - a disk-cache-only lookup, never fetches. See [IconRepository.cachedIconFile]. */
     suspend fun cachedChannelIcon(channel: M3uChannel): File? {
-        val epgIconUrl = epgState.value.data?.index?.match(channel)?.iconUrl
-        return iconController.cachedChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrl)
+        return iconController.cachedChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))
     }
 
     fun isFavorite(channel: M3uChannel): Boolean = favoritesRepository.isFavorite(channel)

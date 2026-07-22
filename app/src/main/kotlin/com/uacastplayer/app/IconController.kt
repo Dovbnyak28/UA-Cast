@@ -49,6 +49,7 @@ class IconController(
 
     private var unmeteredNetworkWatcher: AutoCloseable? = null
     private var lastPrefetchChannels: List<M3uChannel> = emptyList()
+    private var lastEpgIconUrlFor: (M3uChannel) -> String? = { null }
     private var iconPrefetchJob: Job? = null
 
     fun customIconSources(): List<String> = iconRepository.customIconSources()
@@ -73,15 +74,20 @@ class IconController(
         _iconPrefetchState.update { it.copy(wifiOnly = enabled) }
     }
 
-    fun triggerPrefetch(channels: List<M3uChannel>, iconDisplayMode: IconDisplayMode) {
+    fun triggerPrefetch(
+        channels: List<M3uChannel>,
+        iconDisplayMode: IconDisplayMode,
+        epgIconUrlFor: (M3uChannel) -> String? = { null },
+    ) {
         lastPrefetchChannels = channels
+        lastEpgIconUrlFor = epgIconUrlFor
         unmeteredNetworkWatcher?.close()
         unmeteredNetworkWatcher = iconPrefetcher.awaitUnmeteredNetwork {
             iconPrefetchJob?.cancel()
-            iconPrefetchJob = scope.launch { runPrefetch(lastPrefetchChannels, iconDisplayMode) }
+            iconPrefetchJob = scope.launch { runPrefetch(lastPrefetchChannels, iconDisplayMode, lastEpgIconUrlFor) }
         }
         iconPrefetchJob?.cancel()
-        iconPrefetchJob = scope.launch { runPrefetch(channels, iconDisplayMode) }
+        iconPrefetchJob = scope.launch { runPrefetch(channels, iconDisplayMode, epgIconUrlFor) }
     }
 
     /** Cancels any in-flight prefetch without waiting for it to actually stop - pair with
@@ -104,11 +110,15 @@ class IconController(
         unmeteredNetworkWatcher?.close()
     }
 
-    private suspend fun runPrefetch(channels: List<M3uChannel>, iconDisplayMode: IconDisplayMode) {
+    private suspend fun runPrefetch(
+        channels: List<M3uChannel>,
+        iconDisplayMode: IconDisplayMode,
+        epgIconUrlFor: (M3uChannel) -> String?,
+    ) {
         if (channels.isEmpty()) return
         if (iconDisplayMode != IconDisplayMode.CACHE) return
         _iconPrefetchState.update { it.copy(isRunning = true, completed = 0, total = channels.size) }
-        iconPrefetcher.prefetch(channels, preferences.iconWifiOnly) { progress ->
+        iconPrefetcher.prefetch(channels, preferences.iconWifiOnly, epgIconUrlFor) { progress ->
             _iconPrefetchState.update { it.copy(completed = progress.completed, total = progress.total) }
         }
         preferences.lastIconPrefetchAtMillis = System.currentTimeMillis()
