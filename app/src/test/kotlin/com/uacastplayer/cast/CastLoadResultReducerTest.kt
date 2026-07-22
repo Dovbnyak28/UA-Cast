@@ -7,10 +7,10 @@ import org.junit.Test
 class CastLoadResultReducerTest {
 
     @Test
-    fun `success transitions to LOADED and pauses the local player`() {
+    fun `success transitions to LOADED with no effects - PauseLocalPlayer already fired at load time`() {
         val result = CastLoadResultReducer.reduce(CastPlaybackState(), CastLoadResult.Success)
         assertEquals(CastLoadPhase.LOADED, result.state.loadPhase)
-        assertEquals(listOf(CastSideEffect.PauseLocalPlayer), result.effects)
+        assertEquals(emptyList<CastSideEffect>(), result.effects)
     }
 
     @Test

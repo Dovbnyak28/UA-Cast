@@ -34,18 +34,6 @@ object CastDeliveryStrategy {
     fun initialMode(isKnownIncompatible: Boolean): CastDeliveryMode =
         if (isKnownIncompatible) CastDeliveryMode.Proxy else CastDeliveryMode.Direct
 
-    fun onDirectFailure(currentMode: CastDeliveryMode): CastDeliveryMode =
-        if (currentMode == CastDeliveryMode.Direct) CastDeliveryMode.Proxy else currentMode
-
-    fun onWatchdogTimeout(currentMode: CastDeliveryMode, receiverStatus: ReceiverStatus): CastDeliveryMode =
-        if (currentMode == CastDeliveryMode.Direct && receiverStatus != ReceiverStatus.PLAYING) {
-            CastDeliveryMode.Proxy
-        } else {
-            currentMode
-        }
-
-    fun isTerminalFailure(mode: CastDeliveryMode): Boolean = mode == CastDeliveryMode.Proxy
-
     /** See docs/CAST_PLAYBACK_RULES.md for the full verdict x sourceKind routing table this
      * implements. [CastRouteDecision.Blocked] and [CastRouteDecision.ProxyImmediately] both act
      * immediately, even mid-watchdog-window - a Compatible+Hls or Unknown verdict is [NoAction]
