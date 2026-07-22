@@ -1,35 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Colors match ui/theme/CinemaPalette.kt: the cast-signal arcs ramp through the same
-     champagne-gold gradient (accentGradientTop/Bottom) used for accent fills elsewhere in the
-     app, the screen uses labelPrimary's warm ivory, and the play glyph uses accentOnFill's dark
-     bronze for contrast - the same pairing raisedSurface() buttons use for gold-filled controls. -->
+<!-- One bold mark instead of several thin ones: a champagne-gold "screen" (the cast target) with
+     a dark play triangle, fed by two thick signal arcs anchored clear of the screen's corner so
+     the full curve stays visible instead of being clipped behind it - same cast+play idea as
+     before, redrawn with fewer/heavier shapes so it stays legible at launcher/notification size.
+     Colors match ui/theme/CinemaPalette.kt (accentGradientTop/Bottom, accentOnFill). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:strokeColor="#66C9A96E"
-        android:strokeWidth="4"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000"
-        android:pathData="M26,48 A26,26 0 0,1 52,74" />
-    <path
         android:strokeColor="#C9A96E"
-        android:strokeWidth="5"
+        android:strokeWidth="7"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M26,56 A18,18 0 0,1 44,74" />
+        android:pathData="M22,66 A20,20 0 0,1 42,86" />
     <path
         android:strokeColor="#EAD6A4"
-        android:strokeWidth="5"
+        android:strokeWidth="7"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M26,64 A10,10 0 0,1 36,74" />
-    <path
-        android:fillColor="#F2EDE2"
-        android:pathData="M48,38 L78,38 A4,4 0 0,1 82,42 L82,62 A4,4 0 0,1 78,66 L48,66 A4,4 0 0,1 44,62 L44,42 A4,4 0 0,1 48,38 Z" />
+        android:pathData="M22,74 A12,12 0 0,1 34,86" />
+    <path android:pathData="M46,16 L78,16 A8,8 0 0,1 86,24 L86,56 A8,8 0 0,1 78,64 L46,64 A8,8 0 0,1 38,56 L38,24 A8,8 0 0,1 46,16 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="38"
+                android:startY="16"
+                android:endX="86"
+                android:endY="64"
+                android:startColor="#EAD6A4"
+                android:endColor="#C9A96E" />
+        </aapt:attr>
+    </path>
     <path
         android:fillColor="#1A1508"
-        android:pathData="M56,46 L56,58 L72,52 Z" />
+        android:pathData="M54,28 L70,40 L54,52 Z" />
 </vector>

@@ -1,15 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Colors match ui/theme/CinemaPalette.kt (void / voidElevated) so the launcher icon reads as
-     part of the same premium dark-charcoal-plus-gold identity as the in-app UI. -->
+<!-- A plain radial vignette (CinemaPalette.kt's surface1 -> void) instead of a flat fill plus a
+     second inner circle: one soft gradient gives the foreground mark somewhere to sit without
+     competing with it for attention at launcher size. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#0B0A08"
-        android:pathData="M0,0h108v108h-108z" />
-    <path
-        android:fillColor="#121009"
-        android:pathData="M54,14 A40,40 0 1 1 53.9,14 Z" />
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="40"
+                android:gradientRadius="78"
+                android:startColor="#171410"
+                android:endColor="#0B0A08" />
+        </aapt:attr>
+    </path>
 </vector>
