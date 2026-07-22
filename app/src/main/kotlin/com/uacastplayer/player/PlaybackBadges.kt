@@ -37,6 +37,21 @@ object PlaybackBadges {
         else -> null
     }
 
+    /** Unlike [audioCodecLabel]/[videoCodecLabel], this is worth falling back to the raw MIME
+     * subtype for an unmapped format rather than returning null - a subtitle track picker with no
+     * other distinguishing info (no bitrate/channels/resolution) would otherwise show nothing at
+     * all to tell same-language tracks apart. */
+    fun textCodecLabel(mimeType: String?): String? = when (mimeType?.lowercase()) {
+        null -> null
+        "text/vtt" -> "WebVTT"
+        "application/x-subrip", "text/x-ssa" -> "SRT"
+        "application/ttml+xml" -> "TTML"
+        "application/cea-608" -> "CEA-608"
+        "application/cea-708" -> "CEA-708"
+        "application/dvbsubs" -> "DVB"
+        else -> mimeType.substringAfter('/').takeIf { it.isNotBlank() }?.uppercase()
+    }
+
     fun channelLayout(channelCount: Int): AudioChannelLayout = when (channelCount) {
         1 -> AudioChannelLayout.MONO
         2 -> AudioChannelLayout.STEREO

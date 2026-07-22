@@ -13,6 +13,14 @@ data class PlaybackBadgesState(
     val videoCodecLabel: String? = null,
     val audioCodecLabel: String? = null,
     val channelLayout: AudioChannelLayout? = null,
+    /** Exact decoded pixel dimensions, as opposed to [qualityLabel]'s bucketed "480p"/"1080p" -
+     * for the quality dialog, which has room to show the real number instead of a bucket. */
+    val videoWidth: Int? = null,
+    val videoHeight: Int? = null,
+    val frameRate: Float? = null,
+    val videoBitrateBps: Int? = null,
+    val audioBitrateBps: Int? = null,
+    val audioSampleRateHz: Int? = null,
 )
 
 data class SelectableTrack(
@@ -20,6 +28,13 @@ data class SelectableTrack(
     val indexInGroup: Int,
     val label: String,
     val isSelected: Boolean,
+    /** Everything below is optional, measured-only (never guessed) extra detail for the track
+     * picker dialogs - see PlayerScreen's TrackPickerDialog. Null fields are simply omitted from
+     * the detail line instead of showing a placeholder. */
+    val codecLabel: String? = null,
+    val channelLayout: AudioChannelLayout? = null,
+    val sampleRateHz: Int? = null,
+    val bitrateBps: Int? = null,
 )
 
 data class PlayerUiState(

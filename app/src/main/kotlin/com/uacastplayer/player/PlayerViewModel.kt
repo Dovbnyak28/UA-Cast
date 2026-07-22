@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -431,66 +432,106 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(canSeek = SeekPolicy.canSeek(isLive, isSeekable, isCasting)) }
     }
 
+    private data class SelectedVideoFormat(
+        val width: Int?,
+        val height: Int,
+        val mime: String?,
+        val frameRate: Float?,
+        val bitrateBps: Int?,
+    )
+
+    private data class SelectedAudioFormat(
+        val mime: String?,
+        val channelCount: Int?,
+        val sampleRateHz: Int?,
+        val bitrateBps: Int?,
+    )
+
     private fun updateBadgesAndTrackLists(tracks: Tracks) {
-        var videoHeight = 0
-        var videoMime: String? = null
-        var audioMime: String? = null
-        var audioChannelCount: Int? = null
+        var selectedVideo: SelectedVideoFormat? = null
+        var selectedAudio: SelectedAudioFormat? = null
         val audioTracks = mutableListOf<SelectableTrack>()
         val textTracks = mutableListOf<SelectableTrack>()
 
         for (group in tracks.groups) {
             when (group.type) {
                 C.TRACK_TYPE_VIDEO -> for (i in 0 until group.length) {
-                    if (group.isTrackSelected(i)) {
-                        val format = group.getTrackFormat(i)
-                        videoHeight = format.height
-                        videoMime = format.sampleMimeType
-                    }
+                    if (group.isTrackSelected(i)) selectedVideo = selectedVideoFormat(group.getTrackFormat(i))
                 }
-
                 C.TRACK_TYPE_AUDIO -> for (i in 0 until group.length) {
                     val format = group.getTrackFormat(i)
                     val selected = group.isTrackSelected(i)
-                    if (selected) {
-                        audioMime = format.sampleMimeType
-                        audioChannelCount = format.channelCount.takeIf { it != androidx.media3.common.Format.NO_VALUE }
-                    }
-                    audioTracks += SelectableTrack(
-                        trackGroup = group.mediaTrackGroup,
-                        indexInGroup = i,
-                        label = trackLabel(format.language, format.label, i + 1),
-                        isSelected = selected,
-                    )
+                    audioTracks += audioSelectableTrack(group, i, format, selected)
+                    if (selected) selectedAudio = selectedAudioFormat(format)
                 }
-
                 C.TRACK_TYPE_TEXT -> for (i in 0 until group.length) {
-                    val format = group.getTrackFormat(i)
-                    textTracks += SelectableTrack(
-                        trackGroup = group.mediaTrackGroup,
-                        indexInGroup = i,
-                        label = trackLabel(format.language, format.label, i + 1),
-                        isSelected = group.isTrackSelected(i),
-                    )
+                    textTracks += textSelectableTrack(group, i)
                 }
-
                 else -> Unit
             }
         }
 
         _uiState.update {
             it.copy(
-                badges = PlaybackBadgesState(
-                    qualityLabel = PlaybackBadges.qualityLabel(videoHeight),
-                    videoCodecLabel = PlaybackBadges.videoCodecLabel(videoMime),
-                    audioCodecLabel = PlaybackBadges.audioCodecLabel(audioMime),
-                    channelLayout = audioChannelCount?.let(PlaybackBadges::channelLayout),
-                ),
+                badges = badgesState(selectedVideo, selectedAudio),
                 audioTracks = audioTracks,
                 textTracks = textTracks,
             )
         }
     }
+
+    private fun selectedVideoFormat(format: Format) = SelectedVideoFormat(
+        width = format.width.takeIf { it > 0 },
+        height = format.height,
+        mime = format.sampleMimeType,
+        frameRate = format.frameRate.takeIf { it > 0f && it != Format.NO_VALUE.toFloat() },
+        bitrateBps = format.bitrate.takeIf { it != Format.NO_VALUE },
+    )
+
+    private fun selectedAudioFormat(format: Format) = SelectedAudioFormat(
+        mime = format.sampleMimeType,
+        channelCount = format.channelCount.takeIf { it != Format.NO_VALUE },
+        sampleRateHz = format.sampleRate.takeIf { it != Format.NO_VALUE },
+        bitrateBps = format.bitrate.takeIf { it != Format.NO_VALUE },
+    )
+
+    private fun audioSelectableTrack(group: Tracks.Group, index: Int, format: Format, selected: Boolean): SelectableTrack {
+        val channelCount = format.channelCount.takeIf { it != Format.NO_VALUE }
+        return SelectableTrack(
+            trackGroup = group.mediaTrackGroup,
+            indexInGroup = index,
+            label = trackLabel(format.language, format.label, index + 1),
+            isSelected = selected,
+            codecLabel = PlaybackBadges.audioCodecLabel(format.sampleMimeType),
+            channelLayout = channelCount?.let(PlaybackBadges::channelLayout),
+            sampleRateHz = format.sampleRate.takeIf { it != Format.NO_VALUE },
+            bitrateBps = format.bitrate.takeIf { it != Format.NO_VALUE },
+        )
+    }
+
+    private fun textSelectableTrack(group: Tracks.Group, index: Int): SelectableTrack {
+        val format = group.getTrackFormat(index)
+        return SelectableTrack(
+            trackGroup = group.mediaTrackGroup,
+            indexInGroup = index,
+            label = trackLabel(format.language, format.label, index + 1),
+            isSelected = group.isTrackSelected(index),
+            codecLabel = PlaybackBadges.textCodecLabel(format.sampleMimeType),
+        )
+    }
+
+    private fun badgesState(video: SelectedVideoFormat?, audio: SelectedAudioFormat?) = PlaybackBadgesState(
+        qualityLabel = video?.height?.let(PlaybackBadges::qualityLabel),
+        videoCodecLabel = PlaybackBadges.videoCodecLabel(video?.mime),
+        audioCodecLabel = PlaybackBadges.audioCodecLabel(audio?.mime),
+        channelLayout = audio?.channelCount?.let(PlaybackBadges::channelLayout),
+        videoWidth = video?.width,
+        videoHeight = video?.height?.takeIf { it > 0 },
+        frameRate = video?.frameRate,
+        videoBitrateBps = video?.bitrateBps,
+        audioBitrateBps = audio?.bitrateBps,
+        audioSampleRateHz = audio?.sampleRateHz,
+    )
 
     private fun trackLabel(language: String?, label: String?, index: Int): String {
         if (!label.isNullOrBlank()) return label

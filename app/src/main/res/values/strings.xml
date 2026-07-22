@@ -259,6 +259,11 @@
     <string name="player_buffering">Buffering…</string>
     <string name="player_quality_unknown">Unknown</string>
     <string name="player_track_unknown">Track %1$d</string>
+    <string name="player_resolution">%1$d × %2$d</string>
+    <string name="player_frame_rate">%1$d fps</string>
+    <string name="player_bitrate_kbps">%1$d kbps</string>
+    <string name="player_sample_rate_khz">%1$s kHz</string>
+    <string name="player_quality_audio_section">Audio</string>
     <string name="player_tv_guide">TV guide</string>
     <string name="player_previous_channel">Last channel</string>
     <string name="epg_guide_no_data">No TV guide for this channel</string>

@@ -261,6 +261,11 @@
     <string name="player_buffering">Буферизация…</string>
     <string name="player_quality_unknown">Неизвестно</string>
     <string name="player_track_unknown">Дорожка %1$d</string>
+    <string name="player_resolution">%1$d × %2$d</string>
+    <string name="player_frame_rate">%1$d кадр/с</string>
+    <string name="player_bitrate_kbps">%1$d кбит/с</string>
+    <string name="player_sample_rate_khz">%1$s кГц</string>
+    <string name="player_quality_audio_section">Аудио</string>
     <string name="player_tv_guide">Телегид</string>
     <string name="player_previous_channel">Последний канал</string>
     <string name="epg_guide_no_data">Нет телегида для этого канала</string>
