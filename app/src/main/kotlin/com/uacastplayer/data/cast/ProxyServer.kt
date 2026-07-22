@@ -23,6 +23,7 @@ import com.uacastplayer.proxy.TsSegmenter
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
@@ -54,6 +55,7 @@ private const val REMUX_INITIAL_PLAYLIST_WAIT_MILLIS = 8_000L
 private const val REMUX_POLL_INTERVAL_MILLIS = 100L
 private const val REMUX_READ_CHUNK_BYTES = 64 * 1024
 private const val REMUX_READER_JOIN_TIMEOUT_MILLIS = 1_000L
+private const val HTTP_BAD_GATEWAY = 502
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 private const val HTTP_NO_CONTENT = 204
 private const val CORS_MAX_AGE_SECONDS = "86400"
@@ -284,15 +286,23 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         val existingSession = remuxSessionForPlaylist(resourceId)
         if (existingSession != null) {
             writePlaylistText(existingSession.currentPlaylist(), request.method, output)
-            return
+        } else {
+            fetchAndServeUpstreamResource(resourceId, resource, request, output)
         }
+    }
 
+    private fun fetchAndServeUpstreamResource(
+        resourceId: String,
+        resource: ResourceEntry,
+        request: ParsedRequest,
+        output: OutputStream,
+    ) {
         val upstreamRequest = Request.Builder().url(resource.originalUrl).apply {
             header("User-Agent", resource.userAgent)
             resource.referrer?.let { header("Referer", it) }
             request.headers["range"]?.let { header("Range", it) }
         }.build()
-        val response = httpClient.newCall(upstreamRequest).execute()
+        val response = fetchUpstreamOrRespondError(upstreamRequest, resourceId, output) ?: return
         if (!response.isSuccessful) {
             AppLog.w(TAG) { "Upstream fetch for resource $resourceId returned ${response.code}" }
         }
@@ -328,6 +338,26 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         } else {
             response.use { servePassthrough(it, request.method, output) }
         }
+    }
+
+    /** Runs an upstream fetch, turning a network-level failure (refused/reset connection, timeout
+     * - never a clean HTTP response) into a logged 502 instead of letting the exception escape
+     * uncaught to [handleConnection]'s generic catch, which silently drops the receiver's
+     * connection with no response at all - indistinguishable, from the receiver's side, from the
+     * proxy simply vanishing. Logged distinctly from a completed-but-unsuccessful response (see
+     * the `!response.isSuccessful` check after every call site) since only one of the two means
+     * the origin was ever actually reached - relevant for origins that reject a second connection
+     * from the same account outright rather than answering it with an HTTP error. */
+    private fun fetchUpstreamOrRespondError(
+        request: Request,
+        resourceId: String,
+        output: OutputStream,
+    ): Response? = try {
+        httpClient.newCall(request).execute()
+    } catch (e: IOException) {
+        AppLog.w(TAG) { "Upstream fetch for resource $resourceId failed: ${e.javaClass.simpleName}" }
+        writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
+        null
     }
 
     /** Ownership of [response] passes to the remux session's background reader thread - it is
@@ -510,15 +540,24 @@ class ProxyServer(private val httpClient: OkHttpClient) {
         val unwrapTarget = if (remuxEnabled) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
         if (unwrapTarget == null) {
             serveRewrittenPlaylist(text, finalUrl, method, output, resource)
-            return
+        } else {
+            serveUnwrappedStream(resourceId, resource, unwrapTarget, method, output)
         }
+    }
+
+    private fun serveUnwrappedStream(
+        resourceId: String,
+        resource: ResourceEntry,
+        unwrapTarget: String,
+        method: String,
+        output: OutputStream,
+    ) {
         AppLog.d(TAG) { "Unwrapping single-stream wrapper playlist for resource $resourceId" }
-        val mediaResponse = httpClient.newCall(
-            Request.Builder().url(unwrapTarget).apply {
-                header("User-Agent", resource.userAgent)
-                resource.referrer?.let { header("Referer", it) }
-            }.build(),
-        ).execute()
+        val unwrapRequest = Request.Builder().url(unwrapTarget).apply {
+            header("User-Agent", resource.userAgent)
+            resource.referrer?.let { header("Referer", it) }
+        }.build()
+        val mediaResponse = fetchUpstreamOrRespondError(unwrapRequest, resourceId, output) ?: return
         val shouldRemux = runCatching { shouldRemuxUpstream(mediaResponse) }
             .onFailure { runCatching { mediaResponse.close() } }
             .getOrThrow()
@@ -538,14 +577,14 @@ class ProxyServer(private val httpClient: OkHttpClient) {
     private fun readPlaylistText(response: Response, output: OutputStream): String? {
         val body = response.body
         if (body == null) {
-            writeError(output, 502, "Bad Gateway")
+            writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
             return null
         }
         return when (val bounded = BoundedTextReader.readText(body.byteStream(), MAX_PLAYLIST_BYTES)) {
             is BoundedReadResult.Success -> bounded.text
             BoundedReadResult.SizeLimitExceeded -> {
                 AppLog.w(TAG) { "Upstream playlist exceeded $MAX_PLAYLIST_BYTES bytes; rejecting" }
-                writeError(output, 502, "Bad Gateway")
+                writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
                 null
             }
         }
