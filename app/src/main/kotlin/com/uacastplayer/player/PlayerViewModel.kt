@@ -3,6 +3,7 @@ package com.uacastplayer.player
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -20,6 +21,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
+import com.uacastplayer.BuildConfig
 import com.uacastplayer.MainActivity
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
@@ -30,7 +32,7 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.R
 import com.uacastplayer.playlist.M3uChannel
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +49,10 @@ import kotlinx.coroutines.launch
  */
 @UnstableApi
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
+
+    // Registered before anything this ViewModel owns (ExoPlayer, MediaSession) is constructed, so
+    // the guard in init sees a second live instance as early as possible. See liveInstances.
+    private val liveInstanceCount: Int = liveInstances.incrementAndGet()
 
     private val preferences = AppPreferences(application)
 
@@ -87,16 +93,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // out of scope here (this is a live-TV app; playback isn't expected to survive the player
     // screen closing), so this session just lives and dies alongside the ExoPlayer instance.
     //
-    // The ID must be explicit and unique: Media3 rejects a second MediaSession sharing an ID with
-    // one still alive in the process, and the default ID is the empty string for every instance.
-    // A NavHost exit-animation overlap (or any fast close-then-reopen) can construct the next
-    // PlayerViewModel before this one's session has released, so relying on teardown timing alone
-    // isn't safe - see playerSessionId(). Session creation is also treated as a convenience, not a
-    // hard dependency: if it still fails for some other reason, the player keeps working without
-    // system media controls rather than crashing the process over headset-button support.
+    // A single FIXED id, deliberately not made unique per instance. This ViewModel is now
+    // Activity-scoped and there is only ever one alive at a time (see PlayerHost and the
+    // liveInstances guard above), so a fixed id is correct - and it doubles as a loud backstop:
+    // Media3 rejects a second MediaSession sharing an id with one still alive, so if the
+    // single-instance invariant ever breaks again, that breakage surfaces immediately instead of
+    // quietly leaking an ExoPlayer. Session creation is still treated as a convenience, not a hard
+    // dependency: if it fails for any reason the player keeps working without system media controls
+    // rather than crashing the process over headset-button support.
     private val mediaSession: MediaSession? = try {
         MediaSession.Builder(application, exoPlayer)
-            .setId(playerSessionId(sessionIdCounter.incrementAndGet()))
+            .setId(PLAYER_SESSION_ID)
             .setCallback(MediaSessionCallback())
             // Without an explicit session activity, Media3 falls back to building its own implicit
             // "open the app" intent to satisfy the system media notification/lock-screen controls -
@@ -165,6 +172,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     init {
+        if (PlayerInstanceGuard.isLeak(liveInstanceCount)) {
+            val leak = IllegalStateException(
+                "Second PlayerViewModel created while another is alive - this leaks an ExoPlayer",
+            )
+            // Logged directly rather than via AppLog (which compiles out in release) so this
+            // production-only regression still shows up in release logs; in debug we also crash
+            // loudly so it can never be missed during development.
+            Log.e(TAG, leak.message, leak)
+            if (BuildConfig.DEBUG) throw leak
+        }
         exoPlayer.addListener(listener)
         exoPlayer.playWhenReady = true
 
@@ -545,12 +562,30 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         return getApplication<Application>().getString(R.string.player_track_unknown, index)
     }
 
+    /**
+     * Frees the loaded stream and its decoder/buffer resources when the player is fully closed,
+     * WITHOUT destroying this (Activity-scoped, reused-across-reopens) ViewModel - see [PlayerHost].
+     * stop() releases the codecs and buffered samples, clearMediaItems() drops the stream, so an
+     * idle closed player costs almost nothing; the ExoPlayer and MediaSession instances themselves
+     * are kept for the next open. [onCleared] (on Activity destroy) is what releases the instances.
+     */
+    fun releasePlayback() {
+        pendingSwitchJob?.cancel()
+        retryJob?.cancel()
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        currentIndex = -1
+        channels = emptyList()
+        _uiState.update { PlayerUiState(resizeMode = it.resizeMode) }
+    }
+
     override fun onCleared() {
         pendingSwitchJob?.cancel()
         retryJob?.cancel()
         exoPlayer.removeListener(listener)
         mediaSession?.release()
         exoPlayer.release()
+        liveInstances.decrementAndGet()
         super.onCleared()
     }
 
@@ -592,9 +627,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
         const val STALL_RECOVERY_COOLDOWN_MILLIS = 30_000L
 
-        // Shared across every PlayerViewModel instance in the process so IDs never repeat, even
-        // across a fast close-then-reopen where the old instance hasn't finished tearing down.
-        val sessionIdCounter = AtomicLong(0)
+        // Process-wide guard: at most one PlayerViewModel (hence one ExoPlayer) may be alive at a
+        // time. Incremented as the first thing each instance does, decremented in onCleared; a value
+        // greater than one means the double-ExoPlayer leak this whole fix exists to prevent has come
+        // back (see PlayerInstanceGuard for the interpretation).
+        val liveInstances = AtomicInteger(0)
     }
 }
 
@@ -610,20 +647,42 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
  * latency. LARGE keeps that same split, just at correspondingly higher absolute values for a
  * genuinely unstable connection.
  */
+private const val BYTES_PER_MB = 1024 * 1024
+private const val SMALL_TARGET_BYTES = 8 * BYTES_PER_MB
+private const val MEDIUM_TARGET_BYTES = 16 * BYTES_PER_MB
+private const val LARGE_TARGET_BYTES = 24 * BYTES_PER_MB
+
+// 90s of cruise buffer was VOD-sized overkill for a live stream (there is no seeking backward to
+// justify holding that much) and, on a high-bitrate channel, the single biggest driver of heap
+// pressure. 35s still rides out ordinary hiccups on an unstable link; the byte cap is the real
+// backstop regardless of bitrate.
+private const val LARGE_MAX_BUFFER_MS = 35_000
+
 @UnstableApi
 private fun buildLoadControl(bufferSize: BufferSize): DefaultLoadControl {
-    val (minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs) = when (bufferSize) {
-        BufferSize.SMALL -> BufferProfile(10_000, 20_000, 1_000, 2_000)
+    val profile = when (bufferSize) {
+        BufferSize.SMALL -> BufferProfile(10_000, 20_000, 1_000, 2_000, SMALL_TARGET_BYTES)
         BufferSize.MEDIUM -> BufferProfile(
             DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
             DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
             1_000,
             2_500,
+            MEDIUM_TARGET_BYTES,
         )
-        BufferSize.LARGE -> BufferProfile(30_000, 90_000, 2_000, 5_000)
+        BufferSize.LARGE -> BufferProfile(30_000, LARGE_MAX_BUFFER_MS, 2_000, 5_000, LARGE_TARGET_BYTES)
     }
     return DefaultLoadControl.Builder()
-        .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs)
+        .setBufferDurationsMs(
+            profile.minBufferMs,
+            profile.maxBufferMs,
+            profile.bufferForPlaybackMs,
+            profile.bufferForPlaybackAfterRebufferMs,
+        )
+        // Explicit hard cap in BYTES, independent of the ms thresholds above. DefaultLoadControl's
+        // default byte target is derived from duration and can grow very large on high-bitrate
+        // streams - the exact path to OutOfMemoryError. This bounds one player's held media to a
+        // fixed ceiling no matter the bitrate, which is the primary OOM safeguard.
+        .setTargetBufferBytes(profile.targetBufferBytes)
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()
 }
@@ -633,4 +692,5 @@ private data class BufferProfile(
     val maxBufferMs: Int,
     val bufferForPlaybackMs: Int,
     val bufferForPlaybackAfterRebufferMs: Int,
+    val targetBufferBytes: Int,
 )
