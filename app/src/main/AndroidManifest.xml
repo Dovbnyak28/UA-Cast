@@ -61,6 +61,20 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- Without this, a headset/Bluetooth/watch media button only reaches the app while its
+             process is already alive - once the process dies, Media3's MediaSessionCompat has no
+             registered receiver to wake it, and the system logs "Couldn't find a unique registered
+             media button receiver". MediaButtonReceiver forwards the button press to the live
+             MediaSession if one exists; exported=true is required by the platform for this
+             specific receiver to be reachable from other apps/the system at all. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <!-- Locale storage is handled by our own AppPreferences (see core.i18n.LocalizedContext),
              not AppCompat's auto-store, so this stays disabled per the per-app-language docs. -->
         <service
