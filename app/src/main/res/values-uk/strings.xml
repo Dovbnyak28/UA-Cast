@@ -18,7 +18,6 @@
     <string name="nav_settings">Налаштування</string>
 
     <!-- Home screen -->
-    <string name="home_title">Головна</string>
     <string name="home_subtitle">Ваше телебачення</string>
     <string name="home_empty_message">Плейлист ще не додано</string>
     <string name="home_empty_subtitle">Додайте посилання на M3U або M3U8 плейлист, щоб переглядати канали.</string>
@@ -33,7 +32,6 @@
     <string name="home_epg_unavailable">Телепрограма недоступна</string>
     <string name="home_view_channels_button">Дивитися канали</string>
     <string name="home_continue_watching_label">Продовжити перегляд</string>
-    <string name="home_change_playlist_button">Змінити плейлист</string>
     <string name="home_refresh_playlist">Оновити плейлист</string>
     <string name="home_add_playlist_button">Додати плейлист</string>
     <string name="home_playlist_sources_title">Збережені плейлисти</string>
@@ -60,7 +58,6 @@
     <string name="add_playlist_xtream_password_hint">Пароль</string>
 
     <!-- Channels screen -->
-    <string name="channels_title">Канали</string>
     <string name="channels_empty_message">Поки що немає каналів</string>
     <string name="channels_empty_subtitle">Додайте плейлист у Налаштуваннях, щоб побачити канали тут</string>
     <string name="channels_search_hint">Пошук каналів</string>
@@ -85,14 +82,10 @@
         <item quantity="many">%1$d каналів</item>
         <item quantity="other">%1$d каналу</item>
     </plurals>
-    <string name="playlist_url_hint">URL плейлиста (m3u/m3u8)</string>
-    <string name="playlist_load_button">Завантажити плейлист</string>
-    <string name="playlist_browse_file">Обрати файл</string>
     <string name="playlist_loading">Завантаження плейлиста…</string>
     <string name="playlist_error_size_limit">Плейлист перевищує ліміт 8 МБ</string>
     <string name="playlist_error_http">Помилка сервера (код %1$d)</string>
     <string name="playlist_error_network">Помилка мережі, спробуйте ще раз</string>
-    <string name="playlist_skipped_lines">Пропущено %1$d записів під час розбору</string>
 
     <!-- Channel group names -->
     <string name="group_ungrouped">Без групи</string>
@@ -119,10 +112,8 @@
     <string name="favorites_sort_alphabetical">За алфавітом</string>
     <string name="favorites_sort_recently_added">Нещодавно додані</string>
     <string name="favorites_sort_manual">Власний порядок</string>
-    <string name="favorites_reorder_content_description">Змінити порядок %1$s: утримуйте і перетягуйте</string>
 
     <!-- Settings screen -->
-    <string name="settings_title">Налаштування</string>
     <string name="settings_section_general">Загальні</string>
     <string name="settings_section_playlist">Плейлист</string>
     <string name="settings_theme_label">Тема</string>
@@ -309,11 +300,6 @@
     <string name="channels_icon_tier_banner_action">Увімкнути іконки</string>
 
     <!-- Common -->
-    <string name="common_ok">Гаразд</string>
-    <string name="common_cancel">Скасувати</string>
-    <string name="common_retry">Повторити</string>
-    <string name="common_loading">Завантаження…</string>
-    <string name="common_error_generic">Щось пішло не так</string>
     <string name="common_back">Назад</string>
     <string name="common_close">Закрити</string>
 </resources>

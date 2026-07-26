@@ -18,7 +18,6 @@
     <string name="nav_settings">Ajustes</string>
 
     <!-- Home screen -->
-    <string name="home_title">Inicio</string>
     <string name="home_subtitle">Tu televisión</string>
     <string name="home_empty_message">Aún no se ha añadido ninguna lista</string>
     <string name="home_empty_subtitle">Añade un enlace de lista M3U o M3U8 para ver canales.</string>
@@ -33,7 +32,6 @@
     <string name="home_epg_unavailable">Guía TV no disponible</string>
     <string name="home_view_channels_button">Ver canales</string>
     <string name="home_continue_watching_label">Continuar viendo</string>
-    <string name="home_change_playlist_button">Cambiar lista</string>
     <string name="home_refresh_playlist">Actualizar lista</string>
     <string name="home_add_playlist_button">Añadir lista</string>
     <string name="home_playlist_sources_title">Listas guardadas</string>
@@ -60,7 +58,6 @@
     <string name="add_playlist_xtream_password_hint">Contraseña</string>
 
     <!-- Channels screen -->
-    <string name="channels_title">Canales</string>
     <string name="channels_empty_message">Todavía no hay canales</string>
     <string name="channels_empty_subtitle">Añade una lista en Ajustes para ver los canales aquí</string>
     <string name="channels_search_hint">Buscar canales</string>
@@ -83,14 +80,10 @@
         <item quantity="many">%1$d canales</item>
         <item quantity="other">%1$d canales</item>
     </plurals>
-    <string name="playlist_url_hint">URL de la lista (m3u/m3u8)</string>
-    <string name="playlist_load_button">Cargar lista</string>
-    <string name="playlist_browse_file">Elegir archivo</string>
     <string name="playlist_loading">Cargando lista…</string>
     <string name="playlist_error_size_limit">La lista supera el límite de 8 MB</string>
     <string name="playlist_error_http">Error del servidor (código %1$d)</string>
     <string name="playlist_error_network">Error de red, inténtalo de nuevo</string>
-    <string name="playlist_skipped_lines">Se omitieron %1$d entradas al analizar</string>
 
     <!-- Channel group names -->
     <string name="group_ungrouped">Sin grupo</string>
@@ -117,10 +110,8 @@
     <string name="favorites_sort_alphabetical">Alfabético</string>
     <string name="favorites_sort_recently_added">Añadidos recientemente</string>
     <string name="favorites_sort_manual">Orden personalizado</string>
-    <string name="favorites_reorder_content_description">Reordenar %1$s: mantener pulsado y arrastrar</string>
 
     <!-- Settings screen -->
-    <string name="settings_title">Ajustes</string>
     <string name="settings_section_general">General</string>
     <string name="settings_section_playlist">Lista de reproducción</string>
     <string name="settings_theme_label">Tema</string>
@@ -307,11 +298,6 @@
     <string name="channels_icon_tier_banner_action">Activar iconos</string>
 
     <!-- Common -->
-    <string name="common_ok">Aceptar</string>
-    <string name="common_cancel">Cancelar</string>
-    <string name="common_retry">Reintentar</string>
-    <string name="common_loading">Cargando…</string>
-    <string name="common_error_generic">Algo salió mal</string>
     <string name="common_back">Atrás</string>
     <string name="common_close">Cerrar</string>
 </resources>

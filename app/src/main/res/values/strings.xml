@@ -18,7 +18,6 @@
     <string name="nav_settings">Settings</string>
 
     <!-- Home screen -->
-    <string name="home_title">Home</string>
     <string name="home_subtitle">Your TV</string>
     <string name="home_empty_message">No playlist added yet</string>
     <string name="home_empty_subtitle">Add an M3U or M3U8 playlist link to view channels.</string>
@@ -33,7 +32,6 @@
     <string name="home_epg_unavailable">TV guide unavailable</string>
     <string name="home_view_channels_button">View channels</string>
     <string name="home_continue_watching_label">Continue watching</string>
-    <string name="home_change_playlist_button">Change playlist</string>
     <string name="home_refresh_playlist">Refresh playlist</string>
     <string name="home_add_playlist_button">Add playlist</string>
     <string name="home_playlist_sources_title">Saved playlists</string>
@@ -60,7 +58,6 @@
     <string name="add_playlist_xtream_password_hint">Password</string>
 
     <!-- Channels screen -->
-    <string name="channels_title">Channels</string>
     <string name="channels_empty_message">No channels yet</string>
     <string name="channels_empty_subtitle">Add a playlist in Settings to see channels here</string>
     <string name="channels_search_hint">Search channels</string>
@@ -81,14 +78,10 @@
         <item quantity="one">%1$d channel</item>
         <item quantity="other">%1$d channels</item>
     </plurals>
-    <string name="playlist_url_hint">Playlist URL (m3u/m3u8)</string>
-    <string name="playlist_load_button">Load playlist</string>
-    <string name="playlist_browse_file">Browse file</string>
     <string name="playlist_loading">Loading playlist…</string>
     <string name="playlist_error_size_limit">Playlist is larger than the 8 MB limit</string>
     <string name="playlist_error_http">Server error (code %1$d)</string>
     <string name="playlist_error_network">Network error, please try again</string>
-    <string name="playlist_skipped_lines">%1$d entries were skipped while parsing</string>
 
     <!-- Channel group names -->
     <string name="group_ungrouped">Ungrouped</string>
@@ -115,10 +108,8 @@
     <string name="favorites_sort_alphabetical">Alphabetical</string>
     <string name="favorites_sort_recently_added">Recently added</string>
     <string name="favorites_sort_manual">Custom order</string>
-    <string name="favorites_reorder_content_description">Reorder %1$s: hold and drag</string>
 
     <!-- Settings screen -->
-    <string name="settings_title">Settings</string>
     <string name="settings_section_general">General</string>
     <string name="settings_section_playlist">Playlist</string>
     <string name="settings_theme_label">Theme</string>
@@ -307,11 +298,6 @@
     <string name="channels_icon_tier_banner_action">Enable icons</string>
 
     <!-- Common -->
-    <string name="common_ok">OK</string>
-    <string name="common_cancel">Cancel</string>
-    <string name="common_retry">Retry</string>
-    <string name="common_loading">Loading…</string>
-    <string name="common_error_generic">Something went wrong</string>
     <string name="common_back">Back</string>
     <string name="common_close">Close</string>
 </resources>
