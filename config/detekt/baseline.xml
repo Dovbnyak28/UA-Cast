@@ -8,7 +8,7 @@
     <ID>CyclomaticComplexMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>CyclomaticComplexMethod:MiniJson.kt$MiniJson.Parser$private fun parseString(): String</ID>
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(markerClass = [UnstableApi::class]) @Composable fun PlayerScreen( viewModel: PlayerViewModel, onExit: () -&gt; Unit, isFavorite: (M3uChannel) -&gt; Boolean, onToggleFavorite: (M3uChannel) -&gt; Unit, resolveIcon: suspend (M3uChannel) -&gt; File?, epgState: EpgUiState, iconPrefetchState: IconPrefetchUiState, modifier: Modifier = Modifier, )</ID>
-    <ID>CyclomaticComplexMethod:ProxyServer.kt$ProxyServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
+    <ID>CyclomaticComplexMethod:ProxyHttpServer.kt$ProxyHttpServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
     <ID>CyclomaticComplexMethod:XmlTvTimeParser.kt$XmlTvTimeParser$fun parse(value: String): Long?</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:PlayerViewModel.kt$val (minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs) = when (bufferSize) { BufferSize.SMALL -&gt; BufferProfile(10_000, 20_000, 1_000, 2_000) BufferSize.MEDIUM -&gt; BufferProfile( DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, 1_000, 2_500, ) BufferSize.LARGE -&gt; BufferProfile(30_000, 90_000, 2_000, 5_000) }</ID>
     <ID>LargeClass:AppIcons.kt$AppIcons</ID>
@@ -317,14 +317,14 @@
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$200</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$3</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$4</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer$400</ID>
+    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$400</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$404</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer$405</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer$50</ID>
+    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$405</ID>
+    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$50</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$502</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer.&lt;no name provided&gt;$0.75f</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer.&lt;no name provided&gt;$16</ID>
-    <ID>MagicNumber:ProxyServer.kt$RawTsRemuxSession$0xFF</ID>
+    <ID>MagicNumber:ProxyResourceRegistry.kt$ProxyResourceRegistry.&lt;no name provided&gt;$0.75f</ID>
+    <ID>MagicNumber:ProxyResourceRegistry.kt$ProxyResourceRegistry.&lt;no name provided&gt;$16</ID>
+    <ID>MagicNumber:RawTsRemuxSession.kt$RawTsRemuxSession$0xFF</ID>
     <ID>MagicNumber:SettingsScreen.kt$1024</ID>
     <ID>MagicNumber:SettingsScreen.kt$1024.0</ID>
     <ID>MagicNumber:SettingsScreen.kt$90f</ID>
@@ -451,7 +451,7 @@
     <ID>MaxLineLength:ProxyServer.kt$ProxyServer$/** Exposed only so tests can verify header inheritance (see [servePlaylist]) without going through a real socket. */</ID>
     <ID>MaxLineLength:ProxyServer.kt$ProxyServer$PlaylistDetector.isPlaylist(response.header("Content-Type"), response.peekBody(PLAYLIST_SNIFF_BYTES).bytes())</ID>
     <ID>MaxLineLength:ProxyServer.kt$ProxyServer$registerResource(RESOURCE_TYPE_PLAYLIST, url, userAgent?.ifBlank { null } ?: HttpDefaults.BROWSER_USER_AGENT, referrer?.ifBlank { null })</ID>
-    <ID>MaxLineLength:ProxyServer.kt$ResourceEntry$internal data</ID>
+    <ID>MaxLineLength:ProxyResourceRegistry.kt$ResourceEntry$internal data</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_coil_label, settingsState.cacheSizes.coilCacheBytes) { onClearCache(CacheKind.COIL) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_icons_label, settingsState.cacheSizes.iconCacheBytes) { onClearCache(CacheKind.ICONS) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_playlist_label, settingsState.cacheSizes.playlistBytes) { onClearCache(CacheKind.PLAYLIST) }</ID>
@@ -484,7 +484,7 @@
     <ID>ReturnCount:PlaylistUrlLoader.kt$PlaylistUrlLoader$private fun attemptOnce(url: String): PlaylistLoadResult</ID>
     <ID>ReturnCount:PrefetchGate.kt$PrefetchGate$fun canPrefetchNow(wifiOnlyEnabled: Boolean, isConnected: Boolean, isMetered: Boolean): Boolean</ID>
     <ID>ReturnCount:ProgrammeLookup.kt$ProgrammeLookup$fun currentAndNext(programmes: List&lt;EpgProgramme&gt;, nowMillis: Long): CurrentNextProgrammes</ID>
-    <ID>ReturnCount:ProxyServer.kt$ProxyServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
+    <ID>ReturnCount:ProxyHttpServer.kt$ProxyHttpServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
     <ID>ReturnCount:ProxyServer.kt$ProxyServer$private fun serveRequest(request: ParsedRequest, output: OutputStream)</ID>
     <ID>ReturnCount:ReorderPolicy.kt$ReorderPolicy$fun &lt;T&gt; move(items: List&lt;T&gt;, fromIndex: Int, toIndex: Int): List&lt;T&gt;</ID>
     <ID>ReturnCount:TsFirstSegmentDiagnostic.kt$TsFirstSegmentDiagnostic$fun diagnose(streamUrl: String, httpClient: OkHttpClient): TsProgramInfo?</ID>
@@ -512,7 +512,7 @@
     <ID>TooGenericExceptionCaught:PlaylistRepository.kt$PlaylistRepository$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PlaylistSnapshotStore.kt$PlaylistSnapshotStore$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PlaylistSourceStore.kt$PlaylistSourceStore$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ProxyServer.kt$ProxyServer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ProxyHttpServer.kt$ProxyHttpServer$e: Exception</ID>
     <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : AndroidViewModel</ID>
     <ID>TooManyFunctions:CastSessionRepository.kt$CastSessionRepository</ID>
     <ID>TooManyFunctions:ChannelsScreen.kt$com.uacastplayer.ui.channels.ChannelsScreen.kt</ID>
@@ -521,7 +521,7 @@
     <ID>TooManyFunctions:PlayerViewModel.kt$PlayerViewModel : AndroidViewModel</ID>
     <ID>TooManyFunctions:PlaylistController.kt$PlaylistController</ID>
     <ID>TooManyFunctions:ProxyServer.kt$ProxyServer</ID>
-    <ID>TooManyFunctions:ProxyServer.kt$RawTsRemuxSession</ID>
+    <ID>TooManyFunctions:RawTsRemuxSession.kt$RawTsRemuxSession</ID>
     <ID>TooManyFunctions:SettingsController.kt$SettingsController</ID>
     <ID>TooManyFunctions:SettingsScreen.kt$com.uacastplayer.ui.settings.SettingsScreen.kt</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$/** Unified pressed-state darkening (rule 2 extension, see ui/theme/Depth.kt's [darken]) - how much * darker a [com.uacastplayer.ui.theme.raisedSurface]'s base color gets while pressed, instead of * each control picking its own ad-hoc pressed color. */ const val PressedDarkenFraction = 0.10f</ID>
