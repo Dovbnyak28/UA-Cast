@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -43,9 +44,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Owns the single ExoPlayer instance for a player session. Scoped to the player's nested
- * NavHost destination so the instance (and this view model) is released the moment the user
- * backs out of the player, rather than living for the whole app process.
+ * Owns the single ExoPlayer instance for a player session. Scoped to the host Activity (see
+ * [com.uacastplayer.ui.player.PlayerHost]) so exactly one instance survives mini/fullscreen
+ * toggles, reopens and configuration changes; [releasePlayback] frees the loaded stream without
+ * destroying the instance itself, which only happens when the Activity is actually destroyed.
  */
 @UnstableApi
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -620,18 +622,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private companion object {
-        const val TAG = "PlayerViewModel"
-        const val CHANNEL_SWITCH_DEBOUNCE_MILLIS = 220L
-        const val MAX_PREVIEW_SIZE = 20
-        const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
-        const val STALL_RECOVERY_COOLDOWN_MILLIS = 30_000L
+    companion object {
+        private const val TAG = "PlayerViewModel"
+        private const val CHANNEL_SWITCH_DEBOUNCE_MILLIS = 220L
+        private const val MAX_PREVIEW_SIZE = 20
+        private const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
+        private const val STALL_RECOVERY_COOLDOWN_MILLIS = 30_000L
 
         // Process-wide guard: at most one PlayerViewModel (hence one ExoPlayer) may be alive at a
         // time. Incremented as the first thing each instance does, decremented in onCleared; a value
         // greater than one means the double-ExoPlayer leak this whole fix exists to prevent has come
         // back (see PlayerInstanceGuard for the interpretation).
-        val liveInstances = AtomicInteger(0)
+        private val liveInstances = AtomicInteger(0)
+
+        /** Instrumentation-test hook for the invariant this whole guard exists to enforce: never
+         * more than one live [PlayerViewModel] (see PlayerInstanceGuard.isLeak). */
+        @VisibleForTesting
+        fun liveInstanceCountForTest(): Int = liveInstances.get()
     }
 }
 

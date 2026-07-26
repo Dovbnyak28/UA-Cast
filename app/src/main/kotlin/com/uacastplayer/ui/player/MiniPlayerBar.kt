@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,6 +34,7 @@ import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.player.PlayerViewModel
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
@@ -79,6 +81,7 @@ fun MiniPlayerBar(
             .height(MiniPlayerBarHeight)
             .raisedSurface(RoundedCornerShape(16.dp), UaTheme.palette.surface1, shadow = true)
             .clickable(onClick = onTap)
+            .testTag(UiTestTags.MINI_PLAYER_BAR)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
