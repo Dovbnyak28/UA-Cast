@@ -1,48 +1,33 @@
 package com.uacastplayer.ui.player
 import com.uacastplayer.ui.theme.UaTheme
 
-import android.app.Activity
-import android.app.PictureInPictureParams
 import android.content.Context
-import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.os.Build
-import android.provider.Settings
-import android.util.Rational
-import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -67,65 +52,37 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import com.uacastplayer.R
 import com.uacastplayer.cast.CodecDisplayName
 import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.core.ui.findActivity
-import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.player.AudioChannelLayout
-import com.uacastplayer.player.BrightnessGestureStart
-import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerGesturePolicy
-import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.player.PlayerViewModel
 import com.uacastplayer.player.ResizeModeCycle
-import com.uacastplayer.player.SelectableTrack
-import com.uacastplayer.player.SleepTimerFormatter
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.cast.CastButton
-import com.uacastplayer.ui.components.GradientPlayButton
-import com.uacastplayer.ui.components.RoundIconButton
-import com.uacastplayer.ui.components.SleepTimerDialog
 import com.uacastplayer.ui.components.SmallRoundIconButton
-import com.uacastplayer.ui.epg.EpgGuideSheet
 import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.BreatheMs
-import com.uacastplayer.ui.theme.CardPadding
-import com.uacastplayer.ui.theme.DisplayName
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.IconButtonSize
-import com.uacastplayer.ui.theme.LiveText
 import com.uacastplayer.ui.theme.RadiusCard
-import com.uacastplayer.ui.theme.RadiusField
-import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.ScreenHPadding
-import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.Title
-import androidx.compose.material3.Button
-import com.uacastplayer.ui.components.ChannelIcon
-import com.uacastplayer.ui.components.initialsFor
 import java.io.File
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_MILLIS = 3000L
 private const val GESTURE_INDICATOR_AUTO_HIDE_MILLIS = 900L
-private const val DEFAULT_BRIGHTNESS_LEVEL = 0.5f
 
 @OptIn(markerClass = [UnstableApi::class])
 @Composable
@@ -517,675 +474,23 @@ fun PlayerScreen(
         }
     }
 
-    if (showSleepTimerDialog) {
-        SleepTimerDialog(
-            isTimerActive = sleepTimer.remainingMillis != null,
-            onSelect = { duration ->
-                sleepTimer.start(duration)
-                showSleepTimerDialog = false
-            },
-            onCancelTimer = {
-                sleepTimer.cancel()
-                showSleepTimerDialog = false
-            },
-            onDismiss = { showSleepTimerDialog = false },
-        )
-    }
-
-    if (showAudioDialog) {
-        TrackPickerDialog(
-            title = stringResource(R.string.player_audio_track),
-            tracks = uiState.audioTracks,
-            onSelect = { viewModel.selectAudioTrack(it); showAudioDialog = false },
-            onDismiss = { showAudioDialog = false },
-        )
-    }
-
-    if (showSubtitleDialog) {
-        TrackPickerDialog(
-            title = stringResource(R.string.player_subtitle_track),
-            tracks = uiState.textTracks,
-            offLabel = stringResource(R.string.player_subtitle_off),
-            onSelectOff = { viewModel.clearTextTrack(); showSubtitleDialog = false },
-            onSelect = { viewModel.selectTextTrack(it); showSubtitleDialog = false },
-            onDismiss = { showSubtitleDialog = false },
-        )
-    }
-
-    if (showQualityDialog) {
-        AlertDialog(
-            onDismissRequest = { showQualityDialog = false },
-            title = { Text(stringResource(R.string.player_quality)) },
-            text = { QualityDetails(uiState.badges) },
-            confirmButton = {
-                TextButton(onClick = { showQualityDialog = false }) { Text(stringResource(R.string.common_back)) }
-            },
-        )
-    }
-
-    if (showGuideSheet && currentChannel != null) {
-        EpgGuideSheet(
-            channel = currentChannel,
-            epgData = epgState.data,
-            nowMillis = epgState.nowMillis,
-            onDismiss = { showGuideSheet = false },
-        )
-    }
-}
-
-private enum class GestureIndicatorKind { BRIGHTNESS, VOLUME }
-
-private fun AudioManager?.currentVolumeFraction(): Float {
-    if (this == null) return DEFAULT_BRIGHTNESS_LEVEL
-    val max = getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-    if (max <= 0) return DEFAULT_BRIGHTNESS_LEVEL
-    return getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max.toFloat()
-}
-
-private fun applyWindowBrightness(activity: Activity, level: Float) {
-    val window = activity.window
-    val params = window.attributes
-    params.screenBrightness = level.coerceIn(0.01f, 1f)
-    window.attributes = params
-}
-
-/** Restores the window to following the system/auto brightness - undoes [applyWindowBrightness]. */
-private fun restoreWindowBrightness(activity: Activity) {
-    val window = activity.window
-    val params = window.attributes
-    params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-    window.attributes = params
-}
-
-private const val MAX_SYSTEM_BRIGHTNESS = 255f
-
-private fun initialBrightnessLevel(activity: Activity): Float {
-    val systemBrightness = try {
-        Settings.System.getInt(activity.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / MAX_SYSTEM_BRIGHTNESS
-    } catch (_: Settings.SettingNotFoundException) {
-        null
-    }
-    return BrightnessGestureStart.level(activity.window.attributes.screenBrightness, systemBrightness)
-}
-
-private fun applyStreamVolume(audioManager: AudioManager, level: Float) {
-    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-    val target = (level * max).toInt().coerceIn(0, max)
-    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-}
-
-/** Thin vertical fill bar shown while dragging in the brightness/volume zones of the fullscreen
- * player - mirrors the system overlay's shape but stays inside the app's own design system. */
-@Composable
-private fun GestureLevelIndicator(kind: GestureIndicatorKind, level: Float, modifier: Modifier = Modifier) {
-    Column(
-        // flat by design: deliberately mirrors the system volume/brightness overlay's minimal
-        // look (see the KDoc above), not the app's own raised chrome.
-        modifier = modifier
-            .width(44.dp)
-            .height(150.dp)
-            .clip(RoundedCornerShape(RadiusField))
-            .background(UaTheme.palette.surface2)
-            .padding(10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(
-            imageVector = if (kind == GestureIndicatorKind.BRIGHTNESS) AppIcons.Brightness else AppIcons.Volume,
-            contentDescription = null,
-            tint = UaTheme.palette.azure,
-            modifier = Modifier.size(18.dp),
-        )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(RadiusField / 2))
-                .background(UaTheme.palette.overlayHighlight),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(level.coerceIn(0f, 1f))
-                    .align(Alignment.BottomCenter)
-                    .clip(RoundedCornerShape(RadiusField / 2))
-                    .background(UaTheme.palette.azure),
-            )
-        }
-    }
-}
-
-/** Transient pill shown for [GESTURE_INDICATOR_AUTO_HIDE_MILLIS] after cycling the aspect ratio -
- * same visual language as the buffering pill, just centered instead of anchored to a corner since
- * it isn't tied to a screen edge the way the brightness/volume bars are. */
-@Composable
-private fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(UaTheme.palette.scrimBackground)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(AppIcons.Fullscreen, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-        Text(
-            text = stringResource(ResizeModeCycle.labelRes(mode)),
-            color = Color.White,
-            style = Caption,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-    }
-}
-
-/** internal, not private - reused by [com.uacastplayer.ui.player.MiniPlayerBar], and called from
- * two different sites within this file (inline and fullscreen) - each call site is a distinct
- * composition node, so switching between them (e.g. collapsing fullscreen into the mini-bar)
- * disposes one `PlayerView` and creates another. */
-@OptIn(markerClass = [UnstableApi::class])
-@Composable
-internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
-    AndroidView(
-        factory = { ctx ->
-            // Inflated from res/layout/player_view.xml instead of PlayerView(ctx) purely to get
-            // surface_type=texture_view applied - see that file's doc for why: a SurfaceView (the
-            // constructor default) under Compose overlay buttons in the same Box was swallowing
-            // their taps. useController is still set here since app:use_controller in that layout
-            // only seeds PlayerView's initial value, not a persistent binding.
-            (android.view.LayoutInflater.from(ctx).inflate(R.layout.player_view, null) as PlayerView).apply {
-                player = viewModel.player
-                useController = false
-            }
-        },
-        update = { view ->
-            // update() can run on every recomposition of this call site even though the Player
-            // instance hasn't changed - reassigning PlayerView.player unconditionally resets its
-            // internal surface binding each time, which is what caused an occasional black frame
-            // right after a fullscreen<->mini-bar transition (the newly composed PlayerView and the
-            // about-to-be-disposed old one briefly both held the same live Player).
-            if (view.player !== viewModel.player) view.player = viewModel.player
-            view.resizeMode = resizeMode
-        },
-        // Without this, a disposed PlayerView keeps its `player` reference alive - the Player
-        // itself thinks it still has a video output attached here even though this View is gone,
-        // which is exactly the dangling-surface race the black-frame bug above comes from.
-        onRelease = { it.player = null },
-        modifier = modifier,
+    PlayerDialogs(
+        viewModel = viewModel,
+        uiState = uiState,
+        epgState = epgState,
+        sleepTimer = sleepTimer,
+        currentChannel = currentChannel,
+        showSleepTimerDialog = showSleepTimerDialog,
+        onDismissSleepTimerDialog = { showSleepTimerDialog = false },
+        showAudioDialog = showAudioDialog,
+        onDismissAudioDialog = { showAudioDialog = false },
+        showSubtitleDialog = showSubtitleDialog,
+        onDismissSubtitleDialog = { showSubtitleDialog = false },
+        showQualityDialog = showQualityDialog,
+        onDismissQualityDialog = { showQualityDialog = false },
+        showGuideSheet = showGuideSheet,
+        onDismissGuideSheet = { showGuideSheet = false },
     )
-}
-
-@Composable
-private fun InlineVideoControls(isPlaying: Boolean, onPlayPause: () -> Unit, onToggleFullscreen: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        GradientPlayButton(
-            icon = if (isPlaying) AppIcons.Pause else AppIcons.Play,
-            onClick = onPlayPause,
-            contentDescription = playPauseLabel(isPlaying),
-            modifier = Modifier.align(Alignment.Center),
-        )
-        SmallRoundIconButton(
-            icon = AppIcons.Fullscreen,
-            onClick = onToggleFullscreen,
-            contentDescription = stringResource(R.string.player_fullscreen),
-            background = UaTheme.palette.scrimBackground,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-        )
-    }
-}
-
-@Composable
-private fun PillButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, iconTrailing: Boolean = false) {
-    Row(
-        modifier = modifier
-            .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!iconTrailing) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = UaTheme.palette.labelPrimary,
-                modifier = Modifier.size(18.dp).padding(end = 8.dp),
-            )
-        }
-        Text(text = label, style = Caption, color = UaTheme.palette.labelPrimary)
-        if (iconTrailing) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = UaTheme.palette.labelPrimary,
-                modifier = Modifier.size(18.dp).padding(start = 8.dp),
-            )
-        }
-    }
-}
-
-/** Shown while casting has some reason it isn't reaching the receiver - either a codec
- * [com.uacastplayer.cast.CastCompatibilityPolicy] flagged as incompatible, or the receiver
- * rejecting/erroring on the proxy fallback for any other reason. Local playback keeps playing
- * regardless, this only explains why the receiver isn't. Clears itself once the relevant
- * [PlayerUiState] field goes back to its default (new channel, cast disconnect, or - for a codec
- * incompatibility - the receiver recovering). */
-@Composable
-private fun CastIncompatibilityBanner(message: String, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-            .padding(horizontal = CardPadding, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            AppIcons.HelpCircle,
-            contentDescription = null,
-            tint = UaTheme.palette.routeAmber,
-            modifier = Modifier.size(18.dp),
-        )
-        Text(
-            text = message,
-            style = Caption,
-            color = UaTheme.palette.labelPrimary,
-            modifier = Modifier.padding(start = GapM),
-        )
-    }
-}
-
-@Composable
-private fun ChannelInfoCard(
-    channel: M3uChannel,
-    badges: PlaybackBadgesState,
-    iconRefreshKey: Any,
-    resolveIcon: suspend (M3uChannel) -> File?,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenHPadding)
-            .raisedSurface(
-                RoundedCornerShape(RadiusCard),
-                UaTheme.palette.surface1,
-                edgeColor = UaTheme.palette.hairline,
-                shadow = true,
-            )
-            .padding(CardPadding),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ChannelIcon(channel = channel, resolveIcon = resolveIcon, size = 64.dp, refreshKey = iconRefreshKey)
-        Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
-            Text(text = channel.displayName, style = DisplayName, color = UaTheme.palette.labelPrimary, maxLines = 1)
-            BadgesRow(badges, modifier = Modifier.padding(top = 4.dp))
-        }
-    }
-}
-
-@Composable
-private fun QuickSettingsRow(
-    onAudioClick: () -> Unit,
-    onSubtitlesClick: () -> Unit,
-    onQualityClick: () -> Unit,
-    onAspectRatioClick: () -> Unit,
-    onGuideClick: () -> Unit,
-    onPreviousChannelClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenHPadding, vertical = GapM)
-            .raisedSurface(
-                RoundedCornerShape(RadiusCard),
-                UaTheme.palette.surface1,
-                edgeColor = UaTheme.palette.hairline,
-                shadow = true,
-            )
-            .padding(vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        // Only shown once there's actually somewhere to jump back to - see
-        // PlayerUiState.hasPreviousChannel. Each item gets an equal weight() share of the row so a
-        // 6th item (this one) doesn't squeeze the others' labels into character-by-character wrap -
-        // see docs/DESIGN_SYSTEM.md "§E Equal-share rows".
-        onPreviousChannelClick?.let {
-            QuickSettingItem(
-                AppIcons.Refresh,
-                stringResource(R.string.player_previous_channel),
-                it,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        QuickSettingItem(
-            AppIcons.Storage,
-            stringResource(R.string.player_audio_track),
-            onAudioClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.HelpCircle,
-            stringResource(R.string.player_subtitle_track),
-            onSubtitlesClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.Image,
-            stringResource(R.string.player_quality),
-            onQualityClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.Fullscreen,
-            stringResource(R.string.player_aspect_ratio),
-            onAspectRatioClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.Tv,
-            stringResource(R.string.player_tv_guide),
-            onGuideClick,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun RowScope.QuickSettingItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.clickable(onClick = onClick)) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .raisedSurface(RoundedCornerShape(12.dp), UaTheme.palette.surface2, shadow = false),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(18.dp))
-        }
-        Text(
-            text = label,
-            style = Caption,
-            color = UaTheme.palette.labelSecondary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            maxLines = 2,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-    }
-}
-
-@Composable
-private fun NextChannelsRail(
-    channels: List<IndexedChannel>,
-    iconRefreshKey: Any,
-    resolveIcon: suspend (M3uChannel) -> File?,
-    onSelect: (IndexedChannel) -> Unit,
-) {
-    Column(modifier = Modifier.padding(top = GapM)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.player_next_channels_title),
-                style = Title,
-                color = UaTheme.palette.labelPrimary,
-            )
-            Text(text = stringResource(R.string.player_view_all), style = Caption, color = UaTheme.palette.accentText)
-        }
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(top = GapM, start = ScreenHPadding, end = ScreenHPadding),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(channels, key = { it.index }) { indexed ->
-                Column(
-                    // Inside a LazyRow - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
-                    modifier = Modifier
-                        .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-                        .clickable { onSelect(indexed) }
-                        .padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    ChannelIcon(
-                        channel = indexed.channel,
-                        resolveIcon = resolveIcon,
-                        size = 64.dp,
-                        refreshKey = iconRefreshKey,
-                    )
-                    Text(
-                        text = indexed.channel.displayName,
-                        style = Caption,
-                        color = UaTheme.palette.labelPrimary,
-                        maxLines = 1,
-                        modifier = Modifier.padding(top = 8.dp).width(96.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TrackPickerDialog(
-    title: String,
-    tracks: List<SelectableTrack>,
-    offLabel: String? = null,
-    onSelectOff: (() -> Unit)? = null,
-    onSelect: (SelectableTrack) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                if (offLabel != null && onSelectOff != null) {
-                    Text(
-                        text = offLabel,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = onSelectOff).padding(vertical = 12.dp),
-                    )
-                }
-                tracks.forEach { track ->
-                    Column(
-                        modifier = Modifier.fillMaxWidth().clickable { onSelect(track) }.padding(vertical = 10.dp),
-                    ) {
-                        Text(
-                            text = track.label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (track.isSelected) {
-                                UaTheme.palette.azure
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        trackDetailLabel(track)?.let { detail ->
-                            Text(
-                                text = detail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = UaTheme.palette.labelSecondary,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_back)) }
-        },
-    )
-}
-
-private const val UNITS_PER_KILO = 1000
-
-/** The secondary line under a track's name in [TrackPickerDialog] - every extra field
- * [PlayerViewModel.updateBadgesAndTrackLists] measured for that track (codec, channel layout,
- * sample rate, bitrate for audio; just codec for text tracks, see [PlaybackBadges.textCodecLabel]),
- * joined in the same "· "-separated style as [BadgesRow]. Null (not an empty string) when nothing
- * was measured, so the caller can skip rendering the line entirely instead of showing a blank one. */
-@Composable
-private fun trackDetailLabel(track: SelectableTrack): String? {
-    val parts = buildList {
-        track.codecLabel?.let(::add)
-        track.channelLayout?.let { add(stringResource(it.labelRes())) }
-        sampleRateLabel(track.sampleRateHz)?.let(::add)
-        bitrateLabel(track.bitrateBps)?.let(::add)
-    }
-    return parts.joinToString(" · ").ifBlank { null }
-}
-
-/** The quality dialog's full breakdown of every field [PlayerViewModel.updateBadgesAndTrackLists]
- * measured for the active video and audio tracks - exact resolution (not [PlaybackBadgesState
- * .qualityLabel]'s bucketed "480p") plus codec/frame rate/bitrate for video, and a second line for
- * audio's codec/channel layout/sample rate/bitrate, since this is the one dialog with room to show
- * everything extractable rather than a single summary badge. */
-@Composable
-private fun QualityDetails(badges: PlaybackBadgesState) {
-    val videoParts = buildList {
-        val resolution = if (badges.videoWidth != null && badges.videoHeight != null) {
-            stringResource(R.string.player_resolution, badges.videoWidth, badges.videoHeight)
-        } else {
-            badges.qualityLabel
-        }
-        resolution?.let(::add)
-        badges.videoCodecLabel?.let(::add)
-        badges.frameRate?.let { add(stringResource(R.string.player_frame_rate, it.roundToInt())) }
-        bitrateLabel(badges.videoBitrateBps)?.let(::add)
-    }
-    val audioParts = buildList {
-        badges.audioCodecLabel?.let(::add)
-        badges.channelLayout?.let { add(stringResource(it.labelRes())) }
-        sampleRateLabel(badges.audioSampleRateHz)?.let(::add)
-        bitrateLabel(badges.audioBitrateBps)?.let(::add)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = videoParts.joinToString(" · ").ifBlank { stringResource(R.string.player_quality_unknown) },
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        if (audioParts.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.player_quality_audio_section),
-                style = MaterialTheme.typography.labelMedium,
-                color = UaTheme.palette.labelSecondary,
-            )
-            Text(text = audioParts.joinToString(" · "), style = MaterialTheme.typography.bodyLarge)
-        }
-    }
-}
-
-@Composable
-private fun bitrateLabel(bitrateBps: Int?): String? =
-    bitrateBps?.takeIf { it > 0 }?.let { stringResource(R.string.player_bitrate_kbps, it / UNITS_PER_KILO) }
-
-@Composable
-private fun sampleRateLabel(sampleRateHz: Int?): String? =
-    sampleRateHz?.takeIf { it > 0 }?.let { stringResource(R.string.player_sample_rate_khz, formatKhz(it)) }
-
-/** Sample rates are almost always a clean multiple of 1000 (48 kHz, 44.1 kHz being the one common
- * exception) - shown without a trailing ".0" for the common case instead of always fixing one
- * decimal place. */
-private fun formatKhz(hz: Int): String {
-    val khz = hz / UNITS_PER_KILO.toFloat()
-    return if (khz == khz.toInt().toFloat()) khz.toInt().toString() else "%.1f".format(khz)
-}
-
-@Composable
-private fun PlayerControlsOverlay(
-    uiState: PlayerUiState,
-    isFullscreen: Boolean,
-    sleepTimerRemainingMillis: Long?,
-    onExit: () -> Unit,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
-    onPrevious: () -> Unit,
-    onToggleFullscreen: () -> Unit,
-    onEnterPip: () -> Unit,
-    onOpenSleepTimer: () -> Unit,
-    onSelectPreview: (IndexedChannel) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SmallRoundIconButton(
-                icon = AppIcons.ArrowBack,
-                onClick = onExit,
-                contentDescription = stringResource(R.string.common_back),
-                background = UaTheme.palette.scrimBackground,
-            )
-            Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
-                Text(text = uiState.currentChannel?.displayName.orEmpty(), color = Color.White, style = DisplayName)
-                BadgesRow(uiState.badges)
-            }
-            LiveIndicator()
-            PlayerCastButton(modifier = Modifier.padding(start = GapM))
-        }
-
-        Box(modifier = Modifier.weight(1f))
-
-        if (uiState.nextChannelsPreview.isNotEmpty()) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(uiState.nextChannelsPreview, key = { it.index }) { indexed ->
-                    Text(
-                        text = indexed.channel.displayName,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(RadiusItem))
-                            .background(UaTheme.palette.scrimBackground)
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .pointerInput(indexed.index) {
-                                detectTapGestures { onSelectPreview(indexed) }
-                            },
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RoundIconButton(
-                icon = AppIcons.SkipPrevious,
-                onClick = onPrevious,
-                contentDescription = stringResource(R.string.player_previous),
-            )
-            GradientPlayButton(
-                icon = if (uiState.isPlaying) AppIcons.Pause else AppIcons.Play,
-                onClick = onPlayPause,
-                contentDescription = playPauseLabel(uiState.isPlaying),
-            )
-            RoundIconButton(
-                icon = AppIcons.SkipNext,
-                onClick = onNext,
-                contentDescription = stringResource(R.string.player_next),
-            )
-            Box(modifier = Modifier.weight(1f))
-            SleepTimerButton(remainingMillis = sleepTimerRemainingMillis, onClick = onOpenSleepTimer)
-            SmallRoundIconButton(
-                icon = AppIcons.PictureInPicture,
-                onClick = onEnterPip,
-                contentDescription = stringResource(R.string.player_picture_in_picture),
-                background = UaTheme.palette.scrimBackground,
-            )
-            SmallRoundIconButton(
-                icon = if (isFullscreen) AppIcons.FullscreenExit else AppIcons.Fullscreen,
-                onClick = onToggleFullscreen,
-                contentDescription = stringResource(
-                    if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_fullscreen
-                ),
-                background = UaTheme.palette.scrimBackground,
-            )
-        }
-    }
 }
 
 /**
@@ -1194,7 +499,7 @@ private fun PlayerControlsOverlay(
  * doesn't line up with the app's icon buttons otherwise.
  */
 @Composable
-private fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = UaTheme.palette.scrimBackground) {
+internal fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = UaTheme.palette.scrimBackground) {
     Box(
         modifier = modifier
             .size(IconButtonSize)
@@ -1206,85 +511,12 @@ private fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = 
     }
 }
 
-/**
- * Opens the sleep timer dialog. Shows a plain icon when idle; once a timer is running, widens into
- * a pill showing the live countdown instead, so the remaining time is visible without opening the
- * dialog.
- */
 @Composable
-private fun SleepTimerButton(remainingMillis: Long?, onClick: () -> Unit) {
-    if (remainingMillis == null) {
-        SmallRoundIconButton(
-            icon = AppIcons.Timer,
-            onClick = onClick,
-            contentDescription = stringResource(R.string.player_sleep_timer),
-            background = UaTheme.palette.scrimBackground,
-        )
-    } else {
-        Row(
-            modifier = Modifier
-                .height(IconButtonSize)
-                .clip(RoundedCornerShape(IconButtonSize / 2))
-                .background(UaTheme.palette.scrimBackground)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                AppIcons.Timer,
-                contentDescription = stringResource(R.string.player_sleep_timer),
-                tint = UaTheme.palette.azure,
-                modifier = Modifier.size(16.dp),
-            )
-            Text(
-                text = SleepTimerFormatter.formatRemaining(remainingMillis),
-                color = Color.White,
-                style = Caption,
-                modifier = Modifier.padding(start = 6.dp),
-            )
-        }
-    }
-}
-
-/** §4 rule 3 - LIVE dot breathing between alpha/scale 1 and 0.3/0.8, reversed, on an infinite loop. */
-@Composable
-private fun LiveIndicator() {
-    val transition = rememberInfiniteTransition(label = "liveBreathe")
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(tween(BreatheMs), repeatMode = RepeatMode.Reverse),
-        label = "liveAlpha",
-    )
-    val dotScale by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(tween(BreatheMs), repeatMode = RepeatMode.Reverse),
-        label = "liveScale",
-    )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .scale(dotScale)
-                .background(UaTheme.palette.routeRed.copy(alpha = alpha), CircleShape)
-                .background(UaTheme.palette.redGlow.copy(alpha = alpha * 0.4f), CircleShape),
-        )
-        Text(
-            text = stringResource(R.string.player_live_indicator),
-            style = LiveText,
-            color = UaTheme.palette.routeRed.copy(alpha = alpha.coerceAtLeast(0.6f)),
-            modifier = Modifier.padding(start = 6.dp),
-        )
-    }
-}
-
-@Composable
-private fun playPauseLabel(isPlaying: Boolean) =
+internal fun playPauseLabel(isPlaying: Boolean) =
     stringResource(if (isPlaying) R.string.player_pause else R.string.player_play)
 
 @Composable
-private fun BadgesRow(badges: PlaybackBadgesState, modifier: Modifier = Modifier) {
+internal fun BadgesRow(badges: PlaybackBadgesState, modifier: Modifier = Modifier) {
     val parts = buildList {
         badges.qualityLabel?.let(::add)
         badges.videoCodecLabel?.let(::add)
@@ -1301,42 +533,10 @@ private fun BadgesRow(badges: PlaybackBadgesState, modifier: Modifier = Modifier
     }
 }
 
-private fun AudioChannelLayout.labelRes(): Int = when (this) {
+internal fun AudioChannelLayout.labelRes(): Int = when (this) {
     AudioChannelLayout.MONO -> R.string.audio_layout_mono
     AudioChannelLayout.STEREO -> R.string.audio_layout_stereo
     AudioChannelLayout.SURROUND_5_1 -> R.string.audio_layout_surround_5_1
     AudioChannelLayout.SURROUND_7_1 -> R.string.audio_layout_surround_7_1
     AudioChannelLayout.OTHER -> R.string.audio_layout_stereo
-}
-
-private object FullscreenController {
-    fun apply(activity: Activity, enabled: Boolean) {
-        activity.requestedOrientation = if (enabled) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-        val windowInsetsController = androidx.core.view.WindowCompat.getInsetsController(
-            activity.window,
-            activity.window.decorView,
-        )
-        if (enabled) {
-            windowInsetsController.systemBarsBehavior =
-                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            windowInsetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-        } else {
-            windowInsetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-        }
-    }
-}
-
-private object PipController {
-    fun enter(activity: Activity) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val params = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
-            activity.enterPictureInPictureMode(params)
-        }
-    }
 }

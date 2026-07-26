@@ -295,12 +295,12 @@
     <ID>MagicNumber:PlaybackBadges.kt$PlaybackBadges$720</ID>
     <ID>MagicNumber:PlaybackBadges.kt$PlaybackBadges$8</ID>
     <ID>MagicNumber:PlayerGesturePolicy.kt$PlayerGesturePolicy$3f</ID>
-    <ID>MagicNumber:PlayerScreen.kt$0.01f</ID>
-    <ID>MagicNumber:PlayerScreen.kt$0.6f</ID>
+    <ID>MagicNumber:PlayerControlsOverlay.kt$0.6f</ID>
+    <ID>MagicNumber:PlayerGestureLayer.kt$0.01f</ID>
+    <ID>MagicNumber:PlayerGestureLayer.kt$PipController$16</ID>
+    <ID>MagicNumber:PlayerGestureLayer.kt$PipController$9</ID>
     <ID>MagicNumber:PlayerScreen.kt$16f</ID>
     <ID>MagicNumber:PlayerScreen.kt$9f</ID>
-    <ID>MagicNumber:PlayerScreen.kt$PipController$16</ID>
-    <ID>MagicNumber:PlayerScreen.kt$PipController$9</ID>
     <ID>MagicNumber:PlayerViewModel.kt$10_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$1_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$20_000</ID>
@@ -477,7 +477,7 @@
     <ID>ReturnCount:ImageFormat.kt$ImageFormatDetector$private fun regionMatches(bytes: ByteArray, offset: Int, needle: ByteArray): Boolean</ID>
     <ID>ReturnCount:M3u8Rewriter.kt$M3u8Rewriter$private fun resolveAndMap(reference: String, baseUrl: String, mapUrl: (String) -&gt; String?): String?</ID>
     <ID>ReturnCount:PlaybackRetryPolicy.kt$PlaybackRetryPolicy$fun onError(state: RetryState, errorType: PlaybackErrorType): RetryDecision</ID>
-    <ID>ReturnCount:PlayerScreen.kt$private fun AudioManager?.currentVolumeFraction(): Float</ID>
+    <ID>ReturnCount:PlayerGestureLayer.kt$internal fun AudioManager?.currentVolumeFraction(): Float</ID>
     <ID>ReturnCount:PlayerViewModel.kt$PlayerViewModel$private fun buildPreview(fromIndex: Int): List&lt;IndexedChannel&gt;</ID>
     <ID>ReturnCount:PlayerViewModel.kt$PlayerViewModel$private fun trackLabel(language: String?, label: String?, index: Int): String</ID>
     <ID>ReturnCount:PlaylistDetector.kt$PlaylistDetector$private fun startsWith(bytes: ByteArray, prefix: List&lt;Byte&gt;, offset: Int): Boolean</ID>
