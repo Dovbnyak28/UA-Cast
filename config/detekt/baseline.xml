@@ -416,7 +416,7 @@
     <ID>MaxLineLength:CastSessionRepository.kt$CastSessionRepository$private</ID>
     <ID>MaxLineLength:ChannelGroupNormalizer.kt$ChannelGroupNormalizer$put(ChannelGroup.KEY_KIDS, "kids|cartoons|дети|детские|дитячі|діти|мультфильмы|мультфільми|infantil|niños|ninos")</ID>
     <ID>MaxLineLength:ChannelsScreen.kt$Column</ID>
-    <ID>MaxLineLength:ChannelsScreen.kt$val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth</ID>
+    <ID>MaxLineLength:ChannelListSection.kt$val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth</ID>
     <ID>MaxLineLength:DayScheduleBuilderTest.kt$DayScheduleBuilderTest$EpgProgramme(channelId = "ch", startMillis = startMillis, stopMillis = stopMillis, title = id, description = null)</ID>
     <ID>MaxLineLength:DesignSystemControls.kt$fun</ID>
     <ID>MaxLineLength:DesignSystemControls.kt$val height = if (bold) com.uacastplayer.ui.theme.ProgressHeightBold else com.uacastplayer.ui.theme.ProgressHeightThin</ID>
