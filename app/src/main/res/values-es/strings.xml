@@ -204,6 +204,12 @@
     <string name="help_q7_body">Toca el icono del temporizador en el reproductor para pausar la reproducción automáticamente tras 15, 30, 45 o 60 minutos. Sigue la cuenta atrás aunque cambies de canal, como el temporizador de apagado de un televisor físico.</string>
     <string name="help_q8_title">¿Dónde se guardan mis datos?</string>
     <string name="help_q8_body">Todo — tu lista, la guía TV, los favoritos y los iconos descargados — se guarda solo en el almacenamiento privado de la app en tu dispositivo. Consulta los Términos de uso y la Política de privacidad para más detalles.</string>
+    <string name="help_send_diagnostics_button">Enviar diagnóstico</string>
+    <string name="diagnostics_preview_title">Informe de diagnóstico</string>
+    <string name="diagnostics_preview_body_hint">Revisa lo que se compartirá y elige una app para enviarlo. Nada se envía automáticamente.</string>
+    <string name="diagnostics_preview_send">Enviar</string>
+    <string name="diagnostics_preview_cancel">Cancelar</string>
+    <string name="diagnostics_share_chooser_title">Enviar informe de diagnóstico mediante</string>
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Términos de uso</string>

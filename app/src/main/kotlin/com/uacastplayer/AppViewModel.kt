@@ -2,6 +2,7 @@ package com.uacastplayer
 
 import android.app.Application
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,10 +36,13 @@ import com.uacastplayer.data.prefs.DeviceSpecsProvider
 import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.diagnostics.DiagnosticsReportBuilder
+import com.uacastplayer.diagnostics.DiagnosticsSnapshot
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.log.LogBuffer
 import com.uacastplayer.performance.DevicePerformanceClassifier
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.playlist.M3uChannel
@@ -207,6 +211,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissBatteryOptimizationHint() {
         preferences.hasSeenBatteryOptimizationHint = true
         _showBatteryOptimizationHint.value = false
+    }
+
+    /** Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
+     * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without
+     * touching anything that isn't already read elsewhere in this ViewModel. */
+    fun buildDiagnosticsReport(): String {
+        val runtime = Runtime.getRuntime()
+        return DiagnosticsReportBuilder.build(
+            DiagnosticsSnapshot(
+                appVersionName = BuildConfig.VERSION_NAME,
+                deviceModel = Build.MODEL,
+                androidApiLevel = Build.VERSION.SDK_INT,
+                deviceTier = settingsState.value.deviceTier,
+                bufferSize = settingsState.value.bufferSize,
+                iconDisplayMode = settingsState.value.iconDisplayMode,
+                appTheme = uiState.value.appTheme,
+                usedMemoryBytes = runtime.totalMemory() - runtime.freeMemory(),
+                totalMemoryBytes = runtime.totalMemory(),
+                maxMemoryBytes = runtime.maxMemory(),
+                logEntries = LogBuffer.snapshot(),
+            ),
+        )
     }
 
     fun selectLanguage(language: AppLanguage) {

@@ -204,6 +204,12 @@
     <string name="help_q7_body">Tap the timer icon in the player to pause playback automatically after 15, 30, 45, or 60 minutes. It keeps counting down even if you switch channels, like a physical TV\'s sleep timer.</string>
     <string name="help_q8_title">Where is my data stored?</string>
     <string name="help_q8_body">Everything - your playlist, TV guide, favorites, and downloaded icons - stays in the app\'s private storage on your device. See the Terms of Use and Privacy Policy for details.</string>
+    <string name="help_send_diagnostics_button">Send diagnostics</string>
+    <string name="diagnostics_preview_title">Diagnostics report</string>
+    <string name="diagnostics_preview_body_hint">Review what will be shared, then choose an app to send it with. Nothing is sent automatically.</string>
+    <string name="diagnostics_preview_send">Send</string>
+    <string name="diagnostics_preview_cancel">Cancel</string>
+    <string name="diagnostics_share_chooser_title">Send diagnostics report via</string>
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Terms of Use</string>

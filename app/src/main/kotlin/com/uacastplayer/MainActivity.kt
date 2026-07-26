@@ -302,7 +302,7 @@ private fun ScaffoldZone(
     when {
         showHelp -> {
             BackHandler { onCloseHelp() }
-            HelpScreen(onBackClick = onCloseHelp)
+            HelpScreen(onBackClick = onCloseHelp, onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport)
         }
 
         showTerms -> {

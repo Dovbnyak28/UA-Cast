@@ -206,6 +206,12 @@
     <string name="help_q7_body">Торкніться іконки таймера у плеєрі, щоб автоматично призупинити відтворення через 15, 30, 45 або 60 хвилин. Відлік триває навіть при перемиканні каналів, як у таймері сну звичайного телевізора.</string>
     <string name="help_q8_title">Де зберігаються мої дані?</string>
     <string name="help_q8_body">Усе — плейлист, телепрограма, обране й завантажені іконки — зберігається лише в приватному сховищі застосунку на вашому пристрої. Деталі — в Умовах використання та Політиці конфіденційності.</string>
+    <string name="help_send_diagnostics_button">Надіслати діагностику</string>
+    <string name="diagnostics_preview_title">Звіт діагностики</string>
+    <string name="diagnostics_preview_body_hint">Перегляньте, що буде надіслано, і оберіть застосунок для відправки. Нічого не надсилається автоматично.</string>
+    <string name="diagnostics_preview_send">Надіслати</string>
+    <string name="diagnostics_preview_cancel">Скасувати</string>
+    <string name="diagnostics_share_chooser_title">Надіслати звіт діагностики через</string>
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Умови використання</string>
