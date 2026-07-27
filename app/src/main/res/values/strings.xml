@@ -229,6 +229,16 @@
     <string name="terms_gate_footer">You must accept these terms to use the app.</string>
     <string name="terms_accept_button">Accept and continue</string>
     <string name="terms_decline_button">Decline and exit</string>
+    <string name="onboarding_step1_title">Welcome to UA Cast</string>
+    <string name="onboarding_step1_body">UA Cast is a player for YOUR OWN subscriptions - it doesn\'t provide, sell, or include any TV channels or content itself. You bring a playlist from a provider you already use, and this app plays it.</string>
+    <string name="onboarding_step2_title">What is a playlist?</string>
+    <string name="onboarding_step2_body">A playlist is a list of channels from your provider - either an M3U link, or an Xtream Codes login (server address, username and password). You\'ll add one from the Channels tab whenever you\'re ready.</string>
+    <string name="onboarding_step3_title">Watch on the big screen</string>
+    <string name="onboarding_step3_body">Tap the Cast icon while a channel is playing to send it to a Chromecast or Google TV device on the same Wi-Fi network. If a stream can\'t play directly on the receiver, UA Cast automatically retries it through a local relay on your phone.</string>
+    <string name="onboarding_skip_button">Skip</string>
+    <string name="onboarding_next_button">Next</string>
+    <string name="onboarding_get_started_button">Add a playlist</string>
+    <string name="onboarding_step_indicator">Step %1$d of %2$d</string>
 
     <!-- Player -->
     <string name="player_live_indicator">LIVE</string>

@@ -68,6 +68,7 @@ data class AppUiState(
     val appTheme: AppTheme = AppTheme.DEFAULT,
     val needsLanguagePicker: Boolean = true,
     val needsTermsAcceptance: Boolean = true,
+    val needsOnboarding: Boolean = true,
 )
 
 /**
@@ -175,6 +176,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             appTheme = preferences.appTheme,
             needsLanguagePicker = !preferences.hasChosenLanguage,
             needsTermsAcceptance = !preferences.hasAcceptedTerms,
+            needsOnboarding = !preferences.hasSeenOnboarding,
         )
     )
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -256,6 +258,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun acceptTerms() {
         preferences.hasAcceptedTerms = true
         _uiState.value = _uiState.value.copy(needsTermsAcceptance = false)
+    }
+
+    /** Skipping and completing both end onboarding the same way - see [OnboardingScreen]. */
+    fun completeOnboarding() {
+        preferences.hasSeenOnboarding = true
+        _uiState.value = _uiState.value.copy(needsOnboarding = false)
     }
 
     fun setPlaylistDisplayName(name: String) = playlistController.setPlaylistDisplayName(name)

@@ -231,6 +231,16 @@
     <string name="terms_gate_footer">Чтобы пользоваться приложением, нужно принять эти условия.</string>
     <string name="terms_accept_button">Принять и продолжить</string>
     <string name="terms_decline_button">Отклонить и выйти</string>
+    <string name="onboarding_step1_title">Добро пожаловать в UA Cast</string>
+    <string name="onboarding_step1_body">UA Cast - это плеер для ВАШИХ собственных подписок: приложение не предоставляет, не продаёт и не содержит никаких телеканалов или контента. Вы подключаете плейлист от провайдера, которым уже пользуетесь, а приложение его воспроизводит.</string>
+    <string name="onboarding_step2_title">Что такое плейлист?</string>
+    <string name="onboarding_step2_body">Плейлист - это список каналов от вашего провайдера: либо ссылка M3U, либо логин Xtream Codes (адрес сервера, логин и пароль). Вы добавите его во вкладке «Каналы», когда будете готовы.</string>
+    <string name="onboarding_step3_title">Смотрите на большом экране</string>
+    <string name="onboarding_step3_body">Нажмите значок трансляции во время просмотра канала, чтобы отправить его на Chromecast или Google TV в той же сети Wi-Fi. Если поток не воспроизводится напрямую на приёмнике, UA Cast автоматически повторяет попытку через локальный ретранслятор на телефоне.</string>
+    <string name="onboarding_skip_button">Пропустить</string>
+    <string name="onboarding_next_button">Далее</string>
+    <string name="onboarding_get_started_button">Добавить плейлист</string>
+    <string name="onboarding_step_indicator">Шаг %1$d из %2$d</string>
 
     <!-- Player -->
     <string name="player_live_indicator">LIVE</string>

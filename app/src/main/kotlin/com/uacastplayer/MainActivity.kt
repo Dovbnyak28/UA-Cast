@@ -39,6 +39,7 @@ import com.uacastplayer.ui.components.DownloadStatusBanner
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
+import com.uacastplayer.ui.onboarding.OnboardingScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.player.PlayerEnrichmentState
@@ -91,6 +92,11 @@ class MainActivity : FragmentActivity() {
             // composable below actually consumes them (see ScaffoldZone/PlayerZone/BatteryHintZone),
             // so e.g. an icon-prefetch progress tick no longer has anything to do with the player.
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            // Set true only by OnboardingScreen's final step, so MainAppContent knows to open
+            // AddPlaylist immediately - "Skip" (any step) and system back both leave this false,
+            // going straight into the ordinary app instead. Never reset once true; MainAppContent
+            // reads it exactly once, on its own first composition.
+            var openAddPlaylistAfterOnboarding by remember { mutableStateOf(false) }
 
             LaunchedEffect(uiState.language) {
                 val previous = activeLanguage
@@ -108,11 +114,18 @@ class MainActivity : FragmentActivity() {
                     uiState.needsTermsAcceptance ->
                         TermsScreen(onAccept = viewModel::acceptTerms, onDecline = { finish() })
 
+                    uiState.needsOnboarding ->
+                        OnboardingScreen(onFinished = { openAddPlaylist ->
+                            openAddPlaylistAfterOnboarding = openAddPlaylist
+                            viewModel.completeOnboarding()
+                        })
+
                     else -> MainAppContent(
                         viewModel = viewModel,
                         currentLanguage = uiState.language,
                         currentAppTheme = uiState.appTheme,
                         onFinish = { finish() },
+                        startWithAddPlaylist = openAddPlaylistAfterOnboarding,
                     )
                 }
             }
@@ -133,6 +146,7 @@ private fun MainAppContent(
     currentLanguage: AppLanguage,
     currentAppTheme: AppTheme,
     onFinish: () -> Unit,
+    startWithAddPlaylist: Boolean = false,
 ) {
     val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
 
@@ -168,7 +182,7 @@ private fun MainAppContent(
     }
     var showHelp by remember { mutableStateOf(false) }
     var showTerms by remember { mutableStateOf(false) }
-    var showAddPlaylist by remember { mutableStateOf(false) }
+    var showAddPlaylist by remember { mutableStateOf(startWithAddPlaylist) }
     // Incremented (never reset) each time a playlist load finishes from AddPlaylistScreen, so
     // RootScaffold's LaunchedEffect(token) fires again even if the value happened to repeat - it's
     // a one-shot "switch to Channels" signal, not a persisted tab selection.

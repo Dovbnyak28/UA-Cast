@@ -120,6 +120,13 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_ACCEPTED_TERMS, false)
         set(value) = prefs.edit().putBoolean(KEY_ACCEPTED_TERMS, value).apply()
 
+    /** Gates the one-time [com.uacastplayer.ui.onboarding.OnboardingScreen], shown right after
+     * [hasAcceptedTerms] on first launch - set whether the user skips or completes it, either way
+     * it never shows again on its own. */
+    var hasSeenOnboarding: Boolean
+        get() = prefs.getBoolean(KEY_SEEN_ONBOARDING, false)
+        set(value) = prefs.edit().putBoolean(KEY_SEEN_ONBOARDING, value).apply()
+
     /** Legacy single-playlist label, only still read once during
      * `PlaylistRepository.migrateLegacySnapshotIfNeeded` - display names now live per-source in
      * `com.uacastplayer.playlist.PlaylistSource`. */
@@ -169,6 +176,7 @@ class AppPreferences(context: Context) {
         const val KEY_SEEN_BATTERY_HINT = "seen_battery_optimization_hint"
         const val KEY_SEEN_ICON_TIER_HINT = "seen_icon_tier_hint"
         const val KEY_ACCEPTED_TERMS = "accepted_terms"
+        const val KEY_SEEN_ONBOARDING = "seen_onboarding"
         const val KEY_PLAYLIST_DISPLAY_NAME = "playlist_display_name"
         const val KEY_ACTIVE_PLAYLIST_SOURCE_ID = "active_playlist_source_id"
         const val KEY_LAST_WATCHED_CHANNEL = "last_watched_channel_key"
