@@ -57,6 +57,9 @@ jobs:
       - name: ViewModel onCleared() calls super check
         run: bash scripts/check-oncleared-super.sh
 
+      - name: AppLog sensitive-variable check
+        run: bash scripts/check-applog-sensitive-vars.sh
+
       # Compile-only - there's no emulator/device here to actually run instrumentation tests
       # against (see MainActivitySmokeTest).
       - name: Compile instrumentation tests

@@ -465,7 +465,7 @@ class CastSessionRepository private constructor(context: Context) {
         applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)
         val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
         val localUrl = proxyServer.buildLocalUrl(resourceId)
-        AppLog.d(TAG) { "Proxy fallback loading receiver from $localUrl" }
+        AppLog.d(TAG) { "Proxy fallback loading receiver (resource=$resourceId)" }
         loadOnReceiver(localUrl, LoadRetryContext(streamUrl, title, userAgent, referrer))
     }
 
