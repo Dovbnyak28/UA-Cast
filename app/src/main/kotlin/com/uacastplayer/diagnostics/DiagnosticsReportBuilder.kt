@@ -25,8 +25,10 @@ data class DiagnosticsSnapshot(
 
 /** Formats a [DiagnosticsSnapshot] into the plain-text report shared from HelpScreen's "Send
  * diagnostics" button. Never includes anything beyond what's already in the snapshot - in
- * particular, [LogEntry] messages are included verbatim, relying on the same "never log raw
- * URLs/tokens" discipline [com.uacastplayer.log.AppLog] callers already follow. */
+ * particular, [LogEntry] messages are included verbatim: they're already guaranteed free of raw
+ * URLs/tokens/credentials by [com.uacastplayer.log.LogSanitizer], which every
+ * [com.uacastplayer.log.AppLog] call runs through before an entry ever reaches the buffer this
+ * report reads from. */
 object DiagnosticsReportBuilder {
 
     private const val BYTES_PER_MB = 1024 * 1024

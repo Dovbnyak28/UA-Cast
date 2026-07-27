@@ -199,7 +199,7 @@
     <string name="help_q8_body">Всё — плейлист, телепрограмма, избранное и загруженные иконки — хранится только в приватном хранилище приложения на вашем устройстве. Подробности — в Условиях использования и Политике конфиденциальности.</string>
     <string name="help_send_diagnostics_button">Отправить диагностику</string>
     <string name="diagnostics_preview_title">Отчёт диагностики</string>
-    <string name="diagnostics_preview_body_hint">Просмотрите, что будет отправлено, и выберите приложение для отправки. Ничего не отправляется автоматически.</string>
+    <string name="diagnostics_preview_body_hint">Отчёт содержит технические данные устройства и журнал последних действий. Просмотрите его ниже перед выбором приложения для отправки - ничего не отправляется автоматически.</string>
     <string name="diagnostics_preview_send">Отправить</string>
     <string name="diagnostics_preview_cancel">Отмена</string>
     <string name="diagnostics_share_chooser_title">Отправить отчёт диагностики через</string>

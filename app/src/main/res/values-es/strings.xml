@@ -197,7 +197,7 @@
     <string name="help_q8_body">Todo — tu lista, la guía TV, los favoritos y los iconos descargados — se guarda solo en el almacenamiento privado de la app en tu dispositivo. Consulta los Términos de uso y la Política de privacidad para más detalles.</string>
     <string name="help_send_diagnostics_button">Enviar diagnóstico</string>
     <string name="diagnostics_preview_title">Informe de diagnóstico</string>
-    <string name="diagnostics_preview_body_hint">Revisa lo que se compartirá y elige una app para enviarlo. Nada se envía automáticamente.</string>
+    <string name="diagnostics_preview_body_hint">Este informe contiene datos técnicos del dispositivo y un registro de actividad reciente. Revísalo a continuación antes de elegir una app para enviarlo - nada se envía automáticamente.</string>
     <string name="diagnostics_preview_send">Enviar</string>
     <string name="diagnostics_preview_cancel">Cancelar</string>
     <string name="diagnostics_share_chooser_title">Enviar informe de diagnóstico mediante</string>

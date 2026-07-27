@@ -199,7 +199,7 @@
     <string name="help_q8_body">Усе — плейлист, телепрограма, обране й завантажені іконки — зберігається лише в приватному сховищі застосунку на вашому пристрої. Деталі — в Умовах використання та Політиці конфіденційності.</string>
     <string name="help_send_diagnostics_button">Надіслати діагностику</string>
     <string name="diagnostics_preview_title">Звіт діагностики</string>
-    <string name="diagnostics_preview_body_hint">Перегляньте, що буде надіслано, і оберіть застосунок для відправки. Нічого не надсилається автоматично.</string>
+    <string name="diagnostics_preview_body_hint">Звіт містить технічні дані пристрою і журнал останніх дій. Перегляньте його нижче перед тим, як обрати застосунок для надсилання - нічого не надсилається автоматично.</string>
     <string name="diagnostics_preview_send">Надіслати</string>
     <string name="diagnostics_preview_cancel">Скасувати</string>
     <string name="diagnostics_share_chooser_title">Надіслати звіт діагностики через</string>
