@@ -177,6 +177,11 @@
     <string name="settings_help_body">UA Cast Player — персональный IPTV-плеер. Импортируйте плейлист на вкладке «Каналы» (по URL или файлом), выберите источник телепрограммы и нажмите на канал, чтобы начать просмотр. Используйте кнопку Cast для трансляции на Chromecast или Google TV; если поток не удаётся воспроизвести напрямую на приёмнике, приложение автоматически повторяет попытку через локальный ретранслятор на телефоне.</string>
     <string name="settings_open_help">Подробная справка</string>
     <string name="settings_open_terms">Условия использования</string>
+    <string name="settings_diagnostics_routing_label">Эффективность маршрутизации (только локально, на этом устройстве)</string>
+    <string name="settings_diagnostics_route_direct">Напрямую</string>
+    <string name="settings_diagnostics_route_remux">Ремукс</string>
+    <string name="settings_diagnostics_route_rewrite">Прокси-переписывание</string>
+    <string name="settings_diagnostics_route_line">%1$s: попыток %2$d, воспроизведено %3$d, неудачно %4$d</string>
     <string name="settings_open_button">Открыть</string>
 
     <!-- Help screen -->

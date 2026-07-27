@@ -3,6 +3,7 @@ package com.uacastplayer.data.cast
 import com.uacastplayer.cast.CastCompatibilityPolicy
 import com.uacastplayer.cast.CastCompatibilityVerdict
 import com.uacastplayer.cast.TsProgramInfoParser
+import com.uacastplayer.diagnostics.CastRouteKind
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.BoundedReadResult
 import com.uacastplayer.playlist.BoundedTextReader
@@ -38,7 +39,15 @@ private const val HTTP_SERVICE_UNAVAILABLE = 503
  * once those are factored out: session identity (host/token), routing a request to either an
  * existing remux session or a fresh upstream fetch, and the active/draining remux handoff.
  */
-class ProxyServer(private val httpClient: OkHttpClient) {
+class ProxyServer(
+    private val httpClient: OkHttpClient,
+    /** Fired once per top-level (channel) resource, the first time this server decides whether it
+     * takes the raw-TS remux path or an ordinary rewritten-HLS passthrough - see
+     * [fetchAndServeUpstreamResource]. Callers own de-duplication (see
+     * `RemuxEffectivenessStore.recordProxyRouteAttemptOnce`) since a non-remuxed resource has no
+     * "already decided" shortcut and is reclassified on every manifest poll. */
+    private val onRouteAttempted: (resourceId: String, route: CastRouteKind) -> Unit = { _, _ -> },
+) {
 
     private val resourceRegistry = ProxyResourceRegistry(httpClient)
     private val httpServer = ProxyHttpServer(onRequest = ::serveRequest)
@@ -91,6 +100,10 @@ class ProxyServer(private val httpClient: OkHttpClient) {
 
     fun registerPlaylist(url: String, userAgent: String? = null, referrer: String? = null): String =
         resourceRegistry.registerPlaylist(url, userAgent, referrer)
+
+    /** True once [resourceId]'s first fetch decided to engage the raw-TS remux path rather than an
+     * ordinary rewritten-HLS passthrough - see [fetchAndServeUpstreamResource]/[onRouteAttempted]. */
+    fun wasRemuxed(resourceId: String): Boolean = resourceRegistry.remuxSessionFor(resourceId) != null
 
     /** @throws IllegalStateException if called while the server isn't running - a caller asking
      * for a URL into a stopped proxy is a bug upstream, not something to paper over with a
@@ -191,6 +204,12 @@ class ProxyServer(private val httpClient: OkHttpClient) {
             val isPlaylist = isUpstreamPlaylist(response)
             isPlaylist to (!isPlaylist && remuxEligible && shouldRemuxUpstream(response))
         }.onFailure { runCatching { response.close() } }.getOrThrow()
+
+        // Only the top-level (channel) resource represents a routing decision worth counting -
+        // a RESOURCE_TYPE_MEDIA fetch is just serving one piece of a playlist already routed.
+        if (remuxEligible) {
+            onRouteAttempted(resourceId, if (shouldRemux) CastRouteKind.PROXY_REMUX else CastRouteKind.PROXY_REWRITE)
+        }
 
         if (isPlaylist) {
             serveUpstreamPlaylist(resourceId, resource, response, request.method, output)

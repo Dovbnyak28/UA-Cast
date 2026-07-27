@@ -173,6 +173,11 @@
     <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. Use the Cast button to play on a Chromecast or Google TV device; if a stream can\'t be played directly on the receiver, the app automatically retries through a local relay on your phone.</string>
     <string name="settings_open_help">Detailed help</string>
     <string name="settings_open_terms">Terms of Use</string>
+    <string name="settings_diagnostics_routing_label">Routing effectiveness (local only, this device)</string>
+    <string name="settings_diagnostics_route_direct">Direct</string>
+    <string name="settings_diagnostics_route_remux">Remux</string>
+    <string name="settings_diagnostics_route_rewrite">Proxy rewrite</string>
+    <string name="settings_diagnostics_route_line">%1$s: %2$d attempted, %3$d played, %4$d failed</string>
     <!-- Generic "Open" action for LinkRow (Help/Terms) - distinct from settings_battery_optimization_button,
          which is specific to the battery optimization row and must not be reused elsewhere. -->
     <string name="settings_open_button">Open</string>

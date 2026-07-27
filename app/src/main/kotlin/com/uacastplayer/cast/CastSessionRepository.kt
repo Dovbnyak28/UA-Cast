@@ -13,6 +13,9 @@ import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
 import com.uacastplayer.data.cast.TsFirstSegmentDiagnostic
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.diagnostics.CastRouteKind
+import com.uacastplayer.diagnostics.CastRouteOutcome
+import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.log.AppLog
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
@@ -64,7 +67,10 @@ class CastSessionRepository private constructor(context: Context) {
 
     private val appContext = context.applicationContext
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
-    private val proxyServer = ProxyServer(httpClient)
+    private val remuxEffectivenessStore = RemuxEffectivenessStore.getInstance(appContext)
+    private val proxyServer = ProxyServer(httpClient) { resourceId, route ->
+        remuxEffectivenessStore.recordProxyRouteAttemptOnce(resourceId, route)
+    }
     private val preferences = AppPreferences(appContext)
     private val incompatibilityStore = IncompatibilityMemoryStore(appContext)
     private val diagnosticCache = DiagnosticResultCache()
@@ -75,6 +81,11 @@ class CastSessionRepository private constructor(context: Context) {
     private var currentReceiverId: String? = null
     private var activeChannel: ActiveChannel? = null
     private var watchdogJob: Job? = null
+
+    // Set at the start of every proxy fallback attempt (see startProxyAndLoad), used to resolve
+    // which RemuxEffectivenessStore bucket (remux vs plain rewrite) a later PLAYING/give-up
+    // outcome belongs to - see trackPlayingWindow/tryRecover.
+    private var activeProxyResourceId: String? = null
 
     // See loadOnReceiver/handleLoadResult: every load() bumps this before the SDK call, so a
     // result callback for a load a newer one has already superseded (a watchdog fallback or a fast
@@ -146,11 +157,28 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun trackPlayingWindow(status: ReceiverStatus) {
-        if (status == ReceiverStatus.PLAYING) everReachedPlaying = true
+        if (status == ReceiverStatus.PLAYING && !everReachedPlaying) {
+            everReachedPlaying = true
+            remuxEffectivenessStore.record(currentRouteKind(), CastRouteOutcome.REACHED_PLAYING)
+        }
         playingSinceMillis = if (status == ReceiverStatus.PLAYING) {
             playingSinceMillis ?: System.currentTimeMillis()
         } else {
             null
+        }
+    }
+
+    /** See [RemuxEffectivenessStore]/[activeProxyResourceId]: which bucket the current attempt's
+     * eventual REACHED_PLAYING or FAILED outcome belongs in. */
+    private fun currentRouteKind(): CastRouteKind = when (_state.value.deliveryMode) {
+        CastDeliveryMode.Direct -> CastRouteKind.DIRECT
+        CastDeliveryMode.Proxy -> {
+            val resourceId = activeProxyResourceId
+            if (resourceId != null && proxyServer.wasRemuxed(resourceId)) {
+                CastRouteKind.PROXY_REMUX
+            } else {
+                CastRouteKind.PROXY_REWRITE
+            }
         }
     }
 
@@ -173,7 +201,13 @@ class CastSessionRepository private constructor(context: Context) {
     private fun tryRecover(idleReason: IdleReason, selfInitiated: Boolean): Boolean {
         val channel = activeChannel ?: return false
         val decision = recoveryDecisionFor(idleReason, selfInitiated)
-        if (decision == CastRecoveryDecision.GiveUp) recordIfGenuinelyIncompatible(channel.streamUrl)
+        if (decision == CastRecoveryDecision.GiveUp) {
+            recordIfGenuinelyIncompatible(channel.streamUrl)
+            // A route that already reached PLAYING once got its REACHED_PLAYING credit in
+            // trackPlayingWindow - a later give-up on the same episode is a reliability concern,
+            // not a routing-never-worked one, so only an attempt that never played counts as FAILED.
+            if (!everReachedPlaying) remuxEffectivenessStore.record(currentRouteKind(), CastRouteOutcome.FAILED)
+        }
         return if (decision is CastRecoveryDecision.Reload) {
             scheduleReload(channel, decision)
             true
@@ -353,6 +387,7 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun loadDirectWithWatchdog(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
+        remuxEffectivenessStore.record(CastRouteKind.DIRECT, CastRouteOutcome.ATTEMPTED)
         // A channel already warm (see scheduleDiagnosticWarmup) skips the probe entirely - no need
         // to race the watchdog for an answer that's already known. Read BEFORE the first load so
         // its sourceKind informs that load's Cast content-type too (see CastContentType.of) - the
@@ -438,6 +473,7 @@ class CastSessionRepository private constructor(context: Context) {
             return
         }
         AppLog.d(TAG) { "Falling back to proxy: $reason" }
+        remuxEffectivenessStore.record(CastRouteKind.DIRECT, CastRouteOutcome.FAILED)
         _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
         startProxyAndLoad(streamUrl, title, userAgent, referrer)
     }
@@ -464,6 +500,7 @@ class CastSessionRepository private constructor(context: Context) {
         )
         applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)
         val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
+        activeProxyResourceId = resourceId
         val localUrl = proxyServer.buildLocalUrl(resourceId)
         AppLog.d(TAG) { "Proxy fallback loading receiver (resource=$resourceId)" }
         loadOnReceiver(localUrl, LoadRetryContext(streamUrl, title, userAgent, referrer))

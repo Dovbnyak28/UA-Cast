@@ -21,6 +21,7 @@ data class DiagnosticsSnapshot(
     val totalMemoryBytes: Long,
     val maxMemoryBytes: Long,
     val logEntries: List<LogEntry>,
+    val remuxEffectiveness: RemuxEffectivenessCounts,
 )
 
 /** Formats a [DiagnosticsSnapshot] into the plain-text report shared from HelpScreen's "Send
@@ -45,6 +46,12 @@ object DiagnosticsReportBuilder {
             "Memory: ${snapshot.usedMemoryBytes.toMb()}MB used / " +
                 "${snapshot.totalMemoryBytes.toMb()}MB total / ${snapshot.maxMemoryBytes.toMb()}MB max",
         )
+        appendLine()
+        appendLine("Routing effectiveness (attempted/reached PLAYING/failed):")
+        val r = snapshot.remuxEffectiveness
+        appendLine("  Direct: ${r.directAttempted}/${r.directPlaying}/${r.directFailed}")
+        appendLine("  Proxy+remux: ${r.remuxAttempted}/${r.remuxPlaying}/${r.remuxFailed}")
+        appendLine("  Proxy rewrite: ${r.proxyRewriteAttempted}/${r.proxyRewritePlaying}/${r.proxyRewriteFailed}")
         appendLine()
         appendLine("Recent log entries (${snapshot.logEntries.size}):")
         snapshot.logEntries.forEach { entry ->

@@ -383,6 +383,7 @@ private fun ScaffoldZone(
                 onDismissIconSourceError = viewModel::dismissIconSourceError,
                 onOpenHelp = onOpenHelp,
                 onOpenTerms = onOpenTerms,
+                remuxEffectiveness = viewModel.remuxEffectivenessSnapshot(),
             )
             DownloadStatusBanner(
                 iconPrefetchState = iconPrefetchState,

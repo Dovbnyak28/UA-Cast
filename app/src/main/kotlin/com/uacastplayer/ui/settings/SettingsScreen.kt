@@ -50,6 +50,7 @@ import com.uacastplayer.R
 import com.uacastplayer.backup.BackupImportSummary
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.prefs.BufferSize
+import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
@@ -110,6 +111,7 @@ fun SettingsScreen(
     onDismissIconSourceError: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
+    remuxEffectiveness: RemuxEffectivenessCounts,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -313,6 +315,56 @@ fun SettingsScreen(
                 buttonLabel = stringResource(R.string.settings_open_button),
                 onClick = onOpenTerms,
                 modifier = Modifier.padding(top = 8.dp),
+            )
+            RoutingEffectivenessBlock(remuxEffectiveness, modifier = Modifier.padding(top = 16.dp))
+        }
+    }
+}
+
+private data class RouteLine(val labelRes: Int, val attempted: Int, val played: Int, val failed: Int)
+
+/** Read-only, view-only local stats (see [RemuxEffectivenessStore]) - not sent anywhere, just a
+ * "does the remux investment actually help" fact base for future work. */
+@Composable
+private fun RoutingEffectivenessBlock(counts: RemuxEffectivenessCounts, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.settings_diagnostics_routing_label),
+            style = CaptionSemibold,
+            color = UaTheme.palette.labelSecondary,
+        )
+        val lines = listOf(
+            RouteLine(
+                R.string.settings_diagnostics_route_direct,
+                counts.directAttempted,
+                counts.directPlaying,
+                counts.directFailed,
+            ),
+            RouteLine(
+                R.string.settings_diagnostics_route_remux,
+                counts.remuxAttempted,
+                counts.remuxPlaying,
+                counts.remuxFailed,
+            ),
+            RouteLine(
+                R.string.settings_diagnostics_route_rewrite,
+                counts.proxyRewriteAttempted,
+                counts.proxyRewritePlaying,
+                counts.proxyRewriteFailed,
+            ),
+        )
+        for (line in lines) {
+            Text(
+                text = stringResource(
+                    R.string.settings_diagnostics_route_line,
+                    stringResource(line.labelRes),
+                    line.attempted,
+                    line.played,
+                    line.failed,
+                ),
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
     }

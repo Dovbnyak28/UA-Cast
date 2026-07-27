@@ -38,6 +38,8 @@ import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.diagnostics.DiagnosticsReportBuilder
 import com.uacastplayer.diagnostics.DiagnosticsSnapshot
+import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
+import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
@@ -82,6 +84,7 @@ data class AppUiState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val preferences = AppPreferences(application)
+    private val remuxEffectivenessStore = RemuxEffectivenessStore.getInstance(application)
     private val playlistRepository = PlaylistRepository(application)
     private val epgRepository = EpgRepository(application)
     private val iconRepository = IconRepository(application)
@@ -231,9 +234,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 totalMemoryBytes = runtime.totalMemory(),
                 maxMemoryBytes = runtime.maxMemory(),
                 logEntries = LogBuffer.snapshot(),
+                remuxEffectiveness = remuxEffectivenessStore.snapshot(),
             ),
         )
     }
+
+    /** Read-only routing stats for Settings -> Diagnostics - see [RemuxEffectivenessStore]. */
+    fun remuxEffectivenessSnapshot(): RemuxEffectivenessCounts = remuxEffectivenessStore.snapshot()
 
     fun selectLanguage(language: AppLanguage) {
         preferences.language = language

@@ -41,6 +41,7 @@ import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
@@ -126,6 +127,7 @@ fun RootScaffold(
     onDismissIconSourceError: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
+    remuxEffectiveness: RemuxEffectivenessCounts,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -288,6 +290,7 @@ fun RootScaffold(
                     onDismissIconSourceError = onDismissIconSourceError,
                     onOpenHelp = onOpenHelp,
                     onOpenTerms = onOpenTerms,
+                    remuxEffectiveness = remuxEffectiveness,
                     playlistState = playlistState,
                     onOpenAddPlaylist = onOpenAddPlaylist,
                     hiddenGroupKeys = hiddenGroupKeys,

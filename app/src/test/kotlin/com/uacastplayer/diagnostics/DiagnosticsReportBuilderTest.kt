@@ -23,6 +23,7 @@ class DiagnosticsReportBuilderTest {
         totalMemoryBytes = 200L * 1024 * 1024,
         maxMemoryBytes = 512L * 1024 * 1024,
         logEntries = logEntries,
+        remuxEffectiveness = RemuxEffectivenessCounts(remuxAttempted = 4, remuxPlaying = 3, remuxFailed = 1),
     )
 
     @Test
@@ -39,6 +40,7 @@ class DiagnosticsReportBuilderTest {
         assertTrue(report.contains("100MB"))
         assertTrue(report.contains("200MB"))
         assertTrue(report.contains("512MB"))
+        assertTrue(report.contains("Proxy+remux: 4/3/1"))
     }
 
     @Test
