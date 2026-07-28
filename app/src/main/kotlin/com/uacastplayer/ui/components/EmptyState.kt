@@ -17,7 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.UaCastTheme
 
 /** Full-screen centered icon/title/subtitle - for a screen (or tab) with no other content. */
 @Composable
@@ -72,5 +76,13 @@ fun IconHeader(
                 modifier = Modifier.padding(top = 6.dp),
             )
         }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
+@Composable
+private fun EmptyStatePreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        EmptyState(icon = AppIcons.Favorites, title = "No favorites yet", subtitle = "Star a channel to add it here")
     }
 }

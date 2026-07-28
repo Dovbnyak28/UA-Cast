@@ -24,9 +24,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.TabLabel
+import com.uacastplayer.ui.theme.UaCastTheme
 
 /**
  * One-time, dismissible strip on the Channels tab explaining why logos aren't showing when
@@ -79,5 +82,13 @@ fun IconTierBanner(onEnableIcons: () -> Unit, onDismiss: () -> Unit, modifier: M
         ) {
             Text(stringResource(R.string.channels_icon_tier_banner_action))
         }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
+@Composable
+private fun IconTierBannerPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        IconTierBanner(onEnableIcons = {}, onDismiss = {})
     }
 }

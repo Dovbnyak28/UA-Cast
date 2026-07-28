@@ -44,8 +44,13 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.tooling.preview.Preview
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
@@ -61,7 +66,11 @@ import com.uacastplayer.ui.theme.RoundButtonSize
 import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.SecondaryButtonStyle
 import com.uacastplayer.ui.theme.TabLabel
+import com.uacastplayer.ui.theme.UaCastTheme
 private const val GHOST_BUTTON_PRESSED_ALPHA = 0.12f
+// The app is dark-only (see UaCastTheme's KDoc) - previews below use this instead of Studio's
+// default white canvas so raisedSurface/sunkenSurface depth cues are visible at a glance.
+private const val PREVIEW_BACKGROUND = 0xFF0B0B12L
 
 /**
  * Colors for `OutlinedTextField` that give it the app's "sunken"/recessed input look and an
@@ -404,4 +413,96 @@ fun TabBarLabel(text: String, selected: Boolean) {
         softWrap = false,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     )
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun GradientPlayButtonPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        GradientPlayButton(icon = AppIcons.Play, onClick = {})
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun RoundIconButtonPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            RoundIconButton(icon = AppIcons.SkipPrevious, onClick = {})
+            RoundIconButton(icon = AppIcons.SkipNext, onClick = {})
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun SmallRoundIconButtonPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        SmallRoundIconButton(icon = AppIcons.Settings, onClick = {})
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun StatusPillPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatusPill(text = "Direct", variant = StatusPillVariant.Good)
+            StatusPill(text = "Proxy", variant = StatusPillVariant.Proxy)
+            StatusPill(text = "Failed", variant = StatusPillVariant.Bad)
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun GlowStatusDotPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            GlowStatusDot(variant = StatusPillVariant.Good)
+            GlowStatusDot(variant = StatusPillVariant.Proxy)
+            GlowStatusDot(variant = StatusPillVariant.Bad)
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND, widthDp = 300)
+@Composable
+private fun SegmentedControlPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        SegmentedControl(options = listOf("Small", "Medium", "Large"), selectedIndex = 1, onSelected = {})
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND, widthDp = 300)
+@Composable
+private fun TrackProgressPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            TrackProgress(progress = 0.35f)
+            TrackProgress(progress = 0.7f, bold = true)
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun SecondaryButtonPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SecondaryButton(text = "Export", onClick = {})
+            SecondaryButton(text = "Disabled", onClick = {}, enabled = false)
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
+@Composable
+private fun TabBarLabelPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            TabBarLabel(text = "Channels", selected = true)
+            TabBarLabel(text = "Favorites", selected = false)
+        }
+    }
 }

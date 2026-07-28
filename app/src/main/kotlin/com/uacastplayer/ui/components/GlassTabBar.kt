@@ -27,12 +27,16 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GlassTabBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.theme.PressScaleIcon
+import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.raisedSurface
 
 data class TabBarItem(
@@ -110,5 +114,19 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
             )
             TabBarLabel(text = item.label, selected = item.selected)
         }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
+@Composable
+private fun GlassTabBarPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        GlassTabBar(
+            items = listOf(
+                TabBarItem(label = "Channels", icon = AppIcons.Channels, selected = true, onClick = {}),
+                TabBarItem(label = "Favorites", icon = AppIcons.Favorites, selected = false, onClick = {}),
+                TabBarItem(label = "Settings", icon = AppIcons.Settings, selected = false, onClick = {}),
+            ),
+        )
     }
 }

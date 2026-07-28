@@ -12,18 +12,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.uacastplayer.icons.GroupCollagePolicy
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.RadiusItem
+import com.uacastplayer.ui.theme.UaCastTheme
 import java.io.File
 
 /**
@@ -107,4 +113,26 @@ private fun CollageTile(file: File, modifier: Modifier) {
 @Composable
 private fun CollageDivider(modifier: Modifier) {
     Box(modifier = modifier.background(UaTheme.palette.void))
+}
+
+/** No cached files to resolve here, so this always renders [fallback] - the collage layout itself
+ * needs real decodable files on disk, which a static preview doesn't have. */
+@Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
+@Composable
+private fun GroupIconCollagePreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        GroupIconCollage(
+            channels = emptyList(),
+            cachedIconFile = { null },
+            size = 64.dp,
+            fallback = {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(UaTheme.palette.surface2),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.labelSecondary)
+                }
+            },
+        )
+    }
 }

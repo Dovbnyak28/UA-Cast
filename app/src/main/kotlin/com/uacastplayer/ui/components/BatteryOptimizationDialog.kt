@@ -8,7 +8,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import com.uacastplayer.R
+import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.UaCastTheme
 
 /**
  * One-time (see [com.uacastplayer.AppViewModel.showBatteryOptimizationHint]) explainer shown the
@@ -44,4 +47,12 @@ fun BatteryOptimizationDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
             }
         },
     )
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
+@Composable
+private fun BatteryOptimizationDialogPreview() {
+    UaCastTheme(AppTheme.AZURE) {
+        BatteryOptimizationDialog(onAllow = {}, onDismiss = {})
+    }
 }
