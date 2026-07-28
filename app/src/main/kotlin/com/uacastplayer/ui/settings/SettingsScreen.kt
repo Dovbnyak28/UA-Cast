@@ -208,14 +208,21 @@ fun SettingsScreen(
         }
 
         SettingsSection(title = stringResource(R.string.settings_section_playback), icon = AppIcons.Play) {
-            LabeledRow(stringResource(R.string.settings_icon_display_mode_label), AppIcons.Image) {
-                for (mode in IconDisplayMode.entries) {
-                    SettingsChip(
-                        label = stringResource(mode.labelRes()),
-                        isSelected = mode == settingsState.iconDisplayMode,
-                        onClick = { onIconDisplayModeSelected(mode) },
-                    )
-                }
+            // A single combined preset instead of two separate three-way pickers (channel logos +
+            // list density used to be their own rows) - both axes move together in lockstep with
+            // DeviceTier anyway (see DeviceTierDefaults), so showing them as one control is a real
+            // surface reduction with no behavior change: same three IconDisplayMode/ListDensity
+            // values, same tier-default logic, just one row on screen instead of two.
+            SegmentedRow(stringResource(R.string.settings_detail_level_label), AppIcons.Image) {
+                SegmentedControl(
+                    options = List(DETAIL_LEVEL_PRESETS.size) { stringResource(detailLevelLabelRes(it)) },
+                    selectedIndex = detailLevelIndex(settingsState.iconDisplayMode),
+                    onSelected = { index ->
+                        val (mode, density) = DETAIL_LEVEL_PRESETS[index]
+                        onIconDisplayModeSelected(mode)
+                        onListDensitySelected(density)
+                    },
+                )
             }
             if (settingsState.iconDisplayModeIsAutomatic) {
                 Text(
@@ -226,13 +233,6 @@ fun SettingsScreen(
                 )
             }
             SwitchRow(stringResource(R.string.settings_icon_wifi_only_label), iconWifiOnly, onIconWifiOnlyChanged)
-            SegmentedRow(stringResource(R.string.settings_list_density_label), AppIcons.ViewList) {
-                SegmentedControl(
-                    options = ListDensity.entries.map { stringResource(it.labelRes()) },
-                    selectedIndex = ListDensity.entries.indexOf(settingsState.listDensity),
-                    onSelected = { index -> onListDensitySelected(ListDensity.entries[index]) },
-                )
-            }
             SegmentedRow(stringResource(R.string.settings_channel_layout_label), AppIcons.GridView) {
                 SegmentedControl(
                     options = ChannelLayout.entries.map { stringResource(it.labelRes()) },
@@ -810,16 +810,26 @@ private fun AppLanguage.nativeNameRes(): Int = when (this) {
     AppLanguage.SPANISH -> R.string.language_name_es
 }
 
-private fun IconDisplayMode.labelRes(): Int = when (this) {
-    IconDisplayMode.PLACEHOLDERS -> R.string.icon_display_mode_placeholders
-    IconDisplayMode.CACHE -> R.string.icon_display_mode_cache
-    IconDisplayMode.CACHE_LIMITED -> R.string.icon_display_mode_cache_limited
+/** The combined "detail level" preset shown in Settings - index 0/1/2 pairs up an
+ * [IconDisplayMode] with the [ListDensity] DeviceTierDefaults already assigns it for the same
+ * device tier (LOW_END/MID_RANGE/HIGH_END), so picking a preset can never produce a combination
+ * the automatic tiering wouldn't have picked on its own. */
+private val DETAIL_LEVEL_PRESETS: List<Pair<IconDisplayMode, ListDensity>> = listOf(
+    IconDisplayMode.CACHE to ListDensity.FULL,
+    IconDisplayMode.CACHE_LIMITED to ListDensity.SIMPLE,
+    IconDisplayMode.PLACEHOLDERS to ListDensity.MINIMAL,
+)
+
+private fun detailLevelIndex(iconDisplayMode: IconDisplayMode): Int = when (iconDisplayMode) {
+    IconDisplayMode.CACHE -> 0
+    IconDisplayMode.CACHE_LIMITED -> 1
+    IconDisplayMode.PLACEHOLDERS -> 2
 }
 
-private fun ListDensity.labelRes(): Int = when (this) {
-    ListDensity.FULL -> R.string.list_density_full
-    ListDensity.SIMPLE -> R.string.list_density_simple
-    ListDensity.MINIMAL -> R.string.list_density_minimal
+private fun detailLevelLabelRes(index: Int): Int = when (index) {
+    0 -> R.string.settings_detail_level_full
+    1 -> R.string.settings_detail_level_balanced
+    else -> R.string.settings_detail_level_data_saver
 }
 
 private fun ChannelLayout.labelRes(): Int = when (this) {
