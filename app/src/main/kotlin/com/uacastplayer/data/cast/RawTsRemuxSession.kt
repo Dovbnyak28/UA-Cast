@@ -156,21 +156,29 @@ internal class RawTsRemuxSession(
      * (see its source), so an exception thrown mid-parse never leaves it with a half-written
      * buffer - reusing the same [segmenter] instance across this catch and the next connection
      * attempt is safe, unlike a genuine reconnect where the PCR clock itself resets.
-     * Returns the trailing incomplete packet bytes to prepend to the next read. */
+     * Returns the trailing incomplete packet bytes to prepend to the next read.
+     *
+     * [workBuffer] holds one read chunk plus room for the largest possible carry-over (a trailing
+     * partial packet, always under [TS_PACKET_SIZE]) - each read() lands directly after the
+     * existing carry and [consumePackets] shifts any new trailing partial packet back to the front
+     * in place, so this allocates once per connection instead of the `carry + chunk.copyOf(read)`
+     * this replaced, which allocated twice per network chunk for the lifetime of every cast
+     * session - the single biggest GC-pressure contributor found in a static allocation audit. */
     @Suppress("TooGenericExceptionCaught")
     private fun readUntilDisconnected(input: InputStream, initialCarry: ByteArray): ByteArray {
-        var carry = initialCarry
-        val chunk = ByteArray(REMUX_READ_CHUNK_BYTES)
+        val workBuffer = ByteArray(REMUX_READ_CHUNK_BYTES + TS_PACKET_SIZE)
+        var carryLength = initialCarry.size
+        System.arraycopy(initialCarry, 0, workBuffer, 0, carryLength)
         try {
             while (running) {
-                val read = input.read(chunk)
-                if (read == -1) return carry
-                carry = consumePackets(if (carry.isEmpty()) chunk.copyOf(read) else carry + chunk.copyOf(read))
+                val read = input.read(workBuffer, carryLength, REMUX_READ_CHUNK_BYTES)
+                if (read == -1) return workBuffer.copyOf(carryLength)
+                carryLength = consumePackets(workBuffer, carryLength + read)
             }
         } catch (e: Exception) {
             AppLog.e(TAG, e) { "Raw TS remux reader for $resourceId lost the connection or hit a parsing error" }
         }
-        return carry
+        return workBuffer.copyOf(carryLength)
     }
 
     /** Backoff-retries the upstream connection (see [RemuxReconnectPolicy]) and marks the next
@@ -224,21 +232,24 @@ internal class RawTsRemuxSession(
         false
     }
 
-    /** Extracts every complete, sync-aligned packet from [data] (byte-scanning forward to resync
-     * after any misaligned byte, same idea as [com.uacastplayer.cast.TsProgramInfoParser]),
-     * feeding each to [segmenter]. Returns the trailing incomplete bytes to prepend to the next
-     * read. */
-    private fun consumePackets(data: ByteArray): ByteArray {
+    /** Extracts every complete, sync-aligned packet from `data[0, length)` (byte-scanning forward
+     * to resync after any misaligned byte, same idea as [com.uacastplayer.cast.TsProgramInfoParser]),
+     * feeding each to [segmenter] directly at its offset - no per-packet copy, see [TsSegmenter.feed].
+     * Shifts any trailing incomplete packet to the front of [data] in place and returns its length,
+     * ready for the next read to land right after it. */
+    private fun consumePackets(data: ByteArray, length: Int): Int {
         var offset = 0
-        while (offset + TS_PACKET_SIZE <= data.size) {
+        while (offset + TS_PACKET_SIZE <= length) {
             if ((data[offset].toInt() and 0xFF) == TS_SYNC_BYTE) {
-                segmenter.feed(data.copyOfRange(offset, offset + TS_PACKET_SIZE))?.let(::addSegment)
+                segmenter.feed(data, offset)?.let(::addSegment)
                 offset += TS_PACKET_SIZE
             } else {
                 offset++
             }
         }
-        return data.copyOfRange(offset, data.size)
+        val remaining = length - offset
+        if (remaining > 0) System.arraycopy(data, offset, data, 0, remaining)
+        return remaining
     }
 
     private fun addSegment(segment: TsSegment) {

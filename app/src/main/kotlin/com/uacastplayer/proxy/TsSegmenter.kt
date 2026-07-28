@@ -34,7 +34,10 @@ private const val DEFAULT_MAX_SEGMENT_BYTES = 4 * 1024 * 1024
  * one that throws from [feed] to exercise that session's crash-recovery path) - [TsSegmenter] is
  * the only production implementation. */
 interface TsPacketSegmenter {
-    fun feed(packet: ByteArray): TsSegment?
+    /** Feed one 188-byte packet living at `data[offset, offset + 188)` - callers that already hold
+     * a larger buffer (e.g. a raw network read) pass it directly rather than copying the packet out
+     * first, since this runs once per TS packet, the hottest call in the whole raw-TS-remux path. */
+    fun feed(data: ByteArray, offset: Int = 0): TsSegment?
     fun flush(): TsSegment?
     fun onReconnect(): TsSegment?
 }
@@ -95,32 +98,32 @@ class TsSegmenter(
     private var nextSequence = 0
     private var pendingDiscontinuity = false
 
-    /** Feed one 188-byte TS packet (anything else is ignored). Returns a completed [TsSegment]
-     * when this packet lands on a cut point, in which case the packet itself starts the *next*
-     * segment (it is never dropped). */
-    override fun feed(packet: ByteArray): TsSegment? {
-        if (packet.size != PACKET_SIZE || (packet[0].toInt() and 0xFF) != SYNC_BYTE) return null
-        val pid = pidOf(packet)
-        discoverProgramInfo(pid, packet)
-        val pcr = readPcr(pid, packet)
+    /** Feed one 188-byte TS packet at `data[offset, offset + 188)` (anything else is ignored).
+     * Returns a completed [TsSegment] when this packet lands on a cut point, in which case the
+     * packet itself starts the *next* segment (it is never dropped). */
+    override fun feed(data: ByteArray, offset: Int): TsSegment? {
+        if (offset + PACKET_SIZE > data.size || (data[offset].toInt() and 0xFF) != SYNC_BYTE) return null
+        val pid = pidOf(data, offset)
+        discoverProgramInfo(pid, data, offset)
+        val pcr = readPcr(pid, data, offset)
 
         // Elapsed time is measured up to and including this packet's own PCR (falling back to the
         // last one seen if this packet doesn't carry one) - a keyframe packet's own timestamp is
         // what decides whether *it* is a valid cut point, not the packet before it.
         val elapsed = elapsedMillis(pcr ?: lastPcrTicks)
-        // `pid == videoPid` short-circuits isKeyframeStart(packet) for every other PID - a broadcast
-        // routinely carries other PIDs (teletext, DVB subtitles) with PES structures this segmenter
-        // has no business parsing, and some real-world feeds send persistently malformed PES on
-        // those specific PIDs. Content on a non-video PID must never be inspected for a keyframe
-        // flag at all, regardless of what its bytes happen to look like - see TsSegmenterTest's
-        // "garbage PID" regression test.
-        val isKeyframeBoundary = videoPid != null && pid == videoPid && isKeyframeStart(packet)
+        // `pid == videoPid` short-circuits isKeyframeStart(data, offset) for every other PID - a
+        // broadcast routinely carries other PIDs (teletext, DVB subtitles) with PES structures this
+        // segmenter has no business parsing, and some real-world feeds send persistently malformed
+        // PES on those specific PIDs. Content on a non-video PID must never be inspected for a
+        // keyframe flag at all, regardless of what its bytes happen to look like - see
+        // TsSegmenterTest's "garbage PID" regression test.
+        val isKeyframeBoundary = videoPid != null && pid == videoPid && isKeyframeStart(data, offset)
         val shouldCut = shouldCut(isKeyframeBoundary, elapsed)
 
         val completed = if (shouldCut) completeSegment() else null
         if (shouldCut) segmentStartPcrTicks = pcr ?: lastPcrTicks
 
-        buffer.write(packet)
+        buffer.write(data, offset, PACKET_SIZE)
         if (pcr != null) {
             if (segmentStartPcrTicks == null) segmentStartPcrTicks = pcr
             lastPcrTicks = pcr
@@ -188,17 +191,17 @@ class TsSegmenter(
         return wrapAwareDelta(start, reference) * 1000 / PCR_CLOCK_HZ
     }
 
-    private fun discoverProgramInfo(pid: Int, packet: ByteArray) {
+    private fun discoverProgramInfo(pid: Int, data: ByteArray, offset: Int) {
         if (pmtPid == null && pid == PAT_PID) {
-            pmtPid = parsePatFirstProgramPid(packet)
+            pmtPid = parsePatFirstProgramPid(data, offset)
             return
         }
         if (pmtPid == null || pid != pmtPid) return
         if (videoPid == null) {
-            videoPid = parsePmtFirstVideoPid(packet)
+            videoPid = parsePmtFirstVideoPid(data, offset)
         }
         if (!pcrPidResolved) {
-            val parsedPcrPid = parsePmtPcrPid(packet)
+            val parsedPcrPid = parsePmtPcrPid(data, offset)
             if (parsedPcrPid != null) {
                 pcrPidResolved = true
                 pcrPid = if (parsedPcrPid == PCR_PID_NONE) null else parsedPcrPid
@@ -206,66 +209,69 @@ class TsSegmenter(
         }
     }
 
-    private fun readPcr(pid: Int, packet: ByteArray): Long? {
+    private fun readPcr(pid: Int, data: ByteArray, offset: Int): Long? {
         if (pcrPidResolved) {
             if (pid != pcrPid) return null
         } else if (videoPid != null && pid != videoPid) {
             return null
         }
-        val length = adaptationFieldLength(packet) ?: return null
+        val length = adaptationFieldLength(data, offset) ?: return null
         if (length < 7) return null
-        val flags = packet[5].toInt() and 0xFF
+        val flags = data[offset + 5].toInt() and 0xFF
         if ((flags and 0x10) == 0) return null // PCR_flag
-        val b6 = packet[6].toLong() and 0xFF
-        val b7 = packet[7].toLong() and 0xFF
-        val b8 = packet[8].toLong() and 0xFF
-        val b9 = packet[9].toLong() and 0xFF
-        val b10 = packet[10].toLong() and 0xFF
+        val b6 = data[offset + 6].toLong() and 0xFF
+        val b7 = data[offset + 7].toLong() and 0xFF
+        val b8 = data[offset + 8].toLong() and 0xFF
+        val b9 = data[offset + 9].toLong() and 0xFF
+        val b10 = data[offset + 10].toLong() and 0xFF
         return (b6 shl 25) or (b7 shl 17) or (b8 shl 9) or (b9 shl 1) or (b10 shr 7)
     }
 }
 
-private fun pidOf(packet: ByteArray): Int {
-    val b1 = packet[1].toInt() and 0xFF
-    val b2 = packet[2].toInt() and 0xFF
+private fun pidOf(data: ByteArray, offset: Int): Int {
+    val b1 = data[offset + 1].toInt() and 0xFF
+    val b2 = data[offset + 2].toInt() and 0xFF
     return ((b1 and 0x1F) shl 8) or b2
 }
 
-private fun payloadUnitStart(packet: ByteArray): Boolean = (packet[1].toInt() and 0x40) != 0
+private fun payloadUnitStart(data: ByteArray, offset: Int): Boolean = (data[offset + 1].toInt() and 0x40) != 0
 
 /** null if this packet carries no adaptation field at all (payload-only). */
-private fun adaptationFieldLength(packet: ByteArray): Int? {
-    val adaptationFieldControl = (packet[3].toInt() shr 4) and 0x03
+private fun adaptationFieldLength(data: ByteArray, offset: Int): Int? {
+    val adaptationFieldControl = (data[offset + 3].toInt() shr 4) and 0x03
     if (adaptationFieldControl != 0b10 && adaptationFieldControl != 0b11) return null
-    return packet[4].toInt() and 0xFF
+    return data[offset + 4].toInt() and 0xFF
 }
 
-private fun isKeyframeStart(packet: ByteArray): Boolean {
-    if (!payloadUnitStart(packet)) return false
-    val length = adaptationFieldLength(packet) ?: return false
+private fun isKeyframeStart(data: ByteArray, offset: Int): Boolean {
+    if (!payloadUnitStart(data, offset)) return false
+    val length = adaptationFieldLength(data, offset) ?: return false
     if (length == 0) return false
-    val flags = packet[5].toInt() and 0xFF
+    val flags = data[offset + 5].toInt() and 0xFF
     return (flags and 0x40) != 0 // random_access_indicator
 }
 
-/** Returns the section payload with the adaptation field and pointer_field already skipped. */
-private fun sectionPayload(packet: ByteArray): ByteArray? {
-    val adaptationFieldControl = (packet[3].toInt() shr 4) and 0x03
-    var offset = 4
+/** Returns the section payload with the adaptation field and pointer_field already skipped - the
+ * one remaining per-packet copy in this file, but only PAT/PMT packets (a couple total, not per
+ * packet) ever reach this far. */
+private fun sectionPayload(data: ByteArray, offset: Int): ByteArray? {
+    val packetEnd = offset + PACKET_SIZE
+    val adaptationFieldControl = (data[offset + 3].toInt() shr 4) and 0x03
+    var pos = offset + 4
     when (adaptationFieldControl) {
         0b10 -> return null
         0b11 -> {
-            val adaptationLength = packet[offset].toInt() and 0xFF
-            offset += 1 + adaptationLength
+            val adaptationLength = data[pos].toInt() and 0xFF
+            pos += 1 + adaptationLength
         }
         0b01 -> Unit
         else -> return null
     }
-    if (offset >= packet.size) return null
-    val pointerField = packet[offset].toInt() and 0xFF
-    offset += 1 + pointerField
-    if (offset >= packet.size) return null
-    return packet.copyOfRange(offset, packet.size)
+    if (pos >= packetEnd) return null
+    val pointerField = data[pos].toInt() and 0xFF
+    pos += 1 + pointerField
+    if (pos >= packetEnd) return null
+    return data.copyOfRange(pos, packetEnd)
 }
 
 private fun sectionLength(section: ByteArray): Int {
@@ -275,8 +281,8 @@ private fun sectionLength(section: ByteArray): Int {
     return ((b1 and 0x0F) shl 8) or b2
 }
 
-private fun parsePatFirstProgramPid(packet: ByteArray): Int? {
-    val section = sectionPayload(packet) ?: return null
+private fun parsePatFirstProgramPid(data: ByteArray, offset: Int): Int? {
+    val section = sectionPayload(data, offset) ?: return null
     if (section.isEmpty() || (section[0].toInt() and 0xFF) != 0x00) return null
     val length = sectionLength(section)
     val programsEnd = 3 + length - 4
@@ -290,8 +296,8 @@ private fun parsePatFirstProgramPid(packet: ByteArray): Int? {
     return null
 }
 
-private fun parsePmtFirstVideoPid(packet: ByteArray): Int? {
-    val section = sectionPayload(packet) ?: return null
+private fun parsePmtFirstVideoPid(data: ByteArray, offset: Int): Int? {
+    val section = sectionPayload(data, offset) ?: return null
     // Must fit the fixed PMT header through program_info_length (bytes 0-11, see below) before any
     // of it can be read - see TsProgramInfoParser.parsePmtStreamTypes for the same guard.
     if (section.size < 12 || (section[0].toInt() and 0xFF) != 0x02) return null
@@ -310,10 +316,10 @@ private fun parsePmtFirstVideoPid(packet: ByteArray): Int? {
 }
 
 /** Returns the raw PCR_PID field (13 bits, bytes 8-9 of the section) - may be [PCR_PID_NONE].
- * Returns null only if [packet] isn't a parseable PMT section at all (caller must not treat that
- * as "no PCR", since a later packet could still resolve it - see [TsSegmenter.pcrPidResolved]). */
-private fun parsePmtPcrPid(packet: ByteArray): Int? {
-    val section = sectionPayload(packet)
+ * Returns null only if this packet isn't a parseable PMT section at all (caller must not treat
+ * that as "no PCR", since a later packet could still resolve it - see [TsSegmenter.pcrPidResolved]). */
+private fun parsePmtPcrPid(data: ByteArray, offset: Int): Int? {
+    val section = sectionPayload(data, offset)
         ?.takeIf { it.size >= PCR_PID_FIELD_END && (it[0].toInt() and 0xFF) == 0x02 }
         ?: return null
     return ((section[8].toInt() and 0x1F) shl 8) or (section[9].toInt() and 0xFF)

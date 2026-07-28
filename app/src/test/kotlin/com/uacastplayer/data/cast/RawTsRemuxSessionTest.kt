@@ -137,7 +137,7 @@ class RawTsRemuxSessionTest {
         val reconnectCalled = CountDownLatch(1)
 
         @Suppress("TooGenericExceptionThrown")
-        override fun feed(packet: ByteArray): TsSegment? = throw RuntimeException("simulated parser bug")
+        override fun feed(data: ByteArray, offset: Int): TsSegment? = throw RuntimeException("simulated parser bug")
         override fun flush(): TsSegment? = null
         override fun onReconnect(): TsSegment? {
             reconnectCalled.countDown()

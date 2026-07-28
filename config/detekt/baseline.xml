@@ -493,11 +493,11 @@
     <ID>ReturnCount:TsProgramInfoParser.kt$TsProgramInfoParser$private fun parsePmtStreamTypes(packet: ByteArray): List&lt;Int&gt;</ID>
     <ID>ReturnCount:TsProgramInfoParser.kt$TsProgramInfoParser$private fun sectionPayload(packet: ByteArray): ByteArray?</ID>
     <ID>ReturnCount:TsSegmenter.kt$TsSegmenter$private fun elapsedMillis(referenceTicks: Long?): Long</ID>
-    <ID>ReturnCount:TsSegmenter.kt$TsSegmenter$private fun readPcr(pid: Int, packet: ByteArray): Long?</ID>
-    <ID>ReturnCount:TsSegmenter.kt$private fun isKeyframeStart(packet: ByteArray): Boolean</ID>
-    <ID>ReturnCount:TsSegmenter.kt$private fun parsePatFirstProgramPid(packet: ByteArray): Int?</ID>
-    <ID>ReturnCount:TsSegmenter.kt$private fun parsePmtFirstVideoPid(packet: ByteArray): Int?</ID>
-    <ID>ReturnCount:TsSegmenter.kt$private fun sectionPayload(packet: ByteArray): ByteArray?</ID>
+    <ID>ReturnCount:TsSegmenter.kt$TsSegmenter$private fun readPcr(pid: Int, data: ByteArray, offset: Int): Long?</ID>
+    <ID>ReturnCount:TsSegmenter.kt$private fun isKeyframeStart(data: ByteArray, offset: Int): Boolean</ID>
+    <ID>ReturnCount:TsSegmenter.kt$private fun parsePatFirstProgramPid(data: ByteArray, offset: Int): Int?</ID>
+    <ID>ReturnCount:TsSegmenter.kt$private fun parsePmtFirstVideoPid(data: ByteArray, offset: Int): Int?</ID>
+    <ID>ReturnCount:TsSegmenter.kt$private fun sectionPayload(data: ByteArray, offset: Int): ByteArray?</ID>
     <ID>ReturnCount:XmlTvTimeParser.kt$XmlTvTimeParser$fun parse(value: String): Long?</ID>
     <ID>ReturnCount:XmlTvTimeParser.kt$XmlTvTimeParser$private fun parseOffsetMillis(offset: String): Long?</ID>
     <ID>SwallowedException:IconRepository.kt$IconRepository$e: IOException</ID>
