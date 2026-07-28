@@ -2,8 +2,9 @@ package com.uacastplayer.data.playlist
 
 import android.content.Context
 import android.net.Uri
-import com.uacastplayer.playlist.BoundedReadResult
+import com.uacastplayer.playlist.BoundedBytesResult
 import com.uacastplayer.playlist.BoundedTextReader
+import com.uacastplayer.playlist.CharsetDetector
 import com.uacastplayer.playlist.PlaylistLoadResult
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -19,9 +20,11 @@ class PlaylistFileLoader(private val context: Context) {
             val stream = context.contentResolver.openInputStream(uri)
                 ?: return@withContext PlaylistLoadResult.ReadError("Unable to open file")
             stream.use {
-                when (val bounded = BoundedTextReader.readText(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
-                    is BoundedReadResult.Success -> PlaylistLoadResult.Success(bounded.text)
-                    BoundedReadResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
+                // A local file (picked via the Storage Access Framework) has no Content-Type to
+                // consult - always sniff the bytes.
+                when (val bounded = BoundedTextReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
+                    is BoundedBytesResult.Success -> PlaylistLoadResult.Success(CharsetDetector.decode(bounded.bytes))
+                    BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
                 }
             }
         } catch (e: CancellationException) {

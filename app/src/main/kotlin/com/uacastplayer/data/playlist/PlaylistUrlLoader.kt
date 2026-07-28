@@ -1,12 +1,15 @@
 package com.uacastplayer.data.playlist
 
-import com.uacastplayer.playlist.BoundedReadResult
+import com.uacastplayer.core.net.HttpDefaults
+import com.uacastplayer.playlist.BoundedBytesResult
 import com.uacastplayer.playlist.BoundedTextReader
+import com.uacastplayer.playlist.CharsetDetector
 import com.uacastplayer.playlist.HttpRetryPolicy
 import com.uacastplayer.playlist.PlaylistLoadResult
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,6 +22,7 @@ class PlaylistUrlLoader(private val client: OkHttpClient) {
         var result: PlaylistLoadResult
         do {
             attempt++
+            delay(HttpRetryPolicy.delayBeforeAttemptMillis(attempt))
             result = attemptOnce(url)
         } while (isRetryable(result, attempt))
         result
@@ -33,13 +37,19 @@ class PlaylistUrlLoader(private val client: OkHttpClient) {
 
     private fun attemptOnce(url: String): PlaylistLoadResult {
         return try {
-            val request = Request.Builder().url(url).header("User-Agent", BROWSER_USER_AGENT).build()
+            val request = Request.Builder().url(url).header("User-Agent", HttpDefaults.BROWSER_USER_AGENT).build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return PlaylistLoadResult.HttpError(response.code)
                 val body = response.body ?: return PlaylistLoadResult.HttpError(response.code)
-                when (val bounded = BoundedTextReader.readText(body.byteStream(), MAX_PLAYLIST_BYTES)) {
-                    is BoundedReadResult.Success -> PlaylistLoadResult.Success(bounded.text)
-                    BoundedReadResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
+                // An explicit charset in the response's own Content-Type is authoritative - only
+                // fall back to sniffing the bytes (see CharsetDetector) when the server didn't say.
+                val declaredCharset = body.contentType()?.charset()
+                when (val bounded = BoundedTextReader.readBytes(body.byteStream(), MAX_PLAYLIST_BYTES)) {
+                    is BoundedBytesResult.Success -> {
+                        val charset = declaredCharset ?: CharsetDetector.detect(bounded.bytes)
+                        PlaylistLoadResult.Success(String(bounded.bytes, charset))
+                    }
+                    BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
                 }
             }
         } catch (e: CancellationException) {
@@ -51,8 +61,5 @@ class PlaylistUrlLoader(private val client: OkHttpClient) {
 
     companion object {
         const val MAX_PLAYLIST_BYTES = 8 * 1024 * 1024
-        private const val BROWSER_USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-                "Chrome/128.0.0.0 Safari/537.36"
     }
 }
