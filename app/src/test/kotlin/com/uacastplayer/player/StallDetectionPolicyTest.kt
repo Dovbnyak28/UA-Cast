@@ -173,4 +173,75 @@ class StallDetectionPolicyTest {
         assertEquals(12_000L, StallDetectionPolicy.thresholdMillisFor(BufferSize.MEDIUM))
         assertEquals(20_000L, StallDetectionPolicy.thresholdMillisFor(BufferSize.LARGE))
     }
+
+    @Test
+    fun `buffering throughout the recovery grace period stays healthy and in-grace`() {
+        // Grace is max(2x8000, 20000) = 20000, armed at t=0.
+        var state = StallDetectionPolicy.afterRecovery(nowMillis = 0L, thresholdMillis = THRESHOLD_MILLIS)
+        var now = 2_000L
+        // Ticks up to t=18000 (< 20000 grace deadline) - every one must stay healthy and in-grace,
+        // even though this is BUFFERING for the whole window (well past the 8s stall threshold) -
+        // this is exactly the case that used to self-defeat the recovery it was supposed to give.
+        repeat(8) {
+            val result = StallDetectionPolicy.evaluate(
+                tick(now, 1_000L, StallDetectionPolicy.PlaybackPhase.BUFFERING),
+                state,
+                THRESHOLD_MILLIS,
+            )
+            assertEquals(StallDetectionPolicy.Health.HEALTHY, result.health)
+            assertEquals(true, result.inGracePeriod)
+            state = result.state
+            now += 2_000
+        }
+    }
+
+    @Test
+    fun `a stall after the grace period lapses is detected normally`() {
+        var state = StallDetectionPolicy.afterRecovery(nowMillis = 0L, thresholdMillis = THRESHOLD_MILLIS)
+        // Grace deadline is t=20000 - tick right at/after it with BUFFERING for a full new
+        // threshold's worth (8s) to confirm detection resumes instead of staying suppressed forever.
+        var now = 20_000L
+        var lastResult = StallDetectionPolicy.evaluate(
+            tick(now, 1_000L, StallDetectionPolicy.PlaybackPhase.BUFFERING),
+            state,
+            THRESHOLD_MILLIS,
+        )
+        state = lastResult.state
+        assertEquals(false, lastResult.inGracePeriod)
+        repeat(4) {
+            now += 2_000
+            lastResult = StallDetectionPolicy.evaluate(
+                tick(now, 1_000L, StallDetectionPolicy.PlaybackPhase.BUFFERING),
+                state,
+                THRESHOLD_MILLIS,
+            )
+            state = lastResult.state
+        }
+        assertEquals(StallDetectionPolicy.Health.STALLED, lastResult.health)
+        assertEquals(false, lastResult.inGracePeriod)
+    }
+
+    @Test
+    fun `grace period uses the 20s floor for a small threshold that would otherwise be shorter`() {
+        // 2x SMALL(8000) = 16000, below the 20000 floor - the floor must win.
+        val state = StallDetectionPolicy.afterRecovery(nowMillis = 0L, thresholdMillis = THRESHOLD_MILLIS)
+        val result = StallDetectionPolicy.evaluate(
+            tick(17_000L, 1_000L, StallDetectionPolicy.PlaybackPhase.BUFFERING),
+            state,
+            THRESHOLD_MILLIS,
+        )
+        assertEquals(StallDetectionPolicy.Health.HEALTHY, result.health)
+        assertEquals(true, result.inGracePeriod)
+    }
+
+    @Test
+    fun `a normal healthy tick outside of any grace period is not flagged in-grace`() {
+        val result = StallDetectionPolicy.evaluate(
+            tick(0L, 0L, StallDetectionPolicy.PlaybackPhase.READY),
+            StallDetectionPolicy.StallState.NONE,
+            THRESHOLD_MILLIS,
+        )
+        assertEquals(StallDetectionPolicy.Health.HEALTHY, result.health)
+        assertEquals(false, result.inGracePeriod)
+    }
 }

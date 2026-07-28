@@ -66,6 +66,7 @@ import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerGesturePolicy
 import com.uacastplayer.player.PlayerViewModel
 import com.uacastplayer.player.ResizeModeCycle
+import com.uacastplayer.player.StallRetryPolicy
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.components.SmallRoundIconButton
@@ -257,7 +258,13 @@ fun PlayerScreen(
         ) {
             VideoSurface(viewModel = viewModel, resizeMode = videoResizeMode, modifier = Modifier.fillMaxSize())
 
-            if (uiState.isBuffering && !uiState.fatalError) {
+            if (uiState.isRecoveringPlayback) {
+                RecoveringPlaybackIndicator(
+                    attempt = uiState.stallRecoveryAttempt,
+                    onPickAnotherChannel = onExit,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            } else if (uiState.isBuffering && !uiState.fatalError) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }
             if (uiState.fatalError) {
@@ -368,7 +375,13 @@ fun PlayerScreen(
             ) {
                 VideoSurface(viewModel = viewModel, resizeMode = videoResizeMode, modifier = Modifier.fillMaxSize())
 
-                if (uiState.isBuffering && !uiState.fatalError) {
+                if (uiState.isRecoveringPlayback) {
+                    RecoveringPlaybackIndicator(
+                        attempt = uiState.stallRecoveryAttempt,
+                        onPickAnotherChannel = onExit,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                } else if (uiState.isBuffering && !uiState.fatalError) {
                     Text(
                         text = stringResource(R.string.player_buffering),
                         color = Color.White,
@@ -507,6 +520,45 @@ fun PlayerScreen(
         showGuideSheet = showGuideSheet,
         onDismissGuideSheet = { showGuideSheet = false },
     )
+}
+
+/**
+ * Shown in place of the plain buffering spinner while [StallRetryPolicy] is actively retrying a
+ * silent stall (see [PlayerViewModel.performStallRecovery]) - the automatic retries never stop on
+ * their own, so this exists purely to reassure the user the app is still working on it instead of
+ * leaving a frozen frame with no explanation. Past [StallRetryPolicy.CHANNEL_PICKER_HINT_ATTEMPT]
+ * failed attempts, [onPickAnotherChannel] becomes visible as an escape hatch - the automatic
+ * retries keep going in the background regardless of whether it's tapped.
+ */
+@Composable
+private fun RecoveringPlaybackIndicator(attempt: Int, onPickAnotherChannel: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(RadiusCard))
+            .background(UaTheme.palette.scrimBackground)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+            Text(
+                text = stringResource(R.string.player_recovering_playback),
+                color = Color.White,
+                style = Caption,
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        if (attempt >= StallRetryPolicy.CHANNEL_PICKER_HINT_ATTEMPT) {
+            Text(
+                text = stringResource(R.string.player_pick_another_channel),
+                color = UaTheme.palette.azure,
+                style = Caption,
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .clickable(onClick = onPickAnotherChannel),
+            )
+        }
+    }
 }
 
 /**

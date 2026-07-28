@@ -17,11 +17,15 @@ sealed class CastRecoveryDecision {
  * [com.uacastplayer.cast.CastSessionRepository]'s job.
  */
 object CastRecoveryPolicy {
+    /** Number of fast-backoff attempts before reloads settle into [STEADY_STATE_BACKOFF_MILLIS] -
+     * no longer a hard ceiling (see [onReceiverIdle]'s KDoc for why a live cast route must never
+     * finally give up on its own). */
     const val MAX_ATTEMPTS = 3
     const val STABLE_PLAYING_RESET_MILLIS = 60_000L
     private const val BACKOFF_1_MILLIS = 2_000L
     private const val BACKOFF_2_MILLIS = 4_000L
     private const val BACKOFF_3_MILLIS = 8_000L
+    private const val STEADY_STATE_BACKOFF_MILLIS = 30_000L
     private val BACKOFF_MILLIS = listOf(BACKOFF_1_MILLIS, BACKOFF_2_MILLIS, BACKOFF_3_MILLIS)
 
     /**
@@ -30,9 +34,14 @@ object CastRecoveryPolicy {
      * of continuous PLAYING - see [shouldResetAttemptCounter]). [isConfirmedIncompatible] mirrors
      * [CastPlaybackState.codecIncompatibility] being non-null: a confirmed MPEG-2 verdict means
      * reloading can never help (see [com.uacastplayer.proxy.RawTsRemuxActivation]'s own doc), so
-     * there's nothing to retry. [selfInitiated] mirrors the same flag
-     * [CastReceiverStatusReducer.reduce] uses - an IDLE this app itself caused (by issuing a new
-     * load) is not a failure to recover from at all.
+     * there's nothing to retry - this is the *only* case that ends in [CastRecoveryDecision.GiveUp].
+     * Everything else keeps reloading forever: past [MAX_ATTEMPTS] fast attempts, reloads continue
+     * at a steady [STEADY_STATE_BACKOFF_MILLIS] rather than stopping - a receiver dropping to IDLE
+     * is exactly as routine for live IPTV as the local player's own silent stalls (see
+     * [com.uacastplayer.player.StallRetryPolicy]'s KDoc for the identical reasoning), and a route
+     * that already loaded once deserves the same infinite patience a flaky network connection does.
+     * [selfInitiated] mirrors the same flag [CastReceiverStatusReducer.reduce] uses - an IDLE this
+     * app itself caused (by issuing a new load) is not a failure to recover from at all.
      */
     fun onReceiverIdle(
         idleReason: IdleReason,
@@ -43,10 +52,11 @@ object CastRecoveryPolicy {
         val isRecoverableReason = idleReason == IdleReason.ERROR || idleReason == IdleReason.FINISHED
         return when {
             selfInitiated || !isRecoverableReason -> CastRecoveryDecision.Ignore
-            isConfirmedIncompatible || attemptsSoFar >= MAX_ATTEMPTS -> CastRecoveryDecision.GiveUp
+            isConfirmedIncompatible -> CastRecoveryDecision.GiveUp
             else -> {
                 val nextAttempt = attemptsSoFar + 1
-                CastRecoveryDecision.Reload(attempt = nextAttempt, backoffMillis = BACKOFF_MILLIS[attemptsSoFar])
+                val backoff = BACKOFF_MILLIS.getOrElse(attemptsSoFar) { STEADY_STATE_BACKOFF_MILLIS }
+                CastRecoveryDecision.Reload(attempt = nextAttempt, backoffMillis = backoff)
             }
         }
     }

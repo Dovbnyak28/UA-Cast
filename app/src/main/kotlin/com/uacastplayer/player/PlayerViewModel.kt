@@ -136,10 +136,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var retryState = RetryState()
     private var liveWindowRecoveryHistory: List<Long> = emptyList()
     private var stallState = StallDetectionPolicy.StallState.NONE
-    private var lastStallRecoveryAtMillis: Long? = null
+    private var stallRetryState = StallRetryPolicy.State()
     private var channelHistory = ChannelHistoryPolicy.State(current = null, previous = null)
     private var pendingSwitchJob: Job? = null
     private var retryJob: Job? = null
+    private var stallRecoveryJob: Job? = null
 
     var wrapAroundEnabled: Boolean = preferences.wrapAroundEnabled
     var autoSkipDeadEnabled: Boolean = preferences.autoSkipDeadEnabled
@@ -312,6 +313,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         channelHistory = ChannelHistoryPolicy.onSwitch(channelHistory, index)
         currentIndex = index
         stallState = StallDetectionPolicy.StallState.NONE
+        stallRetryState = StallRetryPolicy.State()
+        stallRecoveryJob?.cancel()
         val channel = channels[index]
         preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
@@ -332,6 +335,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 nextChannelsPreview = buildPreview(index),
                 fatalError = false,
                 hasPreviousChannel = channelHistory.previous != null,
+                isRecoveringPlayback = false,
+                stallRecoveryAttempt = 0,
             )
         }
     }
@@ -408,6 +413,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * connection, so [onPlayerError] never fires - via periodic sampling (see the init block).
      * Skipped entirely while casting (the local player isn't the one actually playing then, see
      * [LocalPlaybackPolicy]) or while paused (nothing to stall).
+     *
+     * Recovery never gives up on a live channel by itself (see [StallRetryPolicy]'s KDoc for why
+     * the old 30s-cooldown-then-give-up behavior was actively self-defeating) - it only escalates
+     * to slower, then eventually 30s-steady, retries. [giveUpOnCurrentChannel] is reserved for real
+     * [androidx.media3.common.PlaybackException]s classified via [PlayerErrorClassifier].
      */
     private fun sampleForStall() {
         if (isCasting || currentIndex !in channels.indices || !exoPlayer.playWhenReady) return
@@ -426,22 +436,48 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val threshold = StallDetectionPolicy.thresholdMillisFor(preferences.bufferSize)
         val result = StallDetectionPolicy.evaluate(tick, stallState, threshold)
         stallState = result.state
-        if (result.health != StallDetectionPolicy.Health.STALLED) return
-        stallState = StallDetectionPolicy.StallState.NONE
+        if (result.health != StallDetectionPolicy.Health.STALLED) {
+            // Only a genuinely healthy (not merely in-grace) tick clears the "recovering" UI - see
+            // Result.inGracePeriod's KDoc.
+            if (!result.inGracePeriod && _uiState.value.isRecoveringPlayback) {
+                _uiState.update { it.copy(isRecoveringPlayback = false, stallRecoveryAttempt = 0) }
+            }
+            return
+        }
 
-        val lastRecovery = lastStallRecoveryAtMillis
-        val withinCooldown = lastRecovery != null && tick.nowMillis - lastRecovery < STALL_RECOVERY_COOLDOWN_MILLIS
-        if (withinCooldown) {
-            // Recovered less than 30s ago and already stalled again - a silent stop/prepare/play
-            // isn't fixing this stream, so stop pretending it will.
-            AppLog.d(TAG) { "Stall recovery cooldown active - giving up on this channel" }
-            giveUpOnCurrentChannel()
-        } else {
-            lastStallRecoveryAtMillis = tick.nowMillis
-            AppLog.d(TAG) { "Recovering from a silent stall (stop/prepare/play, channel preserved)" }
-            exoPlayer.stop()
-            exoPlayer.prepare()
-            exoPlayer.play()
+        val decision = StallRetryPolicy.onStall(tick.nowMillis, stallRetryState)
+        stallRetryState = decision.newState
+        // Armed immediately (not after the delay) so ticks during the wait - which will see the
+        // still-stalled player - don't pile up a second, overlapping stall streak.
+        stallState = StallDetectionPolicy.afterRecovery(tick.nowMillis, threshold)
+        _uiState.update { it.copy(isRecoveringPlayback = true, stallRecoveryAttempt = decision.newState.attempt) }
+        AppLog.d(TAG) {
+            "Recovering from a silent stall: attempt ${decision.newState.attempt}," +
+                " retrying in ${decision.delayMillis}ms"
+        }
+
+        stallRecoveryJob?.cancel()
+        stallRecoveryJob = viewModelScope.launch {
+            delay(decision.delayMillis)
+            performStallRecovery(decision.newState.attempt)
+        }
+    }
+
+    /** [attempt] picks light vs heavy via [StallRetryPolicy.recoveryKindFor] - light
+     * (seekToDefaultPosition + prepare) jumps back to the live edge without tearing down decoders;
+     * heavy (stop/prepare/play, the old unconditional behavior) is reserved for when two light
+     * attempts in a row didn't help, since it costs a full re-buffer from zero. */
+    private fun performStallRecovery(attempt: Int) {
+        when (StallRetryPolicy.recoveryKindFor(attempt)) {
+            StallRecoveryKind.LIGHT -> {
+                exoPlayer.seekToDefaultPosition()
+                exoPlayer.prepare()
+            }
+            StallRecoveryKind.HEAVY -> {
+                exoPlayer.stop()
+                exoPlayer.prepare()
+                exoPlayer.play()
+            }
         }
     }
 
@@ -574,6 +610,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun releasePlayback() {
         pendingSwitchJob?.cancel()
         retryJob?.cancel()
+        stallRecoveryJob?.cancel()
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
         currentIndex = -1
@@ -584,6 +621,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         pendingSwitchJob?.cancel()
         retryJob?.cancel()
+        stallRecoveryJob?.cancel()
         exoPlayer.removeListener(listener)
         mediaSession?.release()
         exoPlayer.release()
@@ -627,7 +665,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         private const val CHANNEL_SWITCH_DEBOUNCE_MILLIS = 220L
         private const val MAX_PREVIEW_SIZE = 20
         private const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
-        private const val STALL_RECOVERY_COOLDOWN_MILLIS = 30_000L
 
         // Process-wide guard: at most one PlayerViewModel (hence one ExoPlayer) may be alive at a
         // time. Incremented as the first thing each instance does, decremented in onCleared; a value

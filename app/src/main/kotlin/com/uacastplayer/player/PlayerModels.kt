@@ -66,4 +66,13 @@ data class PlayerUiState(
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */
     val hasPreviousChannel: Boolean = false,
+    /** True from the moment a [StallRetryPolicy] recovery is scheduled until playback is confirmed
+     * genuinely healthy again (see [StallDetectionPolicy.Result.inGracePeriod]) - the UI shows an
+     * unobtrusive "recovering" indicator instead of the empty/frozen frame the silent stall itself
+     * would otherwise leave on screen. */
+    val isRecoveringPlayback: Boolean = false,
+    /** Mirrors [StallRetryPolicy.State.attempt] for the current recovery streak - once it reaches
+     * [StallRetryPolicy.CHANNEL_PICKER_HINT_ATTEMPT] the UI adds a "pick another channel" escape
+     * hatch alongside the automatic retries, which never stop on their own. */
+    val stallRecoveryAttempt: Int = 0,
 )

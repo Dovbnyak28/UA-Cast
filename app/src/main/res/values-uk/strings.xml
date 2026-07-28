@@ -271,6 +271,8 @@
     <string name="player_quality">Якість відео</string>
     <string name="player_aspect_ratio">Співвідношення</string>
     <string name="player_buffering">Буферизація…</string>
+    <string name="player_recovering_playback">Відновлення відтворення…</string>
+    <string name="player_pick_another_channel">Обрати інший канал</string>
     <string name="player_quality_unknown">Невідомо</string>
     <string name="player_track_unknown">Доріжка %1$d</string>
     <string name="player_resolution">%1$d × %2$d</string>

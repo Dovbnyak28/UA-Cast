@@ -39,11 +39,33 @@ class CastRecoveryPolicyTest {
     }
 
     @Test
-    fun `a fourth failure gives up - three attempts already spent`() {
+    fun `a fourth failure keeps reloading at a steady 30s backoff instead of giving up`() {
         val decision = CastRecoveryPolicy.onReceiverIdle(
             idleReason = IdleReason.ERROR,
             isConfirmedIncompatible = false,
             attemptsSoFar = 3,
+            selfInitiated = false,
+        )
+        assertEquals(CastRecoveryDecision.Reload(attempt = 4, backoffMillis = 30_000L), decision)
+    }
+
+    @Test
+    fun `a twentieth failure still reloads at 30s - the cast route never permanently gives up on its own`() {
+        val decision = CastRecoveryPolicy.onReceiverIdle(
+            idleReason = IdleReason.ERROR,
+            isConfirmedIncompatible = false,
+            attemptsSoFar = 19,
+            selfInitiated = false,
+        )
+        assertEquals(CastRecoveryDecision.Reload(attempt = 20, backoffMillis = 30_000L), decision)
+    }
+
+    @Test
+    fun `a confirmed incompatible verdict gives up even after many prior reload attempts`() {
+        val decision = CastRecoveryPolicy.onReceiverIdle(
+            idleReason = IdleReason.ERROR,
+            isConfirmedIncompatible = true,
+            attemptsSoFar = 10,
             selfInitiated = false,
         )
         assertEquals(CastRecoveryDecision.GiveUp, decision)

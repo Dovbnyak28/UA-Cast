@@ -271,6 +271,8 @@
     <string name="player_quality">Качество видео</string>
     <string name="player_aspect_ratio">Соотношение сторон</string>
     <string name="player_buffering">Буферизация…</string>
+    <string name="player_recovering_playback">Восстановление воспроизведения…</string>
+    <string name="player_pick_another_channel">Выбрать другой канал</string>
     <string name="player_quality_unknown">Неизвестно</string>
     <string name="player_track_unknown">Дорожка %1$d</string>
     <string name="player_resolution">%1$d × %2$d</string>
