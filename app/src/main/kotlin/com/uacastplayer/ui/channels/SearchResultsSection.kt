@@ -80,6 +80,7 @@ internal fun ChannelSearchResultsList(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .animateItem()
                     .clip(shape)
                     .background(UaTheme.palette.surface1),
             ) {

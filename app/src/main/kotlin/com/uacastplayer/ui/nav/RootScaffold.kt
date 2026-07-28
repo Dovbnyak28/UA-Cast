@@ -3,6 +3,7 @@ import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,6 +63,7 @@ import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.settings.SettingsScreen
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.DisplayTitle
+import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.appBackground
 import java.io.File
@@ -191,7 +193,15 @@ fun RootScaffold(
             )
         },
     ) { innerPadding ->
-        Crossfade(targetState = navState.current, label = "bottomNavContent") { destination ->
+        Crossfade(
+            targetState = navState.current,
+            // Same easing curve as the rest of the app's motion (see ui/theme/Motion.kt) instead
+            // of Crossfade's default linear-ish fade - duration is left at tween()'s own default
+            // (300ms) since a bottom-tab switch is one of the most frequent interactions in the
+            // app and shouldn't feel any slower than it already does.
+            animationSpec = tween(easing = EaseSpring),
+            label = "bottomNavContent",
+        ) { destination ->
         stateHolder.SaveableStateProvider(destination) {
             val content = Modifier.padding(innerPadding)
             when (destination) {

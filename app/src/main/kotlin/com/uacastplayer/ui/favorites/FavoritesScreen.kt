@@ -132,6 +132,13 @@ fun FavoritesScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // Only the non-dragged rows get the automatic placement animation - the
+                        // dragged row's position is already fully driven by the graphicsLayer
+                        // translation below every frame, so animating it too would fight that and
+                        // produce a stutter. This is what makes rows smoothly slide out of the way
+                        // as you drag one past them, and makes removing a favorite collapse the
+                        // list instead of the rows below it just jumping up.
+                        .then(if (isDragging) Modifier else Modifier.animateItem())
                         .graphicsLayer { translationY = if (isDragging) dragState?.offsetY ?: 0f else 0f }
                         .onSizeChanged { rowHeightPx = it.height.toFloat() }
                         .clickable { onChannelSelected(channels, index) }

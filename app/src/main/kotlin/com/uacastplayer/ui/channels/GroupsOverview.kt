@@ -162,6 +162,7 @@ internal fun GroupsOverviewGrid(
                         cachedIconFile = cachedIconFile,
                         onClick = { onGroupClick(grouped) },
                         onLongClick = { groupActionsFor = grouped },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -258,6 +259,7 @@ private fun GroupCard(
     cachedIconFile: suspend (M3uChannel) -> File?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -268,7 +270,7 @@ private fun GroupCard(
     )
     val shape = RoundedCornerShape(RadiusList)
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .scale(scale)
             // Inside a LazyVerticalGrid (GroupsOverviewGrid) - shadow = false, see

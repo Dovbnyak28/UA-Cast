@@ -167,6 +167,7 @@ internal fun SingleGroupChannelList(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateItem()
                             .clip(shape)
                             .background(UaTheme.palette.surface1),
                     ) {
@@ -220,6 +221,7 @@ internal fun SingleGroupChannelList(
                         isFavorite = isFavorite(channel),
                         onToggleFavorite = { onToggleFavorite(channel) },
                         onClick = { onChannelClick(channel) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -379,10 +381,11 @@ private fun ChannelTile(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val tileShape = RoundedCornerShape(RadiusList)
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             // Inside a LazyVerticalGrid - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
             .raisedSurface(tileShape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
