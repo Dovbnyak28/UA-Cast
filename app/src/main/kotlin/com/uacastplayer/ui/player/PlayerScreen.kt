@@ -71,6 +71,7 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
@@ -569,10 +570,13 @@ private fun RecoveringPlaybackIndicator(attempt: Int, onPickAnotherChannel: () -
 @Composable
 internal fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = UaTheme.palette.scrimBackground) {
     Box(
+        // Same raisedSurface treatment as SmallRoundIconButton (the other circular overlay icons
+        // in this row) instead of a flat background - without it this button had no edge highlight
+        // or gradient lift, so it visually read as a separate, out-of-place element even though it
+        // was already the same size and position.
         modifier = modifier
             .size(IconButtonSize)
-            .clip(CircleShape)
-            .background(background),
+            .raisedSurface(CircleShape, background, shadow = false),
         contentAlignment = Alignment.Center,
     ) {
         CastButton(modifier = Modifier.size(IconButtonSize))

@@ -25,6 +25,13 @@ val RoundButtonSize = 46.dp
 val IconButtonSize = 38.dp
 val TouchTargetMin = 48.dp
 
+/** Fixed height for a [com.uacastplayer.ui.player.QuickSettingsRow] item's label - some labels
+ * (translated, in the longer locales) wrap to 2 lines while others fit on 1, and without a shared
+ * fixed height each item's Column ends up a different height, breaking the row's rhythm. Sized for
+ * 2 lines of [Caption] plus its top padding; a 1-line label just sits top-aligned within the extra
+ * space instead of stretching to fill it. */
+val QuickSettingLabelHeight = 32.dp
+
 // Adaptive grids
 val GroupTileMinWidth = 160.dp
 val ChannelTileMinWidth = 110.dp

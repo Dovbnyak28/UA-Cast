@@ -399,7 +399,12 @@ private fun HomeFavoritesRow(
         )
         LazyRow(
             modifier = Modifier.fillMaxWidth().padding(top = GapM),
-            horizontalArrangement = Arrangement.spacedBy(GapM),
+            // Centered instead of packed to the start: with just a couple of favorites (the
+            // common case right after someone starts using this feature) a left-packed row left a
+            // large, lopsided gap on the right. Once there are enough favorites to fill/overflow
+            // the screen, this has no visible effect - there's nothing left to center once the row
+            // is already scrolling, so it looks identical to before at higher counts.
+            horizontalArrangement = Arrangement.spacedBy(GapM, Alignment.CenterHorizontally),
         ) {
             itemsIndexed(channels) { index, channel ->
                 HomeFavoriteItem(

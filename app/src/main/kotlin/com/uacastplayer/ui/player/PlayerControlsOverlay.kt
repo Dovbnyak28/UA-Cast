@@ -77,6 +77,11 @@ internal fun PlayerControlsOverlay(
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
+            // One shared token for every gap in this row (including the one between the channel
+            // name and the live dot, which previously had none at all) instead of each item
+            // carrying its own ad-hoc start padding - see PlayerCastButton's matching raisedSurface
+            // fix for the other half of why the cast button used to look out of place here.
+            horizontalArrangement = Arrangement.spacedBy(GapM),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SmallRoundIconButton(
@@ -85,12 +90,12 @@ internal fun PlayerControlsOverlay(
                 contentDescription = stringResource(R.string.common_back),
                 background = UaTheme.palette.scrimBackground,
             )
-            Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(text = uiState.currentChannel?.displayName.orEmpty(), color = Color.White, style = DisplayName)
                 BadgesRow(uiState.badges)
             }
             LiveIndicator()
-            PlayerCastButton(modifier = Modifier.padding(start = GapM))
+            PlayerCastButton()
         }
 
         // TalkBack-reachable alternative to the fullscreen brightness/volume drag gesture (see

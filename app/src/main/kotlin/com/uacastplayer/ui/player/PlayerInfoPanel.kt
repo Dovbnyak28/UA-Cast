@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,6 +43,7 @@ import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CardPadding
 import com.uacastplayer.ui.theme.DisplayName
 import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.QuickSettingLabelHeight
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
@@ -229,14 +231,18 @@ private fun RowScope.QuickSettingItem(
         ) {
             Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(18.dp))
         }
-        Text(
-            text = label,
-            style = Caption,
-            color = UaTheme.palette.labelSecondary,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        Box(
+            modifier = Modifier.height(QuickSettingLabelHeight).padding(top = 6.dp),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Text(
+                text = label,
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+            )
+        }
     }
 }
 
