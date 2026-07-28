@@ -8,8 +8,8 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 /**
- * Hand-authored path vectors for the app's navigation and chrome icons, kept independent of the
- * material-icons-extended artifact.
+ * Hand-authored path vectors for the app's navigation and chrome icons - the app has no dependency
+ * on any bundled Material icon set at all (see E4 in the optimization plan).
  */
 object AppIcons {
 
