@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.TabLabel
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -68,7 +67,7 @@ fun IconTierBanner(onEnableIcons: () -> Unit, onDismiss: () -> Unit, modifier: M
             )
             IconButton(onClick = onDismiss) {
                 Icon(
-                    imageVector = Icons.Filled.Close,
+                    imageVector = AppIcons.Close,
                     contentDescription = stringResource(R.string.download_banner_dismiss),
                     tint = UaTheme.palette.labelSecondary,
                     modifier = Modifier.size(16.dp),

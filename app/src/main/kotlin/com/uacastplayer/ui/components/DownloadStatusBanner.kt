@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.TabLabel
@@ -105,7 +104,7 @@ fun DownloadStatusBanner(
                 )
                 IconButton(onClick = { dismissed = true }) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
+                        imageVector = AppIcons.Close,
                         contentDescription = stringResource(R.string.download_banner_dismiss),
                         tint = UaTheme.palette.labelSecondary,
                         modifier = Modifier.size(16.dp),
