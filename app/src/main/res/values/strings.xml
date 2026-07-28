@@ -263,6 +263,10 @@
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_sleep_timer_minutes">%1$d min</string>
     <string name="player_sleep_timer_cancel">Turn off timer</string>
+    <string name="player_brightness_decrease">Decrease brightness, currently %1$d percent</string>
+    <string name="player_brightness_increase">Increase brightness, currently %1$d percent</string>
+    <string name="player_volume_decrease">Decrease volume, currently %1$d percent</string>
+    <string name="player_volume_increase">Increase volume, currently %1$d percent</string>
     <string name="player_back_to_channels">Back to channels</string>
     <string name="player_next_channels_title">Next channels</string>
     <string name="player_view_all">View all</string>

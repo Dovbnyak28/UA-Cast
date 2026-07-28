@@ -284,6 +284,8 @@ fun PlayerScreen(
                     uiState = uiState,
                     isFullscreen = isFullscreen,
                     sleepTimerRemainingMillis = sleepTimer.remainingMillis,
+                    brightnessLevel = brightnessLevel,
+                    volumeLevel = volumeLevel,
                     onExit = onExit,
                     onPlayPause = {
                         if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
@@ -294,6 +296,20 @@ fun PlayerScreen(
                     onEnterPip = { activity?.let(PipController::enter) },
                     onOpenSleepTimer = { showSleepTimerDialog = true },
                     onSelectPreview = { indexed -> viewModel.requestSwitch(indexed.index) },
+                    // Same effect as the drag gesture above, just reachable from TalkBack - one
+                    // fixed step per tap instead of a continuous drag delta.
+                    onBrightnessStep = { delta ->
+                        brightnessLevel = PlayerGesturePolicy.applyLevelDelta(brightnessLevel, delta)
+                        activity?.let { applyWindowBrightness(it, brightnessLevel) }
+                        gestureIndicator = GestureIndicatorKind.BRIGHTNESS
+                        gestureIndicatorNonce++
+                    },
+                    onVolumeStep = { delta ->
+                        volumeLevel = PlayerGesturePolicy.applyLevelDelta(volumeLevel, delta)
+                        audioManager?.let { applyStreamVolume(it, volumeLevel) }
+                        gestureIndicator = GestureIndicatorKind.VOLUME
+                        gestureIndicatorNonce++
+                    },
                 )
             }
         }

@@ -52,13 +52,17 @@ import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.LiveText
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.ScreenHPadding
+import kotlin.math.roundToInt
 
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
+@Suppress("LongParameterList") // one accessible stepper pair added for brightness/volume, see below
 internal fun PlayerControlsOverlay(
     uiState: PlayerUiState,
     isFullscreen: Boolean,
     sleepTimerRemainingMillis: Long?,
+    brightnessLevel: Float,
+    volumeLevel: Float,
     onExit: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -67,6 +71,8 @@ internal fun PlayerControlsOverlay(
     onEnterPip: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     onSelectPreview: (IndexedChannel) -> Unit,
+    onBrightnessStep: (Float) -> Unit,
+    onVolumeStep: (Float) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -86,6 +92,17 @@ internal fun PlayerControlsOverlay(
             LiveIndicator()
             PlayerCastButton(modifier = Modifier.padding(start = GapM))
         }
+
+        // TalkBack-reachable alternative to the fullscreen brightness/volume drag gesture (see
+        // PlayerScreen's pointerInput(activity, audioManager) block) - the drag zones have no
+        // other way for a screen-reader user to reach them, so these steppers are the accessible
+        // equivalent, not just a visual convenience.
+        LevelStepperRow(
+            brightnessLevel = brightnessLevel,
+            volumeLevel = volumeLevel,
+            onBrightnessStep = onBrightnessStep,
+            onVolumeStep = onVolumeStep,
+        )
 
         Box(modifier = Modifier.weight(1f))
 
@@ -148,6 +165,62 @@ internal fun PlayerControlsOverlay(
                 background = UaTheme.palette.scrimBackground,
             )
         }
+    }
+}
+
+private const val LEVEL_STEP = 0.1f
+private const val PERCENT_SCALE = 100
+
+/** Stepper pair for brightness (left) and volume (right), see the call site's comment. */
+@Composable
+private fun LevelStepperRow(
+    brightnessLevel: Float,
+    volumeLevel: Float,
+    onBrightnessStep: (Float) -> Unit,
+    onVolumeStep: (Float) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SmallRoundIconButton(
+            icon = AppIcons.Minus,
+            onClick = { onBrightnessStep(-LEVEL_STEP) },
+            contentDescription = stringResource(
+                R.string.player_brightness_decrease,
+                (brightnessLevel * PERCENT_SCALE).roundToInt(),
+            ),
+            background = UaTheme.palette.scrimBackground,
+        )
+        SmallRoundIconButton(
+            icon = AppIcons.Plus,
+            onClick = { onBrightnessStep(LEVEL_STEP) },
+            contentDescription = stringResource(
+                R.string.player_brightness_increase,
+                (brightnessLevel * PERCENT_SCALE).roundToInt(),
+            ),
+            background = UaTheme.palette.scrimBackground,
+        )
+        Box(modifier = Modifier.weight(1f))
+        SmallRoundIconButton(
+            icon = AppIcons.Minus,
+            onClick = { onVolumeStep(-LEVEL_STEP) },
+            contentDescription = stringResource(
+                R.string.player_volume_decrease,
+                (volumeLevel * PERCENT_SCALE).roundToInt(),
+            ),
+            background = UaTheme.palette.scrimBackground,
+        )
+        SmallRoundIconButton(
+            icon = AppIcons.Plus,
+            onClick = { onVolumeStep(LEVEL_STEP) },
+            contentDescription = stringResource(
+                R.string.player_volume_increase,
+                (volumeLevel * PERCENT_SCALE).roundToInt(),
+            ),
+            background = UaTheme.palette.scrimBackground,
+        )
     }
 }
 

@@ -263,6 +263,10 @@
     <string name="player_sleep_timer">Temporizador de apagado</string>
     <string name="player_sleep_timer_minutes">%1$d min</string>
     <string name="player_sleep_timer_cancel">Desactivar temporizador</string>
+    <string name="player_brightness_decrease">Bajar brillo, actualmente %1$d por ciento</string>
+    <string name="player_brightness_increase">Subir brillo, actualmente %1$d por ciento</string>
+    <string name="player_volume_decrease">Bajar volumen, actualmente %1$d por ciento</string>
+    <string name="player_volume_increase">Subir volumen, actualmente %1$d por ciento</string>
     <string name="player_back_to_channels">Volver a los canales</string>
     <string name="player_next_channels_title">Próximos canales</string>
     <string name="player_view_all">Ver todos</string>

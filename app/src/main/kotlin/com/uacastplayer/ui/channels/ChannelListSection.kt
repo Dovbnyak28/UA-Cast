@@ -29,6 +29,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -410,7 +411,10 @@ private fun ChannelTile(
         }
         IconButton(
             onClick = onToggleFavorite,
-            modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+            // minimumInteractiveComponentSize() first, then the smaller visual size - same order
+            // as RoundIconButton/SmallRoundIconButton (see ui/components/DesignSystemControls.kt) -
+            // keeps the 28dp glyph fitting this tile while still getting a 48dp touch target.
+            modifier = Modifier.align(Alignment.TopEnd).minimumInteractiveComponentSize().size(28.dp),
         ) {
             Icon(
                 AppIcons.Favorites,

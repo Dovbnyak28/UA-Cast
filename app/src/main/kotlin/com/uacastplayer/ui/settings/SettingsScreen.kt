@@ -4,6 +4,7 @@ import com.uacastplayer.ui.theme.UaTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -421,7 +423,7 @@ private fun BackupImportSummaryBanner(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+        IconButton(onClick = onDismiss) {
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.download_banner_dismiss),
@@ -716,7 +718,7 @@ private fun IconSourceRow(urlText: String, onRemoveClick: (() -> Unit)?) {
             modifier = Modifier.weight(1f),
         )
         if (onRemoveClick != null) {
-            IconButton(onClick = onRemoveClick, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRemoveClick) {
                 Icon(
                     AppIcons.Delete,
                     contentDescription = stringResource(R.string.settings_icon_sources_remove),
@@ -773,12 +775,14 @@ private fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Unit
         modifier = Modifier
             .clip(RoundedCornerShape(RadiusItem))
             .background(if (isSelected) UaTheme.palette.azure else UaTheme.palette.surface2)
-            .clickable(onClick = onClick)
+            .selectable(selected = isSelected, onClick = onClick, role = Role.RadioButton)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (isSelected) {
+            // Decorative: the row's own selected-state semantics (above) already announce
+            // selection, and the color/text-weight change also conveys it visually.
             Icon(
                 AppIcons.Check,
                 contentDescription = null,

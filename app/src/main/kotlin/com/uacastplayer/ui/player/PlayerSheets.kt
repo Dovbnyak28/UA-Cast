@@ -1,11 +1,11 @@
 package com.uacastplayer.ui.player
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.epg.EpgUiState
@@ -118,15 +119,26 @@ internal fun TrackPickerDialog(
         text = {
             Column {
                 if (offLabel != null && onSelectOff != null) {
+                    val isOffSelected = tracks.none { it.isSelected }
                     Text(
                         text = offLabel,
                         style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = onSelectOff).padding(vertical = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(selected = isOffSelected, onClick = onSelectOff, role = Role.RadioButton)
+                            .padding(vertical = 12.dp),
                     )
                 }
                 tracks.forEach { track ->
                     Column(
-                        modifier = Modifier.fillMaxWidth().clickable { onSelect(track) }.padding(vertical = 10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = track.isSelected,
+                                onClick = { onSelect(track) },
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = 10.dp),
                     ) {
                         Text(
                             text = track.label,

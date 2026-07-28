@@ -265,6 +265,10 @@
     <string name="player_sleep_timer">Таймер сну</string>
     <string name="player_sleep_timer_minutes">%1$d хв</string>
     <string name="player_sleep_timer_cancel">Вимкнути таймер</string>
+    <string name="player_brightness_decrease">Зменшити яскравість, зараз %1$d відсотків</string>
+    <string name="player_brightness_increase">Збільшити яскравість, зараз %1$d відсотків</string>
+    <string name="player_volume_decrease">Зменшити гучність, зараз %1$d відсотків</string>
+    <string name="player_volume_increase">Збільшити гучність, зараз %1$d відсотків</string>
     <string name="player_back_to_channels">Назад до каналів</string>
     <string name="player_next_channels_title">Наступні канали</string>
     <string name="player_view_all">Дивитися всі</string>

@@ -714,6 +714,21 @@ object AppIcons {
         }.build()
     }
 
+    val Minus: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Minus", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(4f, 11f)
+                lineTo(20f, 11f)
+                lineTo(20f, 13f)
+                lineTo(4f, 13f)
+                close()
+            }
+        }.build()
+    }
+
     val Sort: ImageVector by lazy {
         ImageVector.Builder(
             name = "Sort", defaultWidth = 24.dp, defaultHeight = 24.dp,

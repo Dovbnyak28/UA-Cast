@@ -265,6 +265,10 @@
     <string name="player_sleep_timer">Таймер сна</string>
     <string name="player_sleep_timer_minutes">%1$d мин</string>
     <string name="player_sleep_timer_cancel">Выключить таймер</string>
+    <string name="player_brightness_decrease">Уменьшить яркость, сейчас %1$d процентов</string>
+    <string name="player_brightness_increase">Увеличить яркость, сейчас %1$d процентов</string>
+    <string name="player_volume_decrease">Уменьшить громкость, сейчас %1$d процентов</string>
+    <string name="player_volume_increase">Увеличить громкость, сейчас %1$d процентов</string>
     <string name="player_back_to_channels">Назад к каналам</string>
     <string name="player_next_channels_title">Следующие каналы</string>
     <string name="player_view_all">Смотреть все</string>

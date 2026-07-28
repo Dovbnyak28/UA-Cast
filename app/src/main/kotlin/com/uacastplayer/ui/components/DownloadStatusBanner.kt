@@ -100,7 +100,7 @@ fun DownloadStatusBanner(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { dismissed = true }, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = { dismissed = true }) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = stringResource(R.string.download_banner_dismiss),

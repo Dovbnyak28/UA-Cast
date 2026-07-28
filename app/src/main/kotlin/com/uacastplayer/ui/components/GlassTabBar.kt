@@ -2,7 +2,6 @@ package com.uacastplayer.ui.components
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Column
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
@@ -73,9 +74,11 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .scale(scale)
-            .clickable(
+            .selectable(
+                selected = item.selected,
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Tab,
                 onClick = item.onClick,
             ),
         horizontalAlignment = Alignment.CenterHorizontally,

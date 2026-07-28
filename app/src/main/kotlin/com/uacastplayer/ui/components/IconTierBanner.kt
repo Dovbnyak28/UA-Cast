@@ -63,7 +63,7 @@ fun IconTierBanner(onEnableIcons: () -> Unit, onDismiss: () -> Unit, modifier: M
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            IconButton(onClick = onDismiss) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = stringResource(R.string.download_banner_dismiss),
