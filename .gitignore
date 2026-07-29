@@ -12,6 +12,7 @@ local.properties
 app/build/
 app/release/
 app/debug/
+baselineprofile/build/
 *.jks
 *.keystore
 *.apk
