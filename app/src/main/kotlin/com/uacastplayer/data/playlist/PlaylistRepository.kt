@@ -61,15 +61,21 @@ class PlaylistRepository(context: Context) {
 
     /** Cached channels for one saved source (see [PlaylistSource]) - keyed by [sourceId] so
      * switching between multiple saved sources can show the last-known channels immediately
-     * instead of always re-fetching over the network. */
-    suspend fun restoreSnapshot(sourceId: String): PlaylistOutcome? = withContext(Dispatchers.IO) {
-        val snapshot = PlaylistSnapshotStore(appContext, sourceId).load() ?: return@withContext null
-        PlaylistOutcome.Loaded(
-            groups = ChannelGrouper.group(snapshot.channels),
-            skippedLineCount = snapshot.skippedLineCount,
-            sourceFingerprint = snapshot.sourceFingerprint,
-            sourceUrl = snapshot.sourceUrl,
-        )
+     * instead of always re-fetching over the network. Grouping thousands of channels is CPU work,
+     * not disk I/O, so it gets its own [Dispatchers.Default] hop rather than riding along on the
+     * [Dispatchers.IO] one used for the snapshot file read. */
+    suspend fun restoreSnapshot(sourceId: String): PlaylistOutcome? {
+        val snapshot = withContext(Dispatchers.IO) {
+            PlaylistSnapshotStore(appContext, sourceId).load()
+        } ?: return null
+        return withContext(Dispatchers.Default) {
+            PlaylistOutcome.Loaded(
+                groups = ChannelGrouper.group(snapshot.channels),
+                skippedLineCount = snapshot.skippedLineCount,
+                sourceFingerprint = snapshot.sourceFingerprint,
+                sourceUrl = snapshot.sourceUrl,
+            )
+        }
     }
 
     suspend fun loadSources(): List<PlaylistSource> = sourceStore.load()
@@ -120,13 +126,19 @@ class PlaylistRepository(context: Context) {
         }
     }
 
-    private fun toOutcome(
+    // result.text can be an 8MB (MAX_PLAYLIST_BYTES) M3U with thousands of channels - M3uParser.parse
+    // and ChannelGrouper.group are CPU-bound text/collection work, not I/O, so this is its own
+    // Dispatchers.Default hop rather than piggybacking on the IO dispatcher the load itself used.
+    // Every caller (loadFromUrl/loadFromFile) reaches this from PlaylistController's viewModelScope,
+    // i.e. Dispatchers.Main.immediate - without this hop, parsing a large playlist freezes the UI for
+    // the whole duration. See docs/PERFORMANCE.md.
+    private suspend fun toOutcome(
         result: PlaylistLoadResult,
         sourceFingerprint: String,
         sourceUrl: String?,
         extraEpgUrls: List<String> = emptyList(),
     ): PlaylistOutcome = when (result) {
-        is PlaylistLoadResult.Success -> {
+        is PlaylistLoadResult.Success -> withContext(Dispatchers.Default) {
             val parsed = M3uParser.parse(result.text)
             PlaylistOutcome.Loaded(
                 groups = ChannelGrouper.group(parsed.channels),
