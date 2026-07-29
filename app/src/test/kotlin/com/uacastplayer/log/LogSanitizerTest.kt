@@ -92,6 +92,28 @@ class LogSanitizerTest {
         assertEquals("ratio=16:9", result)
     }
 
+    // Regression guard for the Block 3 fix: `result.length >= MIN_TOKEN_LENGTH` used to gate
+    // TOKEN_REGEX, which is true for almost any real log line (ordinary sentences are longer than
+    // 24 chars too) - so the regex ran on nearly every call. It should only run when there's an
+    // actual contiguous token-length run of candidate characters.
+    @Test
+    fun `a long ordinary sentence with no token-length run is returned unchanged with no allocation`() {
+        val message = "This is a perfectly ordinary diagnostic message with many separate short words in it"
+
+        val result = LogSanitizer.sanitize(message)
+
+        assertSame(message, result)
+    }
+
+    @Test
+    fun `a run of exactly 23 token characters is left alone but 24 is redacted`() {
+        val justUnder = "prefix ${"a".repeat(23)} suffix"
+        val atThreshold = "prefix ${"a".repeat(24)} suffix"
+
+        assertSame(justUnder, LogSanitizer.sanitize(justUnder))
+        assertTrue(LogSanitizer.sanitize(atThreshold).contains("<token:"))
+    }
+
     @Test
     fun `long log line with mixed content does not throw and drops the sensitive substrings`() {
         val token = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1"

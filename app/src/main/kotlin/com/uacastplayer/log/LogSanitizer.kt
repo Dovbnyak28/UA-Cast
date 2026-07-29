@@ -40,11 +40,31 @@ object LogSanitizer {
         if (result.contains('=')) {
             result = PARAM_REGEX.replace(result) { "${it.groupValues[1]}=<redacted>" }
         }
-        if (result.length >= MIN_TOKEN_LENGTH) {
+        // `result.length >= MIN_TOKEN_LENGTH` alone used to gate this - true for almost any log
+        // message (ordinary sentences are longer than 24 chars too), so TOKEN_REGEX ran on nearly
+        // every call. hasTokenRun actually checks for a contiguous run of token-class characters at
+        // least that long, which is rare outside genuine tokens/keys - the regex only runs when
+        // there's real work for it to do.
+        if (hasTokenRun(result)) {
             result = TOKEN_REGEX.replace(result) { "<token:${shortMarker(it.value)}>" }
         }
         return result
     }
+
+    /** No allocation - a single char-by-char scan for a run of [MIN_TOKEN_LENGTH]+ characters from
+     * [TOKEN_REGEX]'s own character class, so this can never say "no token" when the regex would
+     * actually find one. */
+    private fun hasTokenRun(s: String): Boolean {
+        var run = 0
+        for (c in s) {
+            run = if (isTokenChar(c)) run + 1 else 0
+            if (run >= MIN_TOKEN_LENGTH) return true
+        }
+        return false
+    }
+
+    private fun isTokenChar(c: Char): Boolean =
+        c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '_' || c == '+' || c == '/' || c == '=' || c == '-'
 
     private fun redactUrl(url: String): String {
         val uri = runCatching { URI(url) }.getOrNull()
