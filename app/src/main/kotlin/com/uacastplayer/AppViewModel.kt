@@ -104,9 +104,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         preferences = preferences,
         playlistRepository = playlistRepository,
         scope = viewModelScope,
-        onLoaded = { channels, epgUrls, fromCache ->
+        onLoaded = { channels, groups, epgUrls, fromCache ->
             recomputeDeviceTierDefaults()
-            iconController.triggerPrefetch(channels, settingsState.value.iconDisplayMode, ::epgIconUrlFor)
+            iconController.triggerPrefetch(
+                channels,
+                settingsState.value.iconDisplayMode,
+                ::epgIconUrlFor,
+                prefetchContext(groups.firstOrNull()?.channels.orEmpty()),
+            )
             // Only on an actual load, never a startup cache restore - see
             // EpgController.handleEpgAutoDetect's doc.
             if (!fromCache) epgController.handleEpgAutoDetect(epgUrls)
@@ -136,9 +141,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // the user happened to scroll past that channel. Re-running prefetch here - now that
             // an epgIconUrlFor lookup actually resolves to something - gives those icons the same
             // bulk background download (with the same visible banner) instead.
-            val channels = playlistController.playlistState.value.groups.flatMap { it.channels }
+            val groups = playlistController.playlistState.value.groups
+            val channels = groups.flatMap { it.channels }
             if (channels.isNotEmpty()) {
-                iconController.triggerPrefetch(channels, settingsState.value.iconDisplayMode, ::epgIconUrlFor)
+                iconController.triggerPrefetch(
+                    channels,
+                    settingsState.value.iconDisplayMode,
+                    ::epgIconUrlFor,
+                    prefetchContext(groups.firstOrNull()?.channels.orEmpty()),
+                )
             }
         },
     )
@@ -300,6 +311,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * own candidate being cache-only), so this is also passed to icon prefetch - see
      * [epgController]'s onLoaded above - not just to the interactive per-row resolve below. */
     private fun epgIconUrlFor(channel: M3uChannel): String? = epgState.value.data?.index?.match(channel)?.iconUrl
+
+    /** Builds the "what's worth prefetching" context (see [IconController.PrefetchContext]) from
+     * whatever's already known synchronously - [firstGroupChannels] is passed in rather than read
+     * from [playlistState] here because the playlist-just-loaded call site fires before that state
+     * flow itself has been updated with the newly loaded groups (see PlaylistController.applyPlaylistOutcome). */
+    private fun prefetchContext(firstGroupChannels: List<M3uChannel>): IconController.PrefetchContext =
+        IconController.PrefetchContext(
+            favoriteKeys = favorites.value.map { it.key }.toSet(),
+            lastWatchedKey = preferences.lastWatchedChannelKey,
+            firstGroupChannels = firstGroupChannels,
+            deviceTier = settingsState.value.deviceTier,
+        )
 
     suspend fun resolveChannelIcon(channel: M3uChannel): File? {
         return iconController.resolveChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))

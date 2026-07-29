@@ -158,6 +158,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 liveWindowRecoveryHistory = emptyList()
             }
             _uiState.update { it.copy(isPlaying = isPlaying) }
+            PlaybackActivity.setActive(isPlaying || isCasting)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -202,6 +203,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 updateSeekability()
+                PlaybackActivity.setActive(_uiState.value.isPlaying || isCasting)
             }
         }
         viewModelScope.launch {
@@ -616,6 +618,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         currentIndex = -1
         channels = emptyList()
         _uiState.update { PlayerUiState(resizeMode = it.resizeMode) }
+        PlaybackActivity.setActive(false)
     }
 
     override fun onCleared() {
@@ -626,6 +629,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         mediaSession?.release()
         exoPlayer.release()
         liveInstances.decrementAndGet()
+        PlaybackActivity.setActive(false)
         super.onCleared()
     }
 

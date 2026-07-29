@@ -6,6 +6,7 @@ import com.uacastplayer.data.playlist.PlaylistOutcome
 import com.uacastplayer.data.playlist.PlaylistOutcomeReducer
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceAddResult
@@ -33,7 +34,12 @@ class PlaylistController(
     private val preferences: AppPreferences,
     private val playlistRepository: PlaylistRepository,
     private val scope: CoroutineScope,
-    private val onLoaded: (channels: List<M3uChannel>, epgUrls: List<String>, fromCache: Boolean) -> Unit,
+    private val onLoaded: (
+        channels: List<M3uChannel>,
+        groups: List<GroupedChannels>,
+        epgUrls: List<String>,
+        fromCache: Boolean,
+    ) -> Unit,
     private val onStateChanged: () -> Unit,
 ) {
     private val _playlistState = MutableStateFlow(PlaylistUiState())
@@ -227,7 +233,7 @@ class PlaylistController(
         if (outcome is PlaylistOutcome.Loaded) {
             val channels = outcome.groups.flatMap { it.channels }
             channelCount = channels.size
-            onLoaded(channels, outcome.epgUrls, fromCache)
+            onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
         }
         // Looked up by source id rather than a single flat preference, since there can now be
         // several saved sources each with their own name (see PlaylistSource). A brand-new source
