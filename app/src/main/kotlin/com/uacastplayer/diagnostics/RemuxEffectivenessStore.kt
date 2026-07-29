@@ -35,6 +35,14 @@ class RemuxEffectivenessStore(context: Context) {
         }
     }
 
+    /** [attemptCountedResourceIds] only ever grows - resourceIds are per-session-scoped and never
+     * reused (see ProxyServer), so nothing else ever removes an entry. Call when a cast session
+     * ends: a long-lived process with a lot of channel switching would otherwise accumulate one
+     * entry per proxy resource for the process's entire lifetime. */
+    fun resetAttemptTracking() {
+        synchronized(lock) { attemptCountedResourceIds.clear() }
+    }
+
     fun snapshot(): RemuxEffectivenessCounts = synchronized(lock) { readCounts() }
 
     private fun readCounts() = RemuxEffectivenessCounts(

@@ -354,6 +354,9 @@ class CastSessionRepository private constructor(context: Context) {
         currentSession?.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
         currentSession = null
         currentReceiverId = null
+        // See RemuxEffectivenessStore.resetAttemptTracking's doc - its dedupe set otherwise grows
+        // for the entire process lifetime, not just one cast session.
+        remuxEffectivenessStore.resetAttemptTracking()
         applyResult(CastReceiverStatusReducer.reduce(_state.value, ReceiverStatus.DISCONNECTED))
     }
 

@@ -1,6 +1,7 @@
 package com.uacastplayer.data.cast
 
 import android.content.Context
+import com.uacastplayer.cast.IncompatibilityMemoryPolicy
 import com.uacastplayer.cast.IncompatibilityRecord
 import com.uacastplayer.core.security.Fingerprint
 
@@ -26,6 +27,7 @@ class IncompatibilityMemoryStore(context: Context) {
 
     init {
         migrateIfNeeded()
+        pruneExpired()
     }
 
     /** A one-time wipe when [SCHEMA_VERSION] advances - every entry here is keyed by an opaque
@@ -51,4 +53,18 @@ class IncompatibilityMemoryStore(context: Context) {
     }
 
     private fun keyFor(streamUrl: String, receiverId: String): String = Fingerprint.of("$streamUrl|$receiverId")
+
+    /** The TTL in [lookup] only hides an expired record, it never deletes it - without this, the
+     * file grows forever for a heavy user (thousands of channels over a year). Runs once per
+     * process start, which is enough: this store sees at most a few writes per cast attempt. */
+    private fun pruneExpired(nowMillis: Long = System.currentTimeMillis()) {
+        val entries = prefs.all.filterKeys { it != SCHEMA_VERSION_KEY }
+            .mapNotNull { (key, value) -> (value as? Long)?.let { key to it } }
+            .toMap()
+        val toRemove = IncompatibilityMemoryPolicy.keysToPrune(entries, nowMillis)
+        if (toRemove.isEmpty()) return
+        val editor = prefs.edit()
+        for (key in toRemove) editor.remove(key)
+        editor.apply()
+    }
 }

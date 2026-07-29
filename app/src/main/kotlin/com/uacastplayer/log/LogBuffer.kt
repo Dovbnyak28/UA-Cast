@@ -11,8 +11,9 @@ data class LogEntry(val level: LogLevel, val tag: String, val message: String, v
 /**
  * Thread-safe in-memory ring buffer of the app's own recent log entries - the data behind the
  * "Send diagnostics" report (see HelpScreen). Nothing here is persisted or leaves the device
- * unless the user explicitly shares that report; entries are whatever [AppLog]'s callers already
- * pass it, which by existing project convention never includes raw URLs, tokens or credentials.
+ * unless the user explicitly shares that report; entries are whatever [AppLog]'s callers pass it,
+ * already run through [com.uacastplayer.log.LogSanitizer] before either sink ever sees it - a
+ * mechanical guarantee enforced in [AppLog] itself, not a convention callers have to remember.
  *
  * Capped on two axes at once - entry count AND total message length - since either a very chatty
  * session (many small entries) or a handful of unusually large messages could otherwise blow past
