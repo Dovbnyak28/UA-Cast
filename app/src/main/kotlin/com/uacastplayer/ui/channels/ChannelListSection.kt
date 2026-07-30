@@ -402,7 +402,11 @@ private fun ChannelTile(
                 maxLines = 2,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            NameQualityBadge.detect(channel.displayName)?.let { badge ->
+            // See ChannelRow's identical remember() - only worth redoing when the name actually
+            // changes, not on every recomposition this tile goes through while scrolling a grid
+            // (GRID is ChannelLayout.DEFAULT, so this runs for every user by default).
+            val qualityBadge = remember(channel.displayName) { NameQualityBadge.detect(channel.displayName) }
+            qualityBadge?.let { badge ->
                 Text(
                     text = badge,
                     style = Caption,
