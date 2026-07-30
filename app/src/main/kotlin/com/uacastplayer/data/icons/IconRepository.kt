@@ -111,6 +111,9 @@ class IconRepository(context: Context) {
     private fun cdnFallbackUrl(tvgId: String): String =
         IconResolver.iconUrl(IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL, tvgId)
 
+    // The IOException itself is never surfaced beyond marking this URL as a transient failure
+    // (see IconFailurePolicy) - there's nothing about a network/read error worth logging per icon.
+    @Suppress("SwallowedException")
     private suspend fun fetchAndValidate(url: String): File? = withContext(Dispatchers.IO) {
         try {
             // Many icon hosts have hotlink protection that 403s the default OkHttp UA (which

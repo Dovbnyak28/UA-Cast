@@ -58,6 +58,9 @@ class EpgRepository(context: Context) {
         }
     }
 
+    // A corrupt/truncated cached snapshot (any parse failure, not one specific type) should just
+    // fall back to null - the caller re-fetches live - not crash startup over stale disk state.
+    @Suppress("TooGenericExceptionCaught")
     suspend fun restoreSnapshot(): EpgOutcome? {
         val documentStream = snapshotStore.openDocumentStream() ?: return null
         return try {
@@ -71,6 +74,9 @@ class EpgRepository(context: Context) {
         }
     }
 
+    // Best-effort cache write: the EPG data this session already loaded is usable either way,
+    // so any persist failure (disk full, I/O error) should just skip the cache, not fail the load.
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun persist(url: String, documentFile: File) {
         try {
             snapshotStore.save(Fingerprint.of(url), System.currentTimeMillis(), documentFile)

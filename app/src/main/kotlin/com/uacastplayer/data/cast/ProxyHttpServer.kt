@@ -44,6 +44,9 @@ internal class ProxyHttpServer(private val onRequest: (ParsedRequest, OutputStre
     val port: Int? get() = boundPort
     val isRunning: Boolean get() = running
 
+    // The accept loop's own catch (below, inside the thread{} closure) has to be broad: a single
+    // bad connection/socket error must not kill the loop for every other client the proxy serves.
+    @Suppress("TooGenericExceptionCaught")
     fun start(): Int {
         stop()
         val socket = ServerSocket(0, 50, InetAddress.getByName("0.0.0.0"))
@@ -86,6 +89,9 @@ internal class ProxyHttpServer(private val onRequest: (ParsedRequest, OutputStre
         executor = null
     }
 
+    // Same reasoning as start()'s accept loop: one client's malformed request or dropped socket
+    // must not propagate past this connection - the thread pool serves every other client fine.
+    @Suppress("TooGenericExceptionCaught")
     private fun handleConnection(socket: Socket) {
         socket.use {
             try {

@@ -504,19 +504,6 @@
     <ID>ReturnCount:TsSegmenter.kt$private fun sectionPayload(data: ByteArray, offset: Int): ByteArray?</ID>
     <ID>ReturnCount:XmlTvTimeParser.kt$XmlTvTimeParser$fun parse(value: String): Long?</ID>
     <ID>ReturnCount:XmlTvTimeParser.kt$XmlTvTimeParser$private fun parseOffsetMillis(offset: String): Long?</ID>
-    <ID>SwallowedException:IconRepository.kt$IconRepository$e: IOException</ID>
-    <ID>TooGenericExceptionCaught:CastProxyService.kt$CastProxyService.Companion$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:CastSessionRepository.kt$CastSessionRepository$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:CastWakeLocks.kt$CastWakeLocks$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:EpgRepository.kt$EpgRepository$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:EpgSnapshotStore.kt$EpgSnapshotStore$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:GroupVisibilityStore.kt$GroupVisibilityStore$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:FavoritesStore.kt$FavoritesStore$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:PlayerRenderersFactoryProvider.kt$PlayerRenderersFactoryProvider$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:PlaylistRepository.kt$PlaylistRepository$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:PlaylistSnapshotStore.kt$PlaylistSnapshotStore$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:PlaylistSourceStore.kt$PlaylistSourceStore$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ProxyHttpServer.kt$ProxyHttpServer$e: Exception</ID>
     <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : AndroidViewModel</ID>
     <ID>TooManyFunctions:CastSessionRepository.kt$CastSessionRepository</ID>
     <ID>TooManyFunctions:ChannelsScreen.kt$com.uacastplayer.ui.channels.ChannelsScreen.kt</ID>

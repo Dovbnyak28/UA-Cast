@@ -109,6 +109,9 @@ class PlaylistRepository(context: Context) {
         )
     }
 
+    // Best-effort cache write: the playlist this session already loaded is usable either way, so
+    // any persist failure (disk full, I/O error) should just skip the cache, not fail the load.
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun persistIfLoaded(sourceId: String, outcome: PlaylistOutcome) {
         if (outcome !is PlaylistOutcome.Loaded) return
         val channels = outcome.groups.flatMap { it.channels }

@@ -160,6 +160,8 @@ class CastProxyService : Service() {
          * either way - losing the FGS only means the process is more likely to be reclaimed in the
          * background, not that the stream itself stops - so this degrades instead of crashing.
          */
+        @Suppress("TooGenericExceptionCaught") // not narrowed to ForegroundServiceStartNotAllowedException
+        // (see doc above) - any other framework failure starting the service should degrade the same way.
         private fun startForegroundServiceSafely(context: Context, intent: Intent) {
             try {
                 ContextCompat.startForegroundService(context, intent)

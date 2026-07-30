@@ -17,6 +17,9 @@ private const val TAG = "PlayerRenderersFactory"
 @UnstableApi
 object PlayerRenderersFactoryProvider {
 
+    // Not narrowed further: the doc above covers "fails to construct for any reason" - any
+    // exception from the third-party factory should trigger the same fallback, not just some.
+    @Suppress("TooGenericExceptionCaught")
     fun create(context: Context): RenderersFactory {
         return try {
             NextRenderersFactory(context).apply {

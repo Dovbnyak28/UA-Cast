@@ -22,6 +22,9 @@ class FavoritesStore(context: Context) {
         }
     }
 
+    // AtomicFile requires failWrite() on *any* failure mid-write to release the temp file, not just
+    // specific ones - the broad catch exists to make that cleanup unconditional before rethrowing.
+    @Suppress("TooGenericExceptionCaught")
     suspend fun save(favorites: List<FavoriteChannel>) = withContext(Dispatchers.IO) {
         val stream = atomicFile.startWrite()
         try {

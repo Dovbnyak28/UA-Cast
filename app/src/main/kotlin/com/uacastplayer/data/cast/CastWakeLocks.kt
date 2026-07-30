@@ -17,6 +17,10 @@ class CastWakeLocks(context: Context) {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
+    // WakeLock/WifiLock acquisition can fail for several unrelated reasons (permission revoked,
+    // power service unavailable, OEM restrictions) - none of them should crash the cast session
+    // that's just trying to keep the screen/network alive while streaming, only skip the lock.
+    @Suppress("TooGenericExceptionCaught")
     fun acquire() {
         release()
         try {
