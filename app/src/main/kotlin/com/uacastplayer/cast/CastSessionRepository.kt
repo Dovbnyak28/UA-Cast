@@ -258,6 +258,13 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     init {
+        initCastContext()
+    }
+
+    // Play Services being missing/outdated/misconfigured can surface as several different
+    // exception types here - all of them mean "no cast support on this device", not a crash.
+    @Suppress("TooGenericExceptionCaught")
+    private fun initCastContext() {
         try {
             castContext = CastContext.getSharedInstance(appContext)
             castContext?.sessionManager?.addSessionManagerListener(sessionManagerListener, CastSession::class.java)

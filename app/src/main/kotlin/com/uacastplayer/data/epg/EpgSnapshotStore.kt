@@ -13,6 +13,9 @@ class EpgSnapshotStore(context: Context) {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "epg_snapshot.bin"))
 
+    // AtomicFile requires failWrite() on *any* failure mid-write to release the temp file, not just
+    // specific ones - the broad catch exists to make that cleanup unconditional before rethrowing.
+    @Suppress("TooGenericExceptionCaught")
     suspend fun save(snapshot: EpgSnapshot) = withContext(Dispatchers.IO) {
         val stream = atomicFile.startWrite()
         try {

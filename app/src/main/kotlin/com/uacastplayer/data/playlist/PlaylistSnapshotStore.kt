@@ -14,6 +14,9 @@ class PlaylistSnapshotStore(context: Context) {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "playlist_snapshot.bin"))
 
+    // AtomicFile requires failWrite() on *any* failure mid-write to release the temp file, not just
+    // specific ones - the broad catch exists to make that cleanup unconditional before rethrowing.
+    @Suppress("TooGenericExceptionCaught")
     suspend fun save(snapshot: PlaylistSnapshot) = withContext(Dispatchers.IO) {
         val stream = atomicFile.startWrite()
         try {
