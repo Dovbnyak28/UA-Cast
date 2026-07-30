@@ -156,6 +156,18 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_LAST_WATCHED_CHANNEL, null)
         set(value) = prefs.edit().putString(KEY_LAST_WATCHED_CHANNEL, value).apply()
 
+    /** Salted PBKDF2 hash of the parental-control PIN (see
+     * [com.uacastplayer.core.security.PinHasher]) - null means no PIN is set, which is also how
+     * `app/ParentalControlController` decides whether the feature is enabled at all. Never the
+     * plaintext PIN. Always set together with [parentalControlPinSalt]. */
+    var parentalControlPinHash: String?
+        get() = prefs.getString(KEY_PARENTAL_CONTROL_PIN_HASH, null)
+        set(value) = prefs.edit().putString(KEY_PARENTAL_CONTROL_PIN_HASH, value).apply()
+
+    var parentalControlPinSalt: String?
+        get() = prefs.getString(KEY_PARENTAL_CONTROL_PIN_SALT, null)
+        set(value) = prefs.edit().putString(KEY_PARENTAL_CONTROL_PIN_SALT, value).apply()
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
@@ -181,5 +193,7 @@ class AppPreferences(context: Context) {
         const val KEY_ACTIVE_PLAYLIST_SOURCE_ID = "active_playlist_source_id"
         const val KEY_LAST_WATCHED_CHANNEL = "last_watched_channel_key"
         const val KEY_RAW_TS_REMUX_ENABLED = "raw_ts_remux_enabled"
+        const val KEY_PARENTAL_CONTROL_PIN_HASH = "parental_control_pin_hash"
+        const val KEY_PARENTAL_CONTROL_PIN_SALT = "parental_control_pin_salt"
     }
 }

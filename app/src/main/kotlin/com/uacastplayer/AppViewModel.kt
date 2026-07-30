@@ -10,6 +10,7 @@ import com.uacastplayer.app.BackupController
 import com.uacastplayer.app.EpgController
 import com.uacastplayer.app.GroupVisibilityController
 import com.uacastplayer.app.IconController
+import com.uacastplayer.app.ParentalControlController
 import com.uacastplayer.app.PlaylistController
 import com.uacastplayer.app.SettingsController
 import com.uacastplayer.backup.BackupData
@@ -27,6 +28,7 @@ import com.uacastplayer.data.epg.EpgRepository
 import com.uacastplayer.data.favorites.FavoritesRepository
 import com.uacastplayer.data.icons.IconPrefetcher
 import com.uacastplayer.data.icons.IconRepository
+import com.uacastplayer.data.parentalcontrol.ParentalControlStore
 import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
@@ -43,6 +45,7 @@ import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
+import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.log.LogBuffer
 import com.uacastplayer.performance.DevicePerformanceClassifier
@@ -126,6 +129,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pinnedGroupKeys: StateFlow<Set<String>> = groupVisibilityController.pinnedKeys
     val hiddenGroupKeys: StateFlow<Set<String>> = groupVisibilityController.hiddenKeys
 
+    private val parentalControlController =
+        ParentalControlController(ParentalControlStore(application), preferences, viewModelScope)
+    val lockedChannelKeys: StateFlow<Set<String>> = parentalControlController.lockedKeys
+    val parentalControlPinSet: StateFlow<Boolean> = parentalControlController.isPinSet
+    val parentalControlUnlocked: StateFlow<Boolean> = parentalControlController.unlockedThisSession
+
     private val epgController = EpgController(
         preferences = preferences,
         epgRepository = epgRepository,
@@ -200,6 +209,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         epgController.loadInitial()
         epgController.startTicking()
         groupVisibilityController.loadInitial()
+        parentalControlController.loadInitial()
         viewModelScope.launch {
             activePlaylistSourceId.collect { groupVisibilityController.setActiveSource(it) }
         }
@@ -299,6 +309,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Clears any pin/hide override for [groupKey] in the active source, returning it to the
      * default order/visibility - used both to unpin and to restore a hidden group. */
     fun clearGroupOverride(groupKey: String) = groupVisibilityController.clearOverride(groupKey)
+
+    fun isChannelLocked(channel: M3uChannel): Boolean = parentalControlController.isLocked(FavoriteKey.of(channel))
+
+    fun lockChannel(channel: M3uChannel) = parentalControlController.lockChannel(FavoriteKey.of(channel))
+
+    /** Caller must already hold [parentalControlUnlocked] (see [verifyParentalControlPin]) - this
+     * function doesn't re-check it, so a PIN entered once this session covers every subsequent
+     * unlock without prompting again. */
+    fun unlockChannelPermanently(channel: M3uChannel) =
+        parentalControlController.unlockChannelPermanently(FavoriteKey.of(channel))
+
+    /** True on a correct PIN, which also flips [parentalControlUnlocked] for the rest of this
+     * process's lifetime - see [ParentalControlController]'s doc for why nothing else resets it. */
+    fun verifyParentalControlPin(pin: String): Boolean = parentalControlController.verifyPin(pin)
+
+    /** Sets the PIN for the first time, or replaces an existing one - callers must gate a
+     * *replacement* behind [parentalControlUnlocked] themselves (Settings' "change PIN" flow does).
+     * False if [pin] isn't 4 digits. */
+    fun setParentalControlPin(pin: String): Boolean = parentalControlController.setPin(pin)
+
+    /** The "forgot PIN" escape hatch - clears the PIN and every locked channel, no PIN required.
+     * Settings' own confirmation dialog is the only guard before this is called. */
+    fun resetParentalControl() = parentalControlController.resetParentalControl()
 
     fun selectEpgSource(source: EpgSource) = epgController.selectEpgSource(source)
 
