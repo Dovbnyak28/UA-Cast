@@ -15,11 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
 import com.uacastplayer.ui.theme.ChannelLogoSize
@@ -82,8 +84,8 @@ fun initialsFor(name: String): String =
  * AsyncImage path needs a real decodable file on disk, which a static preview doesn't have. */
 @Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
 @Composable
-private fun ChannelIconPreview() {
-    UaCastTheme(AppTheme.AZURE) {
+private fun ChannelIconPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
+    UaCastTheme(theme) {
         ChannelIcon(
             channel = M3uChannel(displayName = "BBC News", streamUrl = "https://example.com/stream.m3u8"),
             resolveIcon = { null },

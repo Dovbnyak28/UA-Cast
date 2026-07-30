@@ -33,12 +33,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.TabLabel
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -161,8 +163,8 @@ private fun BannerProgressLine(label: String, fraction: Float?) {
 
 @Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
 @Composable
-private fun DownloadStatusBannerPreview() {
-    UaCastTheme(AppTheme.AZURE) {
+private fun DownloadStatusBannerPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
+    UaCastTheme(theme) {
         DownloadStatusBanner(
             iconPrefetchState = IconPrefetchUiState(isRunning = true, completed = 42, total = 120),
             epgState = EpgUiState(isLoading = true),

@@ -17,10 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.player.SleepTimerDuration
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.UaCastTheme
 import kotlin.time.Duration
@@ -83,8 +85,8 @@ private fun SleepTimerDialogRow(label: String, onClick: () -> Unit, emphasized: 
 
 @Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
 @Composable
-private fun SleepTimerDialogPreview() {
-    UaCastTheme(AppTheme.AZURE) {
+private fun SleepTimerDialogPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
+    UaCastTheme(theme) {
         SleepTimerDialog(isTimerActive = true, onSelect = {}, onCancelTimer = {}, onDismiss = {})
     }
 }

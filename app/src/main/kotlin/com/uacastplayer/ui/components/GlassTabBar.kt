@@ -28,9 +28,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GlassTabBarHeight
@@ -119,8 +121,8 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
 
 @Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
 @Composable
-private fun GlassTabBarPreview() {
-    UaCastTheme(AppTheme.AZURE) {
+private fun GlassTabBarPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
+    UaCastTheme(theme) {
         GlassTabBar(
             items = listOf(
                 TabBarItem(label = "Channels", icon = AppIcons.Channels, selected = true, onClick = {}),

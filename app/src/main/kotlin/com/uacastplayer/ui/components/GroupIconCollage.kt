@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -28,6 +29,7 @@ import com.uacastplayer.icons.GroupCollagePolicy
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.UaCastTheme
 import java.io.File
@@ -119,8 +121,8 @@ private fun CollageDivider(modifier: Modifier) {
  * needs real decodable files on disk, which a static preview doesn't have. */
 @Preview(showBackground = true, backgroundColor = 0xFF0B0B12L)
 @Composable
-private fun GroupIconCollagePreview() {
-    UaCastTheme(AppTheme.AZURE) {
+private fun GroupIconCollagePreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
+    UaCastTheme(theme) {
         GroupIconCollage(
             channels = emptyList(),
             cachedIconFile = { null },
