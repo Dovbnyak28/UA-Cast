@@ -2,7 +2,6 @@ package com.uacastplayer.ui.channels
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +34,7 @@ import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
-import com.uacastplayer.ui.components.IconHeader
+import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.components.IconTierBanner
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
@@ -256,7 +255,14 @@ private fun ChannelsContent(
             }
             playlistState.isLoading -> LoadingState()
             playlistState.error != null -> ErrorState(playlistState.error)
-            else -> EmptyState()
+            // No playlist loaded at all - unlike ErrorState (a load that failed) or the search's
+            // NoSearchResults (a query with no matches), this dead end has no action button here:
+            // that lives on Home (see HomeScreen's own empty state) rather than being duplicated.
+            else -> EmptyState(
+                icon = AppIcons.Channels,
+                title = stringResource(R.string.channels_empty_message),
+                subtitle = stringResource(R.string.channels_empty_subtitle),
+            )
         }
     }
 }
@@ -288,20 +294,6 @@ private fun ErrorState(error: PlaylistError) {
     }
 }
 
-/** No playlist loaded at all - unlike [ErrorState] (a load that failed) or the search's
- * [NoSearchResults] (a query with no matches), this dead end needs a way out, but the action
- * itself now lives on Home (see [com.uacastplayer.ui.home.HomeScreen]'s own empty state) rather
- * than being duplicated here. */
-@Composable
-private fun EmptyState() {
-    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        IconHeader(
-            icon = AppIcons.Channels,
-            title = stringResource(R.string.channels_empty_message),
-            subtitle = stringResource(R.string.channels_empty_subtitle),
-        )
-    }
-}
 
 /** Shared with SettingsScreen's hidden-groups list - not just ChannelsScreen's own use. */
 @Composable
