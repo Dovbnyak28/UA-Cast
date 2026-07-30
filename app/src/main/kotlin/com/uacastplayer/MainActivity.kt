@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,6 +37,7 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
 import com.uacastplayer.ui.components.DownloadStatusBanner
+import com.uacastplayer.ui.components.ParentalControlPinDialog
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
@@ -167,10 +169,24 @@ private fun MainAppContent(
     var savedPlayerRequest by rememberSaveable(stateSaver = SavedPlayerRequestSaver) {
         mutableStateOf<SavedPlayerRequest?>(null)
     }
-    val openPlayer = { channels: List<M3uChannel>, startIndex: Int ->
+    val openPlayerReal = { channels: List<M3uChannel>, startIndex: Int ->
         playerRequest = PlayerRequest(channels, startIndex)
         playerContainerState =
             PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Open)
+    }
+
+    // See rememberParentalControlGate's doc - a locked channel's playback goes through the same
+    // "run this once PIN-unlocked" gate that unlocking a channel from ChannelActionsSheet and
+    // Settings' locked-channel management/PIN-change rows all use.
+    val requireParentalControlUnlock = rememberParentalControlGate(viewModel)
+
+    val openPlayer = { channels: List<M3uChannel>, startIndex: Int ->
+        val channel = channels.getOrNull(startIndex)
+        if (channel != null && viewModel.isChannelLocked(channel)) {
+            requireParentalControlUnlock { openPlayerReal(channels, startIndex) }
+        } else {
+            openPlayerReal(channels, startIndex)
+        }
     }
     val closePlayer = {
         playerRequest = null
@@ -253,6 +269,7 @@ private fun MainAppContent(
             pickPlaylistFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
             exportBackupFile = { exportBackupFile.launch("ua-cast-backup-${LocalDate.now()}.json") },
             importBackupFile = { importBackupFile.launch(arrayOf("application/json", "*/*")) },
+            requireParentalControlUnlock = requireParentalControlUnlock,
         )
 
         // A single stable PlayerHost call site, always composed whenever a channel is loaded
@@ -270,6 +287,53 @@ private fun MainAppContent(
         )
 
         BatteryHintZone(viewModel = viewModel)
+    }
+}
+
+/**
+ * Returns a function that runs its argument immediately if the parental-control PIN was already
+ * entered this app session, or stashes it and shows the PIN dialog otherwise - the argument then
+ * runs once the PIN checks out. Self-contained: also renders the dialog itself, so a caller just
+ * wraps whatever needs gating (opening a locked channel, unlocking one permanently, Settings'
+ * locked-channel management/PIN-change rows) in the returned function and nothing else. See
+ * `app/ParentalControlController`'s doc for why unlocking (unlike locking) always needs this.
+ */
+@Composable
+private fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) -> Unit {
+    var pendingUnlockAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showDialog by remember { mutableStateOf(false) }
+    var pinError by remember { mutableStateOf(false) }
+    val unlocked by viewModel.parentalControlUnlocked.collectAsStateWithLifecycle()
+
+    if (showDialog) {
+        ParentalControlPinDialog(
+            title = stringResource(R.string.parental_control_enter_pin),
+            isError = pinError,
+            onSubmit = { pin ->
+                if (viewModel.verifyParentalControlPin(pin)) {
+                    showDialog = false
+                    pinError = false
+                    pendingUnlockAction?.invoke()
+                    pendingUnlockAction = null
+                } else {
+                    pinError = true
+                }
+            },
+            onDismiss = {
+                showDialog = false
+                pendingUnlockAction = null
+            },
+        )
+    }
+
+    return { action ->
+        if (unlocked) {
+            action()
+        } else {
+            pendingUnlockAction = action
+            pinError = false
+            showDialog = true
+        }
     }
 }
 
@@ -300,11 +364,14 @@ private fun ScaffoldZone(
     pickPlaylistFile: () -> Unit,
     exportBackupFile: () -> Unit,
     importBackupFile: () -> Unit,
+    requireParentalControlUnlock: (() -> Unit) -> Unit,
 ) {
     val playlistSources by viewModel.playlistSources.collectAsStateWithLifecycle()
     val activePlaylistSourceId by viewModel.activePlaylistSourceId.collectAsStateWithLifecycle()
     val pinnedGroupKeys by viewModel.pinnedGroupKeys.collectAsStateWithLifecycle()
     val hiddenGroupKeys by viewModel.hiddenGroupKeys.collectAsStateWithLifecycle()
+    val lockedChannelKeys by viewModel.lockedChannelKeys.collectAsStateWithLifecycle()
+    val parentalControlPinSet by viewModel.parentalControlPinSet.collectAsStateWithLifecycle()
     val epgState by viewModel.epgState.collectAsStateWithLifecycle()
     val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
     val castState by viewModel.castState.collectAsStateWithLifecycle()
@@ -361,6 +428,16 @@ private fun ScaffoldZone(
                 onPinGroup = viewModel::pinGroup,
                 onHideGroup = viewModel::hideGroup,
                 onRestoreGroup = viewModel::clearGroupOverride,
+                isChannelLocked = viewModel::isChannelLocked,
+                onLockChannel = viewModel::lockChannel,
+                onUnlockChannel = { channel ->
+                    requireParentalControlUnlock { viewModel.unlockChannelPermanently(channel) }
+                },
+                lockedChannelKeys = lockedChannelKeys,
+                parentalControlPinSet = parentalControlPinSet,
+                onSetParentalControlPin = viewModel::setParentalControlPin,
+                onResetParentalControl = viewModel::resetParentalControl,
+                requireParentalControlUnlock = requireParentalControlUnlock,
                 focusChannelsToken = focusChannelsToken,
                 onChannelSelected = onChannelSelected,
                 epgState = epgState,

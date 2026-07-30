@@ -68,6 +68,10 @@
     <string name="channels_group_pin">Pin group</string>
     <string name="channels_group_unpin">Unpin group</string>
     <string name="channels_group_hide">Hide group</string>
+    <string name="channels_channel_guide">Guide</string>
+    <string name="channels_channel_lock">Lock channel</string>
+    <string name="channels_channel_unlock">Unlock channel</string>
+    <string name="channels_channel_locked">Locked - tap to enter PIN</string>
     <string name="settings_hidden_groups">Hidden groups (%1$d)</string>
     <string name="settings_hidden_groups_restore">Restore</string>
     <plurals name="channel_groups_count">
@@ -148,6 +152,20 @@
     <string name="settings_icon_sources_remove">Remove source</string>
     <string name="settings_icon_sources_error_invalid">Enter a full http(s) URL</string>
     <string name="settings_icon_sources_error_duplicate">That source is already added</string>
+    <string name="settings_section_parental_control">Parental control</string>
+    <string name="parental_control_set_up">Set up PIN lock</string>
+    <string name="parental_control_manage_locked">Locked channels (%1$d)</string>
+    <string name="parental_control_change_pin">Change PIN</string>
+    <string name="parental_control_reset">Reset parental control</string>
+    <string name="parental_control_reset_confirm_title">Reset parental control?</string>
+    <string name="parental_control_reset_confirm_message">This removes the PIN and unlocks every locked channel. This can\'t be undone.</string>
+    <string name="parental_control_unlock_action">Unlock</string>
+    <string name="parental_control_enter_pin">Enter PIN</string>
+    <string name="parental_control_pin_incorrect">Incorrect PIN</string>
+    <string name="parental_control_set_pin_title">Set a 4-digit PIN</string>
+    <string name="parental_control_new_pin">New PIN</string>
+    <string name="parental_control_confirm_pin">Confirm PIN</string>
+    <string name="parental_control_pin_mismatch">PINs don\'t match</string>
     <string name="settings_section_playback">Playback</string>
     <string name="settings_section_cache">Cache</string>
     <string name="settings_section_data">Data</string>
@@ -317,4 +335,6 @@
     <!-- Common -->
     <string name="common_back">Back</string>
     <string name="common_close">Close</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_cancel">Cancel</string>
 </resources>

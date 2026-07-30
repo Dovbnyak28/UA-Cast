@@ -68,6 +68,10 @@
     <string name="channels_group_pin">Закрепить группу</string>
     <string name="channels_group_unpin">Открепить группу</string>
     <string name="channels_group_hide">Скрыть группу</string>
+    <string name="channels_channel_guide">Гид</string>
+    <string name="channels_channel_lock">Заблокировать канал</string>
+    <string name="channels_channel_unlock">Разблокировать канал</string>
+    <string name="channels_channel_locked">Заблокировано - нажмите, чтобы ввести PIN</string>
     <string name="settings_hidden_groups">Скрытые группы (%1$d)</string>
     <string name="settings_hidden_groups_restore">Восстановить</string>
     <plurals name="channel_groups_count">
@@ -152,6 +156,20 @@
     <string name="settings_icon_sources_remove">Убрать источник</string>
     <string name="settings_icon_sources_error_invalid">Введите полный URL http(s)</string>
     <string name="settings_icon_sources_error_duplicate">Этот источник уже добавлен</string>
+    <string name="settings_section_parental_control">Родительский контроль</string>
+    <string name="parental_control_set_up">Установить PIN-код</string>
+    <string name="parental_control_manage_locked">Заблокированные каналы (%1$d)</string>
+    <string name="parental_control_change_pin">Изменить PIN</string>
+    <string name="parental_control_reset">Сбросить родительский контроль</string>
+    <string name="parental_control_reset_confirm_title">Сбросить родительский контроль?</string>
+    <string name="parental_control_reset_confirm_message">Это удалит PIN-код и разблокирует все заблокированные каналы. Действие нельзя отменить.</string>
+    <string name="parental_control_unlock_action">Разблокировать</string>
+    <string name="parental_control_enter_pin">Введите PIN</string>
+    <string name="parental_control_pin_incorrect">Неверный PIN</string>
+    <string name="parental_control_set_pin_title">Установите 4-значный PIN</string>
+    <string name="parental_control_new_pin">Новый PIN</string>
+    <string name="parental_control_confirm_pin">Подтвердите PIN</string>
+    <string name="parental_control_pin_mismatch">PIN-коды не совпадают</string>
     <string name="settings_section_playback">Воспроизведение</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="settings_section_data">Данные</string>
@@ -319,4 +337,6 @@
     <!-- Common -->
     <string name="common_back">Назад</string>
     <string name="common_close">Закрыть</string>
+    <string name="common_confirm">Подтвердить</string>
+    <string name="common_cancel">Отмена</string>
 </resources>

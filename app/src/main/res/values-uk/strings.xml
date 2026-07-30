@@ -68,6 +68,10 @@
     <string name="channels_group_pin">Закріпити групу</string>
     <string name="channels_group_unpin">Відкріпити групу</string>
     <string name="channels_group_hide">Приховати групу</string>
+    <string name="channels_channel_guide">Гід</string>
+    <string name="channels_channel_lock">Заблокувати канал</string>
+    <string name="channels_channel_unlock">Розблокувати канал</string>
+    <string name="channels_channel_locked">Заблоковано - торкніться, щоб ввести PIN</string>
     <string name="settings_hidden_groups">Приховані групи (%1$d)</string>
     <string name="settings_hidden_groups_restore">Відновити</string>
     <plurals name="channel_groups_count">
@@ -152,6 +156,20 @@
     <string name="settings_icon_sources_remove">Прибрати джерело</string>
     <string name="settings_icon_sources_error_invalid">Введіть повну URL-адресу http(s)</string>
     <string name="settings_icon_sources_error_duplicate">Це джерело вже додано</string>
+    <string name="settings_section_parental_control">Батьківський контроль</string>
+    <string name="parental_control_set_up">Встановити PIN-код</string>
+    <string name="parental_control_manage_locked">Заблоковані канали (%1$d)</string>
+    <string name="parental_control_change_pin">Змінити PIN</string>
+    <string name="parental_control_reset">Скинути батьківський контроль</string>
+    <string name="parental_control_reset_confirm_title">Скинути батьківський контроль?</string>
+    <string name="parental_control_reset_confirm_message">Це видалить PIN-код і розблокує всі заблоковані канали. Дію не можна скасувати.</string>
+    <string name="parental_control_unlock_action">Розблокувати</string>
+    <string name="parental_control_enter_pin">Введіть PIN</string>
+    <string name="parental_control_pin_incorrect">Невірний PIN</string>
+    <string name="parental_control_set_pin_title">Встановіть 4-значний PIN</string>
+    <string name="parental_control_new_pin">Новий PIN</string>
+    <string name="parental_control_confirm_pin">Підтвердіть PIN</string>
+    <string name="parental_control_pin_mismatch">PIN-коди не збігаються</string>
     <string name="settings_section_playback">Відтворення</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="settings_section_data">Дані</string>
@@ -319,4 +337,6 @@
     <!-- Common -->
     <string name="common_back">Назад</string>
     <string name="common_close">Закрити</string>
+    <string name="common_confirm">Підтвердити</string>
+    <string name="common_cancel">Скасувати</string>
 </resources>

@@ -55,6 +55,9 @@ fun ChannelsScreen(
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
+    isChannelLocked: (M3uChannel) -> Boolean,
+    onLockChannel: (M3uChannel) -> Unit,
+    onUnlockChannel: (M3uChannel) -> Unit,
     onRefreshPlaylist: () -> Unit,
     showIconTierBanner: Boolean,
     onEnableIcons: () -> Unit,
@@ -68,6 +71,9 @@ fun ChannelsScreen(
 ) {
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
     var guideChannel by remember { mutableStateOf<M3uChannel?>(null) }
+    // Long-press target for ChannelActionsSheet (Guide/Lock toggle) - separate from guideChannel,
+    // which only opens once the sheet's "Guide" row is tapped.
+    var channelActionsFor by remember { mutableStateOf<M3uChannel?>(null) }
 
     // Forces every ChannelIcon/GroupIconCollage in this screen to re-resolve when either signal
     // fires: EPG data arriving unlocks its icon-URL source (see AppViewModel.resolveChannelIcon),
@@ -133,10 +139,11 @@ fun ChannelsScreen(
                     onChannelLayoutSelected = onChannelLayoutSelected,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
+                    isChannelLocked = isChannelLocked,
                     onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
                     onCloseGroup = { openGroupKey = null },
                     onChannelSelected = onChannelSelected,
-                    onLongPressChannel = { guideChannel = it },
+                    onLongPressChannel = { channelActionsFor = it },
                     pinnedGroupKeys = pinnedGroupKeys,
                     hiddenGroupKeys = hiddenGroupKeys,
                     onPinGroup = onPinGroup,
@@ -158,10 +165,11 @@ fun ChannelsScreen(
                 onChannelLayoutSelected = onChannelLayoutSelected,
                 isFavorite = isFavorite,
                 onToggleFavorite = onToggleFavorite,
+                isChannelLocked = isChannelLocked,
                 onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
                 onCloseGroup = { openGroupKey = null },
                 onChannelSelected = onChannelSelected,
-                onLongPressChannel = { guideChannel = it },
+                onLongPressChannel = { channelActionsFor = it },
                 pinnedGroupKeys = pinnedGroupKeys,
                 hiddenGroupKeys = hiddenGroupKeys,
                 onPinGroup = onPinGroup,
@@ -177,6 +185,18 @@ fun ChannelsScreen(
             epgData = epgState.data,
             nowMillis = epgState.nowMillis,
             onDismiss = { guideChannel = null },
+        )
+    }
+
+    channelActionsFor?.let { channel ->
+        ChannelActionsSheet(
+            channelName = channel.displayName,
+            isLocked = isChannelLocked(channel),
+            onOpenGuide = { guideChannel = channel },
+            onToggleLock = {
+                if (isChannelLocked(channel)) onUnlockChannel(channel) else onLockChannel(channel)
+            },
+            onDismiss = { channelActionsFor = null },
         )
     }
 }
@@ -195,6 +215,7 @@ private fun ChannelsContent(
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
+    isChannelLocked: (M3uChannel) -> Boolean,
     onOpenGroup: (GroupedChannels) -> Unit,
     onCloseGroup: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
@@ -244,6 +265,7 @@ private fun ChannelsContent(
                         onLayoutChange = onChannelLayoutSelected,
                         isFavorite = isFavorite,
                         onToggleFavorite = onToggleFavorite,
+                        isLocked = isChannelLocked,
                         onBack = onCloseGroup,
                         onChannelClick = { channel ->
                             val index = flatChannels.indexOf(channel)

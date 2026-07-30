@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,10 +27,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,9 +58,11 @@ import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.playlist.GroupedChannels
+import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.playlist.groupDisplayKey
 import com.uacastplayer.ui.channels.groupLabel
@@ -66,6 +71,7 @@ import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.SegmentedControl
+import com.uacastplayer.ui.components.SetPinDialog
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.AppIcons
@@ -94,6 +100,12 @@ fun SettingsScreen(
     onOpenAddPlaylist: () -> Unit,
     hiddenGroupKeys: Set<String>,
     onRestoreGroup: (String) -> Unit,
+    lockedChannelKeys: Set<String>,
+    parentalControlPinSet: Boolean,
+    onSetParentalControlPin: (String) -> Boolean,
+    onResetParentalControl: () -> Unit,
+    onUnlockChannel: (M3uChannel) -> Unit,
+    requireParentalControlUnlock: (() -> Unit) -> Unit,
     onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
     onListDensitySelected: (ListDensity) -> Unit,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
@@ -203,6 +215,18 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_section_parental_control), icon = AppIcons.Lock) {
+            ParentalControlSection(
+                playlistState = playlistState,
+                lockedChannelKeys = lockedChannelKeys,
+                parentalControlPinSet = parentalControlPinSet,
+                onSetParentalControlPin = onSetParentalControlPin,
+                onResetParentalControl = onResetParentalControl,
+                onUnlockChannel = onUnlockChannel,
+                requireParentalControlUnlock = requireParentalControlUnlock,
+            )
         }
 
         SettingsSection(title = stringResource(R.string.settings_section_playback), icon = AppIcons.Play) {
@@ -523,6 +547,136 @@ private fun HiddenGroupsSheet(groups: List<GroupedChannels>, onRestore: (String)
             }
         }
     }
+}
+
+/** Set-up / manage / reset rows for the parental-control PIN lock - see
+ * `app/ParentalControlController`'s doc for the locking/unlocking asymmetry these rows follow:
+ * setting the first PIN needs no gate, but managing locked channels or changing the PIN both go
+ * through [requireParentalControlUnlock], while [onResetParentalControl] (guarded only by its own
+ * confirmation dialog below) deliberately doesn't. */
+@Composable
+private fun ParentalControlSection(
+    playlistState: PlaylistUiState,
+    lockedChannelKeys: Set<String>,
+    parentalControlPinSet: Boolean,
+    onSetParentalControlPin: (String) -> Boolean,
+    onResetParentalControl: () -> Unit,
+    onUnlockChannel: (M3uChannel) -> Unit,
+    requireParentalControlUnlock: (() -> Unit) -> Unit,
+) {
+    if (!parentalControlPinSet) {
+        var showSetPin by rememberSaveable { mutableStateOf(false) }
+        PlaylistActionRow(
+            label = stringResource(R.string.parental_control_set_up),
+            icon = AppIcons.Lock,
+            onClick = { showSetPin = true },
+        )
+        if (showSetPin) {
+            SetPinDialog(
+                onSubmit = { pin -> if (onSetParentalControlPin(pin)) showSetPin = false },
+                onDismiss = { showSetPin = false },
+            )
+        }
+        return
+    }
+
+    var showManageLocked by rememberSaveable { mutableStateOf(false) }
+    var showChangePin by rememberSaveable { mutableStateOf(false) }
+    var showResetConfirm by rememberSaveable { mutableStateOf(false) }
+
+    PlaylistActionRow(
+        label = stringResource(R.string.parental_control_manage_locked, lockedChannelKeys.size),
+        icon = AppIcons.Lock,
+        onClick = { requireParentalControlUnlock { showManageLocked = true } },
+    )
+    PlaylistActionRow(
+        label = stringResource(R.string.parental_control_change_pin),
+        icon = AppIcons.Lock,
+        onClick = { requireParentalControlUnlock { showChangePin = true } },
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    PlaylistActionRow(
+        label = stringResource(R.string.parental_control_reset),
+        icon = AppIcons.Delete,
+        onClick = { showResetConfirm = true },
+        modifier = Modifier.padding(top = 8.dp),
+    )
+
+    if (showManageLocked) {
+        val lockedChannels = remember(playlistState.groups, lockedChannelKeys) {
+            playlistState.groups.flatMap { it.channels }.filter { FavoriteKey.of(it) in lockedChannelKeys }
+        }
+        LockedChannelsSheet(
+            channels = lockedChannels,
+            onUnlock = onUnlockChannel,
+            onDismiss = { showManageLocked = false },
+        )
+    }
+    if (showChangePin) {
+        SetPinDialog(
+            onSubmit = { pin -> if (onSetParentalControlPin(pin)) showChangePin = false },
+            onDismiss = { showChangePin = false },
+        )
+    }
+    if (showResetConfirm) {
+        ResetParentalControlConfirmDialog(
+            onConfirm = { onResetParentalControl(); showResetConfirm = false },
+            onDismiss = { showResetConfirm = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LockedChannelsSheet(channels: List<M3uChannel>, onUnlock: (M3uChannel) -> Unit, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+            Text(
+                text = stringResource(R.string.parental_control_manage_locked, channels.size),
+                style = Title,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            for (channel in channels) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = channel.displayName,
+                        style = BodyRegular,
+                        color = UaTheme.palette.labelPrimary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SecondaryButton(
+                        text = stringResource(R.string.parental_control_unlock_action),
+                        onClick = { onUnlock(channel) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResetParentalControlConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = UaTheme.palette.surface2,
+        titleContentColor = UaTheme.palette.labelPrimary,
+        textContentColor = UaTheme.palette.labelSecondary,
+        title = { Text(stringResource(R.string.parental_control_reset_confirm_title)) },
+        text = { Text(stringResource(R.string.parental_control_reset_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.parental_control_reset), color = UaTheme.palette.routeRed)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        },
+    )
 }
 
 @Composable

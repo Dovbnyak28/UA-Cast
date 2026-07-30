@@ -59,9 +59,9 @@ class ParentalControlController(
      * set at all - the latter shouldn't happen from the UI (an unlock prompt only ever shows when
      * [isPinSet] is already true), but failing closed instead of throwing is cheap insurance. */
     fun verifyPin(pin: String): Boolean {
-        val hash = preferences.parentalControlPinHash ?: return false
-        val salt = preferences.parentalControlPinSalt ?: return false
-        val matches = PinHasher.verify(pin, salt, hash)
+        val hash = preferences.parentalControlPinHash
+        val salt = preferences.parentalControlPinSalt
+        val matches = hash != null && salt != null && PinHasher.verify(pin, salt, hash)
         if (matches) _unlockedThisSession.value = true
         return matches
     }

@@ -92,6 +92,7 @@ internal fun SingleGroupChannelList(
     onLayoutChange: (ChannelLayout) -> Unit,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
+    isLocked: (M3uChannel) -> Boolean,
     onBack: () -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
     onLongPressChannel: (M3uChannel) -> Unit,
@@ -186,6 +187,7 @@ internal fun SingleGroupChannelList(
                             density = density,
                             isFavorite = isFavorite(channel),
                             onToggleFavorite = { onToggleFavorite(channel) },
+                            isLocked = isLocked(channel),
                             onClick = { onChannelClick(channel) },
                             onLongClick = { onLongPressChannel(channel) },
                         )
@@ -220,7 +222,9 @@ internal fun SingleGroupChannelList(
                         large = layout == ChannelLayout.LARGE_ICONS,
                         isFavorite = isFavorite(channel),
                         onToggleFavorite = { onToggleFavorite(channel) },
+                        isLocked = isLocked(channel),
                         onClick = { onChannelClick(channel) },
+                        onLongClick = { onLongPressChannel(channel) },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -291,6 +295,7 @@ private fun ChannelRow(
     density: ListDensity,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    isLocked: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -356,6 +361,14 @@ private fun ChannelRow(
                 )
             }
         }
+        if (isLocked) {
+            Icon(
+                AppIcons.Lock,
+                contentDescription = stringResource(R.string.channels_channel_locked),
+                tint = UaTheme.palette.labelSecondary,
+                modifier = Modifier.size(18.dp).padding(end = 4.dp),
+            )
+        }
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 AppIcons.Favorites,
@@ -372,6 +385,7 @@ private fun ChannelRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChannelTile(
     channel: M3uChannel,
@@ -380,7 +394,9 @@ private fun ChannelTile(
     large: Boolean,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    isLocked: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tileShape = RoundedCornerShape(RadiusList)
@@ -389,7 +405,7 @@ private fun ChannelTile(
             .fillMaxWidth()
             // Inside a LazyVerticalGrid - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
             .raisedSurface(tileShape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(12.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -428,6 +444,14 @@ private fun ChannelTile(
                 contentDescription = stringResource(R.string.favorites_title),
                 tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
                 modifier = Modifier.size(16.dp),
+            )
+        }
+        if (isLocked) {
+            Icon(
+                AppIcons.Lock,
+                contentDescription = stringResource(R.string.channels_channel_locked),
+                tint = UaTheme.palette.labelSecondary,
+                modifier = Modifier.align(Alignment.TopStart).size(16.dp),
             )
         }
     }

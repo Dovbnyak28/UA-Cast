@@ -68,6 +68,10 @@
     <string name="channels_group_pin">Fijar grupo</string>
     <string name="channels_group_unpin">Dejar de fijar grupo</string>
     <string name="channels_group_hide">Ocultar grupo</string>
+    <string name="channels_channel_guide">Guía</string>
+    <string name="channels_channel_lock">Bloquear canal</string>
+    <string name="channels_channel_unlock">Desbloquear canal</string>
+    <string name="channels_channel_locked">Bloqueado - toca para introducir el PIN</string>
     <string name="settings_hidden_groups">Grupos ocultos (%1$d)</string>
     <string name="settings_hidden_groups_restore">Restaurar</string>
     <plurals name="channel_groups_count">
@@ -150,6 +154,20 @@
     <string name="settings_icon_sources_remove">Quitar fuente</string>
     <string name="settings_icon_sources_error_invalid">Introduce una URL http(s) completa</string>
     <string name="settings_icon_sources_error_duplicate">Esa fuente ya está añadida</string>
+    <string name="settings_section_parental_control">Control parental</string>
+    <string name="parental_control_set_up">Configurar PIN</string>
+    <string name="parental_control_manage_locked">Canales bloqueados (%1$d)</string>
+    <string name="parental_control_change_pin">Cambiar PIN</string>
+    <string name="parental_control_reset">Restablecer control parental</string>
+    <string name="parental_control_reset_confirm_title">¿Restablecer el control parental?</string>
+    <string name="parental_control_reset_confirm_message">Esto elimina el PIN y desbloquea todos los canales bloqueados. No se puede deshacer.</string>
+    <string name="parental_control_unlock_action">Desbloquear</string>
+    <string name="parental_control_enter_pin">Introduce el PIN</string>
+    <string name="parental_control_pin_incorrect">PIN incorrecto</string>
+    <string name="parental_control_set_pin_title">Establece un PIN de 4 dígitos</string>
+    <string name="parental_control_new_pin">PIN nuevo</string>
+    <string name="parental_control_confirm_pin">Confirma el PIN</string>
+    <string name="parental_control_pin_mismatch">Los PIN no coinciden</string>
     <string name="settings_section_playback">Reproducción</string>
     <string name="settings_section_cache">Caché</string>
     <string name="settings_section_data">Datos</string>
@@ -317,4 +335,6 @@
     <!-- Common -->
     <string name="common_back">Atrás</string>
     <string name="common_close">Cerrar</string>
+    <string name="common_confirm">Confirmar</string>
+    <string name="common_cancel">Cancelar</string>
 </resources>

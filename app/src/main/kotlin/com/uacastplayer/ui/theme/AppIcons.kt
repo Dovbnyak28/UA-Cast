@@ -926,6 +926,46 @@ object AppIcons {
         }.build()
     }
 
+    // Every path coordinate below is inherently arbitrary vector-graphics data, same as every
+    // other icon in this object - the rest predate this codebase's detekt baseline and so never
+    // triggered MagicNumber; this one is new and needs the same treatment made explicit.
+    @Suppress("MagicNumber")
+    val Lock: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Lock", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            // Shackle - top half of a ring (same outer/inner-arc EvenOdd technique as Globe/HelpCircle
+            // above), its open ends running straight down to meet the body below.
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(8f, 10f)
+                lineTo(8f, 9f)
+                arcTo(4f, 4f, 0f, isMoreThanHalf = false, isPositiveArc = true, 16f, 9f)
+                lineTo(16f, 10f)
+                lineTo(14.2f, 10f)
+                lineTo(14.2f, 9f)
+                arcTo(2.2f, 2.2f, 0f, isMoreThanHalf = false, isPositiveArc = false, 9.8f, 9f)
+                lineTo(9.8f, 10f)
+                close()
+            }
+            // Body with a keyhole cut out via EvenOdd.
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(5f, 10f)
+                lineTo(19f, 10f)
+                lineTo(19f, 21f)
+                lineTo(5f, 21f)
+                close()
+                moveTo(11.2f, 13.5f)
+                arcTo(0.8f, 0.8f, 0f, isMoreThanHalf = false, isPositiveArc = true, 11.2f, 15.1f)
+                lineTo(10.6f, 18f)
+                lineTo(13.4f, 18f)
+                lineTo(12.8f, 15.1f)
+                arcTo(0.8f, 0.8f, 0f, isMoreThanHalf = false, isPositiveArc = true, 12.8f, 13.5f)
+                close()
+            }
+        }.build()
+    }
+
     val Volume: ImageVector by lazy {
         ImageVector.Builder(
             name = "Volume", defaultWidth = 24.dp, defaultHeight = 24.dp,
