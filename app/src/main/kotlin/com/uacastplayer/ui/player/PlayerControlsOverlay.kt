@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,7 +61,9 @@ import kotlin.math.roundToInt
 internal fun PlayerControlsOverlay(
     uiState: PlayerUiState,
     isFullscreen: Boolean,
-    sleepTimerRemainingMillis: Long?,
+    // State, not a plain Long? - see SleepTimerState's doc. Kept unread until SleepTimerButton's
+    // own body so the once-a-second tick only recomposes that small pill, not this whole overlay.
+    sleepTimerRemainingMillis: State<Long?>,
     brightnessLevel: Float,
     volumeLevel: Float,
     onExit: () -> Unit,
@@ -235,8 +238,9 @@ private fun LevelStepperRow(
  * dialog.
  */
 @Composable
-private fun SleepTimerButton(remainingMillis: Long?, onClick: () -> Unit) {
-    if (remainingMillis == null) {
+private fun SleepTimerButton(remainingMillis: State<Long?>, onClick: () -> Unit) {
+    val remaining = remainingMillis.value
+    if (remaining == null) {
         SmallRoundIconButton(
             icon = AppIcons.Timer,
             onClick = onClick,
@@ -260,7 +264,7 @@ private fun SleepTimerButton(remainingMillis: Long?, onClick: () -> Unit) {
                 modifier = Modifier.size(16.dp),
             )
             Text(
-                text = SleepTimerFormatter.formatRemaining(remainingMillis),
+                text = SleepTimerFormatter.formatRemaining(remaining),
                 color = Color.White,
                 style = Caption,
                 modifier = Modifier.padding(start = 6.dp),

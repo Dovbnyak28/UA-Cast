@@ -2,6 +2,7 @@ package com.uacastplayer.ui.player
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,9 +14,13 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 
-/** User-facing snapshot + actions for the player's sleep timer. */
+/** User-facing snapshot + actions for the player's sleep timer. [remainingMillis] is exposed as a
+ * [State] rather than a plain `Long?` so a caller can hand it down to whichever leaf composable
+ * actually renders the countdown (see PlayerControlsOverlay's SleepTimerButton) without reading
+ * `.value` itself - reading it here, in the same big composable that also owns fullscreen/gesture/
+ * playback state, would recompose the *entire* player screen once a second while the timer runs. */
 internal class SleepTimerState(
-    val remainingMillis: Long?,
+    val remainingMillis: State<Long?>,
     val start: (Duration) -> Unit,
     val cancel: () -> Unit,
 )
@@ -29,30 +34,30 @@ internal class SleepTimerState(
 @Composable
 internal fun rememberSleepTimerState(onExpire: () -> Unit): SleepTimerState {
     var endTimeMillis by rememberSaveable { mutableStateOf<Long?>(null) }
-    var remainingMillis by remember { mutableStateOf<Long?>(null) }
+    val remainingMillisState = remember { mutableStateOf<Long?>(null) }
     val latestOnExpire by rememberUpdatedState(onExpire)
 
     LaunchedEffect(endTimeMillis) {
         val end = endTimeMillis
         if (end == null) {
-            remainingMillis = null
+            remainingMillisState.value = null
             return@LaunchedEffect
         }
         while (true) {
             val now = System.currentTimeMillis()
             if (SleepTimerCalculator.hasExpired(now, end)) {
-                remainingMillis = null
+                remainingMillisState.value = null
                 endTimeMillis = null
                 latestOnExpire()
                 break
             }
-            remainingMillis = SleepTimerCalculator.remainingMillis(now, end)
+            remainingMillisState.value = SleepTimerCalculator.remainingMillis(now, end)
             delay(1.seconds)
         }
     }
 
     return SleepTimerState(
-        remainingMillis = remainingMillis,
+        remainingMillis = remainingMillisState,
         start = { duration ->
             endTimeMillis = SleepTimerCalculator.endTimeMillis(System.currentTimeMillis(), duration)
         },

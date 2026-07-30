@@ -50,7 +50,7 @@ internal fun PlayerDialogs(
 ) {
     if (showSleepTimerDialog) {
         SleepTimerDialog(
-            isTimerActive = sleepTimer.remainingMillis != null,
+            isTimerActive = sleepTimer.remainingMillis.value != null,
             onSelect = { duration ->
                 sleepTimer.start(duration)
                 onDismissSleepTimerDialog()
