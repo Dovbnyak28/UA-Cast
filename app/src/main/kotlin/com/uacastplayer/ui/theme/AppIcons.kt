@@ -926,10 +926,6 @@ object AppIcons {
         }.build()
     }
 
-    // Every path coordinate below is inherently arbitrary vector-graphics data, same as every
-    // other icon in this object - the rest predate this codebase's detekt baseline and so never
-    // triggered MagicNumber; this one is new and needs the same treatment made explicit.
-    @Suppress("MagicNumber")
     val Lock: ImageVector by lazy {
         ImageVector.Builder(
             name = "Lock", defaultWidth = 24.dp, defaultHeight = 24.dp,

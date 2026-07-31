@@ -24,3 +24,33 @@ style:
   # rule can never see them as "used" - same reasoning as TooManyFunctions.ignorePrivate above.
   UnusedPrivateMember:
     ignoreAnnotated: [Preview]
+
+  # Two kinds of file where a number genuinely has no name worth giving it, so flagging them only
+  # ever produced baseline entries and @Suppress noise - 245 of the 391 grandfathered MagicNumber
+  # findings came from exactly these:
+  #
+  #   AppIcons.kt      - ImageVector path geometry. `const val LOCK_SHACKLE_ARC_START_X = 2.2f`
+  #                      names nothing; the coordinate only means anything as part of the path it
+  #                      sits in. Adding one icon used to produce a fresh crop of violations that
+  #                      the baseline (recorded per snippet) could not cover, so each new icon
+  #                      needed its own @Suppress.
+  #   Color/*Palette   - colour channel literals. 0xFF0B0B12 is already the most readable form the
+  #                      value has, and the surrounding property name is what carries the meaning.
+  #
+  # Deliberately NOT extended to the binary-protocol parsers (TsSegmenter, TsProgramInfoParser,
+  # XmlTvTimeParser): a packet offset or bit mask there *does* deserve a name, and those findings
+  # staying in the baseline keeps that as visible debt rather than hiding it behind config.
+  #
+  # NOTE: `excludes` REPLACES detekt's default list for the rule, it does not add to it - so the
+  # test-source patterns below must be restated or every literal in every test file starts failing.
+  MagicNumber:
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/*.Test.kt'
+      - '**/*.Spec.kt'
+      - '**/*.Spek.kt'
+      - '**/ui/theme/AppIcons.kt'
+      - '**/ui/theme/Color.kt'
+      - '**/ui/theme/CinemaPalette.kt'
+      - '**/ui/theme/UaPalette.kt'
