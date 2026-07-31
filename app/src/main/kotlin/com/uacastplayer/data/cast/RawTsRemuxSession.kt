@@ -65,15 +65,35 @@ internal class RawTsRemuxSession(
         readerThread = thread(name = "ProxyServer-remux-$resourceId") { readLoop() }
     }
 
-    /** Stops the reader loop and closes the upstream connection - safe to call from any thread,
-     * including the reader thread itself (e.g. on natural stream end, where it's a no-op beyond
-     * the close). */
+    /**
+     * Signals the reader to stop and unblocks whatever it's parked on - safe to call from any
+     * thread, including the reader thread itself (e.g. on natural stream end, where it's a no-op
+     * beyond the close).
+     *
+     * Deliberately does NOT wait for the reader thread to unwind. Every production caller reaches
+     * this from `ProxyResourceRegistry`, whose teardown paths (session end, receiver error, channel
+     * switch) all run on the main thread via `CastSessionRepository.applyResult` - and while
+     * closing the response normally unblocks the reader in microseconds, a reader parked inside
+     * OkHttp's `execute()` mid-reconnect is NOT unblocked by [Thread.interrupt] at all (classic
+     * socket I/O ignores it), so a join there burned its full timeout on the main thread, twice
+     * over when a draining session was also alive, inside `remuxLock`. Nothing on the registry side
+     * needs the reader to have finished: the session is unreferenced by then and [readLoop]'s
+     * remaining work touches only its own state. Use [awaitStopped] where the wait is actually
+     * wanted (and the caller is not the main thread).
+     */
     fun stop() {
         running = false
         runCatching { currentResponse.close() } // unblocks a blocking read() inside readLoop()
-        val thread = readerThread
-        thread?.interrupt() // unblocks a Thread.sleep() during a reconnect backoff wait
-        if (thread != null && thread !== Thread.currentThread()) {
+        readerThread?.interrupt() // unblocks a Thread.sleep() during a reconnect backoff wait
+    }
+
+    /** Blocks until the reader thread has actually unwound (so [hasEnded] is settled), up to
+     * [REMUX_READER_JOIN_TIMEOUT_MILLIS]. Pair with [stop]; never call from the main thread - see
+     * [stop]'s own doc for why that wait is not always short. A no-op when called from the reader
+     * thread itself. */
+    fun awaitStopped() {
+        val thread = readerThread ?: return
+        if (thread !== Thread.currentThread()) {
             runCatching { thread.join(REMUX_READER_JOIN_TIMEOUT_MILLIS) }
         }
     }

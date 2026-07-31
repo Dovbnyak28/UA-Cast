@@ -49,4 +49,29 @@ class FingerprintTest {
         assertEquals(digest, digest.lowercase())
         assertEquals(true, digest.all { it in "0123456789abcdef" })
     }
+
+    /**
+     * These digests are filenames in the on-disk icon cache and keys in the icon-failure store, so
+     * the hex encoding is a persisted format, not an implementation detail: any change to it
+     * silently orphans every cached icon on every existing install. Pins the current encoding
+     * against a from-scratch reference implementation over inputs that exercise both nibbles of
+     * high-bit (negative, as a signed Kotlin Byte) digest bytes, which is where a hand-rolled hex
+     * conversion would realistically go wrong.
+     */
+    @Test
+    fun `hex encoding matches a reference implementation for every byte value`() {
+        val inputs = listOf(
+            "",
+            "hello",
+            "http://example.com/playlist.m3u?username=u&password=p",
+            "https://cdn.example.org/logos/1%2B1.png",
+            "Дітячі канали",
+        )
+        for (input in inputs) {
+            val expected = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(input.toByteArray(Charsets.UTF_8))
+                .joinToString(separator = "") { byte -> "%02x".format(Locale.ROOT, byte) }
+            assertEquals("digest mismatch for input '$input'", expected, Fingerprint.of(input))
+        }
+    }
 }

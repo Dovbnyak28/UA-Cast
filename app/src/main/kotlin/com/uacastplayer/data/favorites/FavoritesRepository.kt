@@ -20,19 +20,33 @@ class FavoritesRepository(context: Context) {
     private val _favorites = MutableStateFlow<List<FavoriteChannel>>(emptyList())
     val favorites: StateFlow<List<FavoriteChannel>> = _favorites.asStateFlow()
 
-    init {
-        scope.launch { _favorites.value = store.load() }
+    // Membership index over _favorites, rebuilt on every mutation. [isFavorite] is called once per
+    // channel row on every recomposition of a list (see ChannelRow/ChannelTile), which made the
+    // list scan it used to do O(favorites) per row per frame - and the favorites list is
+    // user-grown and unbounded. The list itself stays the source of truth: it carries the manual
+    // sort order (see [reorder]), which a Set cannot.
+    @Volatile private var favoriteKeys: Set<String> = emptySet()
+
+    private fun publish(updated: List<FavoriteChannel>) {
+        favoriteKeys = updated.mapTo(HashSet(updated.size)) { it.key }
+        _favorites.value = updated
+        scope.launch { store.save(updated) }
     }
 
-    fun isFavorite(channel: M3uChannel): Boolean {
-        val key = FavoriteKey.of(channel)
-        return _favorites.value.any { it.key == key }
+    init {
+        scope.launch {
+            val loaded = store.load()
+            favoriteKeys = loaded.mapTo(HashSet(loaded.size)) { it.key }
+            _favorites.value = loaded
+        }
     }
+
+    fun isFavorite(channel: M3uChannel): Boolean = FavoriteKey.of(channel) in favoriteKeys
 
     fun toggleFavorite(channel: M3uChannel) {
         val key = FavoriteKey.of(channel)
         val current = _favorites.value
-        val updated = if (current.any { it.key == key }) {
+        val updated = if (key in favoriteKeys) {
             current.filterNot { it.key == key }
         } else {
             current + FavoriteChannel(
@@ -44,20 +58,16 @@ class FavoritesRepository(context: Context) {
                 addedAtMillis = System.currentTimeMillis(),
             )
         }
-        _favorites.value = updated
-        scope.launch { store.save(updated) }
+        publish(updated)
     }
 
     fun remove(key: String) {
-        val updated = _favorites.value.filterNot { it.key == key }
-        _favorites.value = updated
-        scope.launch { store.save(updated) }
+        publish(_favorites.value.filterNot { it.key == key })
     }
 
     /** Persists a manually reordered favorites list (see MANUAL sort order / ReorderPolicy) - the
      * list order itself doubles as the stored order, so this just replaces it wholesale. */
     fun reorder(newOrder: List<FavoriteChannel>) {
-        _favorites.value = newOrder
-        scope.launch { store.save(newOrder) }
+        publish(newOrder)
     }
 }

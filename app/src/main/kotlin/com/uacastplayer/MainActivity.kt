@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -52,6 +53,8 @@ import com.uacastplayer.ui.theme.GlassTabBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaCastTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
 
@@ -226,8 +229,13 @@ private fun MainAppContent(
     LaunchedEffect(savedPlayerRequest, playlistState.groups) {
         val saved = savedPlayerRequest ?: return@LaunchedEffect
         if (playerRequest != null || !playlistState.hasChannels) return@LaunchedEffect
-        val flatChannels = playlistState.groups.flatMap { it.channels }
-        val index = flatChannels.indexOfFirst { FavoriteKey.of(it) == saved.channelKey }
+        // Off the main thread: FavoriteKey.of is a SHA-256 per channel without a tvg-id, and this
+        // scans the entire flattened playlist - tens of thousands of channels on a large provider
+        // list, at exactly the moment the app is being restored and the user is waiting on a frame.
+        val (flatChannels, index) = withContext(Dispatchers.Default) {
+            val flat = playlistState.groups.flatMap { it.channels }
+            flat to flat.indexOfFirst { FavoriteKey.of(it) == saved.channelKey }
+        }
         if (index >= 0) {
             // playerContainerState is itself rememberSaveable, so the Expanded/Collapsed layout the
             // user left it in normally survives process death on its own - this only needs to force
@@ -304,6 +312,9 @@ private fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) -
     var showDialog by remember { mutableStateOf(false) }
     var pinError by remember { mutableStateOf(false) }
     val unlocked by viewModel.parentalControlUnlocked.collectAsStateWithLifecycle()
+    // Read through a holder rather than captured directly, so the returned gate below can be
+    // remembered once instead of being reallocated whenever `unlocked` flips.
+    val unlockedNow = rememberUpdatedState(unlocked)
 
     if (showDialog) {
         ParentalControlPinDialog(
@@ -326,13 +337,18 @@ private fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) -
         )
     }
 
-    return { action ->
-        if (unlocked) {
-            action()
-        } else {
-            pendingUnlockAction = action
-            pinError = false
-            showDialog = true
+    // Remembered, not rebuilt per composition: this is passed all the way down into RootScaffold's
+    // ~50-parameter call, and an identity that changed on every recomposition meant that call could
+    // never be skipped - one EPG minute tick recomposed the entire tab scaffold.
+    return remember {
+        { action: () -> Unit ->
+            if (unlockedNow.value) {
+                action()
+            } else {
+                pendingUnlockAction = action
+                pinError = false
+                showDialog = true
+            }
         }
     }
 }
@@ -379,6 +395,27 @@ private fun ScaffoldZone(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()
     val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
+
+    // Derived from the flows collected right above rather than delegated to viewModel::isFavorite /
+    // viewModel::isChannelLocked, which read StateFlow.value directly - a plain function call is not
+    // a Compose state read, so a row's star/lock icon had no subscription to what it renders and
+    // only ever refreshed because some ancestor happened to recompose the whole subtree anyway. Any
+    // future skippability win in RootScaffold/ChannelsScreen would have silently frozen both badges
+    // with no compile error to catch it. Keying the lambdas on the sets also gives Compose a real
+    // signal that these inputs changed. HashSet, not the List: isFavorite runs once per visible row
+    // per recomposition, and the favorites list is user-grown and unbounded.
+    val favoriteKeys = remember(favorites) { favorites.mapTo(HashSet(favorites.size)) { it.key } }
+    val isFavorite = remember(favoriteKeys) {
+        { channel: M3uChannel -> FavoriteKey.of(channel) in favoriteKeys }
+    }
+    val isChannelLocked = remember(lockedChannelKeys) {
+        { channel: M3uChannel -> FavoriteKey.of(channel) in lockedChannelKeys }
+    }
+    // Cast routing counters only ever move during a cast session, so castState is the narrowest
+    // signal that can mean "these may have changed". Called unkeyed, this ran on every recomposition
+    // of this zone - i.e. on every EPG minute tick and every icon-prefetch progress update - while
+    // still never actually refreshing reactively.
+    val remuxEffectiveness = remember(castState) { viewModel.remuxEffectivenessSnapshot() }
 
     when {
         showHelp -> {
@@ -428,7 +465,7 @@ private fun ScaffoldZone(
                 onPinGroup = viewModel::pinGroup,
                 onHideGroup = viewModel::hideGroup,
                 onRestoreGroup = viewModel::clearGroupOverride,
-                isChannelLocked = viewModel::isChannelLocked,
+                isChannelLocked = isChannelLocked,
                 onLockChannel = viewModel::lockChannel,
                 onUnlockChannel = { channel ->
                     requireParentalControlUnlock { viewModel.unlockChannelPermanently(channel) }
@@ -464,7 +501,7 @@ private fun ScaffoldZone(
                 onDismissBackupImportSummary = viewModel::dismissBackupImportSummary,
                 favorites = favorites,
                 lastWatchedChannelKey = lastWatchedChannelKey,
-                isFavorite = viewModel::isFavorite,
+                isFavorite = isFavorite,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onRemoveFavorite = viewModel::removeFavorite,
                 onReorderFavorites = viewModel::reorderFavorites,
@@ -474,7 +511,7 @@ private fun ScaffoldZone(
                 onDismissIconSourceError = viewModel::dismissIconSourceError,
                 onOpenHelp = onOpenHelp,
                 onOpenTerms = onOpenTerms,
-                remuxEffectiveness = viewModel.remuxEffectivenessSnapshot(),
+                remuxEffectiveness = remuxEffectiveness,
             )
             DownloadStatusBanner(
                 iconPrefetchState = iconPrefetchState,
@@ -486,7 +523,7 @@ private fun ScaffoldZone(
 }
 
 /** The always-mounted player container - collects only what [PlayerHost] itself needs, so cast
- * state, settings, favorites list churn etc. (all owned by [ScaffoldZone]) never touch this scope. */
+ * state, settings, the backup summary etc. (all owned by [ScaffoldZone]) never touch this scope. */
 @Composable
 private fun BoxScope.PlayerZone(
     viewModel: AppViewModel,
@@ -499,6 +536,18 @@ private fun BoxScope.PlayerZone(
     val request = playerRequest ?: return
     val epgState by viewModel.epgState.collectAsStateWithLifecycle()
     val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
+    // Collected here, rather than delegating to viewModel::isFavorite, for the same reason as
+    // ScaffoldZone's copy: PlayerScreen's favorite button tints itself from isFavorite(currentChannel),
+    // and a plain function call reading StateFlow.value is not a Compose state read. Without a
+    // subscription the star kept its old tint after being tapped until something unrelated
+    // recomposed this zone - in practice the next EPG minute tick, so up to a minute late. Unlike
+    // the flows deliberately kept out of this scope, favorites only change when the user actually
+    // toggles one, which is exactly when the player *should* recompose.
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val favoriteKeys = remember(favorites) { favorites.mapTo(HashSet(favorites.size)) { it.key } }
+    val isFavorite = remember(favoriteKeys) {
+        { channel: M3uChannel -> FavoriteKey.of(channel) in favoriteKeys }
+    }
     val isPlayerExpanded = playerContainerState == PlayerContainerStateMachine.State.EXPANDED
     val isPlayerCollapsed = playerContainerState == PlayerContainerStateMachine.State.COLLAPSED
 
@@ -525,7 +574,7 @@ private fun BoxScope.PlayerZone(
         },
         resolveIcon = viewModel::resolveChannelIcon,
         favoriteActions = PlayerFavoriteActions(
-            isFavorite = viewModel::isFavorite,
+            isFavorite = isFavorite,
             onToggleFavorite = viewModel::toggleFavorite,
         ),
         enrichment = PlayerEnrichmentState(epgState = epgState, iconPrefetchState = iconPrefetchState),

@@ -182,9 +182,11 @@ class RawTsRemuxSessionTest {
         } finally {
             session.stop()
         }
-        // stop() interrupts the backoff wait and joins the reader; readLoop's single exit point
-        // sets the flag - the same exit the reconnect-give-up path goes through, which is what
-        // ProxyServer's dead-session check actually exists for.
+        // stop() only signals and unblocks the reader (it must never block its main-thread callers -
+        // see its doc); awaitStopped() is what waits for the thread to actually unwind. readLoop's
+        // single exit point sets the flag - the same exit the reconnect-give-up path goes through,
+        // which is what ProxyServer's dead-session check actually exists for.
+        session.awaitStopped()
         assertTrue(session.hasEnded)
     }
 

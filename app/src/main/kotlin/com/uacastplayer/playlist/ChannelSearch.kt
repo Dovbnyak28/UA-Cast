@@ -23,6 +23,12 @@ object ChannelSearch {
 
     const val MAX_RESULTS = 200
 
+    // Compiled once at class-init rather than inside normalize() - that function runs once per
+    // channel name (and again per tvg-name) for EVERY channel in the playlist on every search, so a
+    // fresh Regex per call meant tens of thousands of pattern compilations per query on a large
+    // playlist. Same reasoning as ui/components/ChannelIcon.kt's WHITESPACE_REGEX.
+    private val WHITESPACE_REGEX = Regex("\\s+")
+
     fun search(groups: List<GroupedChannels>, query: String): ChannelSearchOutcome {
         val normalizedQuery = normalize(query)
         val results = mutableListOf<ChannelSearchResult>()
@@ -50,5 +56,5 @@ object ChannelSearch {
 
     /** Collapses runs of whitespace to a single space and trims, so "  HBO   Max " and "hbo max"
      * match the same way regardless of how a provider formatted the playlist. */
-    private fun normalize(value: String): String = value.trim().replace(Regex("\\s+"), " ").lowercase()
+    private fun normalize(value: String): String = value.trim().replace(WHITESPACE_REGEX, " ").lowercase()
 }

@@ -70,6 +70,7 @@ fun ChannelsScreen(
     modifier: Modifier = Modifier,
 ) {
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
+    val openChannel = rememberChannelOpener(flatChannels, onChannelSelected)
     var guideChannel by remember { mutableStateOf<M3uChannel?>(null) }
     // Long-press target for ChannelActionsSheet (Guide/Lock toggle) - separate from guideChannel,
     // which only opens once the sheet's "Guide" row is tapped.
@@ -129,7 +130,6 @@ fun ChannelsScreen(
                 ChannelsContent(
                     playlistState = playlistState,
                     openGroup = openGroup,
-                    flatChannels = flatChannels,
                     epgState = epgState,
                     iconRefreshKey = iconRefreshKey,
                     resolveIcon = resolveIcon,
@@ -142,7 +142,7 @@ fun ChannelsScreen(
                     isChannelLocked = isChannelLocked,
                     onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
                     onCloseGroup = { openGroupKey = null },
-                    onChannelSelected = onChannelSelected,
+                    onOpenChannel = openChannel,
                     onLongPressChannel = { channelActionsFor = it },
                     pinnedGroupKeys = pinnedGroupKeys,
                     hiddenGroupKeys = hiddenGroupKeys,
@@ -155,7 +155,6 @@ fun ChannelsScreen(
             ChannelsContent(
                 playlistState = playlistState,
                 openGroup = openGroup,
-                flatChannels = flatChannels,
                 epgState = epgState,
                 iconRefreshKey = iconRefreshKey,
                 resolveIcon = resolveIcon,
@@ -168,7 +167,7 @@ fun ChannelsScreen(
                 isChannelLocked = isChannelLocked,
                 onOpenGroup = { openGroupKey = groupDisplayKey(it.group) },
                 onCloseGroup = { openGroupKey = null },
-                onChannelSelected = onChannelSelected,
+                onOpenChannel = openChannel,
                 onLongPressChannel = { channelActionsFor = it },
                 pinnedGroupKeys = pinnedGroupKeys,
                 hiddenGroupKeys = hiddenGroupKeys,
@@ -201,11 +200,36 @@ fun ChannelsScreen(
     }
 }
 
+/**
+ * Resolves a tapped channel to its index in [flatChannels] through a prebuilt map instead of the
+ * `flatChannels.indexOf(channel)` this replaces - that compared with [M3uChannel]'s data-class
+ * equals (all eight fields, per element) across the whole flattened playlist, which is tens of
+ * thousands of entries on a large provider list, on every tap. streamUrl is what the lists' own
+ * item keys are already derived from (see [com.uacastplayer.playlist.ChannelListKeys]), so this is
+ * the same notion of channel identity those lists already use, not a weaker one.
+ */
+@Composable
+private fun rememberChannelOpener(
+    flatChannels: List<M3uChannel>,
+    onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
+): (M3uChannel) -> Unit {
+    val indexByStreamUrl = remember(flatChannels) {
+        HashMap<String, Int>(flatChannels.size).apply {
+            flatChannels.forEachIndexed { index, channel -> putIfAbsent(channel.streamUrl, index) }
+        }
+    }
+    return remember(flatChannels, indexByStreamUrl, onChannelSelected) {
+        { channel: M3uChannel ->
+            val index = indexByStreamUrl[channel.streamUrl]
+            if (index != null) onChannelSelected(flatChannels, index)
+        }
+    }
+}
+
 @Composable
 private fun ChannelsContent(
     playlistState: PlaylistUiState,
     openGroup: GroupedChannels?,
-    flatChannels: List<M3uChannel>,
     epgState: EpgUiState,
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
@@ -218,7 +242,7 @@ private fun ChannelsContent(
     isChannelLocked: (M3uChannel) -> Boolean,
     onOpenGroup: (GroupedChannels) -> Unit,
     onCloseGroup: () -> Unit,
-    onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
+    onOpenChannel: (M3uChannel) -> Unit,
     onLongPressChannel: (M3uChannel) -> Unit,
     pinnedGroupKeys: Set<String>,
     hiddenGroupKeys: Set<String>,
@@ -244,10 +268,7 @@ private fun ChannelsContent(
                         cachedIconFile = cachedIconFile,
                         isFavorite = isFavorite,
                         onToggleFavorite = onToggleFavorite,
-                        onChannelClick = { channel ->
-                            val index = flatChannels.indexOf(channel)
-                            if (index >= 0) onChannelSelected(flatChannels, index)
-                        },
+                        onChannelClick = onOpenChannel,
                         pinnedGroupKeys = pinnedGroupKeys,
                         hiddenGroupKeys = hiddenGroupKeys,
                         onPinGroup = onPinGroup,
@@ -267,10 +288,7 @@ private fun ChannelsContent(
                         onToggleFavorite = onToggleFavorite,
                         isLocked = isChannelLocked,
                         onBack = onCloseGroup,
-                        onChannelClick = { channel ->
-                            val index = flatChannels.indexOf(channel)
-                            if (index >= 0) onChannelSelected(flatChannels, index)
-                        },
+                        onChannelClick = onOpenChannel,
                         onLongPressChannel = onLongPressChannel,
                     )
                 }

@@ -15,7 +15,16 @@ import kotlin.concurrent.thread
 
 private const val TAG = "ProxyHttpServer"
 private const val MAX_HEADER_BYTES = 16 * 1024
-private const val THREAD_POOL_SIZE = 6
+
+// Sized against the longest a single connection can legitimately occupy a thread without doing any
+// work, not against expected concurrency: a playlist poll for a channel whose remux session is
+// still warming up parks its handler thread inside RawTsRemuxSession.awaitInitialPlaylist for up to
+// 8s waiting for the first segment to be cut. Those parked threads still count against this pool,
+// so at the old size of 6 a burst of channel switches during a cast (each spinning up a fresh remux
+// session, each with its own warm-up wait) could leave the receiver's segment fetches queued behind
+// playlist polls that are doing nothing but sleeping. Every response also closes its connection (see
+// writeHeaders), so threads are never held by idle keep-alive sockets - only by real in-flight work.
+private const val THREAD_POOL_SIZE = 16
 private const val SOCKET_READ_TIMEOUT_MILLIS = 15_000
 private const val HTTP_NO_CONTENT = 204
 private const val CORS_MAX_AGE_SECONDS = "86400"

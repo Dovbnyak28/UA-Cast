@@ -42,15 +42,30 @@ class IconRepository(context: Context) {
     private val memoryCache = LruCache<String, CachedIcon>(MEMORY_CACHE_SIZE)
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
 
-    fun customIconSources(): List<String> = customSourceStore.getBaseUrls()
+    // customSourceStore.getBaseUrls() re-reads SharedPreferences AND re-parses a JSON array on
+    // every call, and the resolve path below needs it once per channel - i.e. once per list row
+    // scrolled into view, and 300 times in a row during a prefetch pass. This list only ever
+    // changes through add/removeCustomIconSource (a Settings action), so it's read once and held
+    // until one of those invalidates it. @Volatile because resolve runs on Dispatchers.IO while
+    // the two mutators are called from the main thread.
+    @Volatile private var cachedCustomBaseUrls: List<String>? = null
+
+    private fun customBaseUrls(): List<String> =
+        cachedCustomBaseUrls ?: customSourceStore.getBaseUrls().also { cachedCustomBaseUrls = it }
+
+    fun customIconSources(): List<String> = customBaseUrls()
 
     fun addCustomIconSource(baseUrl: String) {
-        val current = customSourceStore.getBaseUrls()
-        if (baseUrl !in current) customSourceStore.saveBaseUrls(current + baseUrl)
+        val current = customBaseUrls()
+        if (baseUrl !in current) {
+            customSourceStore.saveBaseUrls(current + baseUrl)
+            cachedCustomBaseUrls = null
+        }
     }
 
     fun removeCustomIconSource(baseUrl: String) {
-        customSourceStore.saveBaseUrls(customSourceStore.getBaseUrls() - baseUrl)
+        customSourceStore.saveBaseUrls(customBaseUrls() - baseUrl)
+        cachedCustomBaseUrls = null
     }
 
     /** Drops every entry, positive and negative - see the class doc for when this needs calling. */
@@ -67,21 +82,36 @@ class IconRepository(context: Context) {
         return resolved
     }
 
-    private suspend fun resolveIconFileUncached(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File? {
+    /**
+     * Dispatched to IO as a whole, not per disk lookup. Both callers reach this from the main
+     * thread - [com.uacastplayer.ui.components.ChannelIcon]'s produceState runs on the composition
+     * dispatcher, and IconController's prefetch job runs on `viewModelScope` (Dispatchers.Main) -
+     * and the per-candidate work here is not free: a SHA-256 fingerprint per candidate URL (see
+     * [IconDiskCache] / [IconFailureStore]) plus the candidate-chain construction itself, once per
+     * channel. Leaving that on the main thread made a prefetch pass (up to 300 channels back to
+     * back, right after a playlist load) compete with rendering for the exact frames the user is
+     * scrolling through. One hop out here also replaces the N separate hops [IconDiskCache.get]
+     * used to make per candidate.
+     */
+    private suspend fun resolveIconFileUncached(
+        tvgLogo: String?,
+        epgIconUrl: String?,
+        tvgId: String?,
+    ): File? = withContext(Dispatchers.IO) {
         val candidates = IconResolver.candidates(
             tvgLogo, epgIconUrl, tvgId,
-            customBaseUrls = customSourceStore.getBaseUrls(),
+            customBaseUrls = customBaseUrls(),
             cdnFallbackUrl = ::cdnFallbackUrl,
         )
         for (candidate in candidates) {
-            diskCache.get(candidate.url)?.let { return it }
+            diskCache.get(candidate.url)?.let { return@withContext it }
             if (candidate is IconCandidate.CacheOnly) continue
             if (failureStore.shouldSkip(candidate.url)) continue
 
             val fetched = fetchAndValidate(candidate.url)
-            if (fetched != null) return fetched
+            if (fetched != null) return@withContext fetched
         }
-        return null
+        null
     }
 
     /**
@@ -91,16 +121,20 @@ class IconRepository(context: Context) {
      * icons nobody explicitly asked for yet would multiply traffic for something that's decorative,
      * not the channel list itself.
      */
-    suspend fun cachedIconFile(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File? {
+    suspend fun cachedIconFile(
+        tvgLogo: String?,
+        epgIconUrl: String?,
+        tvgId: String?,
+    ): File? = withContext(Dispatchers.IO) {
         val candidates = IconResolver.candidates(
             tvgLogo, epgIconUrl, tvgId,
-            customBaseUrls = customSourceStore.getBaseUrls(),
+            customBaseUrls = customBaseUrls(),
             cdnFallbackUrl = ::cdnFallbackUrl,
         )
         for (candidate in candidates) {
-            diskCache.get(candidate.url)?.let { return it }
+            diskCache.get(candidate.url)?.let { return@withContext it }
         }
-        return null
+        null
     }
 
     suspend fun trimCache() = diskCache.trim()
