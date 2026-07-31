@@ -23,6 +23,7 @@ appcompat = "1.7.1"
 lifecycle = "2.10.0"
 fragmentKtx = "1.8.9"
 detekt = "1.23.7"
+desugarJdkLibs = "2.1.5"
 orgJson = "20240303"
 leakcanary = "2.14"
 
@@ -89,6 +90,11 @@ androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiaut
 # Debug-only leak detector (never shipped in release). The app previously had NO leak detection at
 # all, which is why the double-ExoPlayer leak surfaced only via OOM crashes and manual logcat -
 # this makes a retained PlayerViewModel/ExoPlayer visible the moment it happens.
+# Backports java.time (and a few other java.util APIs) to the minSdk 24 devices that predate them -
+# without this, every java.time call in the app is a NoClassDefFoundError on Android 7.0/7.1, which
+# is what android lint's NewApi findings were reporting. See app/build.gradle.kts compileOptions.
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+
 leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
 
 [plugins]

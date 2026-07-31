@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.uacastplayer.R
@@ -59,7 +60,10 @@ private val BufferingIndicatorStrokeWidth = 2.dp
  * the one actually playing (see `LocalPlaybackPolicy`), so this shows the channel's logo instead
  * of a frozen/black video surface, plus a small "on TV" badge.
  */
-@OptIn(markerClass = [UnstableApi::class])
+// Media3 marks these as @UnstableApi, which is androidx.annotation.experimental's flavour of
+// opt-in, NOT Kotlin's @RequiresOptIn - so kotlin.OptIn does not silence it (the compiler says as
+// much: "'@OptIn' has no effect"). androidx.annotation.OptIn is the one that applies.
+@OptIn(UnstableApi::class)
 @Composable
 fun MiniPlayerBar(
     viewModel: PlayerViewModel,

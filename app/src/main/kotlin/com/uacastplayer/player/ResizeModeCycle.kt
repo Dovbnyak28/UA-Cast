@@ -1,5 +1,7 @@
 package com.uacastplayer.player
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.uacastplayer.R
 import com.uacastplayer.data.prefs.PlayerResizeMode
@@ -18,6 +20,10 @@ object ResizeModeCycle {
         PlayerResizeMode.ZOOM -> PlayerResizeMode.FIT
     }
 
+    // AspectRatioFrameLayout's constants are @UnstableApi, which is androidx.annotation.
+    // experimental's flavour of opt-in, NOT Kotlin's @RequiresOptIn - so kotlin.OptIn does not
+    // silence it. androidx.annotation.OptIn is the one that applies.
+    @OptIn(UnstableApi::class)
     fun toMedia3ResizeMode(mode: PlayerResizeMode): Int = when (mode) {
         PlayerResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
         PlayerResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL

@@ -132,6 +132,11 @@ fun HelpScreen(
     }
 
     diagnosticsReport?.let { report ->
+        // Read through stringResource, not context.getString: only the former is tied to the
+        // composition, so a configuration change (the in-app language switch, most obviously)
+        // re-reads it. Pulling it off LocalContext hands back whatever locale that Context was
+        // created with, which is what Compose's own lint flags here.
+        val chooserTitle = stringResource(R.string.diagnostics_share_chooser_title)
         DiagnosticsPreviewDialog(
             report = report,
             onCancel = { diagnosticsReport = null },
@@ -141,9 +146,7 @@ fun HelpScreen(
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, report)
                 }
-                context.startActivity(
-                    Intent.createChooser(intent, context.getString(R.string.diagnostics_share_chooser_title)),
-                )
+                context.startActivity(Intent.createChooser(intent, chooserTitle))
             },
         )
     }

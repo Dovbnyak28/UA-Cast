@@ -96,6 +96,11 @@ android {
     }
 
     compileOptions {
+        // minSdk is 24, but the app uses java.time (EPG day schedules, the guide sheet's clock
+        // formatting, the backup filename's date) which the platform only ships from API 26. On
+        // Android 7.0/7.1 those calls were a NoClassDefFoundError at runtime - a crash on opening
+        // the EPG guide, not a warning. Desugaring backports them into the APK instead.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -109,6 +114,21 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    lint {
+        // The one lint error in this project that is asking for the wrong thing. It fires because
+        // the manifest declares `android.software.leanback` (required=false) without a
+        // LEANBACK_LAUNCHER category - but that omission is the deliberate decision documented in
+        // docs/TV_SUPPORT.md and in the manifest itself: the UI has no D-pad focus navigation, so
+        // appearing on a TV launcher would strand the user with no way to move between channels.
+        // Adding the category to satisfy lint would ship exactly the broken experience the comment
+        // exists to prevent, so the rule is off rather than obeyed or baselined.
+        disable += "MissingLeanbackLauncher"
+
+        // CI runs lintDebug and treats it as a gate (see .github/workflows/android-ci.yml), which
+        // only means anything if a *new* error fails the build rather than joining a growing pile.
+        abortOnError = true
     }
 
     testOptions {
@@ -171,6 +191,8 @@ baselineProfile {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.appcompat)

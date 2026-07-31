@@ -1,6 +1,8 @@
 package com.uacastplayer.ui.player
 import com.uacastplayer.ui.theme.UaTheme
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +31,10 @@ import kotlin.math.roundToInt
 /** The player's five independent dialogs/sheets (sleep timer, audio/subtitle track pickers,
  * quality details, EPG guide) - each `showX` flag and its dismiss callback come from
  * [PlayerScreen]'s own local state, since none of these need to be remembered here. */
+// Media3 marks these as @UnstableApi, which is androidx.annotation.experimental's flavour of
+// opt-in, NOT Kotlin's @RequiresOptIn - so kotlin.OptIn does not silence it (the compiler says as
+// much: "'@OptIn' has no effect"). androidx.annotation.OptIn is the one that applies.
+@OptIn(UnstableApi::class)
 @Composable
 @Suppress("LongParameterList") // glue for five independent dialog triggers, see PlayerScreen's call site
 internal fun PlayerDialogs(
