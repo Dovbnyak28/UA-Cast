@@ -17,5 +17,6 @@ object FavoritesSorter {
         FavoritesSortOrder.PLAYLIST_ORDER -> favorites.sortedBy { playlistIndexOf(it) ?: Int.MAX_VALUE }
         FavoritesSortOrder.ALPHABETICAL -> favorites.sortedBy { it.displayName.lowercase() }
         FavoritesSortOrder.RECENTLY_ADDED -> favorites.sortedByDescending { it.addedAtMillis }
+        FavoritesSortOrder.MANUAL -> favorites
     }
 }

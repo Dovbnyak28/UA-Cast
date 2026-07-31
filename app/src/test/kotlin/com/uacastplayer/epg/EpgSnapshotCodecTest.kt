@@ -3,31 +3,37 @@ package com.uacastplayer.epg
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class EpgSnapshotCodecTest {
 
-    private fun roundTrip(snapshot: EpgSnapshot): EpgSnapshot? {
-        val bytes = ByteArrayOutputStream().also { EpgSnapshotCodec.encode(snapshot, it) }.toByteArray()
-        return EpgSnapshotCodec.decode(ByteArrayInputStream(bytes))
-    }
+    private fun encode(header: EpgSnapshotHeader, document: ByteArray): ByteArray =
+        ByteArrayOutputStream().also { out ->
+            EpgSnapshotCodec.encode(header, ByteArrayInputStream(document), document.size.toLong(), out)
+        }.toByteArray()
 
     @Test
-    fun `round-trips a snapshot with a document payload`() {
-        val snapshot = EpgSnapshot(
-            sourceFingerprint = "abc123",
-            savedAtEpochMillis = 1_700_000_000_000L,
-            documentBytes = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
-        )
-        assertEquals(snapshot, roundTrip(snapshot))
+    fun `round-trips a header and document payload`() {
+        val header = EpgSnapshotHeader(sourceFingerprint = "abc123", savedAtEpochMillis = 1_700_000_000_000L)
+        val document = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val encoded = encode(header, document)
+
+        val decoded = EpgSnapshotCodec.decodeHeader(ByteArrayInputStream(encoded))
+
+        assertEquals(header, decoded?.header)
+        assertArrayEquals(document, decoded?.documentStream?.readBytes())
     }
 
     @Test
     fun `round-trips an empty payload`() {
-        val snapshot = EpgSnapshot("fp", 0L, ByteArray(0))
-        assertEquals(snapshot, roundTrip(snapshot))
+        val header = EpgSnapshotHeader("fp", 0L)
+        val decoded = EpgSnapshotCodec.decodeHeader(ByteArrayInputStream(encode(header, ByteArray(0))))
+
+        assertEquals(header, decoded?.header)
+        assertArrayEquals(ByteArray(0), decoded?.documentStream?.readBytes())
     }
 
     @Test
@@ -37,11 +43,11 @@ class EpgSnapshotCodecTest {
                 writeInt(999)
                 writeUTF("fp")
                 writeLong(0L)
-                writeInt(0)
+                writeLong(0L)
                 flush()
             }
         }.toByteArray()
-        assertNull(EpgSnapshotCodec.decode(ByteArrayInputStream(bytes)))
+        assertNull(EpgSnapshotCodec.decodeHeader(ByteArrayInputStream(bytes)))
     }
 
     @Test
@@ -53,11 +59,11 @@ class EpgSnapshotCodecTest {
                 flush()
             }
         }.toByteArray()
-        assertNull(EpgSnapshotCodec.decode(ByteArrayInputStream(bytes)))
+        assertNull(EpgSnapshotCodec.decodeHeader(ByteArrayInputStream(bytes)))
     }
 
     @Test
     fun `decoding an empty stream returns null`() {
-        assertNull(EpgSnapshotCodec.decode(ByteArrayInputStream(ByteArray(0))))
+        assertNull(EpgSnapshotCodec.decodeHeader(ByteArrayInputStream(ByteArray(0))))
     }
 }

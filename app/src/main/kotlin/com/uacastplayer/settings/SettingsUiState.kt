@@ -1,5 +1,6 @@
 package com.uacastplayer.settings
 
+import com.uacastplayer.data.prefs.BufferSize
 import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.data.prefs.IconDisplayMode
@@ -15,8 +16,14 @@ data class CacheSizes(
 
 data class SettingsUiState(
     val iconDisplayMode: IconDisplayMode = IconDisplayMode.DEFAULT,
+    // True when iconDisplayMode came from DeviceTierDefaults rather than an explicit user choice
+    // (see AppPreferences.hasChosenIconDisplayMode) - drives both the Settings-screen caption and
+    // showIconTierBanner below (see IconPlaceholdersBannerPolicy).
+    val iconDisplayModeIsAutomatic: Boolean = false,
+    val showIconTierBanner: Boolean = false,
     val listDensity: ListDensity = ListDensity.DEFAULT,
     val channelLayout: ChannelLayout = ChannelLayout.DEFAULT,
+    val bufferSize: BufferSize = BufferSize.DEFAULT,
     val favoritesSortOrder: FavoritesSortOrder = FavoritesSortOrder.DEFAULT,
     val wrapAroundEnabled: Boolean = true,
     val autoSkipDeadEnabled: Boolean = true,

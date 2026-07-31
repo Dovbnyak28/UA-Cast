@@ -37,6 +37,12 @@ import kotlinx.coroutines.withContext
 private const val TAG = "CastSessionRepository"
 private const val WATCHDOG_TIMEOUT_MILLIS = 4_000L
 
+// Deliberately much longer than WATCHDOG_TIMEOUT_MILLIS: that one covers a load that never even
+// reaches PLAYING, where 4s of dead air is already too long. This one covers a channel that WAS
+// playing fine and then stalled - a brief rebuffer on a live IPTV origin is normal and shouldn't
+// trigger a reload, so it needs enough slack to not fire on ordinary hiccups.
+private const val SUSTAINED_BUFFERING_TIMEOUT_MILLIS = 15_000L
+
 private data class ActiveChannel(
     val index: Int,
     val streamUrl: String,
@@ -86,6 +92,12 @@ class CastSessionRepository private constructor(context: Context) {
     // which RemuxEffectivenessStore bucket (remux vs plain rewrite) a later PLAYING/give-up
     // outcome belongs to - see trackPlayingWindow/tryRecover.
     private var activeProxyResourceId: String? = null
+
+    // See scheduleSustainedBufferingWatchdog: covers a receiver that stalls on BUFFERING well
+    // after a load already reached PLAYING once, which neither watchdogJob (one-shot, per-load,
+    // stands down the moment PLAYING is first reached) nor CastRecoveryPolicy (only reacts to a
+    // receiver-reported IDLE, never fires) has any way to notice on its own.
+    private var sustainedBufferingJob: Job? = null
 
     // See loadOnReceiver/handleLoadResult: every load() bumps this before the SDK call, so a
     // result callback for a load a newer one has already superseded (a watchdog fallback or a fast
@@ -148,11 +160,43 @@ class CastSessionRepository private constructor(context: Context) {
             val status = currentSession?.remoteMediaClient?.mediaStatus ?: return
             val receiverStatus = mapPlayerState(status.playerState)
             if (receiverStatus == ReceiverStatus.PLAYING) watchdogJob?.cancel()
+            if (receiverStatus == ReceiverStatus.BUFFERING) {
+                scheduleSustainedBufferingWatchdog()
+            } else {
+                sustainedBufferingJob?.cancel()
+            }
             val idleReason = mapIdleReason(status.idleReason)
             val selfInitiated = selfInitiatedTransition
             selfInitiatedTransition = false
             trackPlayingWindow(receiverStatus)
             handleReceiverStatus(receiverStatus, idleReason, selfInitiated)
+        }
+    }
+
+    /** Catches a receiver that stalls on BUFFERING for good mid-stream - e.g. the proxy's origin
+     * connection died, its bounded reconnect attempts (see [com.uacastplayer.proxy.RemuxReconnectPolicy])
+     * ran out, and the live manifest simply stopped advancing. The receiver often reports that as
+     * ongoing BUFFERING rather than a clean IDLE/ERROR, which [CastReceiverStatusReducer] has no
+     * case for and [CastRecoveryPolicy] never even sees - left alone, the TV just freezes on its
+     * last decoded frame forever. Re-armed on every transition into BUFFERING (see
+     * [remoteMediaClientCallback]) and cancelled the moment it clears, so a normal brief rebuffer
+     * never fires this; only one that's still stuck [SUSTAINED_BUFFERING_TIMEOUT_MILLIS] later does,
+     * at which point it's routed through the exact same synthetic-IDLE path [scheduleStallWatchdog]
+     * already uses, so it gets the same bounded reload-then-give-up recovery as a loud failure. */
+    private fun scheduleSustainedBufferingWatchdog() {
+        if (sustainedBufferingJob?.isActive == true) return
+        val generation = loadGeneration.get()
+        val streamUrl = activeChannel?.streamUrl ?: return
+        sustainedBufferingJob = scope.launch {
+            delay(SUSTAINED_BUFFERING_TIMEOUT_MILLIS)
+            if (generation != loadGeneration.get()) return@launch
+            if (_state.value.receiverStatus != ReceiverStatus.BUFFERING) return@launch
+            if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return@launch
+            AppLog.w(TAG) {
+                "cast status: sustained buffering watchdog fired after ${SUSTAINED_BUFFERING_TIMEOUT_MILLIS}ms " +
+                    "mode=${_state.value.deliveryMode}"
+            }
+            handleReceiverStatus(ReceiverStatus.IDLE, IdleReason.ERROR, selfInitiated = false)
         }
     }
 
@@ -358,6 +402,7 @@ class CastSessionRepository private constructor(context: Context) {
     private fun onSessionInactive() {
         watchdogJob?.cancel()
         recoveryJob?.cancel()
+        sustainedBufferingJob?.cancel()
         currentSession?.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
         currentSession = null
         currentReceiverId = null
@@ -371,6 +416,7 @@ class CastSessionRepository private constructor(context: Context) {
         watchdogJob?.cancel()
         recoveryJob?.cancel()
         warmupJob?.cancel()
+        sustainedBufferingJob?.cancel()
         recoveryAttempts = 0
         playingSinceMillis = null
         everReachedPlaying = false

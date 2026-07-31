@@ -191,4 +191,116 @@ class M3uParserTest {
         assertEquals(1, result.channels.size)
         assertEquals(0, result.skippedLineCount)
     }
+
+    @Test
+    fun `EXTVLCOPT provides a user-agent and referrer for the next channel`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,Channel One
+            #EXTVLCOPT:http-user-agent=CustomAgent/1.0
+            #EXTVLCOPT:http-referrer=https://example.com/
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        val channel = result.channels[0]
+        assertEquals("CustomAgent/1.0", channel.userAgent)
+        assertEquals("https://example.com/", channel.referrer)
+    }
+
+    @Test
+    fun `EXTVLCOPT tag and option names are matched case-insensitively`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,Channel One
+            #extvlcopt:HTTP-User-Agent=CustomAgent/1.0
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals("CustomAgent/1.0", result.channels[0].userAgent)
+    }
+
+    @Test
+    fun `EXTVLCOPT headers do not leak into a channel that had none`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,First
+            #EXTVLCOPT:http-user-agent=CustomAgent/1.0
+            http://example.com/1.m3u8
+            #EXTINF:-1,Second
+            http://example.com/2.m3u8
+            """.trimIndent()
+        )
+        assertEquals("CustomAgent/1.0", result.channels[0].userAgent)
+        assertNull(result.channels[1].userAgent)
+        assertNull(result.channels[1].referrer)
+    }
+
+    @Test
+    fun `channels without an EXTVLCOPT tag have null user-agent and referrer`() {
+        val result = M3uParser.parse("#EXTINF:-1,Channel\nhttp://example.com/1.m3u8")
+        val channel = result.channels[0]
+        assertNull(channel.userAgent)
+        assertNull(channel.referrer)
+    }
+
+    @Test
+    fun `EXTVLCOPT with an unrecognized option is ignored without affecting the skip count`() {
+        val result = M3uParser.parse(
+            """
+            #EXTINF:-1,Channel
+            #EXTVLCOPT:network-caching=1000
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals(0, result.skippedLineCount)
+        assertNull(result.channels[0].userAgent)
+    }
+
+    @Test
+    fun `parses url-tvg from the EXTM3U header`() {
+        val result = M3uParser.parse(
+            """
+            #EXTM3U url-tvg="http://example.com/epg.xml"
+            #EXTINF:-1,Channel
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(listOf("http://example.com/epg.xml"), result.epgUrls)
+    }
+
+    @Test
+    fun `parses x-tvg-url case-insensitively`() {
+        val result = M3uParser.parse(
+            """#EXTM3U X-TVG-URL="http://example.com/epg.xml"""" + "\n#EXTINF:-1,Channel\nhttp://example.com/1.m3u8"
+        )
+        assertEquals(listOf("http://example.com/epg.xml"), result.epgUrls)
+    }
+
+    @Test
+    fun `splits and trims a comma-separated list of EPG URLs`() {
+        val result = M3uParser.parse(
+            """#EXTM3U url-tvg="http://a.com/epg.xml, http://b.com/epg.xml"""" +
+                "\n#EXTINF:-1,Channel\nhttp://example.com/1.m3u8"
+        )
+        assertEquals(listOf("http://a.com/epg.xml", "http://b.com/epg.xml"), result.epgUrls)
+    }
+
+    @Test
+    fun `no EXTM3U header yields an empty epgUrls list`() {
+        val result = M3uParser.parse("#EXTINF:-1,Channel\nhttp://example.com/1.m3u8")
+        assertEquals(emptyList<String>(), result.epgUrls)
+    }
+
+    @Test
+    fun `EXTM3U header without url-tvg or x-tvg-url yields an empty epgUrls list`() {
+        val result = M3uParser.parse(
+            """
+            #EXTM3U
+            #EXTINF:-1,Channel
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+        assertEquals(emptyList<String>(), result.epgUrls)
+    }
 }

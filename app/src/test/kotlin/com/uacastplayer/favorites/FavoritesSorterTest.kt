@@ -53,4 +53,13 @@ class FavoritesSorterTest {
 
         assertEquals(listOf("present", "gone"), sorted.map { it.displayName })
     }
+
+    @Test
+    fun `manual order returns the stored list order unchanged`() {
+        val favorites = listOf(favorite("c"), favorite("a"), favorite("b"))
+
+        val sorted = FavoritesSorter.sort(favorites, FavoritesSortOrder.MANUAL) { null }
+
+        assertEquals(listOf("c", "a", "b"), sorted.map { it.displayName })
+    }
 }

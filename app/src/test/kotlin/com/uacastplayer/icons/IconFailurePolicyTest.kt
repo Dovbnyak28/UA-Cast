@@ -26,6 +26,14 @@ class IconFailurePolicyTest {
         assertFalse(IconFailurePolicy.isPermanentFailure(null, isNetworkError = false))
     }
 
+    // Regression guard: a 429 (rate limit) is inherently temporary - the origin is asking to be
+    // retried later, not saying the resource is gone. Blacklisting it for 7 days like a real 404
+    // would keep an otherwise-working icon broken long after the rate limit clears.
+    @Test
+    fun `429 rate limit is not a permanent failure`() {
+        assertFalse(IconFailurePolicy.isPermanentFailure(429, isNetworkError = false))
+    }
+
     @Test
     fun `permanent failure record is not expired before 7 days`() {
         val record = FailureRecord(recordedAtMillis = 0L, isPermanent = true)

@@ -19,13 +19,20 @@ object M3uParser {
         var skippedLineCount = 0
         var pendingExtinf: PendingExtinf? = null
         var pendingGroupOverride: String? = null
+        var pendingUserAgent: String? = null
+        var pendingReferrer: String? = null
+        // Only the (normally singular) #EXTM3U line ever carries these, so first-found wins - no
+        // need to keep scanning once set.
+        var epgUrls: List<String> = emptyList()
 
         for (rawLine in lines) {
             val line = rawLine.trim()
             if (line.isEmpty()) continue
 
             when {
-                line.startsWith("#EXTM3U") -> Unit
+                line.startsWith("#EXTM3U") -> {
+                    if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line.substring("#EXTM3U".length))
+                }
 
                 line.startsWith("#EXTINF:") -> {
                     if (pendingExtinf != null) skippedLineCount++
@@ -34,6 +41,14 @@ object M3uParser {
 
                 line.startsWith("#EXTGRP:") -> {
                     pendingGroupOverride = line.substring("#EXTGRP:".length).trim().ifEmpty { null }
+                }
+
+                line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
+                    val option = parseExtVlcOpt(line.substring("#EXTVLCOPT:".length))
+                    when (option?.first?.lowercase()) {
+                        "http-user-agent" -> pendingUserAgent = option.second.ifEmpty { null }
+                        "http-referrer" -> pendingReferrer = option.second.ifEmpty { null }
+                    }
                 }
 
                 line.startsWith("#") -> Unit // unrecognized tag/comment, silently ignored
@@ -56,18 +71,37 @@ object M3uParser {
                                 tvgName = extinf.tvgName,
                                 tvgLogo = extinf.tvgLogo,
                                 groupTitle = extinf.groupTitle ?: pendingGroupOverride,
+                                userAgent = pendingUserAgent,
+                                referrer = pendingReferrer,
                             )
                         }
                     }
                     pendingExtinf = null
                     pendingGroupOverride = null
+                    pendingUserAgent = null
+                    pendingReferrer = null
                 }
             }
         }
 
         if (pendingExtinf != null) skippedLineCount++
 
-        return M3uParseResult(channels = channels, skippedLineCount = skippedLineCount)
+        return M3uParseResult(channels = channels, skippedLineCount = skippedLineCount, epgUrls = epgUrls)
+    }
+
+    /** `url-tvg`/`x-tvg-url` (case-insensitive, providers use either) on the `#EXTM3U` line - the
+     * de-facto convention for pointing a player at the provider's own EPG. The value can be a
+     * comma-separated list of several URLs; [attributePattern] already handles both quoted and
+     * bare attribute values. */
+    private fun parseEpgUrls(content: String): List<String> {
+        val urls = mutableListOf<String>()
+        for (match in attributePattern.findAll(content)) {
+            val key = match.groupValues[1].lowercase()
+            if (key != "url-tvg" && key != "x-tvg-url") continue
+            val value = (match.groups[2]?.value ?: match.groups[3]?.value).orEmpty()
+            urls += value.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        }
+        return urls
     }
 
     private data class PendingExtinf(
@@ -107,6 +141,15 @@ object M3uParser {
         }
 
         return PendingExtinf(displayName, tvgId, tvgName, tvgLogo, groupTitle)
+    }
+
+    /** `#EXTVLCOPT:key=value` - value runs to the end of the line (no quoting convention here, unlike EXTINF attributes). */
+    private fun parseExtVlcOpt(content: String): Pair<String, String>? {
+        val separatorIndex = content.indexOf('=')
+        if (separatorIndex == -1) return null
+        val key = content.substring(0, separatorIndex).trim()
+        val value = content.substring(separatorIndex + 1).trim()
+        return key to value
     }
 
     private fun indexOfUnquotedComma(content: String): Int {

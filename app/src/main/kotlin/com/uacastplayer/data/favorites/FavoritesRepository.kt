@@ -53,4 +53,11 @@ class FavoritesRepository(context: Context) {
         _favorites.value = updated
         scope.launch { store.save(updated) }
     }
+
+    /** Persists a manually reordered favorites list (see MANUAL sort order / ReorderPolicy) - the
+     * list order itself doubles as the stored order, so this just replaces it wholesale. */
+    fun reorder(newOrder: List<FavoriteChannel>) {
+        _favorites.value = newOrder
+        scope.launch { store.save(newOrder) }
+    }
 }

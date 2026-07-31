@@ -1,6 +1,7 @@
 package com.uacastplayer.icons
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -51,6 +52,20 @@ class ImageFormatDetectorTest {
     fun `detects SVG by tag sniffing`() {
         val svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>""".toByteArray()
         assertEquals(ImageFormat.SVG, ImageFormatDetector.detect(svg))
+    }
+
+    // Regression guard: SVG icons only render at all because SvgDecoder is registered in
+    // UaCastPlayerApp's ImageLoader specifically for the ImageFormat.SVG that IconDiskCache
+    // already accepts here. If SVG support is ever "fixed" by dropping it from this detector
+    // instead of keeping the decoder wired up, disk-cached SVG icons would start being rejected
+    // as unrecognized bytes on their very next write, silently regressing the icons those
+    // channels used to show.
+    @Test
+    fun `SVG bytes are recognized, not rejected as an unsupported format`() {
+        val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>""".toByteArray()
+        val format = ImageFormatDetector.detect(svg)
+        assertEquals(ImageFormat.SVG, format)
+        assertNotEquals(null, format)
     }
 
     @Test

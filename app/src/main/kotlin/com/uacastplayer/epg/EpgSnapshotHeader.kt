@@ -1,26 +1,12 @@
 package com.uacastplayer.epg
 
 /**
- * The last downloaded EPG document, kept exactly as received - some sources serve gzip, others
- * plain XML (see [EpgSource]) - it's only inflated (when needed) and parsed on demand, never
- * eagerly, to avoid holding a decompressed multi-megabyte document in memory or on disk longer
- * than needed.
+ * Metadata for the last downloaded EPG document. The document body itself is deliberately not a
+ * field here - it's streamed directly to/from disk by [EpgSnapshotCodec] and
+ * [com.uacastplayer.data.epg.EpgSnapshotStore] instead, since feeds can run tens of megabytes and
+ * holding one as an in-memory ByteArray alongside everything else is wasteful.
  */
-data class EpgSnapshot(
+data class EpgSnapshotHeader(
     val sourceFingerprint: String,
     val savedAtEpochMillis: Long,
-    val documentBytes: ByteArray,
-) {
-    override fun equals(other: Any?): Boolean =
-        other is EpgSnapshot &&
-            sourceFingerprint == other.sourceFingerprint &&
-            savedAtEpochMillis == other.savedAtEpochMillis &&
-            documentBytes.contentEquals(other.documentBytes)
-
-    override fun hashCode(): Int {
-        var result = sourceFingerprint.hashCode()
-        result = 31 * result + savedAtEpochMillis.hashCode()
-        result = 31 * result + documentBytes.contentHashCode()
-        return result
-    }
-}
+)

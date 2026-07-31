@@ -2,22 +2,35 @@ package com.uacastplayer.core.i18n
 
 import android.content.Context
 import android.content.res.Configuration
-import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
+import com.uacastplayer.data.prefs.AppPreferences
+import java.util.Locale
 
 /**
- * [context] wrapped with the app's current per-app locale (from
- * [AppCompatDelegate.getApplicationLocales]). AppCompat's per-app language mechanism only
- * auto-applies to Activities below API 33 (via an internal lifecycle-callback hook); non-Activity
- * callers like [com.uacastplayer.cast.CastProxyService] that read string resources need to wrap
- * their own context explicitly to stay locale-correct on those older API levels.
+ * The language the app should render in right now: the user's explicit choice, or (before they've
+ * made one) the best supported match for the device's locales.
+ */
+fun Context.currentAppLanguage(): AppLanguage {
+    val prefs = AppPreferences(this)
+    if (prefs.hasChosenLanguage) return prefs.language
+    val deviceLocales = LocaleListCompat.getAdjustedDefault()
+    val tags = (0 until deviceLocales.size()).mapNotNull { deviceLocales[it]?.toLanguageTag() }
+    return LanguageResolver.fromDeviceLocales(tags)
+}
+
+/**
+ * [context] wrapped so its resources resolve to [currentAppLanguage]. MainActivity is a
+ * FragmentActivity, not an AppCompatActivity (see its class doc), so AppCompat never registers a
+ * delegate for it - which means AppCompatDelegate's per-app-language APIs silently no-op in this
+ * app. This wraps the Configuration directly from our own AppPreferences instead, which is the
+ * actual source of truth for the selected language.
  */
 @Suppress("AppBundleLocaleChanges")
 fun Context.withAppLocale(): Context {
     // Lint flags any Configuration.setLocale()/createConfigurationContext() pair as an app-bundle
-    // language-split hazard, but this only mirrors the locale AppCompatDelegate already applied
-    // (the actual language switch, which is what that check cares about) - it never picks a
-    // locale on its own.
-    val locale = AppCompatDelegate.getApplicationLocales().get(0) ?: return this
+    // language-split hazard, but this only mirrors the locale the user already picked (the actual
+    // language switch, which is what that check cares about) - it never picks a locale on its own.
+    val locale = Locale.forLanguageTag(currentAppLanguage().code)
     val configuration = Configuration(resources.configuration)
     configuration.setLocale(locale)
     return createConfigurationContext(configuration)

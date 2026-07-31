@@ -10,16 +10,20 @@ import java.io.OutputStream
 /**
  * Hand-rolled versioned binary (de)serializer for [PlaylistSnapshot]. Bumping [FORMAT_VERSION]
  * and adding a new `when` branch in [decode] is the expected way to evolve the format; unknown
- * versions decode to `null` (treated by callers as "no usable cache") rather than throwing.
+ * versions decode to `null` (treated by callers as "no usable cache") rather than throwing. Old
+ * versions stay readable (see [decodeV1]) so an app update doesn't discard an existing on-disk
+ * snapshot just because the format grew a field.
  */
 object PlaylistSnapshotCodec {
 
-    private const val FORMAT_VERSION = 1
+    private const val FORMAT_VERSION = 2
+    private const val FORMAT_VERSION_1 = 1
 
     fun encode(snapshot: PlaylistSnapshot, output: OutputStream) {
         val out = DataOutputStream(output)
         out.writeInt(FORMAT_VERSION)
         out.writeUTF(snapshot.sourceFingerprint)
+        out.writeNullableUTF(snapshot.sourceUrl)
         out.writeLong(snapshot.savedAtEpochMillis)
         out.writeInt(snapshot.skippedLineCount)
         out.writeInt(snapshot.channels.size)
@@ -30,6 +34,8 @@ object PlaylistSnapshotCodec {
             out.writeNullableUTF(channel.tvgName)
             out.writeNullableUTF(channel.tvgLogo)
             out.writeNullableUTF(channel.groupTitle)
+            out.writeNullableUTF(channel.userAgent)
+            out.writeNullableUTF(channel.referrer)
         }
         out.flush()
     }
@@ -38,7 +44,8 @@ object PlaylistSnapshotCodec {
         return try {
             val in_ = DataInputStream(input)
             when (in_.readInt()) {
-                FORMAT_VERSION -> decodeV1(in_)
+                FORMAT_VERSION -> decodeV2(in_)
+                FORMAT_VERSION_1 -> decodeV1(in_)
                 else -> null
             }
         } catch (_: EOFException) {
@@ -48,6 +55,28 @@ object PlaylistSnapshotCodec {
         }
     }
 
+    private fun decodeV2(input: DataInputStream): PlaylistSnapshot {
+        val sourceFingerprint = input.readUTF()
+        val sourceUrl = input.readNullableUTF()
+        val savedAtEpochMillis = input.readLong()
+        val skippedLineCount = input.readInt()
+        val channelCount = input.readInt()
+        val channels = ArrayList<M3uChannel>(channelCount)
+        repeat(channelCount) {
+            val displayName = input.readUTF()
+            val streamUrl = input.readUTF()
+            val tvgId = input.readNullableUTF()
+            val tvgName = input.readNullableUTF()
+            val tvgLogo = input.readNullableUTF()
+            val groupTitle = input.readNullableUTF()
+            val userAgent = input.readNullableUTF()
+            val referrer = input.readNullableUTF()
+            channels += M3uChannel(displayName, streamUrl, tvgId, tvgName, tvgLogo, groupTitle, userAgent, referrer)
+        }
+        return PlaylistSnapshot(sourceFingerprint, savedAtEpochMillis, channels, skippedLineCount, sourceUrl)
+    }
+
+    /** Pre-sourceUrl, pre-per-channel-headers format. */
     private fun decodeV1(input: DataInputStream): PlaylistSnapshot {
         val sourceFingerprint = input.readUTF()
         val savedAtEpochMillis = input.readLong()
@@ -63,7 +92,7 @@ object PlaylistSnapshotCodec {
             val groupTitle = input.readNullableUTF()
             channels += M3uChannel(displayName, streamUrl, tvgId, tvgName, tvgLogo, groupTitle)
         }
-        return PlaylistSnapshot(sourceFingerprint, savedAtEpochMillis, channels, skippedLineCount)
+        return PlaylistSnapshot(sourceFingerprint, savedAtEpochMillis, channels, skippedLineCount, sourceUrl = null)
     }
 
     private fun DataOutputStream.writeNullableUTF(value: String?) {

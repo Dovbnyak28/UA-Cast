@@ -11,6 +11,15 @@ data class PlaylistUiState(
     val isLoading: Boolean = false,
     val skippedLineCount: Int = 0,
     val error: PlaylistError? = null,
+    /** Short, non-reversible id for the loaded playlist's source, shown on the Home dashboard. */
+    val activePlaylistId: String? = null,
+    /** True when [groups] came from the on-disk snapshot at startup, not a fresh network/file load. */
+    val restoredFromCache: Boolean = false,
+    /** User-chosen label for the active playlist, shown instead of [activePlaylistId] when set. */
+    val displayName: String? = null,
+    /** The URL the active playlist was loaded from - null for a file import. Lets the UI offer a
+     * one-tap refresh instead of sending the user back through Settings to retype it. */
+    val sourceUrl: String? = null,
 ) {
     val hasChannels: Boolean get() = groups.isNotEmpty()
 }

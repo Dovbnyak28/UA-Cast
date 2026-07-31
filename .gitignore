@@ -22,3 +22,4 @@ baselineprofile/build/
 # Agent working artifacts (worktrees, logs) - logcat captures in here can contain full stream
 # URLs, including Xtream credentials passed as query params, so this must never be committed.
 .claude/
+shots/

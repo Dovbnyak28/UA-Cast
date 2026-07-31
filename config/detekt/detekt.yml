@@ -1,0 +1,26 @@
+# Minimal overrides on top of detekt's default ruleset (buildUponDefaultConfig = true in
+# app/build.gradle.kts). Composable functions are idiomatically PascalCase, often take more than
+# six parameters (UI state + several callbacks is normal), and often run long by line count simply
+# because Compose UI trees are declarative - none of that is a style problem worth flagging, so
+# these three rules skip anything annotated @Composable rather than getting hand-tuned per finding
+# forever via the baseline. Everything else stays on defaults.
+complexity:
+  LongMethod:
+    ignoreAnnotated: [Composable]
+  LongParameterList:
+    ignoreAnnotated: [Composable]
+  # @Preview functions are always private (Android convention) and only ever called by tooling,
+  # not other code in the file - counting them toward "does this file do too much" would be
+  # counting the same public composables twice, once for the component and once for its preview.
+  TooManyFunctions:
+    ignorePrivate: true
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: [Composable]
+
+style:
+  # @Preview functions have no call site anywhere but Android Studio's preview renderer, so this
+  # rule can never see them as "used" - same reasoning as TooManyFunctions.ignorePrivate above.
+  UnusedPrivateMember:
+    ignoreAnnotated: [Preview]

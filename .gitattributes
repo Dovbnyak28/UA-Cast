@@ -1,0 +1,18 @@
+# Normalize line endings to LF in the repo regardless of the checkout platform - the sources here
+# are currently CRLF on some machines, which otherwise shows up as a phantom whole-file diff the
+# next time anyone touches one of them on a different OS/editor.
+* text=auto eol=lf
+
+# Binary assets - never subject to line-ending normalization or text diffing.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.keystore binary
+*.jks binary
+*.ttf binary
+*.otf binary
+*.zip binary

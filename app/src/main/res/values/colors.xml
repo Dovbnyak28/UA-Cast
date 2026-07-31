@@ -9,4 +9,10 @@
     <color name="uacast_on_surface">#E5E7EB</color>
     <color name="uacast_on_surface_muted">#8B96A8</color>
     <color name="uacast_error">#F87171</color>
+
+    <!-- Mirrors ui/theme/Color.kt's LabelPrimary/Azure so the platform MediaRouteButton (which
+         can only be tinted via theme attributes, not Compose) matches the rest of the design
+         system instead of AppCompat's default dark-on-light colorControlNormal. -->
+    <color name="uacast_label_primary">#F5F5F7</color>
+    <color name="uacast_azure">#0A84FF</color>
 </resources>

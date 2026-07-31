@@ -27,20 +27,24 @@ class PlaylistSnapshotCodecTest {
                     tvgName = "Channel One",
                     tvgLogo = "http://example.com/1.png",
                     groupTitle = "News",
+                    userAgent = "CustomAgent/1.0",
+                    referrer = "https://example.com/",
                 )
             ),
             skippedLineCount = 2,
+            sourceUrl = "https://example.com/playlist.m3u8",
         )
         assertEquals(snapshot, roundTrip(snapshot))
     }
 
     @Test
-    fun `round-trips a snapshot with null optional channel fields`() {
+    fun `round-trips a snapshot with null optional fields, including sourceUrl`() {
         val snapshot = PlaylistSnapshot(
             sourceFingerprint = "def456",
             savedAtEpochMillis = 0L,
             channels = listOf(M3uChannel(displayName = "Channel", streamUrl = "http://example.com/1.m3u8")),
             skippedLineCount = 0,
+            sourceUrl = null,
         )
         assertEquals(snapshot, roundTrip(snapshot))
     }
@@ -56,6 +60,39 @@ class PlaylistSnapshotCodecTest {
         val channels = (1..50).map { M3uChannel(displayName = "Ch $it", streamUrl = "http://example.com/$it.m3u8") }
         val snapshot = PlaylistSnapshot("fp", 1L, channels, 0)
         assertEquals(snapshot, roundTrip(snapshot))
+    }
+
+    @Test
+    fun `decodes a v1 snapshot with no sourceUrl or per-channel headers`() {
+        val bytes = ByteArrayOutputStream().also { stream ->
+            DataOutputStream(stream).apply {
+                writeInt(1)
+                writeUTF("fp")
+                writeLong(42L)
+                writeInt(0)
+                writeInt(1)
+                writeUTF("Channel One")
+                writeUTF("http://example.com/1.m3u8")
+                writeBoolean(false) // tvgId
+                writeBoolean(false) // tvgName
+                writeBoolean(false) // tvgLogo
+                writeBoolean(false) // groupTitle
+                flush()
+            }
+        }.toByteArray()
+
+        val decoded = PlaylistSnapshotCodec.decode(ByteArrayInputStream(bytes))
+
+        assertEquals(
+            PlaylistSnapshot(
+                sourceFingerprint = "fp",
+                savedAtEpochMillis = 42L,
+                channels = listOf(M3uChannel(displayName = "Channel One", streamUrl = "http://example.com/1.m3u8")),
+                skippedLineCount = 0,
+                sourceUrl = null,
+            ),
+            decoded,
+        )
     }
 
     @Test
@@ -77,9 +114,9 @@ class PlaylistSnapshotCodecTest {
     fun `decoding truncated data returns null instead of throwing`() {
         val bytes = ByteArrayOutputStream().also { stream ->
             DataOutputStream(stream).apply {
-                writeInt(1)
+                writeInt(2)
                 writeUTF("fp")
-                // Truncated: missing savedAtEpochMillis, skippedLineCount, channel count, etc.
+                // Truncated: missing sourceUrl, savedAtEpochMillis, skippedLineCount, channel count, etc.
                 flush()
             }
         }.toByteArray()

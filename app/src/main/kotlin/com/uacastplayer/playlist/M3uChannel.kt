@@ -8,9 +8,15 @@ data class M3uChannel(
     val tvgName: String? = null,
     val tvgLogo: String? = null,
     val groupTitle: String? = null,
+    /** From a preceding `#EXTVLCOPT:http-user-agent=`/`http-referrer=` line, if the playlist has one. */
+    val userAgent: String? = null,
+    val referrer: String? = null,
 )
 
 data class M3uParseResult(
     val channels: List<M3uChannel>,
     val skippedLineCount: Int,
+    /** From the `#EXTM3U` header's `url-tvg`/`x-tvg-url` attribute, if present - see
+     * [com.uacastplayer.epg.EpgSourceAutoDetect] for what happens with these. */
+    val epgUrls: List<String> = emptyList(),
 )
