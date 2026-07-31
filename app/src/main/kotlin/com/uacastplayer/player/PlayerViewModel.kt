@@ -28,6 +28,9 @@ import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.data.prefs.BufferSize
+import com.uacastplayer.dlna.DlnaConnectionState
+import com.uacastplayer.dlna.DlnaDevice
+import com.uacastplayer.dlna.DlnaSessionRepository
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.R
@@ -148,6 +151,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val castRepository = CastSessionRepository.getInstance(application)
     private var isCasting: Boolean = false
 
+    // DLNA is a second, independent cast target (see dlna/DlnaSessionRepository) - a receiver only
+    // ever reachable one way or the other, never both, but nothing enforces that here: as far as
+    // this ViewModel is concerned there are simply two reasons the local player might have to stand
+    // down. isRemoteCasting is what the rest of the class checks, so a new target would only need
+    // to be OR'd in there.
+    private val dlnaRepository = DlnaSessionRepository.getInstance(application)
+    private var isDlnaCasting: Boolean = false
+    val dlnaState: StateFlow<DlnaConnectionState> = dlnaRepository.state
+
+    private val isRemoteCasting: Boolean get() = isCasting || isDlnaCasting
+
     private val _uiState = MutableStateFlow(PlayerUiState(resizeMode = preferences.playerResizeMode))
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
@@ -158,7 +172,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 liveWindowRecoveryHistory = emptyList()
             }
             _uiState.update { it.copy(isPlaying = isPlaying) }
-            PlaybackActivity.setActive(isPlaying || isCasting)
+            PlaybackActivity.setActive(isPlaying || isRemoteCasting)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -203,11 +217,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 updateSeekability()
-                PlaybackActivity.setActive(_uiState.value.isPlaying || isCasting)
+                PlaybackActivity.setActive(_uiState.value.isPlaying || isRemoteCasting)
             }
         }
         viewModelScope.launch {
             castRepository.sideEffects.collect { effect -> handleCastSideEffect(effect) }
+        }
+        viewModelScope.launch {
+            dlnaRepository.state.collect { state -> handleDlnaStateChange(state) }
         }
         viewModelScope.launch {
             while (isActive) {
@@ -216,6 +233,41 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    /**
+     * DLNA has no receiver-status callbacks to reduce over the way Cast does (see
+     * [handleCastSideEffect] and `docs/DLNA.md`), so local playback is driven straight off the
+     * connected/disconnected edge instead.
+     *
+     * stop(), not pause(), for exactly the reason [CastSideEffect.PauseLocalPlayer] gives: a paused
+     * live stream keeps its upstream connection, and IPTV origins routinely allow one connection per
+     * account - while the phone holds that slot the proxy feeding the renderer can never get its
+     * own, so casting starves. The media item survives stop(), so prepare()+play() below restores
+     * local playback fully.
+     */
+    private fun handleDlnaStateChange(state: DlnaConnectionState) {
+        val isConnected = state.connectedDevice != null
+        if (isConnected == isDlnaCasting) return
+        isDlnaCasting = isConnected
+        if (isConnected) {
+            exoPlayer.stop()
+        } else {
+            exoPlayer.prepare()
+            exoPlayer.play()
+        }
+        updateSeekability()
+        PlaybackActivity.setActive(_uiState.value.isPlaying || isRemoteCasting)
+    }
+
+    suspend fun discoverDlnaDevices(): List<DlnaDevice> = dlnaRepository.discoverDevices()
+
+    /** No-op with no channel loaded - there would be nothing to hand the renderer. */
+    fun connectDlna(device: DlnaDevice) {
+        val channel = _uiState.value.currentChannel ?: return
+        dlnaRepository.connect(device, channel.streamUrl, channel.displayName)
+    }
+
+    fun stopDlna() = dlnaRepository.stop()
 
     private fun handleCastSideEffect(effect: CastSideEffect) {
         when (effect) {
@@ -422,7 +474,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * [androidx.media3.common.PlaybackException]s classified via [PlayerErrorClassifier].
      */
     private fun sampleForStall() {
-        if (isCasting || currentIndex !in channels.indices || !exoPlayer.playWhenReady) return
+        if (isRemoteCasting || currentIndex !in channels.indices || !exoPlayer.playWhenReady) return
 
         val tick = StallDetectionPolicy.Tick(
             nowMillis = System.currentTimeMillis(),
@@ -486,7 +538,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun updateSeekability() {
         val isLive = exoPlayer.isCurrentMediaItemLive
         val isSeekable = exoPlayer.isCurrentMediaItemSeekable
-        _uiState.update { it.copy(canSeek = SeekPolicy.canSeek(isLive, isSeekable, isCasting)) }
+        // isRemoteCasting, not isCasting: the local player's own seekability says nothing about
+        // what a receiver is doing, and this MVP sends no position commands to a DLNA renderer
+        // either (see docs/DLNA.md), so the seek bar must be inert for both cast targets alike.
+        _uiState.update { it.copy(canSeek = SeekPolicy.canSeek(isLive, isSeekable, isRemoteCasting)) }
     }
 
     private data class SelectedVideoFormat(

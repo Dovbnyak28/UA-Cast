@@ -337,4 +337,11 @@
     <string name="common_close">Close</string>
     <string name="common_confirm">Confirm</string>
     <string name="common_cancel">Cancel</string>
+    <!-- DLNA casting -->
+    <string name="player_dlna_cast">Cast to other devices (DLNA)</string>
+    <string name="dlna_sheet_title">Other devices (DLNA)</string>
+    <string name="dlna_sheet_searching">Searching for devices…</string>
+    <string name="dlna_sheet_no_devices">No devices found</string>
+    <string name="dlna_sheet_connected_to">Connected to %1$s</string>
+    <string name="dlna_stop_casting">Stop casting</string>
 </resources>

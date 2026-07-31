@@ -339,4 +339,11 @@
     <string name="common_close">Закрити</string>
     <string name="common_confirm">Підтвердити</string>
     <string name="common_cancel">Скасувати</string>
+    <!-- DLNA casting -->
+    <string name="player_dlna_cast">Транслювати на інший пристрій (DLNA)</string>
+    <string name="dlna_sheet_title">Інші пристрої (DLNA)</string>
+    <string name="dlna_sheet_searching">Пошук пристроїв…</string>
+    <string name="dlna_sheet_no_devices">Пристроїв не знайдено</string>
+    <string name="dlna_sheet_connected_to">Підключено до %1$s</string>
+    <string name="dlna_stop_casting">Зупинити трансляцію</string>
 </resources>

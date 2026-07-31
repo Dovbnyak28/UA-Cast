@@ -73,6 +73,8 @@ internal fun PlayerControlsOverlay(
     onToggleFullscreen: () -> Unit,
     onEnterPip: () -> Unit,
     onOpenSleepTimer: () -> Unit,
+    isDlnaCasting: Boolean,
+    onOpenDlnaSheet: () -> Unit,
     onSelectPreview: (IndexedChannel) -> Unit,
     onBrightnessStep: (Float) -> Unit,
     onVolumeStep: (Float) -> Unit,
@@ -98,6 +100,16 @@ internal fun PlayerControlsOverlay(
                 BadgesRow(uiState.badges)
             }
             LiveIndicator()
+            // Sits beside the Cast button rather than replacing it: the two reach different
+            // hardware (Cast for Google devices, DLNA for the Samsung/LG/Sony sets with no Cast
+            // receiver), so a user with either kind needs to see the one that applies to them.
+            SmallRoundIconButton(
+                icon = AppIcons.Tv,
+                onClick = onOpenDlnaSheet,
+                contentDescription = stringResource(R.string.player_dlna_cast),
+                background = UaTheme.palette.scrimBackground,
+                tint = if (isDlnaCasting) UaTheme.palette.azure else Color.White,
+            )
             PlayerCastButton()
         }
 

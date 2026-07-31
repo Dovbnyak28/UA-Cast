@@ -69,6 +69,7 @@ import com.uacastplayer.player.ResizeModeCycle
 import com.uacastplayer.player.StallRetryPolicy
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.cast.CastButton
+import com.uacastplayer.ui.dlna.DlnaDeviceSheet
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.raisedSurface
@@ -106,6 +107,7 @@ fun PlayerScreen(
     val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
     val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
     val haptics = LocalHapticFeedback.current
+    val dlnaState by viewModel.dlnaState.collectAsStateWithLifecycle()
 
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
@@ -114,6 +116,7 @@ fun PlayerScreen(
     var showSubtitleDialog by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     var showGuideSheet by remember { mutableStateOf(false) }
+    var showDlnaSheet by remember { mutableStateOf(false) }
     val videoResizeMode = ResizeModeCycle.toMedia3ResizeMode(uiState.resizeMode)
     val sleepTimer = rememberSleepTimerState(onExpire = { viewModel.player.pause() })
 
@@ -303,6 +306,8 @@ fun PlayerScreen(
                     onToggleFullscreen = { isFullscreen = !isFullscreen },
                     onEnterPip = { activity?.let(PipController::enter) },
                     onOpenSleepTimer = { showSleepTimerDialog = true },
+                    isDlnaCasting = dlnaState.connectedDevice != null,
+                    onOpenDlnaSheet = { showDlnaSheet = true },
                     onSelectPreview = { indexed -> viewModel.requestSwitch(indexed.index) },
                     // Same effect as the drag gesture above, just reachable from TalkBack - one
                     // fixed step per tap instead of a continuous drag delta.
@@ -502,6 +507,19 @@ fun PlayerScreen(
                 Text(stringResource(R.string.player_back_to_channels))
             }
         }
+    }
+
+    if (showDlnaSheet) {
+        DlnaDeviceSheet(
+            connectionState = dlnaState,
+            discoverDevices = viewModel::discoverDlnaDevices,
+            onDismiss = { showDlnaSheet = false },
+            // The sheet stays open on connect: connecting is asynchronous and the row it lists
+            // turns into the connected row, which is also where "stop casting" lives. Closing here
+            // would hide the only feedback that the tap did anything.
+            onDeviceSelected = viewModel::connectDlna,
+            onStopCasting = viewModel::stopDlna,
+        )
     }
 
     PlayerDialogs(
