@@ -10,7 +10,7 @@ media3 = "1.10.1"
 nextlibMedia3ext = "1.10.1-0.13.0"
 castFramework = "22.3.1"
 okhttp = "4.12.0"
-coil = "2.7.0"
+coil = "3.4.0"
 profileinstaller = "1.4.1"
 baselineprofile = "1.4.1"
 benchmarkMacroJunit4 = "1.4.1"
@@ -63,8 +63,12 @@ play-services-cast-framework = { group = "com.google.android.gms", name = "play-
 
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
-coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
-coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
+# coil3, not the io.coil-kt "coil-compose" of Coil 2.x - different group, different package root
+# (coil3.*). Coil 2 is end-of-life; 3.x is where fixes land. No coil-network-* artifact is needed
+# here: every model handed to AsyncImage is a java.io.File that IconRepository already fetched and
+# validated itself (see IconDiskCache), so Coil never performs a network request of its own.
+coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-svg = { group = "io.coil-kt.coil3", name = "coil-svg", version.ref = "coil" }
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }

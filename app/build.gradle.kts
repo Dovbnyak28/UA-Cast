@@ -1,3 +1,4 @@
+import com.android.build.api.variant.FilterConfiguration
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -31,6 +32,32 @@ android {
         versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // 32-bit x86 is dropped outright rather than merely split off: no shipping Android
+            // device uses it, and every current emulator image is x86_64. It was 6.2MB of the
+            // release APK's 22.6MB of native code (FFmpeg via nextlib, see libs.nextlib.media3ext)
+            // for an audience of nobody.
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+        }
+    }
+
+    // Native code is 78% of the release APK (22.6MB of 29.1MB), all of it the same FFmpeg decoders
+    // built four times over. A per-ABI APK carries one of them: ~11.7MB for arm64-v8a against
+    // 29.1MB before, i.e. what a phone actually downloads drops by well over half.
+    //
+    // universalApk stays on because this app is realistically sideloaded as often as it is
+    // installed from a store, and a universal APK is the only one that can be handed to someone
+    // without first asking what CPU their phone has. Publishing to Play Store would not need any
+    // of this - `bundleRelease` produces an .aab and Play does the same split server-side - but
+    // the bundle path cannot serve a direct download.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = true
+        }
     }
 
     signingConfigs {
@@ -107,6 +134,31 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+// Every APK of one release shares a versionCode by default, which a store rejects outright when
+// several per-ABI APKs are uploaded together (see the splits block above) - it has no way to tell
+// which one to serve an upgrading device. Multiplying the base code by ten and adding a per-ABI
+// digit keeps ordering intact within an ABI and, since the offsets ascend with how "capable" the
+// ABI is, makes a 64-bit device prefer the 64-bit APK when it could install either.
+// The universal APK carries no ABI filter and so keeps the plain base code, below all of them.
+private val abiVersionCodeOffsets = mapOf(
+    "armeabi-v7a" to 1,
+    "arm64-v8a" to 2,
+    "x86_64" to 3,
+)
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters
+                .find { it.filterType == FilterConfiguration.FilterType.ABI }
+                ?.identifier
+            val offset = abiVersionCodeOffsets[abi] ?: return@forEach
+            val base = output.versionCode.orNull ?: return@forEach
+            output.versionCode.set(base * 10 + offset)
+        }
     }
 }
 

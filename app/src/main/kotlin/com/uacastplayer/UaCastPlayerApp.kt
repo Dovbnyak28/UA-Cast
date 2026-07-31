@@ -2,11 +2,13 @@ package com.uacastplayer
 
 import android.app.Application
 import android.os.StrictMode
-import coil.ImageLoader
-import coil.ImageLoaderFactory
-import coil.decode.SvgDecoder
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import coil3.svg.SvgDecoder
+import okio.Path.Companion.toOkioPath
 import com.uacastplayer.data.cache.CachePaths
 import java.io.File
 
@@ -20,7 +22,7 @@ private const val COIL_DISK_CACHE_MAX_BYTES = 128L * 1024 * 1024
 // disk in IconDiskCache, so the cost of a miss is a decode, not a refetch.
 private const val COIL_MEMORY_CACHE_PERCENT = 0.10
 
-class UaCastPlayerApp : Application(), ImageLoaderFactory {
+class UaCastPlayerApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
@@ -46,16 +48,16 @@ class UaCastPlayerApp : Application(), ImageLoaderFactory {
     // but AsyncImage's default ImageLoader has no decoder for them - it just silently renders
     // nothing instead of erroring, which is why some channels' logos looked "missing" when the
     // provider's icon happened to be an SVG.
-    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+    override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
         .components { add(SvgDecoder.Factory()) }
         .memoryCache {
-            MemoryCache.Builder(this)
-                .maxSizePercent(COIL_MEMORY_CACHE_PERCENT)
+            MemoryCache.Builder()
+                .maxSizePercent(context, COIL_MEMORY_CACHE_PERCENT)
                 .build()
         }
         .diskCache {
             DiskCache.Builder()
-                .directory(File(filesDir, CachePaths.COIL_CACHE_DIR))
+                .directory(File(filesDir, CachePaths.COIL_CACHE_DIR).toOkioPath())
                 .maxSizeBytes(COIL_DISK_CACHE_MAX_BYTES)
                 .build()
         }

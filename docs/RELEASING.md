@@ -24,6 +24,30 @@ The raw working directory routinely contains things that must never leave this m
 `git archive` sidesteps all of this automatically: it only ever includes tracked files at the
 requested commit, so anything git-ignored (or never committed) simply isn't in the output.
 
+## Which APK to ship
+
+`./gradlew :app:assembleRelease` produces four APKs, not one (see the `splits` block in
+`app/build.gradle.kts`):
+
+| File | Size | For |
+|---|---|---|
+| `app-arm64-v8a-release.apk` | ~11.9MB | every current phone |
+| `app-armeabi-v7a-release.apk` | ~11.5MB | older 32-bit ARM devices |
+| `app-x86_64-release.apk` | ~12.9MB | emulators |
+| `app-universal-release.apk` | ~23.1MB | when you cannot ask what CPU the target has |
+
+Native code (FFmpeg, via `nextlib-media3ext`) is ~78% of this app, so a per-ABI APK is less than
+half the size of the universal one. Hand out the universal APK for a plain download link; upload
+the three per-ABI APKs together if a store accepts multiple APKs per release. 32-bit x86 is not
+built at all (see `ndk.abiFilters`).
+
+For Play Store specifically, prefer `./gradlew :app:bundleRelease` - Play performs the same split
+server-side from a single `.aab` and none of the above needs thinking about.
+
+Each per-ABI APK gets its own `versionCode` (base × 10 + an ABI digit, see `androidComponents` in
+`app/build.gradle.kts`); the universal APK keeps the plain base code. A store rejects multiple APKs
+sharing one `versionCode`.
+
 ## Versioning
 
 `versionCode`/`versionName` are supplied at build time via `-Puacast.versionCode` /

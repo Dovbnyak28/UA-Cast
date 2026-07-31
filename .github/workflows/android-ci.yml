@@ -2,7 +2,10 @@ name: Android CI
 
 on:
   push:
-    branches: [main]
+    # Both, deliberately: the work actually lives on master (there is no main branch in this
+    # repository), so a main-only trigger meant this workflow could never fire on a push. main is
+    # kept alongside it so renaming the default branch later doesn't silently disable CI again.
+    branches: [master, main]
   pull_request:
 
 concurrency:
