@@ -52,9 +52,19 @@ class ProxyServer(
     private val resourceRegistry = ProxyResourceRegistry(httpClient)
     private val httpServer = ProxyHttpServer(onRequest = ::serveRequest)
 
-    private var sessionToken: String = ""
-    private var host: String = "127.0.0.1"
-    private var remuxEnabled = true
+    // Written from the main thread (start/ensureStarted, reached from CastSessionRepository on
+    // Dispatchers.Main.immediate) and read from ProxyHttpServer's pool threads - isSessionToken,
+    // shouldRemuxUpstream, buildLocalUrl. @Volatile for the same reason ProxyHttpServer marks its
+    // own boundPort/running, which this class had simply been missing.
+    //
+    // Starting the server happens to publish the first two safely on its own, since httpServer
+    // .start() creates the pool *after* they are assigned and thread creation carries a
+    // happens-before edge. ensureStarted's already-running fast path has no such edge: it writes
+    // remuxEnabled while the pool is live, so without this the setting could go unseen by the
+    // threads serving the current session.
+    @Volatile private var sessionToken: String = ""
+    @Volatile private var host: String = "127.0.0.1"
+    @Volatile private var remuxEnabled = true
 
     /**
      * Starts the server if it isn't already running for this exact `(sessionToken, host)` pair -

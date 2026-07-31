@@ -63,14 +63,41 @@ class IconFailureStore(context: Context) {
         }
     }
 
-    /** [transientFailures] otherwise only shrinks when the same channel is looked up again after
-     * its record expires (see [shouldSkip]) - a channel whose icon failed once and is never
-     * looked up again (e.g. the user never scrolls back to it) keeps its entry for the rest of the
-     * process's lifetime. Call once per playlist load/refresh. */
-    fun pruneTransientFailures(nowMillis: Long = System.currentTimeMillis()) {
+    /**
+     * Drops every expired record, transient and permanent alike. Call once per playlist
+     * load/refresh.
+     *
+     * Neither side shrinks on its own: [shouldSkip] only removes a record when that exact URL is
+     * looked up again after expiring, and an icon URL stops being looked up the moment its channel
+     * leaves the playlist - which is precisely when the user switches or edits a playlist source.
+     *
+     * For the transient map that just wastes a little heap. For the persisted side it is worse:
+     * dead logo URLs number in the hundreds on a typical IPTV playlist, SharedPreferences parses
+     * its whole file into memory on first access (blocking), and rewrites the whole file on every
+     * apply(). Left alone the file only ever grows, so cold start gets slower over the months and
+     * every new icon failure pays to rewrite a bigger file. The 7-day TTL was already there (see
+     * [IconFailurePolicy.PERMANENT_TTL_MILLIS]) - nothing was enforcing it.
+     */
+    fun pruneExpiredFailures(nowMillis: Long = System.currentTimeMillis()) {
         transientFailures.entries.removeIf { (_, recordedAt) ->
             IconFailurePolicy.isExpired(FailureRecord(recordedAt, isPermanent = false), nowMillis)
         }
+        prunePersistedFailures(nowMillis)
+    }
+
+    private fun prunePersistedFailures(nowMillis: Long) {
+        val expired = prefs.all
+            .filterKeys { it != KEY_SCHEMA_VERSION }
+            // Anything that is not a Long is not a failure record this class wrote - skipped rather
+            // than assumed, so a future key of another type here can never be deleted by accident.
+            .filterValues { value ->
+                value is Long && IconFailurePolicy.isExpired(FailureRecord(value, isPermanent = true), nowMillis)
+            }
+            .keys
+        if (expired.isEmpty()) return
+        val editor = prefs.edit()
+        expired.forEach(editor::remove)
+        editor.apply()
     }
 
     private companion object {

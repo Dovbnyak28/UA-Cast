@@ -2,6 +2,14 @@ package com.uacastplayer.proxy
 
 private const val DEFAULT_MAX_BYTES = 20L * 1024 * 1024
 
+// A live HLS playlist needs at least three segments to be usable at all: a client starts playback
+// three back from the live edge, so a shorter window leaves it nothing to start on. [maxBytes] is a
+// memory ceiling, and on a high-bitrate channel it can be reached with very few segments held - so
+// eviction has to stop here even when that means briefly exceeding the ceiling, rather than
+// shrinking the window to something the receiver cannot play. Segments are capped at 4MB each (see
+// TsSegmenter), so the worst-case overshoot is bounded and small.
+private const val MIN_SEGMENTS = 3
+
 /**
  * A sliding window of the most recent [TsSegment]s a [TsSegmenter] has produced, capped at
  * [maxBytes] total - old segments are evicted oldest-first, same idea as [ProxyServer]'s resource
@@ -19,7 +27,7 @@ class RemuxSegmentBuffer(private val maxBytes: Long = DEFAULT_MAX_BYTES) {
     fun add(segment: TsSegment) {
         segments.addLast(segment)
         totalBytes += segment.bytes.size
-        while (totalBytes > maxBytes && segments.size > 1) {
+        while (totalBytes > maxBytes && segments.size > MIN_SEGMENTS) {
             val evicted = segments.removeFirst()
             totalBytes -= evicted.bytes.size
         }

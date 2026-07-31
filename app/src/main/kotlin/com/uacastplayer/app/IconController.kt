@@ -104,8 +104,8 @@ class IconController(
         epgIconUrlFor: (M3uChannel) -> String? = { null },
         context: PrefetchContext = PrefetchContext(),
     ) {
-        // Once per playlist load/refresh - see IconFailureStore.pruneTransientFailures's doc.
-        iconRepository.pruneTransientFailures()
+        // Once per playlist load/refresh - see IconFailureStore.pruneExpiredFailures's doc.
+        iconRepository.pruneExpiredFailures()
         lastPrefetchChannels = channels
         lastEpgIconUrlFor = epgIconUrlFor
         lastIconDisplayMode = iconDisplayMode

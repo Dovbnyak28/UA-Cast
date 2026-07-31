@@ -139,8 +139,8 @@ class IconRepository(context: Context) {
 
     suspend fun trimCache() = diskCache.trim()
 
-    /** See [IconFailureStore.pruneTransientFailures] - call once per playlist load/refresh. */
-    fun pruneTransientFailures() = failureStore.pruneTransientFailures()
+    /** See [IconFailureStore.pruneExpiredFailures] - call once per playlist load/refresh. */
+    fun pruneExpiredFailures() = failureStore.pruneExpiredFailures()
 
     private fun cdnFallbackUrl(tvgId: String): String =
         IconResolver.iconUrl(IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL, tvgId)
