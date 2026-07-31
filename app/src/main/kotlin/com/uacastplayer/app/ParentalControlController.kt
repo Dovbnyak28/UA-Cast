@@ -1,9 +1,9 @@
 package com.uacastplayer.app
 
 import com.uacastplayer.core.security.PinHasher
-import com.uacastplayer.data.parentalcontrol.ParentalControlStore
-import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinPolicy
+import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Owns the parental-control PIN lock (see [ParentalControlStore]/[AppPreferences.parentalControlPinHash]).
+ * Owns the parental-control PIN lock (see [LockedChannelsStorage]/[ParentalControlPinStorage.parentalControlPinHash]).
  * Locking a channel is always allowed - it only ever narrows what's playable, nothing to protect by
  * gating it - but *removing* a lock (watching a locked channel, un-locking it permanently, changing
  * or resetting the PIN) requires [unlockedThisSession] to be true first, which only [verifyPin]
@@ -19,8 +19,8 @@ import kotlinx.coroutines.launch
  * a fresh process always starts locked again - "until the app is closed" per the feature's design.
  */
 class ParentalControlController(
-    private val store: ParentalControlStore,
-    private val preferences: AppPreferences,
+    private val store: LockedChannelsStorage,
+    private val preferences: ParentalControlPinStorage,
     private val scope: CoroutineScope,
 ) {
     private val _lockedKeys = MutableStateFlow<Set<String>>(emptySet())

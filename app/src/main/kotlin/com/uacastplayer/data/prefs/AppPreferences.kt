@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.i18n.LanguageResolver
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import com.uacastplayer.ui.theme.AppTheme
 
 /**
@@ -12,7 +13,7 @@ import com.uacastplayer.ui.theme.AppTheme
  * Values here are all tiny scalars; there is no need for the AtomicFile/versioned-snapshot
  * machinery used by the playlist/EPG/favorites caches.
  */
-class AppPreferences(context: Context) {
+class AppPreferences(context: Context) : ParentalControlPinStorage {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -160,11 +161,11 @@ class AppPreferences(context: Context) {
      * [com.uacastplayer.core.security.PinHasher]) - null means no PIN is set, which is also how
      * `app/ParentalControlController` decides whether the feature is enabled at all. Never the
      * plaintext PIN. Always set together with [parentalControlPinSalt]. */
-    var parentalControlPinHash: String?
+    override var parentalControlPinHash: String?
         get() = prefs.getString(KEY_PARENTAL_CONTROL_PIN_HASH, null)
         set(value) = prefs.edit().putString(KEY_PARENTAL_CONTROL_PIN_HASH, value).apply()
 
-    var parentalControlPinSalt: String?
+    override var parentalControlPinSalt: String?
         get() = prefs.getString(KEY_PARENTAL_CONTROL_PIN_SALT, null)
         set(value) = prefs.edit().putString(KEY_PARENTAL_CONTROL_PIN_SALT, value).apply()
 

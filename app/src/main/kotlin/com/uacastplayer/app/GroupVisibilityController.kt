@@ -1,7 +1,7 @@
 package com.uacastplayer.app
 
-import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.playlist.GroupVisibilityEntry
+import com.uacastplayer.playlist.GroupVisibilityStorage
 import com.uacastplayer.playlist.GroupVisibilityState
 import com.uacastplayer.playlist.LEGACY_SOURCE_ID
 import kotlinx.coroutines.CoroutineScope
@@ -11,14 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Owns per-playlist-source group pin/hide overrides (see [GroupVisibilityStore]) - moved out of
+ * Owns per-playlist-source group pin/hide overrides (see [GroupVisibilityStorage]) - moved out of
  * [com.uacastplayer.AppViewModel] as a move-only split, same pattern as the other controllers (see
  * B1 in the consolidated fix plan). [pinnedKeys]/[hiddenKeys] always reflect whichever source is
  * currently active (see [setActiveSource]) - switching playlists never mixes another source's
  * pins/hides into the current one.
  */
 class GroupVisibilityController(
-    private val store: GroupVisibilityStore,
+    private val store: GroupVisibilityStorage,
     private val scope: CoroutineScope,
 ) {
     private var allEntries: List<GroupVisibilityEntry> = emptyList()
