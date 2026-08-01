@@ -1,8 +1,9 @@
 package com.uacastplayer.dlna
 
 import android.content.Context
+import com.uacastplayer.cast.CastProxyService
+import com.uacastplayer.cast.CastProxyTarget
 import com.uacastplayer.core.net.AppHttp
-import com.uacastplayer.data.cast.CastWakeLocks
 import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
 import com.uacastplayer.log.AppLog
@@ -75,7 +76,6 @@ class DlnaSessionRepository private constructor(context: Context) {
     private val proxyServer = ProxyServer(proxyHttpClient)
     private val avTransportClient = AvTransportClient(soapHttpClient)
     private val ssdpDiscovery = SsdpDiscovery(appContext, discoveryHttpClient)
-    private val wakeLocks = CastWakeLocks(appContext)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -144,7 +144,13 @@ class DlnaSessionRepository private constructor(context: Context) {
             AppLog.w(TAG) { "No LAN address available; cannot start DLNA proxy" }
             return false
         }
-        wakeLocks.acquire()
+        // The same foreground service the Chromecast path uses, not a bare wake lock. A
+        // PARTIAL_WAKE_LOCK keeps the CPU awake but does nothing to stop the OS reclaiming a
+        // backgrounded process - and this proxy only matters while it is *serving*, so leaving the
+        // app killed the TV's stream on exactly the aggressive OEM builds CastProxyService's own
+        // doc was written for. The service owns the wake/wifi locks for its own lifetime, so this
+        // class no longer holds any of its own.
+        CastProxyService.start(appContext, title, device.friendlyName, CastProxyTarget.DLNA)
         // ensureStarted, not start: a channel switch (see setActiveChannel) must reuse the running
         // socket and port rather than rebind a fresh one out from under a renderer that may still
         // be fetching the previous url - the contract ProxyServer.start's own doc spells out.
@@ -156,7 +162,7 @@ class DlnaSessionRepository private constructor(context: Context) {
         if (!ok) {
             AppLog.w(TAG) { "DLNA connect failed for ${device.friendlyName}" }
             proxyServer.stop()
-            wakeLocks.release()
+            CastProxyService.stop(appContext)
             sessionToken = null
         }
         return ok
@@ -180,7 +186,7 @@ class DlnaSessionRepository private constructor(context: Context) {
         connectJob = null
         sessionToken = null
         proxyServer.stop()
-        wakeLocks.release()
+        CastProxyService.stop(appContext)
         scope.launch {
             withContext(Dispatchers.IO) {
                 if (device != null) avTransportClient.stop(device.controlUrl)

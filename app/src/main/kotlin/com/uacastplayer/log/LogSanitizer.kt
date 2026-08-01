@@ -66,15 +66,26 @@ object LogSanitizer {
     private fun isTokenChar(c: Char): Boolean =
         c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '_' || c == '+' || c == '/' || c == '=' || c == '-'
 
+    /**
+     * Keeps only scheme, host and port - enough to tell which origin a log line is about - and
+     * replaces everything else with a marker.
+     *
+     * [URI.getHost], never [URI.getAuthority]: the authority *includes userinfo*, so
+     * `http://user:secret@host/path` redacted through it came out as
+     * `http://user:secret@host/…`, handing the account's credentials to the very diagnostics report
+     * this object exists to keep them out of. The path was being stripped correctly the whole time;
+     * only the credentials-before-the-@ form leaked.
+     *
+     * A host this fails to parse (`URI` is strict - an underscore in a hostname is enough) is
+     * redacted whole rather than falling back to the authority. That loses a little context in a
+     * report, which is the right way round for a component whose failure mode is a leak.
+     */
     private fun redactUrl(url: String): String {
         val uri = runCatching { URI(url) }.getOrNull()
-        val authority = uri?.authority ?: uri?.host
-        return if (authority != null) {
-            val scheme = uri?.scheme ?: "http"
-            "$scheme://$authority/…#${shortMarker(url)}"
-        } else {
-            "<url:${shortMarker(url)}>"
-        }
+        val host = uri?.host ?: return "<url:${shortMarker(url)}>"
+        val scheme = uri.scheme ?: "http"
+        val port = if (uri.port != -1) ":${uri.port}" else ""
+        return "$scheme://$host$port/…#${shortMarker(url)}"
     }
 
     /** [String.hashCode] is fixed by the Java language spec, so this is stable across runs/JVMs. */

@@ -55,6 +55,18 @@ sharing one `versionCode`.
 than hardcoded in `build.gradle.kts` - a local `./gradlew :app:assembleRelease` without these
 properties falls back to the defaults in `app/build.gradle.kts`.
 
+Marking a new version touches **three** files, and they have to move together:
+
+1. `app/build.gradle.kts` - the `versionCode`/`versionName` defaults a local build falls back to.
+2. `.github/workflows/android-ci.yml` - `UACAST_VERSION_NAME`, which carries the same
+   `major.minor.patch` with the run number appended. Leaving this behind makes CI artifacts claim
+   the previous version, which is worse than no version at all since it looks authoritative.
+3. `CHANGELOG.md` - a new section at the top. A version number with no record of what is in it
+   tells a user nothing.
+
+`versionCode` only has to increase monotonically; CI derives its own from the run number, so the
+default in `build.gradle.kts` matters only for locally built APKs.
+
 ## Regenerating the baseline profile
 
 **Current status: successfully run once (2026-07-30), on a Pixel 10 Pro emulator (API 37,

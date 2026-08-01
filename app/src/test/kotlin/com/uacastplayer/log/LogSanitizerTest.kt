@@ -124,4 +124,57 @@ class LogSanitizerTest {
         assertFalse(result.contains("secret"))
         assertFalse(result.contains(token))
     }
+
+    // Credentials embedded in the url's userinfo (`scheme://user:pass@host/`) used to survive
+    // redaction verbatim, because URI.getAuthority includes userinfo where getHost does not. This is
+    // the one leak class this object exists to prevent, so it gets its own group of tests.
+
+    @Test
+    fun `strips credentials embedded before the at-sign`() {
+        val result = LogSanitizer.sanitize("loading http://joe:hunter2@iptv.example.com/live/1.ts")
+
+        assertFalse("leaked user, got: $result", result.contains("joe"))
+        assertFalse("leaked password, got: $result", result.contains("hunter2"))
+        assertFalse("leaked userinfo separator, got: $result", result.contains("@"))
+    }
+
+    @Test
+    fun `strips a userinfo with no password`() {
+        val result = LogSanitizer.sanitize("loading http://joe@iptv.example.com/live/1.ts")
+
+        assertFalse("leaked user, got: $result", result.contains("joe"))
+        assertFalse("leaked userinfo separator, got: $result", result.contains("@"))
+    }
+
+    @Test
+    fun `keeps the host so a report still says which origin a line is about`() {
+        val result = LogSanitizer.sanitize("loading http://joe:hunter2@iptv.example.com/live/1.ts")
+
+        assertTrue("host was dropped, got: $result", result.contains("iptv.example.com"))
+    }
+
+    @Test
+    fun `keeps a non-default port alongside the host`() {
+        val result = LogSanitizer.sanitize("loading http://iptv.example.com:8080/live/1.ts")
+
+        assertTrue("port was dropped, got: $result", result.contains("iptv.example.com:8080"))
+    }
+
+    @Test
+    fun `still strips the path, which is where Xtream puts its credentials`() {
+        val result = LogSanitizer.sanitize("loading http://iptv.example.com/live/joe/hunter2/1.ts")
+
+        assertFalse("leaked user, got: $result", result.contains("joe"))
+        assertFalse("leaked password, got: $result", result.contains("hunter2"))
+    }
+
+    /** An unparseable host falls back to redacting the whole url rather than to the authority -
+     * losing context in a report is the right trade for a component whose failure mode is a leak. */
+    @Test
+    fun `a url whose host cannot be parsed is redacted whole`() {
+        val result = LogSanitizer.sanitize("loading http://joe:hunter2@host_with_underscore/x")
+
+        assertFalse("leaked password, got: $result", result.contains("hunter2"))
+        assertTrue("expected a whole-url marker, got: $result", result.contains("<url:"))
+    }
 }

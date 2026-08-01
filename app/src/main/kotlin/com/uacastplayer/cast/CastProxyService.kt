@@ -16,6 +16,7 @@ import com.uacastplayer.MainActivity
 import com.uacastplayer.R
 import com.uacastplayer.core.i18n.withAppLocale
 import com.uacastplayer.data.cast.CastWakeLocks
+import com.uacastplayer.dlna.DlnaSessionRepository
 import com.uacastplayer.log.AppLog
 
 private const val TAG = "CastProxyService"
@@ -35,6 +36,14 @@ private const val ACTION_STOP_FOREGROUND = "com.uacastplayer.cast.action.STOP_FO
 private const val ACTION_END_SESSION = "com.uacastplayer.cast.action.END_SESSION"
 private const val EXTRA_CHANNEL_TITLE = "channel_title"
 private const val EXTRA_RECEIVER_NAME = "receiver_name"
+private const val EXTRA_TARGET = "target"
+
+/**
+ * Which cast target the proxy session being protected belongs to - the only thing this service
+ * needs to tell them apart, and only so the notification's Stop action ends the right one. The two
+ * are mutually exclusive (see docs/DLNA.md), so at most one is ever current.
+ */
+enum class CastProxyTarget { CHROMECAST, DLNA }
 
 /**
  * Keeps the process (and the local HLS [com.uacastplayer.data.cast.ProxyServer] it hosts) alive
@@ -49,6 +58,12 @@ class CastProxyService : Service() {
     private val wakeLocks by lazy { CastWakeLocks(applicationContext) }
     private val localizedContext by lazy { applicationContext.withAppLocale() }
 
+    // Read on ACTION_END_SESSION, written on ACTION_START. Kept on the service rather than carried
+    // in the Stop button's PendingIntent: a PendingIntent built once and reused would keep the
+    // extras of whichever session created it, so a DLNA session started after a Chromecast one
+    // would hand its Stop button the wrong target.
+    private var target = CastProxyTarget.CHROMECAST
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -61,15 +76,23 @@ class CastProxyService : Service() {
 
         when (intent?.action) {
             ACTION_END_SESSION -> {
-                AppLog.d(TAG) { "Stop action tapped - ending the Cast session" }
-                CastSessionRepository.getInstance(applicationContext).endSession()
+                AppLog.d(TAG) { "Stop action tapped - ending the $target session" }
+                when (target) {
+                    CastProxyTarget.CHROMECAST -> CastSessionRepository.getInstance(applicationContext).endSession()
+                    CastProxyTarget.DLNA -> DlnaSessionRepository.getInstance(applicationContext).stop()
+                }
                 stopServiceForeground()
             }
             ACTION_STOP_FOREGROUND -> {
                 AppLog.d(TAG) { "Proxy no longer needed - stopping the foreground service only" }
                 stopServiceForeground()
             }
-            else -> wakeLocks.acquire()
+            else -> {
+                target = intent?.getStringExtra(EXTRA_TARGET)
+                    ?.let { name -> CastProxyTarget.entries.firstOrNull { it.name == name } }
+                    ?: CastProxyTarget.CHROMECAST
+                wakeLocks.acquire()
+            }
         }
 
         // System-killed means the proxy state is gone anyway; the receiver will surface its own
@@ -129,12 +152,17 @@ class CastProxyService : Service() {
     }
 
     companion object {
-        private fun startIntent(context: Context, channelTitle: String, receiverName: String): Intent =
-            Intent(context, CastProxyService::class.java).apply {
-                action = ACTION_START
-                putExtra(EXTRA_CHANNEL_TITLE, channelTitle)
-                putExtra(EXTRA_RECEIVER_NAME, receiverName)
-            }
+        private fun startIntent(
+            context: Context,
+            channelTitle: String,
+            receiverName: String,
+            target: CastProxyTarget,
+        ): Intent = Intent(context, CastProxyService::class.java).apply {
+            action = ACTION_START
+            putExtra(EXTRA_CHANNEL_TITLE, channelTitle)
+            putExtra(EXTRA_RECEIVER_NAME, receiverName)
+            putExtra(EXTRA_TARGET, target.name)
+        }
 
         private fun stopForegroundIntent(context: Context): Intent =
             Intent(context, CastProxyService::class.java).apply { action = ACTION_STOP_FOREGROUND }
@@ -142,8 +170,13 @@ class CastProxyService : Service() {
         private fun endSessionIntent(context: Context): Intent =
             Intent(context, CastProxyService::class.java).apply { action = ACTION_END_SESSION }
 
-        fun start(context: Context, channelTitle: String, receiverName: String) {
-            startForegroundServiceSafely(context, startIntent(context, channelTitle, receiverName))
+        fun start(
+            context: Context,
+            channelTitle: String,
+            receiverName: String,
+            target: CastProxyTarget = CastProxyTarget.CHROMECAST,
+        ) {
+            startForegroundServiceSafely(context, startIntent(context, channelTitle, receiverName, target))
         }
 
         /** Called 1:1 with [com.uacastplayer.data.cast.ProxyServer.stop] - tears down only this

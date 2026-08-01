@@ -58,6 +58,14 @@ finds, and a tap on a device calls `DlnaSessionRepository.connect`. A separate "
 action calls `DlnaSessionRepository.stop`, which stops the renderer and tears down the proxy
 session and its locks.
 
+While connected, the session is held up by `cast/CastProxyService` - the same foreground service the
+Chromecast path uses, started with `CastProxyTarget.DLNA` so its notification's Stop action ends the
+DLNA session rather than a Chromecast one. This replaced a bare `CastWakeLocks` acquire: a
+`PARTIAL_WAKE_LOCK` keeps the CPU awake but does nothing to stop the OS reclaiming a backgrounded
+process, and the proxy only matters while it is *serving* - so leaving the app killed the TV's stream
+on exactly the aggressive OEM builds that service was written for. The service owns the wake/wifi
+locks for its own lifetime; `DlnaSessionRepository` holds none of its own.
+
 `stop()` tears the proxy and locks down *synchronously* and only defers the SOAP `Stop`: with the
 teardown behind the coroutine that first waits out a renderer's timeout, a user who stopped and
 immediately picked another device had that pending teardown kill the proxy the new session had just

@@ -286,12 +286,15 @@ private fun parsePatFirstProgramPid(data: ByteArray, offset: Int): Int? {
     if (section.isEmpty() || (section[0].toInt() and 0xFF) != 0x00) return null
     val length = sectionLength(section)
     val programsEnd = 3 + length - 4
-    var offset = 8
-    while (offset + 4 <= programsEnd && offset + 4 <= section.size) {
-        val programNumber = ((section[offset].toInt() and 0xFF) shl 8) or (section[offset + 1].toInt() and 0xFF)
-        val pid = ((section[offset + 2].toInt() and 0x1F) shl 8) or (section[offset + 3].toInt() and 0xFF)
+    // `cursor`, not another `offset`: the parameter of that name indexes the 188-byte PACKET, this
+    // indexes the extracted SECTION. They shadowed each other, which in a byte parser is a
+    // one-character edit away from an invisible off-by-one against the wrong buffer.
+    var cursor = 8
+    while (cursor + 4 <= programsEnd && cursor + 4 <= section.size) {
+        val programNumber = ((section[cursor].toInt() and 0xFF) shl 8) or (section[cursor + 1].toInt() and 0xFF)
+        val pid = ((section[cursor + 2].toInt() and 0x1F) shl 8) or (section[cursor + 3].toInt() and 0xFF)
         if (programNumber != 0) return pid
-        offset += 4
+        cursor += 4
     }
     return null
 }
@@ -303,14 +306,15 @@ private fun parsePmtFirstVideoPid(data: ByteArray, offset: Int): Int? {
     if (section.size < 12 || (section[0].toInt() and 0xFF) != 0x02) return null
     val length = sectionLength(section)
     val programInfoLength = ((section[10].toInt() and 0x0F) shl 8) or (section[11].toInt() and 0xFF)
-    var offset = 12 + programInfoLength
+    // See parsePatFirstProgramPid for why this is not called `offset` too.
+    var cursor = 12 + programInfoLength
     val sectionEnd = 3 + length - 4
-    while (offset + 5 <= sectionEnd && offset + 5 <= section.size) {
-        val streamType = section[offset].toInt() and 0xFF
-        val esPid = ((section[offset + 1].toInt() and 0x1F) shl 8) or (section[offset + 2].toInt() and 0xFF)
-        val esInfoLength = ((section[offset + 3].toInt() and 0x0F) shl 8) or (section[offset + 4].toInt() and 0xFF)
+    while (cursor + 5 <= sectionEnd && cursor + 5 <= section.size) {
+        val streamType = section[cursor].toInt() and 0xFF
+        val esPid = ((section[cursor + 1].toInt() and 0x1F) shl 8) or (section[cursor + 2].toInt() and 0xFF)
+        val esInfoLength = ((section[cursor + 3].toInt() and 0x0F) shl 8) or (section[cursor + 4].toInt() and 0xFF)
         if (streamType in VIDEO_STREAM_TYPES) return esPid
-        offset += 5 + esInfoLength
+        cursor += 5 + esInfoLength
     }
     return null
 }
