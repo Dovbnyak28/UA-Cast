@@ -57,9 +57,15 @@ internal class RawTsRemuxSession(
     @Volatile var hasEnded = false
         private set
 
-    // Only ever read/written from the reader thread itself - readLoop() owns it exclusively once
-    // start() has been called, so it doesn't need the same synchronization as `buffer`.
-    private var currentResponse = initialResponse
+    // Written only by the reader thread (attemptReconnect swaps it), but READ by whatever thread
+    // calls stop() - which is the whole point of that read: closing the response is what unblocks
+    // a reader parked in read(). Without @Volatile a stop() racing a reconnect can see the stale
+    // reference and close the response the reader has already moved off, leaving it blocked on the
+    // new one until the socket read timeout expires (15s on the cast path) with the upstream
+    // connection still held. Only the reference needs publishing; Response.close() is itself safe
+    // to call from another thread, and readLoop's own last-resort close makes a doubly-closed
+    // response a no-op rather than a leak.
+    @Volatile private var currentResponse = initialResponse
 
     fun start() {
         readerThread = thread(name = "ProxyServer-remux-$resourceId") { readLoop() }

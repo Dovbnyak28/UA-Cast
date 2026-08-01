@@ -373,7 +373,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
         exoPlayer.setMediaItem(MediaItemFactory.forChannel(channel.streamUrl))
-        if (LocalPlaybackPolicy.shouldPrepareLocally(isCasting)) {
+        if (LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting)) {
             exoPlayer.prepare()
         } else {
             // The media item is still set so ResumeLocalPlayer (on cast disconnect) can prepare
@@ -381,6 +381,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             exoPlayer.stop()
         }
         castRepository.setActiveChannel(index, channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)
+        // No-op unless a DLNA renderer is actually connected. Unconditional on purpose: the local
+        // player has already stood down for a remote target above, so without this a channel switch
+        // during a DLNA cast would change nothing anywhere - the TV keeps the old channel and the
+        // phone plays nothing.
+        dlnaRepository.setActiveChannel(channel.streamUrl, channel.displayName)
         _uiState.update {
             it.copy(
                 currentChannel = channel,

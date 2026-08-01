@@ -9,6 +9,11 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -40,11 +45,23 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
 
     private val appContext = context.applicationContext
 
-    /** Blocks the calling thread for about [DISCOVERY_WINDOW_SECONDS] seconds - call from a background dispatcher. */
-    fun discover(): List<DlnaDevice> {
+    /**
+     * Takes at least [DISCOVERY_WINDOW_SECONDS] (the fixed M-SEARCH listen window), plus one
+     * device-description fetch.
+     *
+     * The fetches run concurrently rather than one after another: each is an independent HTTP round
+     * trip to a different device, capped at [DEVICE_DESCRIPTION_TIMEOUT_SECONDS] by the client, so
+     * serially a LAN with several renderers - or one unresponsive TV that burns its whole timeout -
+     * added that timeout again per device to a sheet the user is watching spin. Concurrently the
+     * whole batch costs the slowest single device.
+     */
+    suspend fun discover(): List<DlnaDevice> {
         val multicastLock = acquireMulticastLock()
         return try {
-            collectLocations().mapNotNull(::fetchDevice)
+            val locations = withContext(Dispatchers.IO) { collectLocations() }
+            coroutineScope {
+                locations.map { location -> async(Dispatchers.IO) { fetchDevice(location) } }.awaitAll()
+            }.filterNotNull()
         } finally {
             multicastLock?.let { if (it.isHeld) it.release() }
         }

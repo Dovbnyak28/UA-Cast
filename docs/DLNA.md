@@ -14,6 +14,19 @@ url to the renderer instead of the origin url. This is deliberate, not incidenta
 geo-restriction/TLS-quirk/header problems that make Chromecast need a local relay apply just as
 much to a DLNA renderer, and it keeps exactly one proxy implementation in the app instead of two.
 
+Two consequences of "same proxy" that are easy to get wrong, and were:
+
+- **The proxy gets its own OkHttp client** (10s connect / 15s read, matching the Chromecast path),
+  never the discovery client's few seconds. The discovery timeouts are sized for one small
+  device-description XML; the proxy's client is what reads an *endless live stream*, and OkHttp
+  applies the read timeout to every `read()` on the body - so a few seconds without a byte, routine
+  through a VPN, would read as a dropped connection and send the remux reader into a backoff
+  reconnect plus a discontinuity.
+- **`ProxyServer.ensureStarted`, not `start`.** One session token is generated per DLNA session and
+  reused, so a channel switch reuses the running socket and port instead of rebinding a fresh one
+  out from under a renderer that may still be fetching the previous url. `start` is only reached
+  through `ensureStarted`'s own new-session path.
+
 ## Discovery
 
 `dlna/SsdpDiscovery` sends a single SSDP M-SEARCH multicast datagram (`ST:
@@ -44,6 +57,26 @@ to the player's other overlay controls: it runs discovery once per appearance, l
 finds, and a tap on a device calls `DlnaSessionRepository.connect`. A separate "Stop casting"
 action calls `DlnaSessionRepository.stop`, which stops the renderer and tears down the proxy
 session and its locks.
+
+`stop()` tears the proxy and locks down *synchronously* and only defers the SOAP `Stop`: with the
+teardown behind the coroutine that first waits out a renderer's timeout, a user who stopped and
+immediately picked another device had that pending teardown kill the proxy the new session had just
+bound. Neither call blocks - `ProxyServer.stop` closes sockets and signals its reader threads
+without joining them.
+
+## Channel switching
+
+`PlayerViewModel.switchToIndexImmediate` calls `DlnaSessionRepository.setActiveChannel`
+unconditionally - the DLNA counterpart of `CastSessionRepository.setActiveChannel`, and a no-op
+unless a renderer is connected. It re-runs `connect` for the already-connected device, which
+re-registers the new channel with the (still running, same port) proxy and sends a fresh
+`SetAVTransportURI` + `Play`.
+
+This is not optional bookkeeping. The local player stands down for *any* remote target -
+`LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting)`, note `isRemoteCasting`, not
+`isCasting`, or the phone opens a second connection to an origin that allows one per account and
+starves the proxy feeding the TV. So without `setActiveChannel` a channel switch during a DLNA cast
+changed nothing anywhere: the TV kept the old channel and the phone played nothing.
 
 ## Explicitly out of scope for this MVP
 
