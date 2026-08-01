@@ -709,6 +709,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             return MediaSession.ConnectionResult.accept(connectionResult.availableSessionCommands, availablePlayerCommands)
         }
 
+        /**
+         * Deprecated in media3, which now points at wrapping the player in a `ForwardingPlayer`
+         * that overrides `seekToNext`/`seekToPreviousMediaItem` and friends. Deliberately NOT
+         * migrated yet, and the reason is worth writing down rather than rediscovering:
+         *
+         * a `ForwardingPlayer` has to keep `getAvailableCommands()` and `isCommandAvailable()`
+         * agreeing with each other, and the only surfaces that exercise any of this are system
+         * ones - a headset, a watch, the media notification. None of them are reachable from a
+         * unit test, so a mistake would show up as next/previous silently doing nothing on a
+         * user's notification, discovered weeks later. The deprecated callback here works, is
+         * still called by media3 1.10.1, and is a handful of lines; trading it for an untestable
+         * refactor is not an improvement.
+         *
+         * Do the migration when there is a device to check it on, together with
+         * [MediaSessionCommandPolicy], which already isolates the mapping the new player would
+         * need.
+         */
+        @Suppress("DEPRECATION")
+        @Deprecated("Kept until the ForwardingPlayer migration can be verified on a device.")
         override fun onPlayerCommandRequest(
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
