@@ -2,12 +2,17 @@ package com.uacastplayer.data.playlist
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.data.writeSafely
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSnapshotCodec
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private const val TAG = "PlaylistSnapshotStore"
 
 /**
  * Persists the last successfully loaded playlist for one saved source (see
@@ -19,24 +24,22 @@ class PlaylistSnapshotStore(context: Context, sourceId: String) {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "playlist_snapshot_$sourceId.bin"))
 
-    // AtomicFile requires failWrite() on *any* failure mid-write to release the temp file, not just
-    // specific ones - the broad catch exists to make that cleanup unconditional before rethrowing.
-    @Suppress("TooGenericExceptionCaught")
     suspend fun save(snapshot: PlaylistSnapshot) = withContext(Dispatchers.IO) {
-        val stream = atomicFile.startWrite()
-        try {
+        atomicFile.writeSafely(TAG, "Playlist snapshot") { stream ->
             PlaylistSnapshotCodec.encode(snapshot, stream)
-            atomicFile.finishWrite(stream)
-        } catch (e: Exception) {
-            atomicFile.failWrite(stream)
-            throw e
         }
+        Unit
     }
 
     suspend fun load(): PlaylistSnapshot? = withContext(Dispatchers.IO) {
         try {
             atomicFile.openRead().use { PlaylistSnapshotCodec.decode(it) }
         } catch (_: FileNotFoundException) {
+            null
+        } catch (e: IOException) {
+            // Purely a cache - an unreadable snapshot just means re-fetching from the network,
+            // which is what a null return already asks the caller to do.
+            AppLog.w(TAG) { "Playlist snapshot read failed, will refetch: ${e.javaClass.simpleName}" }
             null
         }
     }

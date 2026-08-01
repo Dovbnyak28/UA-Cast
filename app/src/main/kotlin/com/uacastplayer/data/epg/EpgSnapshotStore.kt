@@ -2,13 +2,18 @@ package com.uacastplayer.data.epg
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.data.writeSafely
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.epg.EpgSnapshotCodec
 import com.uacastplayer.epg.EpgSnapshotHeader
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private const val TAG = "EpgSnapshotStore"
 
 class EpgSnapshotStore(context: Context) {
 
@@ -16,12 +21,8 @@ class EpgSnapshotStore(context: Context) {
 
     /** Streams [documentFile]'s contents straight into the snapshot file - the document is never
      * fully materialized as a ByteArray, since EPG feeds can run tens of megabytes. */
-    // AtomicFile requires failWrite() on *any* failure mid-write to release the temp file, not just
-    // specific ones - the broad catch exists to make that cleanup unconditional before rethrowing.
-    @Suppress("TooGenericExceptionCaught")
     suspend fun save(sourceFingerprint: String, savedAtEpochMillis: Long, documentFile: File) = withContext(Dispatchers.IO) {
-        val stream = atomicFile.startWrite()
-        try {
+        atomicFile.writeSafely(TAG, "EPG snapshot") { stream ->
             documentFile.inputStream().use { documentStream ->
                 EpgSnapshotCodec.encode(
                     EpgSnapshotHeader(sourceFingerprint, savedAtEpochMillis),
@@ -30,11 +31,8 @@ class EpgSnapshotStore(context: Context) {
                     stream,
                 )
             }
-            atomicFile.finishWrite(stream)
-        } catch (e: Exception) {
-            atomicFile.failWrite(stream)
-            throw e
         }
+        Unit
     }
 
     /**
@@ -46,6 +44,11 @@ class EpgSnapshotStore(context: Context) {
         val stream = try {
             atomicFile.openRead()
         } catch (_: FileNotFoundException) {
+            return@withContext null
+        } catch (e: IOException) {
+            // Cache only - a null here means "parse from the network instead", which is exactly
+            // what an unreadable snapshot calls for. Escaping would take the EPG load down with it.
+            AppLog.w(TAG) { "EPG snapshot read failed, will refetch: ${e.javaClass.simpleName}" }
             return@withContext null
         }
         val decoded = EpgSnapshotCodec.decodeHeader(stream)

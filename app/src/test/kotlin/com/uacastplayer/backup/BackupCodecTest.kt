@@ -72,4 +72,54 @@ class BackupCodecTest {
         val decoded = BackupCodec.decode(BackupCodec.encode(data))
         assertNull(decoded?.sources?.get(1)?.displayName)
     }
+
+    // This file is user-visible and meant to be hand-editable, so decode() has to survive anything
+    // a person can type into it. It used to throw JSONException out of BackupController's
+    // scope.launch - i.e. crash the app on import - for each of the shapes below.
+
+    @Test
+    fun `a non-object element in the sources array does not throw`() {
+        val decoded = BackupCodec.decode("""{"version":1,"sources":["oops"],"favorites":[],"settings":{}}""")
+
+        assertTrue(decoded?.sources.isNullOrEmpty())
+    }
+
+    @Test
+    fun `a non-object element in the favorites array does not throw`() {
+        val decoded = BackupCodec.decode("""{"version":1,"sources":[],"favorites":[42],"settings":{}}""")
+
+        assertTrue(decoded?.favorites.isNullOrEmpty())
+    }
+
+    /** One unusable row costs that row, not the whole import - the same tolerance the codec
+     * already had for an object merely missing its required fields. */
+    @Test
+    fun `a stray element is skipped while the valid entries around it still import`() {
+        val json = """
+            {"version":1,"sources":[
+              {"id":"a","type":"URL","location":"http://a.com"},
+              "garbage",
+              {"id":"b","type":"URL","location":"http://b.com"}
+            ],"favorites":[],"settings":{}}
+        """.trimIndent()
+
+        val decoded = BackupCodec.decode(json)
+
+        assertEquals(listOf("a", "b"), decoded?.sources?.map { it.id })
+    }
+
+    @Test
+    fun `an array where an object was expected decodes to nothing rather than throwing`() {
+        val decoded = BackupCodec.decode("""{"version":1,"sources":"not an array","settings":[]}""")
+
+        assertTrue(decoded?.sources.isNullOrEmpty())
+    }
+
+    @Test
+    fun `a deeply malformed but parseable document still yields a usable result`() {
+        val decoded = BackupCodec.decode("""{"version":1,"sources":[[]],"favorites":[[{}]],"settings":{}}""")
+
+        assertTrue(decoded?.sources.isNullOrEmpty())
+        assertTrue(decoded?.favorites.isNullOrEmpty())
+    }
 }

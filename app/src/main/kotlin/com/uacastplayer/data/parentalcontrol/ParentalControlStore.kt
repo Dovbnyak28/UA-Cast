@@ -2,12 +2,17 @@ package com.uacastplayer.data.parentalcontrol
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.data.writeSafely
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.parentalcontrol.LockedChannelsCodec
 import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private const val TAG = "ParentalControlStore"
 
 /** Persists the set of parental-control-locked channel keys (see
  * [com.uacastplayer.favorites.FavoriteKey]) so they survive an app restart - deliberately not
@@ -23,20 +28,21 @@ class ParentalControlStore(context: Context) : LockedChannelsStorage {
             LockedChannelsCodec.decode(String(bytes, Charsets.UTF_8))
         } catch (_: FileNotFoundException) {
             emptySet()
+        } catch (e: IOException) {
+            // AtomicFile.readFully already falls back to its backup copy, so reaching here means
+            // neither is readable - there is nothing left to recover, and letting this escape into
+            // the controller's init launch crashed the app on every start.
+            AppLog.w(TAG) { "Locked channels read failed, starting empty: ${e.javaClass.simpleName}" }
+            emptySet()
         }
     }
 
-    // AtomicFile requires failWrite() on *any* failure mid-write to release the temp file, not just
-    // specific ones - the broad catch exists to make that cleanup unconditional before rethrowing.
-    @Suppress("TooGenericExceptionCaught")
+    /** A lost write here fails safe in the direction that matters: a lock that did not persist is
+     * re-applied by the user, while an unlock that did not persist leaves the channel locked. */
     override suspend fun save(keys: Set<String>) = withContext(Dispatchers.IO) {
-        val stream = atomicFile.startWrite()
-        try {
+        atomicFile.writeSafely(TAG, "Locked channels") { stream ->
             stream.write(LockedChannelsCodec.encode(keys).toByteArray(Charsets.UTF_8))
-            atomicFile.finishWrite(stream)
-        } catch (e: Exception) {
-            atomicFile.failWrite(stream)
-            throw e
         }
+        Unit
     }
 }

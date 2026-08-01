@@ -49,6 +49,19 @@ version, and the local player's behaviour during a remote cast changed.
 - A `stop()` racing a reconnect could close the wrong upstream response, leaving the reader blocked
   until its socket timeout with the connection still held.
 
+### Fixed - crashes
+
+- **Importing a hand-edited or corrupt backup crashed the app.** `BackupCodec.decode` guarded only
+  the initial JSON parse, so a stray non-object element in the `sources` or `favorites` array threw
+  straight out of the import coroutine - contradicting the codec's own documented promise to return
+  null for anything unusable. A bad row is now skipped and the valid entries around it still import.
+- **An unreadable favorites, locked-channels, group-visibility, playlist or EPG file crashed the app
+  on startup**, every startup: each store caught only `FileNotFoundException`, letting any other I/O
+  error escape into a `launch` where nothing catches it.
+- **A failed write crashed the app** on the same six stores - starring a channel with a full disk was
+  enough. Writes now report failure instead of throwing; the in-memory state the caller already
+  updated stays correct, so a lost write costs that one change at next launch.
+
 ### Fixed - data
 
 - **XMLTV feeds could record the literal string `"null"` as a channel's display name** when a

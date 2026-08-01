@@ -24,20 +24,38 @@ object BackupCodec {
         return root.toString(2)
     }
 
+    /**
+     * The whole body is guarded, not just the initial [JSONObject] construction: `runCatching`
+     * around that alone left every accessor below it free to throw, and one did - see
+     * [toObjectList]. This file is user-visible and meant to be hand-editable, so "unusable input
+     * yields null" has to hold for the entire parse, not for its first line.
+     */
     fun decode(text: String): BackupData? {
         if (text.isBlank()) return null
-        return runCatching { JSONObject(text) }
-            .getOrNull()
-            ?.takeIf { it.optInt("version", -1) == CURRENT_VERSION }
-            ?.let { root ->
-                val sources = root.optJSONArray("sources")?.toObjectList()?.mapNotNull(::sourceFromJson).orEmpty()
-                val favorites = root.optJSONArray("favorites")?.toObjectList()?.mapNotNull(::favoriteFromJson).orEmpty()
-                val settings = root.optJSONObject("settings")?.let(::settingsFromJson) ?: BackupSettings()
-                BackupData(sources, favorites, settings)
-            }
+        return runCatching {
+            JSONObject(text)
+                .takeIf { it.optInt("version", -1) == CURRENT_VERSION }
+                ?.let { root ->
+                    val sources = root.optJSONArray("sources")?.toObjectList()?.mapNotNull(::sourceFromJson).orEmpty()
+                    val favorites =
+                        root.optJSONArray("favorites")?.toObjectList()?.mapNotNull(::favoriteFromJson).orEmpty()
+                    val settings = root.optJSONObject("settings")?.let(::settingsFromJson) ?: BackupSettings()
+                    BackupData(sources, favorites, settings)
+                }
+        }.getOrNull()
     }
 
-    private fun JSONArray.toObjectList(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
+    /**
+     * `optJSONObject`, not `getJSONObject`: the latter throws on an array element that is not an
+     * object, and nothing between here and [com.uacastplayer.app.BackupController.importFrom]'s
+     * `scope.launch` caught it - so importing a backup whose `sources` array had a stray string in
+     * it took the app down instead of being ignored.
+     *
+     * Skipping the bad element rather than failing the whole parse also matches what the
+     * `mapNotNull(::sourceFromJson)` at both call sites already does for an object that is merely
+     * missing fields: one unusable row costs that row, not the import.
+     */
+    private fun JSONArray.toObjectList(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 
     private fun sourceToJson(source: BackupPlaylistSource): JSONObject = JSONObject().apply {
         put("id", source.id)

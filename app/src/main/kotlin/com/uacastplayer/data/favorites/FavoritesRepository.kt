@@ -30,6 +30,9 @@ class FavoritesRepository(context: Context) {
     private fun publish(updated: List<FavoriteChannel>) {
         favoriteKeys = updated.mapTo(HashSet(updated.size)) { it.key }
         _favorites.value = updated
+        // Fire-and-forget, and safe to be: the store reports a failed write rather than throwing
+        // into this launch, where an uncaught exception would kill the app (see
+        // com.uacastplayer.data.writeSafely). The list above is already published either way.
         scope.launch { store.save(updated) }
     }
 
