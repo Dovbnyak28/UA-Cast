@@ -50,6 +50,13 @@ version, and the local player's behaviour during a remote cast changed.
 - **Leaving the app during a DLNA cast could kill the TV's stream.** DLNA held only a wake lock,
   which keeps the CPU awake but does not stop the OS reclaiming a backgrounded process. It now uses
   the same foreground service the Chromecast path does.
+- **An upstream connection could be leaked between fetching it and serving it.** The proxy owns
+  the origin response from the moment it is fetched until a serve path takes it on, and the two
+  content sniffs in between were guarded individually - but the route-attempt counter that runs
+  after them writes to a disk-backed store on the same thread, and an I/O error out of it left the
+  connection open with nobody holding a reference. Seen in the field as OkHttp's "connection was
+  leaked. Did you forget to close a response body?" against the origin host. The whole window is
+  now covered by one guard instead of a per-call one.
 - A channel switch during a DLNA cast rebound the proxy's socket out from under a renderer that
   could still be fetching the previous url.
 - A `stop()` racing a reconnect could close the wrong upstream response, leaving the reader blocked

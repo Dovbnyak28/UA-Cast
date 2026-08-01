@@ -28,6 +28,10 @@ private const val TS_PROBE_BYTES = 128L * 1024
 private const val HTTP_BAD_GATEWAY = 502
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 
+/** How an upstream response is to be served, decided from the response itself rather than from
+ * the resource's registered type - see `decideRoute`. */
+private enum class UpstreamRoute { PLAYLIST, REMUX, PASSTHROUGH }
+
 /**
  * Local HLS proxy: rewrites and re-serves an HLS stream so a Cast receiver that can't (or won't)
  * play the origin URL directly can play it through the phone instead. Every path is
@@ -214,29 +218,50 @@ class ProxyServer(
         // this: every segment fetch of an ordinary HLS channel spun up its own remux session that
         // re-downloaded the same 10s segment in a loop and answered the receiver with M3U8 text
         // where it expected segment bytes.
+        // `response` belongs to this function from here until one of the serve paths takes it on,
+        // and every escape in between has to close it. The sniffs inside decideRoute were already
+        // guarded individually, but the guard stopped there: onRouteAttempted writes to a
+        // disk-backed store on this same connection-handling thread, and an IOException out of it
+        // would have left the upstream connection open with nobody holding a reference - the
+        // OkHttp "connection was leaked" warning against the origin host.
+        var handedOff = false
+        try {
+            val route = decideRoute(resourceId, resource, response)
+            handedOff = true
+            // Each branch owns `response` from here: the playlist and passthrough paths close it
+            // through their own use {}, and the remux path passes it to the session's reader.
+            when (route) {
+                UpstreamRoute.PLAYLIST ->
+                    serveUpstreamPlaylist(resourceId, resource, response, request.method, output)
+                UpstreamRoute.REMUX ->
+                    serveRemuxedUpstream(resourceId, response, request.method, output)
+                UpstreamRoute.PASSTHROUGH ->
+                    response.use { servePassthrough(resourceId, it, request.method, output) }
+            }
+        } finally {
+            if (!handedOff) runCatching { response.close() }
+        }
+    }
+
+    /** Everything between acquiring the upstream response and handing it off - i.e. everything
+     * that can still throw while this function owns it. */
+    private fun decideRoute(resourceId: String, resource: ResourceEntry, response: Response): UpstreamRoute {
         val remuxEligible = resource.type == RESOURCE_TYPE_PLAYLIST
-        val (isPlaylist, shouldRemux) = runCatching {
-            val isPlaylist = isUpstreamPlaylist(response)
-            isPlaylist to (!isPlaylist && remuxEligible && shouldRemuxUpstream(response))
-        }.onFailure { runCatching { response.close() } }.getOrThrow()
+        val isPlaylist = isUpstreamPlaylist(response)
+        val shouldRemux = !isPlaylist && remuxEligible && shouldRemuxUpstream(response)
 
         // Only the top-level (channel) resource represents a routing decision worth counting -
         // a RESOURCE_TYPE_MEDIA fetch is just serving one piece of a playlist already routed.
         if (remuxEligible) {
             onRouteAttempted(resourceId, if (shouldRemux) CastRouteKind.PROXY_REMUX else CastRouteKind.PROXY_REWRITE)
         }
-
-        if (isPlaylist) {
-            serveUpstreamPlaylist(resourceId, resource, response, request.method, output)
-            return
-        }
-
-        if (shouldRemux) {
-            serveRemuxedUpstream(resourceId, response, request.method, output)
-        } else {
-            response.use { servePassthrough(resourceId, it, request.method, output) }
+        return when {
+            isPlaylist -> UpstreamRoute.PLAYLIST
+            shouldRemux -> UpstreamRoute.REMUX
+            else -> UpstreamRoute.PASSTHROUGH
         }
     }
+
 
     /** Runs an upstream fetch, turning a network-level failure (refused/reset connection, timeout
      * - never a clean HTTP response) into a logged 502 instead of letting the exception escape
