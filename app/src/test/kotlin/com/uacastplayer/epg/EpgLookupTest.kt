@@ -9,8 +9,8 @@ class EpgLookupTest {
 
     private val epgChannel = EpgChannel(id = "bbc.one.uk", displayNames = listOf("BBC One"), iconUrl = null)
     private val programmes = listOf(
-        EpgProgramme("bbc.one.uk", 1000, 2000, "A", null),
-        EpgProgramme("bbc.one.uk", 2000, 3000, "B", null),
+        EpgProgramme("bbc.one.uk", 1000, 2000, "A"),
+        EpgProgramme("bbc.one.uk", 2000, 3000, "B"),
     )
     private val data = EpgData(
         index = EpgIndex(listOf(epgChannel)),

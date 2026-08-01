@@ -3,13 +3,11 @@
   <ManuallySuppressedIssues></ManuallySuppressedIssues>
   <CurrentIssues>
     <ID>ComplexCondition:AddPlaylistScreen.kt$hasStartedLoading &amp;&amp; playlistState.hasChannels &amp;&amp; !playlistState.isLoading &amp;&amp; playlistState.error == null</ID>
-    <ID>ComplexCondition:XmlTvTimeParser.kt$XmlTvTimeParser$month !in 1..12 || day !in 1..31 || hour !in 0..23 || minute !in 0..59 || second !in 0..60</ID>
     <ID>CyclomaticComplexMethod:M3uParser.kt$M3uParser$fun parse(text: String): M3uParseResult</ID>
     <ID>CyclomaticComplexMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>CyclomaticComplexMethod:MiniJson.kt$MiniJson.Parser$private fun parseString(): String</ID>
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(markerClass = [UnstableApi::class]) @Composable fun PlayerScreen( viewModel: PlayerViewModel, onExit: () -&gt; Unit, isFavorite: (M3uChannel) -&gt; Boolean, onToggleFavorite: (M3uChannel) -&gt; Unit, resolveIcon: suspend (M3uChannel) -&gt; File?, epgState: EpgUiState, iconPrefetchState: IconPrefetchUiState, modifier: Modifier = Modifier, )</ID>
     <ID>CyclomaticComplexMethod:ProxyHttpServer.kt$ProxyHttpServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
-    <ID>CyclomaticComplexMethod:XmlTvTimeParser.kt$XmlTvTimeParser$fun parse(value: String): Long?</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:PlayerViewModel.kt$val (minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs) = when (bufferSize) { BufferSize.SMALL -&gt; BufferProfile(10_000, 20_000, 1_000, 2_000) BufferSize.MEDIUM -&gt; BufferProfile( DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, 1_000, 2_500, ) BufferSize.LARGE -&gt; BufferProfile(30_000, 90_000, 2_000, 5_000) }</ID>
     <ID>LargeClass:AppIcons.kt$AppIcons</ID>
     <ID>LongMethod:M3uParser.kt$M3uParser$fun parse(text: String): M3uParseResult</ID>
@@ -151,18 +149,6 @@
     <ID>MagicNumber:TsSegmenter.kt$TsSegmenter$7</ID>
     <ID>MagicNumber:TsSegmenter.kt$TsSegmenter$8</ID>
     <ID>MagicNumber:TsSegmenter.kt$TsSegmenter$9</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$10</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$12</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$14</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$23</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$31</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$3_600_000L</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$4</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$59</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$6</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$60</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$60_000L</ID>
-    <ID>MagicNumber:XmlTvTimeParser.kt$XmlTvTimeParser$8</ID>
     <ID>MatchingDeclarationName:GlassTabBar.kt$TabBarItem</ID>
     <ID>MaxLineLength:AppViewModel.kt$AppViewModel$/** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]); manufacturer battery managers (MIUI/HyperOS and friends) otherwise silently kill the cast proxy in the background. */</ID>
     <ID>MaxLineLength:BoundedByteReader.kt$BoundedByteReader$/** Same streaming-with-early-bailout shape as [com.uacastplayer.playlist.BoundedTextReader], for binary content (the EPG gzip blob is stored as-is and must not go through text decoding). */</ID>
@@ -257,8 +243,6 @@
     <ID>ReturnCount:TsSegmenter.kt$private fun parsePatFirstProgramPid(data: ByteArray, offset: Int): Int?</ID>
     <ID>ReturnCount:TsSegmenter.kt$private fun parsePmtFirstVideoPid(data: ByteArray, offset: Int): Int?</ID>
     <ID>ReturnCount:TsSegmenter.kt$private fun sectionPayload(data: ByteArray, offset: Int): ByteArray?</ID>
-    <ID>ReturnCount:XmlTvTimeParser.kt$XmlTvTimeParser$fun parse(value: String): Long?</ID>
-    <ID>ReturnCount:XmlTvTimeParser.kt$XmlTvTimeParser$private fun parseOffsetMillis(offset: String): Long?</ID>
     <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : AndroidViewModel</ID>
     <ID>TooManyFunctions:CastSessionRepository.kt$CastSessionRepository</ID>
     <ID>TooManyFunctions:ChannelsScreen.kt$com.uacastplayer.ui.channels.ChannelsScreen.kt</ID>

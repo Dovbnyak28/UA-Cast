@@ -34,7 +34,7 @@ class XmlTvParserTest {
     }
 
     @Test
-    fun `parses a programme with title and description`() {
+    fun `parses a programme with a title, discarding the description alongside it`() {
         val result = parse(
             """
             <tv>
@@ -49,7 +49,27 @@ class XmlTvParserTest {
         val programme = result.programmes[0]
         assertEquals("bbc.one.uk", programme.channelId)
         assertEquals("News at Noon", programme.title)
-        assertEquals("Live news coverage.", programme.description)
+    }
+
+    /**
+     * `<desc>` is the largest field in a real feed and nothing reads it - see [EpgProgramme]. The
+     * risk in skipping it is that its character data leaks into whatever builder happens to be
+     * open, so this pins down that a description sitting either side of the title changes nothing.
+     */
+    @Test
+    fun `description text never bleeds into the title, before or after it`() {
+        val result = parse(
+            """
+            <tv>
+              <programme channel="ch1" start="20240115120000 +0000">
+                <desc>LEADING DESCRIPTION</desc>
+                <title>Real Title</title>
+                <desc>TRAILING DESCRIPTION</desc>
+              </programme>
+            </tv>
+            """.trimIndent()
+        )
+        assertEquals("Real Title", result.programmes[0].title)
     }
 
     @Test
@@ -116,7 +136,7 @@ class XmlTvParserTest {
     }
 
     @Test
-    fun `truncates text content longer than the 16KB limit`() {
+    fun `truncates text content longer than the name-length limit`() {
         val longTitle = "x".repeat(XmlTvParser.MAX_TEXT_LENGTH + 5000)
         val xml = """
             <tv>
@@ -150,20 +170,6 @@ class XmlTvParserTest {
         assertTrue(result.programmes.isEmpty())
         assertFalse(result.channelLimitExceeded)
         assertFalse(result.programmeLimitExceeded)
-    }
-
-    @Test
-    fun `programme with no description leaves it null`() {
-        val result = parse(
-            """
-            <tv>
-              <programme channel="ch1" start="20240115120000 +0000">
-                <title>No desc</title>
-              </programme>
-            </tv>
-            """.trimIndent()
-        )
-        assertNull(result.programmes[0].description)
     }
 
     /**

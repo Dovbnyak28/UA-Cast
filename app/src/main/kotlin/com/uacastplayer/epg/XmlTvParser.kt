@@ -27,7 +27,14 @@ object XmlTvParser {
 
     const val MAX_CHANNELS = 25_000
     const val MAX_PROGRAMMES = 250_000
-    const val MAX_TEXT_LENGTH = 16 * 1024
+
+    /**
+     * Caps a single `<display-name>` or `<title>`. These are the only text this parser keeps now
+     * that `<desc>` is skipped (see [EpgProgramme]), and both are names: 512 characters is far
+     * beyond any real one. The old 16KB was sized for descriptions, and with up to
+     * [MAX_PROGRAMMES] titles retained it left the worst case at gigabytes.
+     */
+    const val MAX_TEXT_LENGTH = 512
 
     fun parse(input: InputStream): XmlTvParseResult {
         val factory = SAXParserFactory.newInstance()
@@ -76,7 +83,6 @@ private class XmlTvHandler : DefaultHandler() {
     private var currentProgrammeStart: Long? = null
     private var currentProgrammeStop: Long? = null
     private var currentProgrammeTitle: StringBuilder? = null
-    private var currentProgrammeDesc: StringBuilder? = null
 
     private var textTarget: StringBuilder? = null
 
@@ -103,16 +109,14 @@ private class XmlTvHandler : DefaultHandler() {
                 currentProgrammeStart = attributes.getValue("start")?.let(XmlTvTimeParser::parse)
                 currentProgrammeStop = attributes.getValue("stop")?.let(XmlTvTimeParser::parse)
                 currentProgrammeTitle = null
-                currentProgrammeDesc = null
             }
             "title" -> if (currentProgrammeChannelId != null) {
                 textTarget = StringBuilder()
                 currentProgrammeTitle = textTarget
             }
-            "desc" -> if (currentProgrammeChannelId != null) {
-                textTarget = StringBuilder()
-                currentProgrammeDesc = textTarget
-            }
+            // <desc> is deliberately not accumulated - see EpgProgramme for the measurement. Its
+            // text still streams through characters(), but with no target it is dropped there
+            // rather than built into a String that nothing reads.
         }
     }
 
@@ -148,6 +152,9 @@ private class XmlTvHandler : DefaultHandler() {
                 currentDisplayNames = null
                 currentIconUrl = null
             }
+            // "desc" is still listed even though startElement no longer opens a target for it:
+            // a <desc> nested inside a <display-name> must keep clearing that display-name's
+            // target, which is what stops the name being recorded (see the note above).
             "title", "desc" -> textTarget = null
             "programme" -> {
                 val channelId = currentProgrammeChannelId
@@ -159,7 +166,6 @@ private class XmlTvHandler : DefaultHandler() {
                             startMillis = start,
                             stopMillis = currentProgrammeStop ?: start,
                             title = currentProgrammeTitle?.toString()?.trim().orEmpty(),
-                            description = currentProgrammeDesc?.toString()?.trim()?.ifEmpty { null },
                         )
                     } else {
                         programmeLimitExceeded = true
@@ -169,7 +175,6 @@ private class XmlTvHandler : DefaultHandler() {
                 currentProgrammeStart = null
                 currentProgrammeStop = null
                 currentProgrammeTitle = null
-                currentProgrammeDesc = null
             }
         }
     }

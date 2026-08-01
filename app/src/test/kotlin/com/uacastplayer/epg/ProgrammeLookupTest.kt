@@ -7,7 +7,7 @@ import org.junit.Test
 class ProgrammeLookupTest {
 
     private fun programme(start: Long, stop: Long, title: String) =
-        EpgProgramme(channelId = "ch1", startMillis = start, stopMillis = stop, title = title, description = null)
+        EpgProgramme(channelId = "ch1", startMillis = start, stopMillis = stop, title = title)
 
     private val programmes = listOf(
         programme(1000, 2000, "A"),

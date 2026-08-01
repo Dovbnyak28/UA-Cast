@@ -57,7 +57,17 @@ version, and the local player's behaviour during a remote cast changed.
 
 ### Fixed - crashes
 
-- **A headset, watch or car media button could crash the app on Android 12+.** The manifest declared
+- **Loading a large EPG could kill the app with an OutOfMemoryError.** Caught in a field logcat:
+  the heap sat pinned at the 255MB/256MB growth limit for ninety seconds - every allocation
+  process-wide triggering a blocking GC, the main thread skipping up to 797 frames at a time - and
+  then died inside the XMLTV parse. The cause was `<desc>`: XMLTV's programme description is by
+  far the largest field in a real feed, it was retained for up to 250,000 programmes, and nothing
+  in the app has ever read it (the guide sheet shows a title and a time). Measured on a
+  500-channel, 200k-programme feed, dropping it takes the parsed EPG from **109MB to 27MB
+  retained** and the parse itself from 569ms to 376ms. See `EpgProgramme` for what to do
+  differently if descriptions are ever shown.
+- The per-name text cap came down from 16KB to 512 characters alongside it. 16KB was sized for
+  descriptions; applied to 250,000 titles it left the worst case in the gigabytes. The manifest declared
   `androidx.media3.session.MediaButtonReceiver`, which exists to wake a `MediaSessionService` and
   throws when there is none - and this app deliberately has none, since live TV is not expected to
   keep playing after the player closes. On API 31+ media3 picks a declared receiver as the media
@@ -114,7 +124,13 @@ desktop JVM.
 - **URL fingerprinting: 3008µs → 750µs** per 5000 digests. `MessageDigest.getInstance()` is a JCA
   provider lookup and was ~75% of the cost for inputs this short.
 - **EPG memory:** channel ids are pooled, collapsing up to 250k duplicate strings into one per
-  distinct channel.
+  distinct channel. Dropping the unread `<desc>` (above) cut the rest by a further 75%.
+- **XMLTV timestamps: 260µs → 49µs** per 500k parses, producing bit-identical results. This runs
+  twice per programme, and each call was allocating a `GregorianCalendar` and looking up the UTC
+  zone through `TimeZone.getTimeZone`, which is internally synchronized - the same field logcat
+  showed the EPG worker holding that monitor for 1.2 seconds at a stretch with other threads
+  queued behind it. It is now plain arithmetic over the string's indices, with no allocation and
+  no lock. Six throwaway substrings per timestamp went with it, about three million per feed.
 - **Playlist parsing** no longer builds the whole file a second time in memory as a list of lines.
 - Channel-row initials no longer run a regex and build four intermediate lists per recomposition.
 - Flattening a loaded playlist moved off the main thread.

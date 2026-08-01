@@ -11,7 +11,7 @@ class DayScheduleBuilderTest {
     private val zone: ZoneId = ZoneOffset.UTC
 
     private fun programme(id: String, startMillis: Long, stopMillis: Long) =
-        EpgProgramme(channelId = "ch", startMillis = startMillis, stopMillis = stopMillis, title = id, description = null)
+        EpgProgramme(channelId = "ch", startMillis = startMillis, stopMillis = stopMillis, title = id)
 
     // 2026-01-01T00:00:00Z
     private val dayStart = 1_767_225_600_000L
