@@ -14,6 +14,7 @@ import com.uacastplayer.proxy.PlaylistUnwrapPolicy
 import com.uacastplayer.proxy.RawTsRemuxActivation
 import com.uacastplayer.proxy.RemuxHandoffPolicy
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
 import okhttp3.OkHttpClient
@@ -453,10 +454,37 @@ class ProxyServer(
         response.header("Accept-Ranges")?.let { headers["Accept-Ranges"] = it }
         response.header("Content-Length")?.let { headers["Content-Length"] = it }
         httpServer.writeHeaders(output, response.code, response.message.ifEmpty { "OK" }, headers)
-        if (method == "GET") {
-            response.body?.byteStream()?.use { input -> input.copyTo(output) }
+        // Logged in a finally, and on success too, because a successful passthrough used to log
+        // nothing at all: only the remux path reported its segments. That left the single most
+        // important question about a failing cast - did the receiver ever pull any media, or only
+        // the playlist? - unanswerable from a field capture, and two of them were lost to it.
+        // The finally is what makes a receiver that hangs up mid-segment distinguishable from one
+        // that never asked: a partial byte count is the evidence for the first.
+        val copied = LongArray(1)
+        try {
+            if (method == "GET") {
+                response.body?.byteStream()?.use { copyCounting(it, output, copied) }
+            }
+            output.flush()
+        } finally {
+            AppLog.d(TAG) { "Passthrough served: ${response.code}, ${copied[0]}B of resource $resourceId" }
         }
-        output.flush()
+    }
+
+    /**
+     * Copies [input] to [output], accumulating the running total into [progress]. The count has to
+     * live outside the call rather than being returned: a return value only arrives once the whole
+     * body is through, and the case worth diagnosing is precisely the one where it is not - a
+     * receiver that takes 200KB of a segment and hangs up reads as zero bytes otherwise.
+     */
+    private fun copyCounting(input: InputStream, output: OutputStream, progress: LongArray) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            output.write(buffer, 0, read)
+            progress[0] += read
+        }
     }
 
     /** Constant-time so a client fishing for the session token can't learn anything from how

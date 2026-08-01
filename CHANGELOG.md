@@ -109,6 +109,12 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   looks exactly like a codec or content failure.
 - An ordinary (non-remux) HLS cast now logs its rewritten playlist. Only the remux path logged
   anything before, so the common case left no trace of whether the receiver ever fetched.
+- **A successfully-served segment is logged, with its byte count.** Only the remux path reported
+  its segments; an ordinary passthrough logged nothing unless the upstream returned a non-2xx. So
+  the central question about a failing cast - did the receiver ever pull any media, or only the
+  playlist? - could not be answered from a field capture at all, and two of them were lost to it.
+  The count is accumulated during the copy and reported from a `finally`, so a receiver that takes
+  part of a segment and hangs up is distinguishable from one that never read a byte.
 - A request for a resource this session never registered is logged instead of a silent 404.
 - Proxy connection errors say which phase they happened in and, where known, the path. A peer that
   connects and hangs up without sending a request - a routine reachability probe - is no longer
