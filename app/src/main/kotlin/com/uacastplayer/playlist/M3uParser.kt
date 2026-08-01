@@ -11,9 +11,20 @@ object M3uParser {
     private const val UTF8_BOM = "\uFEFF"
     private val attributePattern = Regex("""([a-zA-Z][\w-]*)=(?:"([^"]*)"|(\S+))""")
 
+    /**
+     * [lineSequence] rather than `split("\n").map { it.trimEnd('\r') }`: that built the whole
+     * playlist a second time in memory - one String per line plus a backing array, then a second
+     * array for the map - all of it alive at once, on top of the original text, for a file that is
+     * routinely tens of megabytes on a large IPTV provider. The sequence hands over one line at a
+     * time, so each becomes collectable as soon as the loop moves past it.
+     *
+     * It also splits on a lone `\r`, which the old `trimEnd` did not (it only stripped a trailing
+     * one from a `\n`-delimited line). That is the more correct reading of a classic-Mac line
+     * ending, and `\r` is a control character that cannot legitimately appear inside a channel name
+     * or url anyway.
+     */
     fun parse(text: String): M3uParseResult {
-        val normalized = text.removePrefix(UTF8_BOM)
-        val lines = normalized.split("\n").map { it.trimEnd('\r') }
+        val lines = text.removePrefix(UTF8_BOM).lineSequence()
 
         val channels = mutableListOf<M3uChannel>()
         var skippedLineCount = 0

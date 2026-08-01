@@ -39,4 +39,33 @@ class ChannelIconTest {
     fun `an empty name yields no initials`() {
         assertEquals("", initialsFor(""))
     }
+
+    @Test
+    fun `a blank name yields no initials`() {
+        assertEquals("", initialsFor("   "))
+    }
+
+    @Test
+    fun `tabs and newlines separate words like spaces do`() {
+        assertEquals("AB", initialsFor("alpha\t\nbeta"))
+    }
+
+    /** Only whitespace splits words - punctuation inside one does not, so "1+1" contributes its
+     * leading digit and nothing more. */
+    @Test
+    fun `a non-letter first character is taken as-is`() {
+        assertEquals("1U", initialsFor("1+1 Ukraine"))
+    }
+
+    @Test
+    fun `cyrillic initials are uppercased`() {
+        assertEquals("НК", initialsFor("новий канал"))
+    }
+
+    /** The scan stops at two rather than splitting a long name in full and discarding the rest -
+     * this pins that the early exit doesn't change the answer. */
+    @Test
+    fun `a long name yields the same two initials as a short one`() {
+        assertEquals("AB", initialsFor("Alpha Beta Gamma Delta Epsilon Zeta Eta Theta"))
+    }
 }

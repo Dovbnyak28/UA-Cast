@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -66,6 +67,8 @@ import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Landing screen for the Channels tab: one card per group, showing its channel count. A non-blank
@@ -102,11 +105,19 @@ internal fun GroupsOverviewGrid(
     val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(GroupTileMinWidth)
 
     var query by rememberSaveable { mutableStateOf("") }
-    // Debounced: this search runs across the whole playlist (not just one group), so re-running it
-    // on every keystroke while typing causes visible jank on larger playlists.
+    // Debounced so a burst of keystrokes costs one search rather than one per character - this
+    // searches the whole playlist, not just one group.
     val trimmedQuery = rememberDebounced(query.trim())
-    val searchOutcome = remember(groups, trimmedQuery) {
-        if (trimmedQuery.isEmpty()) null else ChannelSearch.search(groups, trimmedQuery)
+    // ...and run off the composition thread, because debouncing only reduces how OFTEN the scan
+    // happens, not what it costs when it does: inside remember{} every search blocked the frame
+    // that composed it, for as long as a full-playlist scan takes. produceState keeps showing the
+    // previous results while the next scan runs, so the list never flashes empty mid-typing.
+    val searchOutcome by produceState<ChannelSearchOutcome?>(null, groups, trimmedQuery) {
+        value = if (trimmedQuery.isEmpty()) {
+            null
+        } else {
+            withContext(Dispatchers.Default) { ChannelSearch.search(groups, trimmedQuery) }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
@@ -148,7 +159,10 @@ internal fun GroupsOverviewGrid(
             modifier = Modifier.fillMaxWidth().padding(top = GapM),
         )
 
-        when (searchOutcome) {
+        // Read the delegate once into a local: `when` cannot smart-cast a delegated property, and
+        // this also pins one value for the whole branch instead of re-reading a state that the
+        // background search can update between reads.
+        when (val outcome = searchOutcome) {
             null -> LazyVerticalGrid(
                 columns = gridCells,
                 modifier = Modifier.fillMaxSize().padding(top = GapM),
@@ -167,11 +181,11 @@ internal fun GroupsOverviewGrid(
                 }
             }
 
-            is ChannelSearchOutcome.Matches -> if (searchOutcome.results.isEmpty()) {
+            is ChannelSearchOutcome.Matches -> if (outcome.results.isEmpty()) {
                 NoSearchResults(trimmedQuery)
             } else {
                 ChannelSearchResultsList(
-                    results = searchOutcome.results,
+                    results = outcome.results,
                     iconRefreshKey = iconRefreshKey,
                     resolveIcon = resolveIcon,
                     isFavorite = isFavorite,
@@ -188,7 +202,7 @@ internal fun GroupsOverviewGrid(
                     modifier = Modifier.padding(top = GapM),
                 )
                 ChannelSearchResultsList(
-                    results = searchOutcome.results,
+                    results = outcome.results,
                     iconRefreshKey = iconRefreshKey,
                     resolveIcon = resolveIcon,
                     isFavorite = isFavorite,

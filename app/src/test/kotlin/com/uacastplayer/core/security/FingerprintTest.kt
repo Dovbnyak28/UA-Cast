@@ -74,4 +74,46 @@ class FingerprintTest {
             assertEquals("digest mismatch for input '$input'", expected, Fingerprint.of(input))
         }
     }
+
+    /**
+     * The MessageDigest instance is reused per thread rather than created per call (see
+     * [Fingerprint]), so a leftover-state bug would not show up as a crash - it would show up as a
+     * digest that is correct the first time and wrong afterwards, silently orphaning cached icons
+     * from the second call onward. Interleaves distinct inputs so any carried-over state would have
+     * to survive an intervening digest of something else.
+     */
+    @Test
+    fun `repeated interleaved calls on one thread all match a fresh digest`() {
+        val inputs = listOf("hello", "http://example.com/a.ts", "", "Дітячі канали", "hello")
+        repeat(3) {
+            for (input in inputs) {
+                val expected = referenceDigest(input)
+                assertEquals("digest mismatch for repeated input '$input'", expected, Fingerprint.of(input))
+            }
+        }
+    }
+
+    /** The instance is per thread, so nothing is shared - but that is the claim the comment makes,
+     * and this is what would fail loudly if it were ever made a shared field instead. */
+    @Test
+    fun `concurrent callers each get the correct digest for their own input`() {
+        val inputs = (0 until 8).map { "http://example.com/stream$it.ts" }
+        val expected = inputs.associateWith { referenceDigest(it) }
+        val actual = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+        val threads = inputs.map { input ->
+            Thread {
+                repeat(200) { actual[input] = Fingerprint.of(input) }
+            }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        assertEquals(expected, actual.toMap())
+    }
+
+    private fun referenceDigest(input: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString(separator = "") { byte -> "%02x".format(Locale.ROOT, byte) }
 }

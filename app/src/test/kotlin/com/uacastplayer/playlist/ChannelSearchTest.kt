@@ -82,4 +82,82 @@ class ChannelSearchTest {
         check(outcome is ChannelSearchOutcome.Matches)
         assertEquals(ChannelSearch.MAX_RESULTS, outcome.results.size)
     }
+
+    // The cases below pin the matcher that replaced "normalize the channel name into a String, then
+    // call contains" - see ChannelSearch.containsNormalized. Each is something that version got
+    // right for free and a character-walking matcher can plausibly get wrong.
+
+    @Test
+    fun `matches a name whose only difference is leading and trailing whitespace`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("   HBO Max   "))), "hbo max")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    @Test
+    fun `collapses tabs and newlines the same way it collapses spaces`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("HBO\t\n  Max"))), "hbo max")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    /** A query space must consume the whole run, not one character of it - otherwise the match
+     * restarts mid-run and silently fails. */
+    @Test
+    fun `a single query space matches a long whitespace run`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Sport          1 HD"))), "sport 1")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    @Test
+    fun `does not match across a word boundary the query does not have`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Sport 1"))), "sport1")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertTrue(outcome.results.isEmpty())
+    }
+
+    @Test
+    fun `matches a substring starting mid-name, not just a prefix`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Ukraine Discovery HD"))), "discovery hd")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    /** The scan tries every source index as a start, so a name where the query almost matches
+     * earlier must still match at the later, real position. */
+    @Test
+    fun `matches after a false start earlier in the name`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Disco Dance Discovery"))), "discovery")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    @Test
+    fun `does not match when the name runs out mid-query`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Disc"))), "discovery")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertTrue(outcome.results.isEmpty())
+    }
+
+    @Test
+    fun `a query with internal whitespace runs is normalized before matching`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("HBO Max"))), "  hbo    MAX ")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    @Test
+    fun `matches mixed-case cyrillic mid-name`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Дитячий  НОВИЙ Канал"))), "новий канал")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
+
+    @Test
+    fun `tvgName matching normalizes whitespace too`() {
+        val outcome = ChannelSearch.search(listOf(groupOf(channel("Ch1", tvgName = "  Euro   Sport "))), "euro sport")
+        check(outcome is ChannelSearchOutcome.Matches)
+        assertEquals(1, outcome.results.size)
+    }
 }

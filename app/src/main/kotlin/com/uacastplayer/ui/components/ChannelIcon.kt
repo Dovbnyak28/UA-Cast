@@ -29,11 +29,7 @@ import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
-// Compiled once at class-init rather than inside initialsFor() - that function runs on every
-// recomposition of every channel row falling back to initials (no icon yet, or a decode error),
-// including the swipe-preview rail shown live during playback, so a fresh Regex per call there was
-// a real per-frame allocation source, not just a one-off.
-private val WHITESPACE_REGEX = Regex("\\s+")
+private const val MAX_INITIALS = 2
 
 /**
  * A channel's resolved logo, falling back to its initials in a plain box while resolving, if none
@@ -77,8 +73,34 @@ fun ChannelIcon(
     }
 }
 
-fun initialsFor(name: String): String =
-    name.trim().split(WHITESPACE_REGEX).mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
+/**
+ * The first letter of each of the first [MAX_INITIALS] words, uppercased.
+ *
+ * Scans [name] once instead of the `trim().split(regex).mapNotNull{}.take(2).joinToString()` this
+ * replaced: that ran a regex matcher and built four intermediate lists per call, and it is called
+ * on every recomposition of every channel row falling back to initials - no icon resolved yet, or a
+ * decode error - including the swipe-preview rail that recomposes live during playback. Stopping at
+ * [MAX_INITIALS] also means a long name is no longer split in full just to discard all but two
+ * pieces of it.
+ */
+fun initialsFor(name: String): String {
+    val initials = StringBuilder(MAX_INITIALS)
+    var atWordStart = true
+    var index = 0
+    // Having enough initials is a loop condition rather than a break: a long name stops being
+    // scanned the moment the answer is complete.
+    while (index < name.length && initials.length < MAX_INITIALS) {
+        val character = name[index]
+        if (character.isWhitespace()) {
+            atWordStart = true
+        } else {
+            if (atWordStart) initials.append(character.uppercaseChar())
+            atWordStart = false
+        }
+        index++
+    }
+    return initials.toString()
+}
 
 /** No file to resolve here, so this always renders the initials-fallback path - the file-found/
  * AsyncImage path needs a real decodable file on disk, which a static preview doesn't have. */

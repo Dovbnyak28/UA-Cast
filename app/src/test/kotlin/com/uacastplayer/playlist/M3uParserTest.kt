@@ -303,4 +303,52 @@ class M3uParserTest {
         )
         assertEquals(emptyList<String>(), result.epgUrls)
     }
+
+    /** Windows-authored playlists are common, and a stray CR left on the end of a url would make
+     * every stream unplayable - this is what the line splitting has to get right above all else. */
+    @Test
+    fun `CRLF line endings leave no carriage return on any value`() {
+        val result = M3uParser.parse(
+            "#EXTM3U\r\n" +
+                "#EXTINF:-1 tvg-id=\"ch1\" group-title=\"News\",Channel One\r\n" +
+                "http://example.com/1.m3u8\r\n",
+        )
+        assertEquals(1, result.channels.size)
+        val channel = result.channels[0]
+        assertEquals("Channel One", channel.displayName)
+        assertEquals("http://example.com/1.m3u8", channel.streamUrl)
+        assertEquals("News", channel.groupTitle)
+        assertEquals("ch1", channel.tvgId)
+        assertEquals(0, result.skippedLineCount)
+    }
+
+    @Test
+    fun `mixed CRLF and LF endings in one playlist parse identically`() {
+        val result = M3uParser.parse(
+            "#EXTM3U\r\n" +
+                "#EXTINF:-1,First\n" +
+                "http://example.com/1.m3u8\r\n" +
+                "#EXTINF:-1,Second\r\n" +
+                "http://example.com/2.m3u8\n",
+        )
+        assertEquals(listOf("First", "Second"), result.channels.map { it.displayName })
+        assertEquals(
+            listOf("http://example.com/1.m3u8", "http://example.com/2.m3u8"),
+            result.channels.map { it.streamUrl },
+        )
+        assertEquals(0, result.skippedLineCount)
+    }
+
+    /** A lone CR is treated as a line separator too. `\r` is a control character that cannot appear
+     * inside a real channel name or url, so reading it as a classic-Mac line ending is the only
+     * interpretation that can produce a usable playlist rather than one unparseable line. */
+    @Test
+    fun `a lone carriage return separates lines`() {
+        val result = M3uParser.parse(
+            "#EXTM3U\r#EXTINF:-1,Channel One\rhttp://example.com/1.m3u8\r",
+        )
+        assertEquals(1, result.channels.size)
+        assertEquals("Channel One", result.channels[0].displayName)
+        assertEquals("http://example.com/1.m3u8", result.channels[0].streamUrl)
+    }
 }
