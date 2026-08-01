@@ -15,6 +15,7 @@ import com.uacastplayer.testsupport.FakeOriginServer
 import com.uacastplayer.testsupport.loadTestPlaylist
 import com.uacastplayer.testsupport.openChannelViaSearch
 import com.uacastplayer.testsupport.skipOnboarding
+import com.uacastplayer.testsupport.tapChannelRow
 import com.uacastplayer.testsupport.waitForChannelsLoaded
 import com.uacastplayer.ui.UiTestTags
 import org.junit.After
@@ -71,8 +72,7 @@ class PlayerLifecycleInstrumentedTest {
         composeTestRule.waitForIdle()
 
         repeat(9) {
-            composeTestRule.onNodeWithText("Channel 1").performClick() // reopen (Event.Open)
-            composeTestRule.waitForIdle()
+            composeTestRule.tapChannelRow("Channel 1") // reopen (Event.Open)
             assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
             backButton().performClick() // close (Event.Close)
             composeTestRule.waitForIdle()
