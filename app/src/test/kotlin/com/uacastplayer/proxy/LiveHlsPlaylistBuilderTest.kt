@@ -70,4 +70,54 @@ class LiveHlsPlaylistBuilderTest {
         val playlist = LiveHlsPlaylistBuilder.build(segments, ::url, configuredTargetDurationSeconds = 5)
         assertTrue(playlist.contains("#EXT-X-MEDIA-SEQUENCE:5\n"))
     }
+
+    /**
+     * The receiver's own default is three segments back from the live edge, which is however many
+     * seconds three segments happen to be - and all the slack it ever gets when upstream (a VPN,
+     * typically) delivers slower than real time. Half the window scales with the window instead.
+     */
+    @Test
+    fun `starts the receiver half a window back from the live edge`() {
+        val segments = (0 until 6).map { segment(it, 5_000) }
+        val playlist = LiveHlsPlaylistBuilder.build(segments, ::url, configuredTargetDurationSeconds = 5)
+        // 6 x 5s = 30s of window, so 15s back - three segments' worth, and it grows with the window.
+        assertTrue(playlist.contains("#EXT-X-START:TIME-OFFSET=-15.000,PRECISE=YES\n"))
+    }
+
+    @Test
+    fun `the start offset tracks a shorter-segment window rather than a fixed number of seconds`() {
+        // What a high-bitrate channel produces: TsSegmenter's byte cap forces cuts well short of
+        // the 5s target, so a fixed offset would point outside the window.
+        val segments = (0 until 8).map { segment(it, 2_000) }
+        val playlist = LiveHlsPlaylistBuilder.build(segments, ::url, configuredTargetDurationSeconds = 5)
+        assertTrue(playlist.contains("#EXT-X-START:TIME-OFFSET=-8.000,PRECISE=YES\n"))
+    }
+
+    @Test
+    fun `omits the start offset while the window is still too short to place one`() {
+        val playlist = LiveHlsPlaylistBuilder.build(
+            (0 until 3).map { segment(it, 5_000) },
+            ::url,
+            configuredTargetDurationSeconds = 5,
+        )
+        assertTrue(!playlist.contains("#EXT-X-START"))
+    }
+
+    @Test
+    fun `omits the start offset for an empty playlist`() {
+        val playlist = LiveHlsPlaylistBuilder.build(emptyList(), ::url, configuredTargetDurationSeconds = 5)
+        assertTrue(!playlist.contains("#EXT-X-START"))
+    }
+
+    /** The offset must sit inside the listed segments - a receiver told to start before the first
+     * one has nowhere to begin, and on the eviction edge at that. */
+    @Test
+    fun `the start offset never exceeds the window it is placed in`() {
+        for (count in 4..12) {
+            val segments = (0 until count).map { segment(it, 5_000) }
+            val playlist = LiveHlsPlaylistBuilder.build(segments, ::url, configuredTargetDurationSeconds = 5)
+            val offset = playlist.substringAfter("#EXT-X-START:TIME-OFFSET=-").substringBefore(',').toDouble()
+            assertTrue("offset $offset outside a ${count * 5}s window", offset < count * 5.0)
+        }
+    }
 }
