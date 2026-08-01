@@ -152,6 +152,10 @@ class ProxyServer(
         val resourceId = segments[2]
         val resource = resourceRegistry.get(resourceId)
         if (resource == null) {
+            // Silent before: a receiver asking for a resource this session never registered (a
+            // stale url from a previous session, or one evicted from the LRU) looked exactly like
+            // no request at all in a log capture.
+            AppLog.d(TAG) { "Unknown resource requested: $resourceId" }
             httpServer.writeError(output, 404, "Not Found")
             return
         }
@@ -417,10 +421,16 @@ class ProxyServer(
         output: OutputStream,
         parent: ResourceEntry,
     ) {
+        var rewrittenCount = 0
         val rewritten = M3u8Rewriter.rewrite(text, finalUrl) { absoluteUrl ->
+            rewrittenCount++
             val type = if (looksLikePlaylist(absoluteUrl)) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_MEDIA
             buildLocalUrl(resourceRegistry.register(type, absoluteUrl, parent.userAgent, parent.referrer))
         }
+        // The remux path logs every playlist poll and segment; this one logged nothing at all, so an
+        // ordinary HLS cast - the common case - left no trace of whether the receiver ever fetched
+        // anything. A field capture of a failing cast was unreadable for exactly that reason.
+        AppLog.d(TAG) { "Rewritten playlist served: $rewrittenCount urls rewritten, ${rewritten.length}B" }
         writePlaylistText(rewritten, method, output)
     }
 

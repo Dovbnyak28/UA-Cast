@@ -98,18 +98,32 @@ internal class ProxyHttpServer(private val onRequest: (ParsedRequest, OutputStre
         executor = null
     }
 
-    // Same reasoning as start()'s accept loop: one client's malformed request or dropped socket
-    // must not propagate past this connection - the thread pool serves every other client fine.
+    /**
+     * Same reasoning as start()'s accept loop: one client's malformed request or dropped socket
+     * must not propagate past this connection - the thread pool serves every other client fine.
+     *
+     * The failure is reported with the phase it happened in and the path when one was parsed,
+     * because "Connection error: SocketException" on its own turned out to be a dead end in a real
+     * field capture: it cannot distinguish a receiver that never sent a request (a reachability
+     * probe opening and closing a socket - routine, and not a warning) from one that gave up
+     * mid-response, which is a real symptom. The path is this proxy's own
+     * `/hls/<token>/<resourceId>`, where both parts are already opaque fingerprints.
+     */
     @Suppress("TooGenericExceptionCaught")
     private fun handleConnection(socket: Socket) {
         socket.use {
+            var request: ParsedRequest? = null
             try {
                 socket.soTimeout = SOCKET_READ_TIMEOUT_MILLIS
                 val input = BufferedInputStream(socket.getInputStream())
                 val output = BufferedOutputStream(socket.getOutputStream())
-                val request = readRequest(input)
+                request = readRequest(input)
                 when {
-                    request == null -> writeError(output, 400, "Bad Request")
+                    request == null -> {
+                        // No request line at all - the peer connected and hung up. Probes do this.
+                        AppLog.d(TAG) { "Connection closed before sending a request" }
+                        writeError(output, 400, "Bad Request")
+                    }
                     request.method == "OPTIONS" ->
                         writeCorsPreflight(output, request.headers["access-control-request-headers"])
                     request.method != "GET" && request.method != "HEAD" ->
@@ -117,7 +131,8 @@ internal class ProxyHttpServer(private val onRequest: (ParsedRequest, OutputStre
                     else -> onRequest(request, output)
                 }
             } catch (e: Exception) {
-                AppLog.w(TAG) { "Connection error: ${e.javaClass.simpleName}" }
+                val phase = if (request == null) "while reading the request" else "serving ${request.path}"
+                AppLog.w(TAG) { "Connection error $phase: ${e.javaClass.simpleName}" }
             }
         }
     }

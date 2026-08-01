@@ -35,6 +35,12 @@ version, and the local player's behaviour during a remote cast changed.
   started three segments from the live edge with no slack for a VPN or a congested link (the
   playlist now carries `#EXT-X-START` at half the window). Reported from the field; not reproducible
   without the reporter's own channels and receiver.
+- **The proxy could hand the receiver the VPN's address instead of the LAN's.** A VPN inherits the
+  transports of the network it runs over, so a VPN tunnelled over Wi-Fi reports `TRANSPORT_WIFI`
+  exactly like real Wi-Fi, and `allNetworks` has no defined order - whichever came first won. The
+  receiver then had a url on a private range it cannot route to, accepted the load, fetched nothing,
+  and went idle/error, which is indistinguishable on the sender from a codec problem. Matches the
+  field reports of casting being unusable specifically while a VPN is connected.
 - **The DLNA proxy read live streams through a 4-second-timeout HTTP client** meant for fetching one
   small device-description XML, so any four seconds without a byte read as a dropped connection and
   sent the reader into a backoff reconnect. It now gets the same 10s/15s budget as the Chromecast
@@ -76,6 +82,19 @@ version, and the local player's behaviour during a remote cast changed.
   not whichever the user picked last.
 - A malformed `\u` escape in a cached JSON file reported a bare `NumberFormatException` instead of
   the parser's own error with a position in it.
+
+### Diagnostics
+
+Prompted by a field logcat of a failing cast that turned out to be unreadable:
+
+- The local LAN address handed to the receiver is logged. Without it, a wrong-interface failure
+  looks exactly like a codec or content failure.
+- An ordinary (non-remux) HLS cast now logs its rewritten playlist. Only the remux path logged
+  anything before, so the common case left no trace of whether the receiver ever fetched.
+- A request for a resource this session never registered is logged instead of a silent 404.
+- Proxy connection errors say which phase they happened in and, where known, the path. A peer that
+  connects and hangs up without sending a request - a routine reachability probe - is no longer
+  reported as a warning.
 
 ### Performance
 
