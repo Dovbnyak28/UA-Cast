@@ -113,9 +113,16 @@ object MiniJson {
                             'n' -> sb.append('\n')
                             'r' -> sb.append('\r')
                             't' -> sb.append('\t')
+                            // toIntOrNull, not toInt: malformed hex would otherwise surface as a
+                            // NumberFormatException with no position in it, instead of this
+                            // parser's own error - every caller catches broadly enough that it
+                            // was never a crash, only a worse diagnostic when one of these files
+                            // does turn out to be corrupt.
                             'u' -> {
                                 if (pos + 4 > text.length) parseError("Truncated unicode escape")
-                                sb.append(text.substring(pos, pos + 4).toInt(16).toChar())
+                                val code = text.substring(pos, pos + 4).toIntOrNull(16)
+                                    ?: parseError("Malformed unicode escape")
+                                sb.append(code.toChar())
                                 pos += 4
                             }
                             else -> sb.append(escaped)

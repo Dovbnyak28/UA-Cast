@@ -16,10 +16,13 @@ import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.playlist.XtreamUrlBuilder
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Owns every saved [PlaylistSource] plus the currently active playlist's load state - moved out of
@@ -62,13 +65,27 @@ class PlaylistController(
      * refreshPlaylist or switchPlaylistSource, which reload an *existing* source instead. */
     private var pendingNewSource: PlaylistSource? = null
 
+    /**
+     * The one load allowed to be in flight. Every entry point that loads a playlist goes through
+     * [launchLoad], which cancels whatever this holds first: switching sources twice in quick
+     * succession used to leave two loads racing, and the one that happened to finish *last* won
+     * [_playlistState] - not the one the user picked last. Saves and deletes are deliberately NOT
+     * routed through here; cancelling persistence would lose data rather than a stale result.
+     */
+    private var loadJob: Job? = null
+
     var channelCount: Int = 0
         private set
+
+    private fun launchLoad(block: suspend () -> Unit) {
+        loadJob?.cancel()
+        loadJob = scope.launch { block() }
+    }
 
     /** Restores the active source's cached snapshot at startup, migrating a pre-multi-playlist
      * legacy snapshot into the sources list first if needed. Called once from AppViewModel.init. */
     fun loadInitialSource() {
-        scope.launch {
+        launchLoad {
             var sources = playlistRepository.loadSources()
             if (sources.isEmpty()) {
                 // Upgrading from before multi-playlist support (or a fresh install with nothing
@@ -140,7 +157,7 @@ class PlaylistController(
         val epgUrl = XtreamUrlBuilder.epgUrl(server, username, password)
         pendingNewSource = newPendingSource(PlaylistSourceType.XTREAM, playlistUrl)
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
-        scope.launch {
+        launchLoad {
             applyPlaylistOutcome(playlistRepository.loadFromUrl(playlistUrl, extraEpgUrls = listOf(epgUrl)))
         }
     }
@@ -148,7 +165,7 @@ class PlaylistController(
     fun loadPlaylistFromFile(uri: Uri) {
         pendingNewSource = newPendingSource(PlaylistSourceType.FILE, uri.toString())
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
-        scope.launch {
+        launchLoad {
             applyPlaylistOutcome(playlistRepository.loadFromFile(uri))
         }
     }
@@ -169,7 +186,7 @@ class PlaylistController(
             error = null,
             displayName = source.displayName,
         )
-        scope.launch {
+        launchLoad {
             val cached = playlistRepository.restoreSnapshot(source.id)
             if (cached != null) {
                 applyPlaylistOutcome(cached, fromCache = true)
@@ -224,14 +241,17 @@ class PlaylistController(
 
     private fun startUrlLoad(url: String) {
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
-        scope.launch {
+        launchLoad {
             applyPlaylistOutcome(playlistRepository.loadFromUrl(url))
         }
     }
 
-    private fun applyPlaylistOutcome(outcome: PlaylistOutcome, fromCache: Boolean = false) {
+    private suspend fun applyPlaylistOutcome(outcome: PlaylistOutcome, fromCache: Boolean = false) {
         if (outcome is PlaylistOutcome.Loaded) {
-            val channels = outcome.groups.flatMap { it.channels }
+            // Off the main thread: `scope` is the ViewModel's (Dispatchers.Main.immediate), and
+            // this flattens every group of a playlist that routinely runs to tens of thousands of
+            // channels - an allocation that size does not belong in the frame that applies a load.
+            val channels = withContext(Dispatchers.Default) { outcome.groups.flatMap { it.channels } }
             channelCount = channels.size
             onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
         }

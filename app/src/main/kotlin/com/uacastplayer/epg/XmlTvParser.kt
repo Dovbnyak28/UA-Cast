@@ -80,17 +80,26 @@ private class XmlTvHandler : DefaultHandler() {
 
     private var textTarget: StringBuilder? = null
 
+    // A channel id arrives as a fresh String from every single attribute lookup, and there is one
+    // per <programme> - up to MAX_PROGRAMMES of them, all held for as long as the schedule is. The
+    // distinct values are bounded by the channel count instead (a few thousand at most), so pooling
+    // them collapses ~250k Strings into that. getOrPut keeps the first instance seen and hands it
+    // back for every later occurrence of the same id.
+    private val channelIdPool = HashMap<String, String>()
+
+    private fun internChannelId(id: String): String = channelIdPool.getOrPut(id) { id }
+
     override fun startElement(uri: String?, localName: String?, qName: String, attributes: Attributes) {
         when (qName) {
             "channel" -> {
-                currentChannelId = attributes.getValue("id")
+                currentChannelId = attributes.getValue("id")?.let(::internChannelId)
                 currentDisplayNames = mutableListOf()
                 currentIconUrl = null
             }
             "display-name" -> textTarget = StringBuilder()
             "icon" -> if (currentChannelId != null) currentIconUrl = attributes.getValue("src")
             "programme" -> {
-                currentProgrammeChannelId = attributes.getValue("channel")
+                currentProgrammeChannelId = attributes.getValue("channel")?.let(::internChannelId)
                 currentProgrammeStart = attributes.getValue("start")?.let(XmlTvTimeParser::parse)
                 currentProgrammeStop = attributes.getValue("stop")?.let(XmlTvTimeParser::parse)
                 currentProgrammeTitle = null
@@ -116,8 +125,14 @@ private class XmlTvHandler : DefaultHandler() {
 
     override fun endElement(uri: String?, localName: String?, qName: String) {
         when (qName) {
+            // `textTarget`, not `textTarget.toString()` on the nullable field: that resolves to
+            // Any?.toString(), which yields the literal string "null" when the builder is absent -
+            // and it can be absent here, because endElement("title"/"desc") clears the target
+            // unconditionally, so any <title>/<desc> nested inside a <display-name> left this
+            // recording "null" as the channel's name. Blank names are dropped too: they match
+            // nothing useful in EpgIndex and only add an empty key to its name map.
             "display-name" -> {
-                currentDisplayNames?.add(textTarget.toString().trim())
+                textTarget?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { currentDisplayNames?.add(it) }
                 textTarget = null
             }
             "channel" -> {

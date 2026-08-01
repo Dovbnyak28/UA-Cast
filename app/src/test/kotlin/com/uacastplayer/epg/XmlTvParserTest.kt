@@ -165,4 +165,77 @@ class XmlTvParserTest {
         )
         assertNull(result.programmes[0].description)
     }
+
+    /**
+     * `textTarget.toString()` on the nullable builder resolved to `Any?.toString()`, which yields
+     * the literal string "null" - and endElement("title"/"desc") clears that builder
+     * unconditionally, so any title/desc nested inside a display-name recorded "null" as the
+     * channel's name and put it straight into EpgIndex's name map.
+     */
+    @Test
+    fun `a display-name containing a nested title or desc never yields the literal string null`() {
+        val result = parse(
+            """
+            <tv>
+              <channel id="c1"><display-name><desc>nested</desc></display-name></channel>
+              <channel id="c2"><display-name><title>nested</title></display-name></channel>
+            </tv>
+            """.trimIndent()
+        )
+        assertEquals(emptyList<String>(), result.channels[0].displayNames)
+        assertEquals(emptyList<String>(), result.channels[1].displayNames)
+    }
+
+    @Test
+    fun `an empty or whitespace-only display-name is dropped rather than stored blank`() {
+        val result = parse(
+            """
+            <tv>
+              <channel id="c1">
+                <display-name></display-name>
+                <display-name>   </display-name>
+                <display-name>Real Name</display-name>
+              </channel>
+            </tv>
+            """.trimIndent()
+        )
+        assertEquals(listOf("Real Name"), result.channels[0].displayNames)
+    }
+
+    /**
+     * Channel ids are pooled so one String is held per distinct id rather than one per programme
+     * (up to MAX_PROGRAMMES of them). Identity, not equality, is the whole point of that pooling -
+     * assertEquals would pass just as well without it.
+     */
+    @Test
+    fun `programmes on the same channel share one channelId instance`() {
+        val result = parse(
+            """
+            <tv>
+              <channel id="ch1"><display-name>One</display-name></channel>
+              <programme channel="ch1" start="20240115120000 +0000"><title>A</title></programme>
+              <programme channel="ch1" start="20240115130000 +0000"><title>B</title></programme>
+              <programme channel="ch1" start="20240115140000 +0000"><title>C</title></programme>
+            </tv>
+            """.trimIndent()
+        )
+        assertEquals(3, result.programmes.size)
+        val first = result.programmes[0].channelId
+        assertTrue(result.programmes.all { it.channelId === first })
+        // The <channel> element's own id comes from the same pool.
+        assertTrue(result.channels[0].id === first)
+    }
+
+    @Test
+    fun `distinct channel ids stay distinct through the pool`() {
+        val result = parse(
+            """
+            <tv>
+              <programme channel="ch1" start="20240115120000 +0000"><title>A</title></programme>
+              <programme channel="ch2" start="20240115130000 +0000"><title>B</title></programme>
+            </tv>
+            """.trimIndent()
+        )
+        assertEquals(listOf("ch1", "ch2"), result.programmes.map { it.channelId })
+    }
 }

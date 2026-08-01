@@ -4,6 +4,7 @@ import java.util.Locale
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MiniJsonTest {
@@ -66,10 +67,20 @@ class MiniJsonTest {
         assertEquals(objects, MiniJson.parseArrayOfObjects(json))
     }
 
+    /** The input is a regular escaped string, not a raw one: the doubled backslash is what makes
+     * the parser receive the two characters `\` and `u`. This test previously used a raw string
+     * whose escape had been flattened away, so its input was the literal `AB` and it exercised no
+     * escape handling at all while still passing. */
     @Test
     fun `parses unicode escape sequences`() {
-        val result = MiniJson.parseArrayOfObjects("""[{"a":"AB"}]""")
+        val result = MiniJson.parseArrayOfObjects("[{\"a\":\"\\u0041\\u0042\"}]")
         assertEquals(listOf(mapOf("a" to "AB")), result)
+    }
+
+    @Test
+    fun `parses a unicode escape for a non-ASCII character`() {
+        val result = MiniJson.parseArrayOfObjects("[{\"a\":\"b\\u00e9c\"}]")
+        assertEquals(listOf(mapOf("a" to "béc")), result)
     }
 
     @Test
@@ -87,5 +98,23 @@ class MiniJsonTest {
         val objects = listOf(mapOf("weird" to "}],[{"))
         val json = MiniJson.writeArrayOfObjects(objects)
         assertEquals(objects, MiniJson.parseArrayOfObjects(json))
+    }
+
+    /** Malformed hex used to surface as a bare NumberFormatException from toInt(16) rather than
+     * this parser's own positioned error - never a crash, since every caller catches broadly, but
+     * useless for telling which byte of a corrupt file is at fault. */
+    @Test
+    fun `reports a malformed unicode escape as a parse error with a position`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            MiniJson.parseArrayOfObjects("""[{"a":"\uZZZZ"}]""")
+        }
+        assertTrue("message was: ${error.message}", error.message.orEmpty().contains("position"))
+    }
+
+    @Test
+    fun `reports a truncated unicode escape as a parse error`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            MiniJson.parseArrayOfObjects("""[{"a":"\u00""")
+        }
     }
 }
