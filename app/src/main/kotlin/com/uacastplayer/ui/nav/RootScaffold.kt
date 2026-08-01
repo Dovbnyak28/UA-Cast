@@ -98,7 +98,7 @@ fun RootScaffold(
     onUnlockChannel: (M3uChannel) -> Unit,
     lockedChannelKeys: Set<String>,
     parentalControlPinSet: Boolean,
-    onSetParentalControlPin: (String) -> Boolean,
+    onSetParentalControlPin: suspend (String) -> Boolean,
     onResetParentalControl: () -> Unit,
     requireParentalControlUnlock: (() -> Unit) -> Unit,
     focusChannelsToken: Int,

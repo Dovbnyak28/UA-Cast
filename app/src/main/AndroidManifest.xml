@@ -65,19 +65,20 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Without this, a headset/Bluetooth/watch media button only reaches the app while its
-             process is already alive - once the process dies, Media3's MediaSessionCompat has no
-             registered receiver to wake it, and the system logs "Couldn't find a unique registered
-             media button receiver". MediaButtonReceiver forwards the button press to the live
-             MediaSession if one exists; exported=true is required by the platform for this
-             specific receiver to be reachable from other apps/the system at all. -->
-        <receiver
-            android:name="androidx.media3.session.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
+        <!-- androidx.media3.session.MediaButtonReceiver is deliberately NOT declared here.
+             It exists to wake a MediaSessionService, and its handleIntentAndMaybeStartTheService
+             throws IllegalStateException("Could not find any Service that handles any of the
+             actions ...") when there is none. This app has no MediaSessionService on purpose - see
+             PlayerViewModel, live TV is not expected to keep playing after the player closes.
+
+             Declaring it was therefore a crash waiting on a headset button: MediaSessionLegacyStub
+             picks a declared receiver as the media-button target on API 31+, so the first press
+             from a headset, watch or car would have gone straight into that throw. Below API 31 it
+             was merely inert.
+
+             Nothing is lost by leaving it out. When no receiver and no service are declared,
+             MediaSessionLegacyStub registers its own in-process receiver for ACTION_MEDIA_BUTTON,
+             which is exactly the "works while the app is alive" behaviour this app wants. -->
 
         <!-- Locale storage is handled by our own AppPreferences (see core.i18n.LocalizedContext),
              not AppCompat's auto-store, so this stays disabled per the per-app-language docs. -->

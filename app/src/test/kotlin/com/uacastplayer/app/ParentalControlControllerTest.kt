@@ -47,7 +47,7 @@ class ParentalControlControllerTest {
     private fun controller(
         storage: LockedChannelsStorage = FakeLockedChannelsStorage(),
         pins: ParentalControlPinStorage = FakePinStorage(),
-    ) = ParentalControlController(storage, pins, TestScope(dispatcher))
+    ) = ParentalControlController(storage, pins, TestScope(dispatcher), hashingDispatcher = dispatcher)
 
     @Test
     fun `locking a channel needs no PIN and persists immediately`() = runTest(dispatcher) {

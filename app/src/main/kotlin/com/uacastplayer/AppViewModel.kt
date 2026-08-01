@@ -322,12 +322,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** True on a correct PIN, which also flips [parentalControlUnlocked] for the rest of this
      * process's lifetime - see [ParentalControlController]'s doc for why nothing else resets it. */
-    fun verifyParentalControlPin(pin: String): Boolean = parentalControlController.verifyPin(pin)
+    suspend fun verifyParentalControlPin(pin: String): Boolean = parentalControlController.verifyPin(pin)
 
     /** Sets the PIN for the first time, or replaces an existing one - callers must gate a
      * *replacement* behind [parentalControlUnlocked] themselves (Settings' "change PIN" flow does).
      * False if [pin] isn't 4 digits. */
-    fun setParentalControlPin(pin: String): Boolean = parentalControlController.setPin(pin)
+    suspend fun setParentalControlPin(pin: String): Boolean = parentalControlController.setPin(pin)
 
     /** The "forgot PIN" escape hatch - clears the PIN and every locked channel, no PIN required.
      * Settings' own confirmation dialog is the only guard before this is called. */

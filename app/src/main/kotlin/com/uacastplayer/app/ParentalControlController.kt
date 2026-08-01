@@ -4,11 +4,14 @@ import com.uacastplayer.core.security.PinHasher
 import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinPolicy
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Owns the parental-control PIN lock (see [LockedChannelsStorage]/[ParentalControlPinStorage.parentalControlPinHash]).
@@ -22,6 +25,9 @@ class ParentalControlController(
     private val store: LockedChannelsStorage,
     private val preferences: ParentalControlPinStorage,
     private val scope: CoroutineScope,
+    /** Where [PinHasher]'s PBKDF2 rounds run - see [verifyPin]. Injected rather than hardcoded so
+     * tests stay on their own dispatcher instead of hopping to a real thread pool mid-assertion. */
+    private val hashingDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val _lockedKeys = MutableStateFlow<Set<String>>(emptySet())
     val lockedKeys: StateFlow<Set<String>> = _lockedKeys.asStateFlow()
@@ -57,11 +63,16 @@ class ParentalControlController(
     /** Verifies [pin] against the stored hash and, on success, flips [unlockedThisSession] for the
      * rest of this process's lifetime. False (with no state change) for a wrong PIN or if none is
      * set at all - the latter shouldn't happen from the UI (an unlock prompt only ever shows when
-     * [isPinSet] is already true), but failing closed instead of throwing is cheap insurance. */
-    fun verifyPin(pin: String): Boolean {
+     * [isPinSet] is already true), but failing closed instead of throwing is cheap insurance.
+     *
+     * Suspending because [PinHasher] runs 120,000 PBKDF2 rounds - ~26ms on a desktop JVM, and
+     * several times that on the low-end phones this app targets. That is a frozen frame on the tap
+     * that submits the PIN, for work that has no business on the main thread. */
+    suspend fun verifyPin(pin: String): Boolean {
         val hash = preferences.parentalControlPinHash
         val salt = preferences.parentalControlPinSalt
-        val matches = hash != null && salt != null && PinHasher.verify(pin, salt, hash)
+        if (hash == null || salt == null) return false
+        val matches = withContext(hashingDispatcher) { PinHasher.verify(pin, salt, hash) }
         if (matches) _unlockedThisSession.value = true
         return matches
     }
@@ -69,12 +80,16 @@ class ParentalControlController(
     /** Sets a new PIN, replacing any existing one. Callers must gate *replacing* an existing PIN
      * behind [unlockedThisSession] themselves; setting the very first PIN needs no such check -
      * there's nothing to protect yet. False (no state change) if [pin] fails
-     * [ParentalControlPinPolicy.isValidFormat]. */
-    fun setPin(pin: String): Boolean {
+     * [ParentalControlPinPolicy.isValidFormat]. Suspending for the same reason as [verifyPin]. */
+    suspend fun setPin(pin: String): Boolean {
         if (!ParentalControlPinPolicy.isValidFormat(pin)) return false
         val salt = PinHasher.generateSalt()
+        val hash = withContext(hashingDispatcher) { PinHasher.hash(pin, salt) }
+        // Written together, after the hash succeeds: a salt persisted without its hash would leave
+        // isPinSet false with a stale salt on disk for the next setPin to overwrite anyway, but
+        // pairing the writes keeps the two fields' invariant obvious.
         preferences.parentalControlPinSalt = salt
-        preferences.parentalControlPinHash = PinHasher.hash(pin, salt)
+        preferences.parentalControlPinHash = hash
         _isPinSet.value = true
         return true
     }

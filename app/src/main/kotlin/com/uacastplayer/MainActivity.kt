@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +55,7 @@ import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaCastTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
@@ -315,19 +317,24 @@ private fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) -
     // Read through a holder rather than captured directly, so the returned gate below can be
     // remembered once instead of being reallocated whenever `unlocked` flips.
     val unlockedNow = rememberUpdatedState(unlocked)
+    val pinScope = rememberCoroutineScope()
 
     if (showDialog) {
         ParentalControlPinDialog(
             title = stringResource(R.string.parental_control_enter_pin),
             isError = pinError,
+            // Launched rather than called inline: verifying runs PBKDF2 off the main thread now
+            // (see ParentalControlController.verifyPin), so the result arrives a frame or two later.
             onSubmit = { pin ->
-                if (viewModel.verifyParentalControlPin(pin)) {
-                    showDialog = false
-                    pinError = false
-                    pendingUnlockAction?.invoke()
-                    pendingUnlockAction = null
-                } else {
-                    pinError = true
+                pinScope.launch {
+                    if (viewModel.verifyParentalControlPin(pin)) {
+                        showDialog = false
+                        pinError = false
+                        pendingUnlockAction?.invoke()
+                        pendingUnlockAction = null
+                    } else {
+                        pinError = true
+                    }
                 }
             },
             onDismiss = {
@@ -472,7 +479,9 @@ private fun ScaffoldZone(
                 },
                 lockedChannelKeys = lockedChannelKeys,
                 parentalControlPinSet = parentalControlPinSet,
-                onSetParentalControlPin = viewModel::setParentalControlPin,
+                // A lambda, not a method reference: Kotlin will not adapt `::suspendFun` to a
+                // `suspend (String) -> Boolean` parameter type.
+                onSetParentalControlPin = { pin -> viewModel.setParentalControlPin(pin) },
                 onResetParentalControl = viewModel::resetParentalControl,
                 requireParentalControlUnlock = requireParentalControlUnlock,
                 focusChannelsToken = focusChannelsToken,

@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +83,7 @@ import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.Title
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -102,7 +104,7 @@ fun SettingsScreen(
     onRestoreGroup: (String) -> Unit,
     lockedChannelKeys: Set<String>,
     parentalControlPinSet: Boolean,
-    onSetParentalControlPin: (String) -> Boolean,
+    onSetParentalControlPin: suspend (String) -> Boolean,
     onResetParentalControl: () -> Unit,
     onUnlockChannel: (M3uChannel) -> Unit,
     requireParentalControlUnlock: (() -> Unit) -> Unit,
@@ -559,11 +561,14 @@ private fun ParentalControlSection(
     playlistState: PlaylistUiState,
     lockedChannelKeys: Set<String>,
     parentalControlPinSet: Boolean,
-    onSetParentalControlPin: (String) -> Boolean,
+    onSetParentalControlPin: suspend (String) -> Boolean,
     onResetParentalControl: () -> Unit,
     onUnlockChannel: (M3uChannel) -> Unit,
     requireParentalControlUnlock: (() -> Unit) -> Unit,
 ) {
+    // Setting a PIN hashes it with PBKDF2 off the main thread, so the dialogs below submit into a
+    // coroutine rather than reading the result inline.
+    val pinScope = rememberCoroutineScope()
     if (!parentalControlPinSet) {
         var showSetPin by rememberSaveable { mutableStateOf(false) }
         PlaylistActionRow(
@@ -573,7 +578,7 @@ private fun ParentalControlSection(
         )
         if (showSetPin) {
             SetPinDialog(
-                onSubmit = { pin -> if (onSetParentalControlPin(pin)) showSetPin = false },
+                onSubmit = { pin -> pinScope.launch { if (onSetParentalControlPin(pin)) showSetPin = false } },
                 onDismiss = { showSetPin = false },
             )
         }
@@ -614,7 +619,7 @@ private fun ParentalControlSection(
     }
     if (showChangePin) {
         SetPinDialog(
-            onSubmit = { pin -> if (onSetParentalControlPin(pin)) showChangePin = false },
+            onSubmit = { pin -> pinScope.launch { if (onSetParentalControlPin(pin)) showChangePin = false } },
             onDismiss = { showChangePin = false },
         )
     }

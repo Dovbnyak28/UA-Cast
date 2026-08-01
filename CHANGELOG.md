@@ -57,6 +57,14 @@ version, and the local player's behaviour during a remote cast changed.
 
 ### Fixed - crashes
 
+- **A headset, watch or car media button could crash the app on Android 12+.** The manifest declared
+  `androidx.media3.session.MediaButtonReceiver`, which exists to wake a `MediaSessionService` and
+  throws when there is none - and this app deliberately has none, since live TV is not expected to
+  keep playing after the player closes. On API 31+ media3 picks a declared receiver as the media
+  button target, so the first press would have gone straight into that throw. Removing the
+  declaration loses nothing: media3 registers its own in-process receiver when neither a receiver
+  nor a service is declared.
+
 - **Importing a hand-edited or corrupt backup crashed the app.** `BackupCodec.decode` guarded only
   the initial JSON parse, so a stray non-object element in the `sources` or `favorites` array threw
   straight out of the import coroutine - contradicting the codec's own documented promise to return
@@ -110,6 +118,9 @@ desktop JVM.
 - **Playlist parsing** no longer builds the whole file a second time in memory as a list of lines.
 - Channel-row initials no longer run a regex and build four intermediate lists per recomposition.
 - Flattening a loaded playlist moved off the main thread.
+- Entering or setting the parental-control PIN no longer freezes the frame it was submitted on:
+  120,000 PBKDF2 rounds (~26ms on a desktop JVM, several times that on a low-end phone) moved off
+  the main thread.
 
 ### Changed
 
