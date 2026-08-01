@@ -127,6 +127,18 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   connects and hangs up without sending a request - a routine reachability probe - is no longer
   reported as a warning.
 
+### Testing
+
+- **Screenshot tests now run** (Roborazzi + Robolectric 4.16), covering the design system's empty
+  state in both themes. `recordRoborazziDebug` regenerates goldens, `verifyRoborazziDebug` fails on
+  a pixel diff. This had been shelved as blocked: the real obstacle was that Robolectric fetches its
+  own 203MB `android-all` runtime jar over its own HTTP client, which fails here with an
+  SSLHandshakeException while Gradle resolves the identical artifact from the identical host without
+  trouble. Gradle now fetches it and Robolectric runs offline against the Gradle cache directory.
+  See `docs/SCREENSHOT_TESTING.md`, including why CI enforcement is a separate decision.
+- `testOptions.unitTests.isIncludeAndroidResources` is now `true`, which screenshot tests require.
+  All 847 unit tests pass with it on.
+
 ### Performance
 
 Measured before and after; ratios hold on device even though the absolute numbers are from a

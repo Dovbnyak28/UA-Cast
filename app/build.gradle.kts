@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.detekt)
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.roborazzi)
 }
 
 detekt {
@@ -133,7 +134,10 @@ android {
 
     testOptions {
         unitTests {
-            isIncludeAndroidResources = false
+            // Required by Robolectric/Roborazzi: the screenshot tests render real Compose UI, which
+            // needs the merged resources and the AAPT-generated table, not stubs. Flipping this on
+            // affects every unit test, so it landed in its own commit with the full suite re-run.
+            isIncludeAndroidResources = true
             isReturnDefaultValues = true
         }
     }
@@ -246,4 +250,55 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+
+    // Screenshot tests (see docs/SCREENSHOT_TESTING.md). compose-ui-test-junit4 is needed on the
+    // unit-test classpath too, not just androidTest: Roborazzi drives the same createComposeRule.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.ui.test.manifest)
 }
+
+/**
+ * Robolectric downloads the `android-all` runtime jar it executes against over its own HTTP client
+ * at test time, and in this environment that fetch dies with an SSLHandshakeException ("unable to
+ * find valid certification path") while Gradle resolves the very same artifact from the very same
+ * host without complaint - so the problem is Robolectric's fetcher and its trust store, not
+ * reachability. That single fact is what kept screenshot testing shelved; see
+ * docs/SCREENSHOT_TESTING.md for the full diagnosis.
+ *
+ * The fix is to let Gradle do the fetching and put Robolectric in offline mode against the result.
+ * No copy step is needed: Gradle's cache already stores the artifact alone in a per-hash directory
+ * under exactly the `android-all-instrumented-<version>.jar` name Robolectric's offline resolver
+ * looks for, so pointing `robolectric.dependency.dir` at that directory is enough - which also
+ * avoids duplicating a 203MB jar into the build directory on every checkout.
+ */
+val robolectricSdk: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    robolectricSdk(libs.robolectric.android.all.instrumented)
+}
+
+tasks.withType<Test>().configureEach {
+    // Resolved lazily through a provider so the 203MB artifact is only fetched when tests actually
+    // run, and so the wiring survives the configuration cache.
+    val sdkDirectory = robolectricSdk.elements.map { it.first().asFile.parentFile.absolutePath }
+    jvmArgumentProviders.add(
+        CommandLineArgumentProvider {
+            listOf(
+                "-Drobolectric.offline=true",
+                "-Drobolectric.dependency.dir=${sdkDirectory.get()}",
+                // Roborazzi renders real pixels rather than Robolectric's default no-op canvas;
+                // without NATIVE graphics every golden image comes out blank.
+                "-Drobolectric.graphicsMode=NATIVE",
+            )
+        }
+    )
+}
+
+
+

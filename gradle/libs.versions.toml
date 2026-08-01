@@ -26,6 +26,8 @@ detekt = "1.23.7"
 desugarJdkLibs = "2.1.5"
 orgJson = "20240303"
 leakcanary = "2.14"
+robolectric = "4.16"
+roborazzi = "1.32.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -97,6 +99,16 @@ desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", ver
 
 leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
 
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
+# The Android runtime jar Robolectric executes against. Pulled through Gradle on purpose - see the
+# robolectricSdk configuration in app/build.gradle.kts and docs/SCREENSHOT_TESTING.md. The version
+# string is not free-form: it is what DefaultSdkProvider in robolectric 4.16 asks for for API 36
+# (androidVersion 16, framework build 13921718, instrumentation revision i7), so it moves only when
+# the robolectric version above does.
+robolectric-android-all-instrumented = { group = "org.robolectric", name = "android-all-instrumented", version = "16-robolectric-13921718-i7" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
@@ -104,3 +116,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
