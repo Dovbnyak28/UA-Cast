@@ -29,6 +29,19 @@ version, and the local player's behaviour during a remote cast changed.
 
 ### Fixed - casting
 
+- **A channel casting through the proxy could reload itself to death without ever playing.** The
+  stall watchdog asked "has the receiver reported PLAYING within 4 seconds", which on the proxy path
+  it cannot: every byte goes origin → phone → receiver, and one segment of an HD channel measured
+  3.6-6.5MB taking 2-3 seconds to move, so a receiver buffering two of them is still well inside the
+  timeout. A device capture caught it firing **four times in 30 seconds** on one channel while the
+  proxy was delivering a complete 3.6MB segment roughly every 2 seconds without a gap - and each
+  firing forced a reload that aborted the in-flight transfers, so every attempt started further
+  behind than the last. That channel never played. It now decides from *bytes delivered* instead of
+  elapsed time (`cast/CastStallWatchdogPolicy.kt`): a tick where the proxy served the receiver
+  nothing at all is still a stall and still fires immediately, but a receiver visibly pulling media
+  is left alone, up to a 30s ceiling for the case of one that fetches forever and never plays. Same
+  channel, same receiver, verified on device: zero firings, plays in ~9s. The direct-mode watchdog is
+  a different question with a different answer and keeps its flat 4s.
 - **Cast streams breaking up into constant rebuffering.** Two separate causes: the remux window was
   capped in bytes only, so a high-bitrate channel got a window too short in *seconds* and segments
   rolled off before the receiver fetched them (now 48MB with a six-segment floor); and the receiver

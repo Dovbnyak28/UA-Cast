@@ -130,4 +130,56 @@ class ProxyServerTest {
         val resourceId = server.registerPlaylist("https://origin.example/one.m3u8")
         assertTrue(server.buildLocalUrl(resourceId).startsWith("http://127.0.0.1:"))
     }
+
+    private fun servePlaylistOnce(method: String, output: ByteArrayOutputStream) {
+        val parent = ResourceEntry(
+            type = RESOURCE_TYPE_PLAYLIST,
+            originalUrl = "https://origin.example/playlist.m3u8",
+            userAgent = "Agent/1.0",
+            referrer = null,
+        )
+        val playlist = "#EXTM3U\n#EXTINF:-1,Channel\nsegment1.ts"
+        server.servePlaylist(fakeResponse("https://origin.example/playlist.m3u8", playlist), method, output, parent)
+    }
+
+    @Test
+    fun `serving a body to the receiver advances the delivered-bytes counter`() {
+        server.start(sessionToken = "test-session", host = "127.0.0.1")
+        assertEquals(0L, server.bytesServedToReceiver())
+
+        val output = ByteArrayOutputStream()
+        servePlaylistOnce("GET", output)
+
+        assertEquals(output.size().toLong(), server.bytesServedToReceiver() + headerBytesIn(output))
+        assertTrue(server.bytesServedToReceiver() > 0L)
+    }
+
+    /** Only bytes the receiver actually receives count - a HEAD gets the headers and no body, so
+     * it is not evidence that media is moving. */
+    @Test
+    fun `a HEAD request delivers no body and so advances nothing`() {
+        server.start(sessionToken = "test-session", host = "127.0.0.1")
+        servePlaylistOnce("HEAD", ByteArrayOutputStream())
+        assertEquals(0L, server.bytesServedToReceiver())
+    }
+
+    /** The stall watchdog reads deltas, so a restart that zeroed this would read as "no progress"
+     * and fire the very watchdog the counter exists to keep quiet - see ProxyServer's own note. */
+    @Test
+    fun `restarting the server does not reset the delivered-bytes counter`() {
+        server.start(sessionToken = "session-a", host = "127.0.0.1")
+        servePlaylistOnce("GET", ByteArrayOutputStream())
+        val before = server.bytesServedToReceiver()
+
+        server.start(sessionToken = "session-b", host = "127.0.0.1")
+
+        assertEquals(before, server.bytesServedToReceiver())
+    }
+
+    /** The counter tracks bodies, not whole responses; the headers written alongside are not part
+     * of it, so a test comparing against the raw stream has to subtract them. */
+    private fun headerBytesIn(output: ByteArrayOutputStream): Long {
+        val text = output.toString(Charsets.ISO_8859_1.name())
+        return (text.indexOf("\r\n\r\n") + "\r\n\r\n".length).toLong()
+    }
 }

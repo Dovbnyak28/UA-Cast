@@ -36,6 +36,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = "CastSessionRepository"
+// The direct-mode watchdog only, now that the stall watchdog ticks on delivered bytes instead (see
+// CastStallWatchdogPolicy). The two decide different questions and a flat 4s is right for this one:
+// in direct mode nothing travels through the phone, so the receiver fetching the origin itself has
+// no reason to be slow, and the consequence of firing is a cheap mode switch to the proxy - not the
+// destructive reload that made the same number wrong for the stall watchdog.
 private const val WATCHDOG_TIMEOUT_MILLIS = 4_000L
 
 // Deliberately much longer than WATCHDOG_TIMEOUT_MILLIS: that one covers a load that never even
@@ -638,19 +643,42 @@ class CastSessionRepository private constructor(context: Context) {
      * for a genuine receiver failure - reload with backoff, eventually give up - means a silent
      * stall gets the same bounded recovery a loud one does, instead of none. Not scheduled for
      * [loadDirectWithWatchdog]'s own initial call - see [loadOnReceiver]'s scheduleStallWatchdog
-     * parameter - so that path isn't double-covered by two competing timeouts. */
+     * parameter - so that path isn't double-covered by two competing timeouts.
+     *
+     * Ticks rather than waiting once, because "hasn't reported PLAYING yet" and "is stuck" are not
+     * the same thing on the proxy path - see [CastStallWatchdogPolicy] for the field capture that
+     * showed a flat timeout reloading a load that was busy delivering a 6MB segment at the time. */
     private fun scheduleStallWatchdog(generation: Long, streamUrl: String) {
         stallWatchdogJob?.cancel()
         stallWatchdogJob = scope.launch {
-            delay(WATCHDOG_TIMEOUT_MILLIS)
-            if (generation != loadGeneration.get()) return@launch
-            if (_state.value.receiverStatus == ReceiverStatus.PLAYING) return@launch
-            if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return@launch
-            AppLog.w(TAG) {
-                "cast status: stall watchdog fired, receiverStatus=${_state.value.receiverStatus} " +
-                    "mode=${_state.value.deliveryMode}"
+            var elapsed = 0L
+            var previousBytes = proxyServer.bytesServedToReceiver()
+            while (true) {
+                delay(CastStallWatchdogPolicy.TICK_MILLIS)
+                elapsed += CastStallWatchdogPolicy.TICK_MILLIS
+                if (generation != loadGeneration.get()) return@launch
+                if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return@launch
+                val bytes = proxyServer.bytesServedToReceiver()
+                val delivered = bytes - previousBytes
+                previousBytes = bytes
+                val decision = CastStallWatchdogPolicy.decide(
+                    elapsedMillis = elapsed,
+                    bytesDeliveredThisTick = delivered,
+                    isPlaying = _state.value.receiverStatus == ReceiverStatus.PLAYING,
+                )
+                if (decision == CastStallDecision.Settled) return@launch
+                if (decision == CastStallDecision.Fire) {
+                    // Reports the bytes as well as the status: a capture that only said "fired"
+                    // could not answer whether the receiver had been pulling media at the time,
+                    // which is the difference between a real stall and this watchdog being wrong.
+                    AppLog.w(TAG) {
+                        "cast status: stall watchdog fired after ${elapsed}ms, ${delivered}B served this tick, " +
+                            "receiverStatus=${_state.value.receiverStatus} mode=${_state.value.deliveryMode}"
+                    }
+                    handleReceiverStatus(ReceiverStatus.IDLE, IdleReason.ERROR, selfInitiated = false)
+                    return@launch
+                }
             }
-            handleReceiverStatus(ReceiverStatus.IDLE, IdleReason.ERROR, selfInitiated = false)
         }
     }
 

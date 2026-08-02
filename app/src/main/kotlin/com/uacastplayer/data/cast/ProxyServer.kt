@@ -17,6 +17,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicLong
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -71,6 +72,13 @@ class ProxyServer(
     @Volatile private var host: String = "127.0.0.1"
     @Volatile private var remuxEnabled = true
 
+    // Deliberately never reset - not by start(), not by stop(). The only consumer
+    // (CastSessionRepository's stall watchdog) reads DELTAS between two ticks, and a reset mid-load
+    // would make a delta negative, i.e. read as "no progress" and fire the very watchdog this
+    // counter exists to keep from firing spuriously. Monotonic for the process lifetime has no such
+    // edge, and a Long cannot realistically wrap here.
+    private val bytesServed = AtomicLong(0)
+
     /**
      * Starts the server if it isn't already running for this exact `(sessionToken, host)` pair -
      * otherwise a no-op that reuses the running socket, port, and every resource/remux session
@@ -119,6 +127,16 @@ class ProxyServer(
     /** True once [resourceId]'s first fetch decided to engage the raw-TS remux path rather than an
      * ordinary rewritten-HLS passthrough - see [fetchAndServeUpstreamResource]/[onRouteAttempted]. */
     fun wasRemuxed(resourceId: String): Boolean = resourceRegistry.remuxSessionFor(resourceId) != null
+
+    /**
+     * Total response-body bytes handed to the receiver so far - playlists, remuxed segments and
+     * passthrough media alike. Counted per chunk as it is written rather than per completed
+     * response, so a receiver that is halfway through a 6MB segment still reads as progress; that
+     * is the whole point, since the case worth telling apart from a stall is precisely a transfer
+     * that has not finished yet. Read by [com.uacastplayer.cast.CastStallWatchdogPolicy] to tell a
+     * load that is merely slow from one that is genuinely stuck.
+     */
+    fun bytesServedToReceiver(): Long = bytesServed.get()
 
     /** @throws IllegalStateException if called while the server isn't running - a caller asking
      * for a URL into a stopped proxy is a bug upstream, not something to paper over with a
@@ -348,7 +366,10 @@ class ProxyServer(
         httpServer.writeHeaders(output, 200, "OK", headers)
         // HEAD gets the same headers (Content-Length included) with no body, same as
         // writePlaylistText/servePassthrough already do for their resources.
-        if (method == "GET") output.write(bytes)
+        if (method == "GET") {
+            output.write(bytes)
+            bytesServed.addAndGet(bytes.size.toLong())
+        }
         output.flush()
     }
 
@@ -363,7 +384,10 @@ class ProxyServer(
             output, 200, "OK",
             mapOf("Content-Type" to "application/vnd.apple.mpegurl", "Content-Length" to bytes.size.toString()),
         )
-        if (method == "GET") output.write(bytes)
+        if (method == "GET") {
+            output.write(bytes)
+            bytesServed.addAndGet(bytes.size.toLong())
+        }
         output.flush()
     }
 
@@ -509,6 +533,7 @@ class ProxyServer(
             if (read < 0) break
             output.write(buffer, 0, read)
             progress[0] += read
+            bytesServed.addAndGet(read.toLong())
         }
     }
 

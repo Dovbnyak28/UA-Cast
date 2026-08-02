@@ -57,11 +57,36 @@ whatever channel happens to be on screen instead of the one it was actually diag
 
 ## Watchdog
 
-A stream that's geo-restricted or VPN-only often doesn't error out on the receiver - it just
-buffers forever. So after a direct load, if the receiver isn't `PLAYING` within **4 seconds**, the
-app falls back to the proxy (`CastSessionRepository.loadDirectWithWatchdog`). This is raced against
+There are two of them, and they answer different questions. Keeping them straight matters: they
+were once the same 4-second constant, and that was a bug (below).
+
+**The direct-mode watchdog** (`CastSessionRepository.loadDirectWithWatchdog`) decides the
+direct→proxy *mode switch*. A stream that's geo-restricted or VPN-only often doesn't error out on
+the receiver - it just buffers forever. So after a direct load, if the receiver isn't `PLAYING`
+within **4 seconds**, the app falls back to the proxy. This is raced against
 `data/cast/TsFirstSegmentDiagnostic` probing the stream for its actual declared video/audio codecs
-(`cast/TsProgramInfoParser.kt`, reading PAT/PMT).
+(`cast/TsProgramInfoParser.kt`, reading PAT/PMT). Flat 4s is right here: nothing travels through
+the phone in direct mode, and firing costs only a mode switch.
+
+**The stall watchdog** (`CastSessionRepository.scheduleStallWatchdog`, policy in
+`cast/CastStallWatchdogPolicy.kt`) covers everything after that - proxy loads and recovery reloads -
+and asks "is this load stuck?", answering it from **bytes delivered, not elapsed time**. It ticks
+every 4s and fires only on a tick where the proxy served the receiver *nothing at all*, up to a 30s
+ceiling.
+
+It used to be a flat 4s too, and that could not work. On the proxy path every byte goes
+origin → phone → receiver, and one segment of an HD channel measured 3.6-6.5MB taking ~2-3s to move;
+a receiver buffering two of them cannot report `PLAYING` inside 4s. A device capture of one channel
+showed the watchdog firing **four times in 30 seconds** while the proxy was delivering a complete
+3.6MB segment roughly every 2 seconds without a gap - and each firing forced a reload that aborted
+the in-flight transfers (`Passthrough served: 200, 212534B` of a 3.6MB segment, then
+`SocketException`), so every attempt started further behind than the last. The channel never played;
+it just escalated through the `CastRecoveryPolicy` backoff to 30s. After the change, the same
+channel on the same receiver plays with zero firings.
+
+The policy is deliberately mode-agnostic rather than taking a "is this proxy mode?" flag: in direct
+mode the proxy serves nothing, so the byte delta is always zero and it fires on the first tick,
+exactly like the flat timeout it replaced. There is no way for the two paths to drift apart.
 
 ### Diagnostic warm-up and cache
 
