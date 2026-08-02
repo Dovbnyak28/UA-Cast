@@ -19,6 +19,21 @@ version, and the local player's behaviour during a remote cast changed.
 - **Channel switching while casting to DLNA.** The renderer is re-pointed at the new channel
   instead of being left on the old one.
 
+### Fixed - launcher icon
+
+- **The launcher was showing a cropped fragment of the app icon.** The adaptive icon's foreground
+  was the full-bleed artwork, spanning ~100dp of the 108dp canvas - but a launcher only ever shows
+  the inner 72dp of that canvas. The blue and yellow ring was cut off entirely and the glyph was
+  clipped on two sides; visible on any device with a circular mask, which is most of them. The
+  foreground is now the badge alone at 72dp, so the whole mark survives every mask shape. Nothing
+  was redrawn - every asset here is a crop, a scale or a mask of the original artwork.
+- **Themed icons (Android 13+) had nothing to theme.** There was no `<monochrome>` layer, so the app
+  kept its full-colour icon while the rest of the launcher followed the wallpaper. Added, derived
+  from the mark's own luminance.
+- **The round and square legacy icons were the same file**, and both filled every pixel of their
+  square. They are now genuinely different shapes with transparent corners - which only matters on
+  API 24-25, the range the adaptive icon does not cover.
+
 ### Fixed - platform
 
 - **The cast notification never appeared on Android 13 or newer.** `CastProxyService` is a
@@ -45,8 +60,9 @@ version, and the local player's behaviour during a remote cast changed.
   app's main screen in its primary language read "1 Улюблених" and "2863 Каналів". They are plurals
   now, with all four quantity classes. The counts worth testing are not 1 and 5 but 21 and 22, where
   Slavic plural rules stop agreeing with the English intuition that "one" means one; a test asserts
-  the declensions directly, since the only screenshot goldens that exist cover empty states and
-  never saw this.
+  the declensions directly. The screenshot goldens also now cover the dashboard *with data in it*
+  (Ukrainian and English) - the only ones that existed were empty states, which is precisely how a
+  bug about numbers went unseen.
 
 ### Changed - build
 

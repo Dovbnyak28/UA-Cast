@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Plain solid fill matching colors.xml's uacast_background - ic_launcher_foreground (the
-     provided UA CAST PLAYER artwork) is full-bleed/opaque, so this background never actually
-     shows through; it only exists because every adaptive icon needs one. -->
+<!-- Plain solid fill matching colors.xml's uacast_background. This does show through now: the
+     foreground is the badge sized to the 72dp a launcher actually displays, so whatever the mask
+     shape is, the area around the badge is this colour. That it is the same colour as the badge's
+     own interior is what makes the two read as one dark disc with the ring inside it. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

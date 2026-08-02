@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The foreground is the badge alone, sized to the 72dp an adaptive icon actually shows out of its
+  108dp canvas. It used to be the full-bleed artwork spanning ~100dp of that canvas, so every
+  launcher mask cut the blue/yellow ring off entirely and clipped the glyph on two sides - visible
+  on a real device, not just in lint.
+
+  <monochrome> is the same mark with its own luminance as alpha, for Android 13 themed icons; the
+  system supplies the colour. Platforms below API 33 ignore the tag.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

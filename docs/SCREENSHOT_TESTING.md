@@ -118,9 +118,30 @@ as the `roborazzi-screenshot-diffs` artifact (`*_compare.png` side-by-side, `*_a
 rendered); compare, then re-record on the runner and this becomes a "regenerate on CI" workflow
 instead of a "regenerate locally" one.
 
+## What the goldens cover, and why that list grew
+
+`DesignSystemScreenshotTest` - the empty state in both themes.
+
+`HomeDashboardScreenshotTest` - the home dashboard **with data in it**, in Ukrainian and English.
+
+That second one exists because of a bug the first could never have caught. The home screen renders
+a count and its label as two separate pieces of text, and the label was a fixed genitive plural, so
+the app's main screen in its primary language read "1 Улюблених" and "2863 Каналів". Nothing that
+ran in CI had ever rendered that screen with a number on it: the only goldens were empty states.
+
+So the fixture is chosen for the failure mode, not for looking representative - 3 channels, 1 group,
+1 favorite, which put the labels on the "few" and singular forms, the two a fixed label gets wrong.
+Both goldens were checked by reverting one label to its broken form and confirming
+`verifyRoborazziDebug` fails; a golden nobody has seen fail is a golden nobody knows works.
+
+The general lesson for adding the next one: pick the state that would *expose* the class of bug you
+care about. An empty screen is cheap to record and catches almost nothing.
+
 ## Whether it is worth it
 
-Modest. The design system already has `@Preview` coverage across its components (see
-`docs/DESIGN_SYSTEM.md`), which catches the same class of regression at authoring time. What these
-add is *enforcement* - a `@Preview` only helps whoever opens it, whereas a golden fails the build.
-Weigh that against owning golden images as the component set and themes grow.
+Better than it looked at first. The design system already has `@Preview` coverage across its
+components (see `docs/DESIGN_SYSTEM.md`), which catches the same class of regression at authoring
+time, and the argument for goldens was mostly *enforcement* - a `@Preview` only helps whoever opens
+it, whereas a golden fails the build. The plurals bug added a second argument: a `@Preview` shows
+one hand-picked state, and the states worth checking are the awkward ones. Still weigh that against
+owning golden images as the component set and themes grow.

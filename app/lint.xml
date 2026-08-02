@@ -43,15 +43,6 @@
     <issue id="GradleDependency" severity="informational" />
     <issue id="NewerVersionAvailable" severity="informational" />
 
-    <!-- Accepted, and tracked rather than fixed blind: both want launcher artwork this project does
-         not have. IconLauncherShape wants the legacy pre-API-26 PNGs inset from their square (the
-         adaptive icon in mipmap-anydpi-v26 already handles every API 26+ device, leaving only 24-25);
-         MonochromeLauncherIcon wants a single-colour vector layer for Android 13 themed icons. Both
-         are design work on the wordmark, not something to invent from the existing raster. -->
-    <issue id="IconLauncherShape" severity="informational" />
-    <issue id="MonochromeLauncherIcon" severity="informational" />
-    <issue id="IconDuplicates" severity="informational" />
-
     <!-- The flagged strings interpolate a percentage or a diagnostics counter, not a countable noun
          ("currently %d percent", "%d attempted, %d played, %d failed"). The places where a number
          really does govern a noun already use plurals - see home_stat_* and channels_total_count. -->
