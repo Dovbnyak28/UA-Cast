@@ -233,11 +233,7 @@ class CastSessionRepository private constructor(context: Context) {
             everReachedPlaying = true
             remuxEffectivenessStore.record(currentRouteKind(), CastRouteOutcome.REACHED_PLAYING)
         }
-        playingSinceMillis = if (status == ReceiverStatus.PLAYING) {
-            playingSinceMillis ?: System.currentTimeMillis()
-        } else {
-            null
-        }
+        playingSinceMillis = PlayingWindowPolicy.next(playingSinceMillis, status, System.currentTimeMillis())
     }
 
     /** The proxy just played a channel whose direct attempt was abandoned - see
@@ -316,7 +312,7 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun recoveryDecisionFor(idleReason: IdleReason, selfInitiated: Boolean): CastRecoveryDecision {
-        val stablePlayingMs = playingSinceMillis?.let { System.currentTimeMillis() - it } ?: 0L
+        val stablePlayingMs = PlayingWindowPolicy.stableMillis(playingSinceMillis, System.currentTimeMillis())
         if (CastRecoveryPolicy.shouldResetAttemptCounter(stablePlayingMs)) recoveryAttempts = 0
         val isConfirmedIncompatible = _state.value.codecIncompatibility != null
         val decision =
@@ -758,12 +754,12 @@ class CastSessionRepository private constructor(context: Context) {
         // be torn down right away instead of waiting out its grace period - a harmless no-op if this
         // load wasn't on the proxy or nothing was draining.
         if (result is CastLoadResult.Success) proxyServer.confirmActiveSession()
-        // A confirmed-incompatible codec (see onRouteBlocked) means the proxy could never have
-        // helped even if the diagnostic resolved after this failure - don't waste a proxy attempt
-        // chasing a load that was already known to be futile.
-        val isDirectFailure = result is CastLoadResult.Failure && _state.value.deliveryMode == CastDeliveryMode.Direct
-        val stillWorthProxying = _state.value.codecIncompatibility == null
-        if (isDirectFailure && stillWorthProxying) {
+        val shouldRetryOnProxy = DirectFailureFallbackPolicy.shouldRetryOnProxy(
+            result = result,
+            mode = _state.value.deliveryMode,
+            isConfirmedIncompatible = _state.value.codecIncompatibility != null,
+        )
+        if (shouldRetryOnProxy) {
             watchdogJob?.cancel()
             _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
             startProxyAndLoad(context.streamUrl, context.title, context.userAgent, context.referrer)
