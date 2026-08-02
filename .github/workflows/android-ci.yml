@@ -12,9 +12,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The workflow only ever reads the repository and uploads artifacts; nothing here needs write access
+# to code, issues or packages. Declared explicitly because the default for GITHUB_TOKEN depends on a
+# repository setting rather than on this file.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The full gate takes a handful of minutes. Without a cap, a hung Gradle daemon or a test that
+    # waits on something that never arrives burns the runner's 6-hour default before failing.
+    timeout-minutes: 45
     env:
       # versionCode must increase monotonically across releases; the CI run number does that for
       # free. versionName stays human-readable but gets the run number appended so each CI build
@@ -63,8 +72,16 @@ jobs:
       - name: Release unit tests
         run: ./gradlew :app:testReleaseUnitTest --stacktrace
 
-      - name: Lint
+      # Both variants, because lint is per-variant and this build ships the release one. The release
+      # variant merges a different manifest and runs with a different set of build-config values, so
+      # lintDebug alone leaves exactly the APK that gets uploaded unchecked. It also keeps this job
+      # equal to the gate run locally before a commit - otherwise "green locally" and "green in CI"
+      # quietly mean two different things.
+      - name: Lint (debug)
         run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Lint (release)
+        run: ./gradlew :app:lintRelease --stacktrace
 
       - name: Detekt
         run: ./gradlew :app:detekt --stacktrace
