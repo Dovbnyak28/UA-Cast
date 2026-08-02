@@ -49,12 +49,22 @@ private const val WATCHDOG_TIMEOUT_MILLIS = 4_000L
 // trigger a reload, so it needs enough slack to not fire on ordinary hiccups.
 private const val SUSTAINED_BUFFERING_TIMEOUT_MILLIS = 15_000L
 
-private data class ActiveChannel(
+/**
+ * Everything [CastSessionRepository] needs about the channel being cast. A value type rather than a
+ * parameter list because it is exactly the same set of fields in both directions - the caller
+ * describing a channel, and this class remembering the active one - and that list had grown long
+ * enough that the two were only kept in step by hand.
+ */
+data class CastChannel(
     val index: Int,
     val streamUrl: String,
     val title: String,
-    val userAgent: String?,
-    val referrer: String?,
+    val userAgent: String? = null,
+    val referrer: String? = null,
+    /** The channel's `tvg-logo`, shown as artwork on the receiver - see [CastMediaLoader]. Not part
+     * of [LoadRetryContext] because nothing about *retrying* depends on it: a wrong thumbnail on a
+     * racing channel switch is cosmetic, where a wrong stream URL would not be. */
+    val logoUrl: String? = null,
 )
 
 /** What [CastSessionRepository.applyLoadResult] needs to retry on the proxy if a direct load fails. */
@@ -91,7 +101,7 @@ class CastSessionRepository private constructor(context: Context) {
     private var castContext: CastContext? = null
     private var currentSession: CastSession? = null
     private var currentReceiverId: String? = null
-    private var activeChannel: ActiveChannel? = null
+    private var activeChannel: CastChannel? = null
     private var watchdogJob: Job? = null
 
     // Set at the start of every proxy fallback attempt (see startProxyAndLoad), used to resolve
@@ -148,6 +158,11 @@ class CastSessionRepository private constructor(context: Context) {
     // Whether PLAYING has been observed at all this casting episode (across every recovery
     // reload) - see IncompatibilityRecordingPolicy. Reset per channel in startPlayback.
     private var everReachedPlaying = false
+
+    // The channel whose direct attempt was abandoned for the proxy this episode, held until the
+    // proxy proves it can play it - at which point the pair is remembered so the next cast skips
+    // direct entirely. See DirectRouteMemoryPolicy. Reset per channel in startPlayback.
+    private var directRouteAbandonedFor: String? = null
 
     private val _state = MutableStateFlow(CastPlaybackState())
     val state: StateFlow<CastPlaybackState> = _state.asStateFlow()
@@ -213,6 +228,7 @@ class CastSessionRepository private constructor(context: Context) {
     }
 
     private fun trackPlayingWindow(status: ReceiverStatus) {
+        rememberDirectRouteFailureIfProven(status)
         if (status == ReceiverStatus.PLAYING && !everReachedPlaying) {
             everReachedPlaying = true
             remuxEffectivenessStore.record(currentRouteKind(), CastRouteOutcome.REACHED_PLAYING)
@@ -221,6 +237,26 @@ class CastSessionRepository private constructor(context: Context) {
             playingSinceMillis ?: System.currentTimeMillis()
         } else {
             null
+        }
+    }
+
+    /** The proxy just played a channel whose direct attempt was abandoned - see
+     * [DirectRouteMemoryPolicy] for why that specific pairing, and nothing weaker, is what earns a
+     * persisted "skip direct for this pair" record. Cleared either way once the question has been
+     * answered for this episode: a second PLAYING transition on the same channel is not new
+     * evidence, and the store's own write throttle should not be the thing suppressing it. */
+    private fun rememberDirectRouteFailureIfProven(status: ReceiverStatus) {
+        val streamUrl = directRouteAbandonedFor ?: return
+        if (!DirectRouteMemoryPolicy.provenProxyOnly(_state.value.deliveryMode, status)) return
+        directRouteAbandonedFor = null
+        // The same staleness question every other deferred continuation here asks: a PLAYING update
+        // can arrive for a channel the user has already zapped past, and recording it against
+        // whatever is active now would teach the store about the wrong pair entirely.
+        val isCurrent = StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)
+        val receiverId = currentReceiverId
+        if (isCurrent && receiverId != null) {
+            AppLog.d(TAG) { "cast route: direct never played and the proxy did - remembering this pair" }
+            incompatibilityStore.record(streamUrl, receiverId)
         }
     }
 
@@ -292,7 +328,7 @@ class CastSessionRepository private constructor(context: Context) {
         return decision
     }
 
-    private fun scheduleReload(channel: ActiveChannel, decision: CastRecoveryDecision.Reload) {
+    private fun scheduleReload(channel: CastChannel, decision: CastRecoveryDecision.Reload) {
         recoveryAttempts = decision.attempt
         _state.update { it.copy(isRecovering = true) }
         recoveryJob?.cancel()
@@ -302,7 +338,7 @@ class CastSessionRepository private constructor(context: Context) {
         }
     }
 
-    private fun performRecoveryReload(channel: ActiveChannel) {
+    private fun performRecoveryReload(channel: CastChannel) {
         when (_state.value.deliveryMode) {
             CastDeliveryMode.Direct -> loadOnReceiver(
                 channel.streamUrl,
@@ -361,13 +397,13 @@ class CastSessionRepository private constructor(context: Context) {
      * connected this both queues the index as pending (for handoff on disconnect) and starts
      * delivering the new channel to the receiver immediately.
      */
-    fun setActiveChannel(index: Int, streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null) {
-        activeChannel = ActiveChannel(index, streamUrl, title, userAgent, referrer)
+    fun setActiveChannel(channel: CastChannel) {
+        activeChannel = channel
         if (currentSession != null) {
-            _state.value = CastReceiverStatusReducer.requestChannelSwitch(_state.value, index)
-            startPlayback(streamUrl, title, userAgent, referrer)
+            _state.value = CastReceiverStatusReducer.requestChannelSwitch(_state.value, channel.index)
+            startPlayback(channel.streamUrl, channel.title, channel.userAgent, channel.referrer)
         } else {
-            scheduleDiagnosticWarmup(streamUrl)
+            scheduleDiagnosticWarmup(channel.streamUrl)
         }
     }
 
@@ -461,6 +497,7 @@ class CastSessionRepository private constructor(context: Context) {
         recoveryAttempts = 0
         playingSinceMillis = null
         everReachedPlaying = false
+        directRouteAbandonedFor = null
         val receiverId = currentReceiverId.orEmpty()
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
@@ -570,6 +607,10 @@ class CastSessionRepository private constructor(context: Context) {
             return
         }
         AppLog.d(TAG) { "Falling back to proxy: $reason" }
+        // Only a note that it happened - nothing is persisted until the proxy actually plays this
+        // channel, which is what tells a route that cannot work apart from a bad moment on the
+        // network. See DirectRouteMemoryPolicy / rememberDirectRouteFailureIfProven.
+        directRouteAbandonedFor = streamUrl
         remuxEffectivenessStore.record(CastRouteKind.DIRECT, CastRouteOutcome.FAILED)
         _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
         startProxyAndLoad(streamUrl, title, userAgent, referrer)
@@ -621,7 +662,16 @@ class CastSessionRepository private constructor(context: Context) {
         if (!_sideEffects.tryEmit(CastSideEffect.PauseLocalPlayer)) {
             AppLog.w(TAG) { "Dropped cast side effect, no buffer space: PauseLocalPlayer" }
         }
-        val request = CastMediaLoader.buildRequest(urlToLoad, context.title, lastKnownSourceKind)
+        // Read off activeChannel rather than carried in the context: every path here loads the
+        // channel that is active right now (the recovery reload guards that with StaleChannelGuard
+        // before it gets this far), and the worst a race could produce is the wrong thumbnail.
+        val logoUrl = activeChannel?.logoUrl
+        val request = CastMediaLoader.buildRequest(urlToLoad, context.title, lastKnownSourceKind, logoUrl)
+        // Whether artwork went out, never the url itself (it is a third-party host, and this line
+        // ends up in a shared diagnostics report). Blank-vs-absent is not worth distinguishing here
+        // - CastMediaLoader treats both the same - but "we sent none at all" vs "the receiver
+        // ignored what we sent" is exactly the split a missing-artwork report needs.
+        AppLog.d(TAG) { "cast load: artwork=${!logoUrl.isNullOrBlank()}" }
         client.load(request).setResultCallback { result ->
             val loadResult = if (result.status.isSuccess) {
                 CastLoadResult.Success

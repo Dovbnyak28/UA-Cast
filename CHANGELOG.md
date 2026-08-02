@@ -42,6 +42,23 @@ version, and the local player's behaviour during a remote cast changed.
   is left alone, up to a 30s ceiling for the case of one that fetches forever and never plays. Same
   channel, same receiver, verified on device: zero firings, plays in ~9s. The direct-mode watchdog is
   a different question with a different answer and keeps its flat 4s.
+- **Every cast paid 4 seconds of dead air for a direct attempt already known to fail.** The store
+  that exists to skip the direct route for a (stream, receiver) pair was only ever written for a
+  confirmed MPEG-2 verdict - the one case `CastRecoveryPolicy` answers with `GiveUp` - so the
+  overwhelmingly common reason a cast lands on the proxy, the direct watchdog simply timing out, was
+  never remembered. A device capture showed seven consecutive channel loads and seven identical
+  `Falling back to proxy: watchdog_timeout` lines, including two visits to the same channel a minute
+  apart. It is now recorded when the direct attempt never played *and the proxy then did*
+  (`cast/DirectRouteMemoryPolicy.kt`) - proof that the stream, receiver and network are all fine and
+  only the direct route is not, rather than one bad moment sending a channel through the phone for
+  30 days. Verified on device: second visit to the same channel goes straight to the proxy, no
+  watchdog line.
+- **The receiver showed a bare title on a black screen, and the cast dialog a large empty grey
+  panel.** The load request carried no image at all; it now sends the channel's `tvg-logo` as
+  artwork. Partial: channels whose icon comes from the EPG or the CDN fallback rather than from
+  `tvg-logo` still send none, because that resolution chain (`icons/IconResolver`) lives in
+  `AppViewModel` and is not reachable from where the cast load is built. `cast load: artwork=` in
+  the log says which case a given channel hit.
 - **Cast streams breaking up into constant rebuffering.** Two separate causes: the remux window was
   capped in bytes only, so a high-bitrate channel got a window too short in *seconds* and segments
   rolled off before the receiver fetched them (now 48MB with a six-segment floor); and the receiver

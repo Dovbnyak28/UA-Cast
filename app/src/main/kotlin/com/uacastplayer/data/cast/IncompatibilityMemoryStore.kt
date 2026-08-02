@@ -13,7 +13,16 @@ private const val MIN_WRITE_INTERVAL_MILLIS = 2_000L
 private const val SCHEMA_VERSION = 1
 private const val SCHEMA_VERSION_KEY = "schema_version"
 
-/** Disk-backed (stream-fingerprint, receiver-fingerprint) -> incompatibility timestamp map. */
+/**
+ * Disk-backed (stream-fingerprint, receiver-fingerprint) -> timestamp map.
+ *
+ * Read for exactly one question - "should this pair skip the direct attempt and go straight to the
+ * proxy?" (`CastDeliveryStrategy.initialMode`) - so despite the name, a record does not assert
+ * anything as specific as a codec problem. Two rules write here, and both mean the same thing to
+ * the reader: a confirmed hard-incompatible codec (`IncompatibilityRecordingPolicy`) and a direct
+ * attempt that never played where the proxy then did (`DirectRouteMemoryPolicy`). Nothing else
+ * reads this store, so the distinction never has to be recovered from it.
+ */
 class IncompatibilityMemoryStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences("uacast_cast_incompatibility", Context.MODE_PRIVATE)

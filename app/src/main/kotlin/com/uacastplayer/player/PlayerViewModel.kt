@@ -25,6 +25,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.MainActivity
+import com.uacastplayer.cast.CastChannel
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
 import com.uacastplayer.data.prefs.AppPreferences
@@ -385,7 +386,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             // it fresh once local playback resumes - just not prepared right now.
             exoPlayer.stop()
         }
-        castRepository.setActiveChannel(index, channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)
+        castRepository.setActiveChannel(
+            CastChannel(
+                index = index,
+                streamUrl = channel.streamUrl,
+                title = channel.displayName,
+                userAgent = channel.userAgent,
+                referrer = channel.referrer,
+                logoUrl = channel.tvgLogo,
+            ),
+        )
         // No-op unless a DLNA renderer is actually connected. Unconditional on purpose: the local
         // player has already stood down for a remote target above, so without this a channel switch
         // during a DLNA cast would change nothing anywhere - the TV keeps the old channel and the

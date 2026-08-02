@@ -88,6 +88,31 @@ The policy is deliberately mode-agnostic rather than taking a "is this proxy mod
 mode the proxy serves nothing, so the byte delta is always zero and it fires on the first tick,
 exactly like the flat timeout it replaced. There is no way for the two paths to drift apart.
 
+### Remembering that direct never works
+
+`data/cast/IncompatibilityMemoryStore` is read by `CastDeliveryStrategy.initialMode` to skip the
+direct attempt entirely for a (stream, receiver) pair. Despite the name it is not a codec claim -
+it is only ever asked "should this pair go straight to the proxy?", and two rules write it:
+
+- `IncompatibilityRecordingPolicy` - a confirmed hard-incompatible codec.
+- `DirectRouteMemoryPolicy` - the direct attempt never played **and the proxy then did**.
+
+The second was missing entirely, which meant the common case - the direct watchdog timing out - was
+never remembered, and every cast of every channel re-paid its 4 seconds of dead air. The bar is
+deliberately the *pair* of facts, not just "direct failed": a direct attempt can fail because the
+origin blinked, and recording that would push a channel through the phone for 30 days over one bad
+moment. Proxy playback succeeding on the same stream moments later rules that out.
+
+### Artwork
+
+The load request carries the channel's `tvg-logo` as a `WebImage`, so the receiver shows the channel
+logo rather than a bare title on black. Channels whose icon comes from the EPG or the CDN fallback
+instead (see `icons/IconResolver.candidates`, which is the full precedence the app's own UI uses)
+send no artwork: that chain needs the EPG index, which lives in `AppViewModel`, and the cast load is
+built from `PlayerViewModel`. Closing that gap means plumbing an `epgIconUrlFor`-style lookup down
+to the cast layer. `cast load: artwork=<bool>` records which case a channel hit, without ever
+logging the url.
+
 ### Diagnostic warm-up and cache
 
 Probing a stream is a real HTTP fetch, and casting or re-casting the same channel shouldn't pay for
