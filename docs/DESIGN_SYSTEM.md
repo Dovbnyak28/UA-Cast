@@ -212,7 +212,17 @@ is true) must give every item `Modifier.weight(1f)`. Without it, `Arrangement.Sp
 affects *positioning*, not the width each child is measured with - each `Column` sizes to its label's
 intrinsic width, and once the row runs out of room the last items get squeezed into whatever space is
 left, wrapping their `Text` character-by-character instead of onto a clean second line. Pair
-`weight(1f)` with `textAlign = TextAlign.Center` and `maxLines = 2` on the label so a longer label
-(`"Співвідношення"`) wraps cleanly rather than clipping or overflowing. This was found on
-`PlayerScreen`'s `QuickSettingsRow` going from 5 to 6 items; the same risk applies to any other
-variable-count icon row built the same way.
+`weight(1f)` with `textAlign = TextAlign.Center` and `maxLines = 2` on the label so a two-word label
+wraps cleanly rather than clipping or overflowing. This was found on `PlayerScreen`'s
+`QuickSettingsRow` going from 5 to 6 items; the same risk applies to any other variable-count icon
+row built the same way.
+
+**Equal shares are necessary but not sufficient - the real constraint is the longest single word.**
+An earlier version of this section cited `"Співвідношення"` as an example of a label that wraps
+cleanly under these rules. It does not, and the app shipped it: at 14 characters it is one word with
+no break point, so a sixth of the row width leaves Compose nothing to do but break it mid-word, and
+the Ukrainian player read `Співвідно / шення`. Weights control how much room each item *gets*; they
+cannot create a place to wrap. So when adding an item to a row like this, check every locale for the
+longest **word**, not the longest string - and where a term is unavoidably long, translate it as two
+short words instead of one long one (`"Формат кадру"`, not `"Співвідношення"`). Roughly: keep the
+longest word under about 9 characters for a six-item row at 411dp.

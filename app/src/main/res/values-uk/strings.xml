@@ -288,7 +288,11 @@
     <string name="player_next_channels_title">Наступні канали</string>
     <string name="player_view_all">Дивитися всі</string>
     <string name="player_quality">Якість відео</string>
-    <string name="player_aspect_ratio">Співвідношення</string>
+    <!-- Two short words rather than one long one: this is a label in the player's six-item quick
+         settings row, where each item gets a sixth of the width. "Співвідношення" is a single
+         14-character word - no word boundary to wrap at, so Compose broke it mid-word as
+         "Співвідно / шення". See docs/DESIGN_SYSTEM.md "§E Equal-share rows". -->
+    <string name="player_aspect_ratio">Формат кадру</string>
     <string name="player_buffering">Буферизація…</string>
     <string name="player_recovering_playback">Відновлення відтворення…</string>
     <string name="player_pick_another_channel">Обрати інший канал</string>

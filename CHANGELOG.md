@@ -140,6 +140,22 @@ version, and the local player's behaviour during a remote cast changed.
 
 ### Fixed - UI
 
+- **The player's title bar said "UA Cast Player" instead of naming the channel.** On the one screen
+  where the user is least in doubt about which app they are in and most in doubt about what is
+  playing, it showed the app name - while the channel it was playing sat in a card further down.
+  It now shows the channel, ellipsised, falling back to the app name only before anything is loaded.
+- **Ukrainian broke a player label in the middle of a word.** The quick-settings row gives each item
+  an equal share of the width, which is what stops labels wrapping character-by-character - but
+  weights cannot create a place to wrap, and `"Співвідношення"` is one 14-character word, so it came
+  out as `Співвідно / шення`. `docs/DESIGN_SYSTEM.md` cited that very string as an example of a label
+  that wraps *cleanly* under the rule; the rule is now stated in terms of the longest **word**, and
+  the label is `"Формат кадру"` (Russian likewise).
+- **Two-line labels in that row had their descenders cut off.** The label box was a fixed 32dp
+  height, less 6dp of top padding, against roughly 29dp needed for two lines of 12sp - so the second
+  line was drawn into space that did not exist and `"кадру"` lost the tail of its `у`. It is a
+  minimum height now, which keeps one-line labels reserving the same space (so the icons above stay
+  aligned) while letting a two-line label take the room it needs.
+
 - **The "Preparing your channels…" banner covered the screen title while it was showing.** It was an
   overlay pinned to the top of a Box that also held the whole scaffold, so it was simply painted
   over whatever was underneath: measured at 108dp of overlap, which cut "UA Cast Player" in half on

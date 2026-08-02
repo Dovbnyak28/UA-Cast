@@ -288,7 +288,9 @@
     <string name="player_next_channels_title">Следующие каналы</string>
     <string name="player_view_all">Смотреть все</string>
     <string name="player_quality">Качество видео</string>
-    <string name="player_aspect_ratio">Соотношение сторон</string>
+    <!-- "Соотношение" alone is 11 characters with no break point; see the uk note and
+         docs/DESIGN_SYSTEM.md "§E Equal-share rows". -->
+    <string name="player_aspect_ratio">Формат кадра</string>
     <string name="player_buffering">Буферизация…</string>
     <string name="player_recovering_playback">Восстановление воспроизведения…</string>
     <string name="player_pick_another_channel">Выбрать другой канал</string>

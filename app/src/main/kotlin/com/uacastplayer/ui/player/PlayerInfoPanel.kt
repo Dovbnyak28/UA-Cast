@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -232,7 +233,15 @@ private fun RowScope.QuickSettingItem(
             Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(18.dp))
         }
         Box(
-            modifier = Modifier.height(QuickSettingLabelHeight).padding(top = 6.dp),
+            // A *minimum*, not a fixed height. Fixed, this reserved 32dp less the 6dp of top
+            // padding - 26dp - while two lines of 12sp Caption need about 29dp, so the second line
+            // was drawn into space that did not exist and its descenders were cut off: the
+            // Ukrainian "Формат кадру" lost the tail of its "у". The point of the constant is to
+            // keep one-line labels reserving the same space so the icons above them stay aligned,
+            // and a minimum does that just as well while letting a two-line label have the room it
+            // actually needs. Every item is top-aligned in its Column, so the icons stay in line
+            // even when one label is taller than the rest.
+            modifier = Modifier.heightIn(min = QuickSettingLabelHeight).padding(top = 6.dp),
             contentAlignment = Alignment.TopCenter,
         ) {
             Text(

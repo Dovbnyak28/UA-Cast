@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -371,10 +372,16 @@ fun PlayerScreen(
             ) {
                 SmallRoundIconButton(icon = AppIcons.ArrowBack, onClick = onExit, contentDescription = stringResource(R.string.common_back))
                 Text(
-                    text = stringResource(R.string.app_name),
+                    // The channel being watched, not the app's own name - which is what this said
+                    // before, on the one screen where the user already knows which app they are in
+                    // and the single most useful thing to show is what is playing. Falls back to
+                    // the app name only while nothing is loaded yet.
+                    text = currentChannel?.displayName ?: stringResource(R.string.app_name),
                     style = Title,
                     color = UaTheme.palette.labelPrimary,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 if (currentChannel != null) {
