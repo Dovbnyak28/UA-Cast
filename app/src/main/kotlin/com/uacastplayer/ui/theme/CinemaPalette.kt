@@ -80,6 +80,7 @@ val CinemaUaPalette = UaPalette(
     shadowSoft = CinemaShadowSoft,
     surfaceLiftAmount = 0.06f,
     vignette = true,
+    wallpaperTexture = true,
     pillButtons = true,
     secondaryButtonStyle = SecondaryButtonStyle.GHOST,
 )

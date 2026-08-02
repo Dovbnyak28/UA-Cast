@@ -52,5 +52,7 @@ style:
       - '**/*.Spek.kt'
       - '**/ui/theme/AppIcons.kt'
       - '**/ui/theme/Color.kt'
-      - '**/ui/theme/CinemaPalette.kt'
-      - '**/ui/theme/UaPalette.kt'
+      # Glob, not one line per palette: the palettes were listed individually until adding a third
+      # theme failed the build on nothing but its own colour literals. Adding a theme should not
+      # require editing the detekt config.
+      - '**/ui/theme/*Palette.kt'

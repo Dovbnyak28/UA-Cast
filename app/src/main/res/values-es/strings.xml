@@ -133,6 +133,7 @@
     <string name="settings_theme_label">Tema</string>
     <string name="theme_name_azure">Clásico</string>
     <string name="theme_name_cinema">Cine</string>
+    <string name="theme_name_midnight">Medianoche</string>
     <string name="settings_language_label">Idioma</string>
     <string name="settings_icon_wifi_only_label">Descargar logotipos solo con Wi-Fi</string>
     <string name="settings_epg_source_label">Fuente de la guía TV</string>

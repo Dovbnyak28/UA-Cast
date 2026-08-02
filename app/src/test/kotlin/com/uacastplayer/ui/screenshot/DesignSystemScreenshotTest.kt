@@ -58,6 +58,11 @@ class DesignSystemScreenshotTest {
         captureThemed(AppTheme.AZURE, "empty_state_azure")
     }
 
+    @Test
+    fun emptyState_midnight() {
+        captureThemed(AppTheme.MIDNIGHT, "empty_state_midnight")
+    }
+
     private fun captureThemed(theme: AppTheme, name: String) {
         composeRule.setContent {
             UaCastTheme(theme) {

@@ -75,6 +75,9 @@ jobs:
       - name: No hardcoded colors outside ui/theme check
         run: bash scripts/check-no-hardcoded-colors.sh
 
+      - name: Glow colors not used as text/icon foregrounds check
+        run: bash scripts/check-glow-not-text.sh
+
       - name: ViewModel onCleared() calls super check
         run: bash scripts/check-oncleared-super.sh
 

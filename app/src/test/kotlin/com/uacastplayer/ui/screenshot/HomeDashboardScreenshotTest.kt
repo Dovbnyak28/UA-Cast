@@ -90,9 +90,9 @@ class HomeDashboardScreenshotTest {
         onRefreshPlaylist = {},
     )
 
-    private fun capture(name: String) {
+    private fun capture(name: String, theme: AppTheme = AppTheme.CINEMA) {
         composeRule.setContent {
-            UaCastTheme(AppTheme.CINEMA) {
+            UaCastTheme(theme) {
                 Box(
                     Modifier
                         .size(width = 411.dp, height = 891.dp)
@@ -118,4 +118,11 @@ class HomeDashboardScreenshotTest {
     @Test
     @Config(qualifiers = "en-w411dp-h891dp-xhdpi")
     fun homeDashboard_english() = capture("home_dashboard_en")
+
+    /** Midnight on a populated screen, not just the empty state: it is the only theme that turns
+     * the background texture off entirely (see UaPalette.wallpaperTexture), so a full dashboard is
+     * where a regression in that would actually show. */
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun homeDashboard_midnight() = capture("home_dashboard_midnight", AppTheme.MIDNIGHT)
 }

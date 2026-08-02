@@ -779,7 +779,9 @@ private fun EpgTruncatedRow() {
     Text(
         text = stringResource(R.string.settings_epg_truncated),
         style = Caption,
-        color = UaTheme.palette.amberGlow,
+        // routeAmber, not amberGlow: the glow is the same hue at ~50% alpha and was never a text
+        // color - see the doc on UaPalette.azureGlow.
+        color = UaTheme.palette.routeAmber,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
 }
@@ -975,9 +977,12 @@ private fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Unit
     }
 }
 
-private fun AppTheme.nameRes(): Int = when (this) {
+/** Internal rather than private so `ThemePickerScreenshotTest` renders the picker off the same
+ * mapping the screen does - a golden built on a copy of this `when` would not notice it drifting. */
+internal fun AppTheme.nameRes(): Int = when (this) {
     AppTheme.AZURE -> R.string.theme_name_azure
     AppTheme.CINEMA -> R.string.theme_name_cinema
+    AppTheme.MIDNIGHT -> R.string.theme_name_midnight
 }
 
 private fun AppLanguage.nativeNameRes(): Int = when (this) {

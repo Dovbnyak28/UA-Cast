@@ -39,6 +39,7 @@ fun UaCastTheme(theme: AppTheme, content: @Composable () -> Unit) {
     val palette = when (theme) {
         AppTheme.AZURE -> AzureUaPalette
         AppTheme.CINEMA -> CinemaUaPalette
+        AppTheme.MIDNIGHT -> MidnightUaPalette
     }
     CompositionLocalProvider(LocalUaPalette provides palette) {
         MaterialTheme(

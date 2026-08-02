@@ -18,6 +18,20 @@ version, and the local player's behaviour during a remote cast changed.
   does not do.
 - **Channel switching while casting to DLNA.** The renderer is re-pointed at the new channel
   instead of being left on the old one.
+- **A third theme, Midnight** - true black, violet accent, no wallpaper texture. Azure and Cinema
+  differ in temperature but both paint the same faint texture a few percent above black; Midnight
+  takes the axis they leave open, which on an OLED panel is the one that costs no backlight. Violet
+  is also the only accent hue that can't be mistaken for one of the three route-health colours.
+  Selectable in Settings alongside the other two.
+
+### Fixed - contrast
+
+- **The EPG "playlist too large" warning in Settings was drawn in a glow colour**, not a text one -
+  amber at 50% alpha, which composites to a dull olive against the background instead of covering
+  it: 3.99:1, under WCAG AA. It now uses the full-opacity route amber. Present since the warning was
+  added; the true-black theme is what made it visible rather than merely dim.
+  `scripts/check-glow-not-text.sh` fails the build on any future `*Glow` used as a text or icon
+  colour.
 
 ### Fixed - launcher icon
 

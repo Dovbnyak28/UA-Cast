@@ -104,19 +104,33 @@ unselected, `Azure` when selected, `RadiusItem` corners, `BodyRegular` label. Us
 with more than 4 options or long labels (language, EPG source, icon display mode) where
 `SegmentedControl` wouldn't fit.
 
-## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `Theme.kt`, `Background.kt`)
+## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `MidnightPalette.kt`, `Theme.kt`, `Background.kt`)
 
-The app has two selectable visual styles, `AppTheme.AZURE` (default, unchanged from before themes
-existed) and `AppTheme.CINEMA` (warm charcoal background, champagne-gold accent, serif display
-type, pill-shaped controls). Users pick one in Settings; it applies instantly, app-wide.
+The app has three selectable visual styles. Users pick one in Settings; it applies instantly,
+app-wide.
+
+| Theme | Background | Accent | Character |
+| --- | --- | --- | --- |
+| `AppTheme.AZURE` (default) | neutral near-black, textured | cool blue | unchanged from before themes existed |
+| `AppTheme.CINEMA` | warm charcoal, textured | champagne gold | serif display type, pill-shaped controls |
+| `AppTheme.MIDNIGHT` | true `#000000`, flat | violet | no wallpaper texture, no vignette, maximum contrast |
+
+They're deliberately spread across the axes rather than being three shades of the same idea: Azure
+and Cinema differ in *temperature* while painting the same faint wallpaper texture a few percent
+above black, so Midnight takes the axis both leave open - unlit, textureless, and the only one whose
+`void` is actually black. Its violet is the one hue neither other theme nor the three route-health
+colors (green/amber/red) occupy, so an accent is never confusable with a status.
 
 ### How it works
 
 - **`UaPalette`** is a `data class` holding every semantic color plus a handful of per-theme
-  shape/font toggles (`displayFontFamily`, `vignette`, `pillButtons`, `secondaryButtonStyle`).
-  `AzureUaPalette` and `CinemaUaPalette` are the two concrete values - `AzureUaPalette` is built
-  straight from the existing Color.kt constants, so Azure's rendering is byte-for-byte what it was
-  before this system existed.
+  shape/font toggles (`displayFontFamily`, `vignette`, `wallpaperTexture`, `pillButtons`,
+  `secondaryButtonStyle`). `AzureUaPalette`, `CinemaUaPalette` and `MidnightUaPalette` are the
+  concrete values - `AzureUaPalette` is built straight from the existing Color.kt constants, so
+  Azure's rendering is byte-for-byte what it was before this system existed.
+- **`wallpaperTexture = false`** makes `Background.kt` return a flat `void` fill and skip the
+  gradient/noise layers entirely, rather than tinting them to nothing. That's what keeps Midnight's
+  black actually `#000000` on an OLED panel: a texture drawn at 2% over black is still lit pixels.
 - **`LocalUaPalette`** (a `staticCompositionLocalOf<UaPalette>`) carries the active palette down
   the tree; **`UaTheme.palette`** is the `@Composable` accessor components actually call.
   `staticCompositionLocalOf` is deliberate, not an oversight - a theme switch is meant to force the
@@ -147,6 +161,21 @@ type, pill-shaped controls). Users pick one in Settings; it applies instantly, a
    read the palette, they don't know which theme they're in.
 6. `scripts/check-no-hardcoded-colors.sh` (run in CI) fails the build on any `Color(0x...)` under
    `ui/` outside `ui/theme/` - that's the enforcement mechanism for rule 5.
+   `scripts/check-glow-not-text.sh` is the other half: a `*Glow` field is a ~50%-alpha fill, and a
+   new theme's background is exactly what turns "a bit dim" into "fails contrast" (see the doc on
+   `UaPalette.azureGlow`).
+7. Record goldens for it: a `captureThemed` case in `DesignSystemScreenshotTest`, and - if the theme
+   changes anything structural rather than only hues, as `wallpaperTexture` does - a populated one
+   in `HomeDashboardScreenshotTest`, where an empty screen would show nothing.
+8. Re-record `ThemePickerScreenshotTest`. **Every theme added narrows the theme picker**: its
+   `SegmentedControl` gives each segment `weight(1f)`, and a weight decides how much room a segment
+   gets - it cannot create a place to wrap. A name that outgrows its share doesn't truncate, it goes
+   two lines tall and takes the whole control with it. Check all four locales; the longest name is
+   rarely the English one.
+9. Compute the contrast ratios rather than eyeballing them. Body text on `void`/`surface1` should
+   clear WCAG AA (4.5:1), large display type and icons 3:1. Record the numbers in a comment next to
+   the color, as `CinemaPalette.kt` and `MidnightPalette.kt` do - the next person changing a hue by
+   "just a little" needs to know what the margin was.
 
 ### Small (<12sp) accent text
 

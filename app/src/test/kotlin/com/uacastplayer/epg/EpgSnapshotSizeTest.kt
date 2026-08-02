@@ -17,7 +17,15 @@ import org.junit.Test
  *
  * Not a precise benchmark - hardware varies, and this runs at a fraction of the real feed's size to
  * stay quick - but a coarse guard that restoring the snapshot stays far cheaper than parsing the
- * document. The margin is deliberately loose so ordinary CI noise cannot make it flaky.
+ * document.
+ *
+ * It compares the **fastest** of several runs on each side, not the total of them. A loose ratio was
+ * supposed to absorb CI noise on its own and did not: summing five timed windows means one window
+ * losing its core to another Gradle task inflates that side's total, and this failed at 130ms vs
+ * 194ms while running alongside six other tasks - then passed three times in a row alone. A stolen
+ * timeslice can only ever make a run slower, so the minimum is the closest thing to the uncontended
+ * cost that a wall-clock measurement can offer, and contention has to hit *every* iteration of one
+ * side to move it.
  *
  * There is deliberately **no assertion here about file size.** The obvious one - "the parsed
  * snapshot is smaller than the gzipped document" - measures the fixture rather than the format:
@@ -33,7 +41,13 @@ class EpgSnapshotSizeTest {
         const val CHANNELS = 200
         const val PROGRAMMES_PER_CHANNEL = 60
         const val PARSE_BUDGET_RATIO = 0.5
+        const val TIMED_RUNS = 5
     }
+
+    /** Wall-clock cost of the quickest of [TIMED_RUNS] runs - see the class doc for why the minimum
+     * rather than the total. */
+    private fun fastestOf(block: () -> Unit): Long =
+        (1..TIMED_RUNS).minOf { measureTimeMillis(block) }
 
     private val header = EpgSnapshotHeader("fp", 1_700_000_000_000L)
 
@@ -87,11 +101,9 @@ class EpgSnapshotSizeTest {
             java.util.zip.GZIPInputStream(ByteArrayInputStream(documentBytes)).use(XmlTvParser::parse)
         }
 
-        val decodeMillis = measureTimeMillis {
-            repeat(5) { EpgSnapshotCodec.decode(ByteArrayInputStream(parsedBytes)) }
-        }
-        val parseMillis = measureTimeMillis {
-            repeat(5) { java.util.zip.GZIPInputStream(ByteArrayInputStream(documentBytes)).use(XmlTvParser::parse) }
+        val decodeMillis = fastestOf { EpgSnapshotCodec.decode(ByteArrayInputStream(parsedBytes)) }
+        val parseMillis = fastestOf {
+            java.util.zip.GZIPInputStream(ByteArrayInputStream(documentBytes)).use(XmlTvParser::parse)
         }
 
         assertTrue(

@@ -8,7 +8,7 @@ import androidx.compose.ui.text.font.FontFamily
 
 /** Which visual style is active - see docs/DESIGN_SYSTEM.md "Themes". */
 enum class AppTheme {
-    AZURE, CINEMA;
+    AZURE, CINEMA, MIDNIGHT;
 
     companion object {
         // Cinema (warm charcoal + champagne-gold, radial vignette on every screen) is the default
@@ -53,6 +53,11 @@ data class UaPalette(
     val labelSecondary: Color,
     val labelTertiary: Color,
     val hairline: Color,
+    /** Glows are **fills and shadow spot colors, never text.** They are the route-health hues at
+     * ~50% alpha, which is what makes a halo read as a halo - and what makes them fail contrast the
+     * moment one is used as a foreground: `amberGlow` over black composites to #806B05, 3.99:1, and
+     * shipped that way in Settings until Midnight's true-black background made it obvious. For
+     * colored text use [routeGreen]/[routeAmber]/[routeRed] or [accentText]. */
     val azureGlow: Color,
     val greenGlow: Color,
     val amberGlow: Color,
@@ -86,6 +91,13 @@ data class UaPalette(
     val surfaceLiftAmount: Float,
     /** Radial "spotlight" background instead of the plain top-to-bottom gradient - see appBackground(). */
     val vignette: Boolean,
+    /**
+     * Whether the screen background paints the decorative wallpaper texture at all (see
+     * appBackground()). True for the themes that want the ambient glow; false for Midnight, where
+     * the whole point is that background pixels are *off* - a near-black texture would light every
+     * one of them on an OLED panel and take the contrast down with it.
+     */
+    val wallpaperTexture: Boolean,
     /** Pill-shaped (fully rounded) primary/secondary buttons instead of RadiusItem corners. */
     val pillButtons: Boolean,
     val secondaryButtonStyle: SecondaryButtonStyle,
@@ -125,6 +137,7 @@ val AzureUaPalette = UaPalette(
     shadowSoft = ShadowSoft,
     surfaceLiftAmount = 0.06f,
     vignette = false,
+    wallpaperTexture = true,
     pillButtons = false,
     secondaryButtonStyle = SecondaryButtonStyle.RAISED,
 )
