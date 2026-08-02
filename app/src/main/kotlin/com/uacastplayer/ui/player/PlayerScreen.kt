@@ -40,7 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.toAndroidRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -149,6 +152,21 @@ fun PlayerScreen(
     val configuration = LocalConfiguration.current
     val isInPip = remember(configuration, activity) {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
+    }
+
+    // Where the video surface currently sits on screen, for PiP's source-rect hint (see below).
+    var videoBounds by remember { mutableStateOf<android.graphics.Rect?>(null) }
+
+    // From API 31 the system can enter PiP by itself when the user gestures home, but only if the
+    // activity's params already say so - by the time onUserLeaveHint would fire it is too late.
+    // Keeping them in sync here is what makes swiping home during playback continue the channel in
+    // a floating window instead of just backgrounding the app. Gated on actually playing, and on
+    // fullscreen: auto-entering PiP from a paused, errored or cast-only player would put an empty
+    // window on screen. The same params carry the real aspect ratio, so the window is the shape of
+    // the channel rather than an assumed 16:9.
+    val autoEnterPip = isFullscreen && uiState.isPlaying && !uiState.isCasting && !uiState.fatalError
+    LaunchedEffect(activity, autoEnterPip, videoBounds, uiState.videoSize) {
+        activity?.let { PipController.syncParams(it, uiState.videoSize, videoBounds, autoEnterPip) }
     }
 
     DisposableEffect(activity, isFullscreen) {
@@ -260,7 +278,17 @@ fun PlayerScreen(
                     }
                 },
         ) {
-            VideoSurface(viewModel = viewModel, resizeMode = videoResizeMode, modifier = Modifier.fillMaxSize())
+            VideoSurface(
+                viewModel = viewModel,
+                resizeMode = videoResizeMode,
+                // Reported so PiP can hand the system a source rectangle to scale out of, instead
+                // of cross-fading from nowhere. These are the surface's bounds, not the picture's:
+                // a letterboxed stream leaves bars inside them, which is the usual approximation
+                // and costs a slightly larger starting rect, nothing more.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { videoBounds = it.boundsInWindow().toAndroidRect() },
+            )
 
             if (uiState.isRecoveringPlayback) {
                 RecoveringPlaybackIndicator(
@@ -304,7 +332,7 @@ fun PlayerScreen(
                     onNext = viewModel::requestNext,
                     onPrevious = viewModel::requestPrevious,
                     onToggleFullscreen = { isFullscreen = !isFullscreen },
-                    onEnterPip = { activity?.let(PipController::enter) },
+                    onEnterPip = { activity?.let { PipController.enter(it, uiState.videoSize, videoBounds) } },
                     onOpenSleepTimer = { showSleepTimerDialog = true },
                     isDlnaCasting = dlnaState.connectedDevice != null,
                     onOpenDlnaSheet = { showDlnaSheet = true },

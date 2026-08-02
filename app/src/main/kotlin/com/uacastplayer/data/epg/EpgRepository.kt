@@ -58,6 +58,16 @@ class EpgRepository(context: Context) {
         }
     }
 
+    /**
+     * Reclaims temp files stranded by a previous process death - see
+     * [EpgDownloader.deleteStaleDownloads] for how they accumulate and why nothing else removes them.
+     *
+     * Called at startup rather than only before a download, because the common case is that no
+     * download happens at all: the EPG is restored from its snapshot, so a device carrying half a
+     * gigabyte of orphans would keep carrying it until the cache happened to expire.
+     */
+    suspend fun deleteStaleDownloads() = withContext(Dispatchers.IO) { downloader.deleteStaleDownloads() }
+
     // A corrupt/truncated cached snapshot (any parse failure, not one specific type) should just
     // fall back to null - the caller re-fetches live - not crash startup over stale disk state.
     @Suppress("TooGenericExceptionCaught")

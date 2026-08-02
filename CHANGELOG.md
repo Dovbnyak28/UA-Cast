@@ -93,6 +93,40 @@ version, and the local player's behaviour during a remote cast changed.
   enough. Writes now report failure instead of throwing; the in-memory state the caller already
   updated stays correct, so a lost write costs that one change at next launch.
 
+### Fixed - storage
+
+- **Half a gigabyte of orphaned EPG downloads.** Every path through `EpgDownloader`/`EpgRepository`
+  deletes its own temp file, but none of that runs when the *process* is killed mid-download or
+  mid-parse - and an XMLTV parse is exactly where this app has been killed before (see the
+  OutOfMemoryError entry below). Nothing ever swept the leftovers, and because they live in
+  `filesDir` rather than the cache directory, Android never reclaims them either. Found on a real
+  device as **13 stranded files totalling ~500MB, out of an app footprint of 523MB**; one force-stop
+  during a download was enough to strand another 46MB permanently. A sweep now runs at startup -
+  not only before a download, since the common case is that no download happens at all and the EPG
+  is restored from its snapshot. Age-gated exactly like the icon cache's equivalent, so it can never
+  delete a file another download is still writing into. Measured on the reporting device: 523MB to
+  45MB.
+
+### Fixed - data
+
+- **Cyrillic channel names arrived as mojibake from playlists served over HTTP.** The charset in the
+  response's `Content-Type` was treated as authoritative, and IPTV panels are wrong about it often
+  enough to matter: a body that is really UTF-8 announced as `charset=windows-1251` had each Cyrillic
+  letter's two UTF-8 bytes rendered as two separate Windows-1251 characters, so a channel list read
+  `Liberty РЎРїРѕСЂС‚` instead of `Liberty Спорт`. The declaration is now a hint that loses to the
+  bytes: a BOM wins outright, then valid UTF-8 (which genuine Windows-1251 Cyrillic essentially never
+  is, since its letters sit in 0xC0-0xFF where UTF-8 requires 0x80-0xBF), and only then the
+  declaration. The symmetric case is fixed too - a server claiming UTF-8 over bytes that are not
+  valid UTF-8 is disbelieved rather than yielding a string full of U+FFFD. Playlists imported from a
+  file were never affected; they already sniffed the bytes.
+- **A playlist restored from an old cache snapshot could not be refreshed at all.** The pre-`sourceUrl`
+  snapshot format restores with a null url (`PlaylistSnapshotCodec.decodeV1`), and that null was
+  taken to mean "nothing to re-fetch": Home hides its refresh button and `refreshPlaylist()` had
+  nothing to work from, so the only way back to a live copy was deleting the source and pasting the
+  url in again - even though the url was sitting in the saved `PlaylistSource` the whole time. It is
+  now read from there. A file import keeps its null, which is the one case where the field genuinely
+  means what it said.
+
 ### Fixed - UI
 
 - **The "Preparing your channels…" banner covered the screen title while it was showing.** It was an
@@ -102,6 +136,17 @@ version, and the local player's behaviour during a remote cast changed.
   Scaffold measures it and the content gets the remaining height - the banner pushes rather than
   covers. It expands and shrinks instead of sliding, since an animation that only moved the banner
   would leave the content below it jumping to its new position in a single frame.
+- **Picture-in-Picture always used a 16:9 window**, whatever the channel actually was - so 4:3 SD
+  channels, of which a Ukrainian playlist has plenty, played letterboxed inside an already-small
+  floating window. The ratio now comes from the decoded video, including its *pixel* aspect ratio:
+  broadcast SD is routinely anamorphic (720x576 samples carrying a 4:3 picture), so the sample
+  dimensions alone would describe a shape the viewer never sees. It is clamped into the 1:2.39..2.39:1
+  range Android accepts, which also means a corrupt reported size can no longer crash the app on the
+  PiP button.
+- **PiP is now entered by gesturing home**, not only from the button, and animates out of the video
+  rather than cross-fading from nowhere (`setAutoEnterEnabled` + `setSourceRectHint`, API 31+). Only
+  while a channel is actually playing in fullscreen - auto-entering PiP for a paused, errored or
+  cast-only player would put an empty window on screen.
 
 ### Fixed - data
 

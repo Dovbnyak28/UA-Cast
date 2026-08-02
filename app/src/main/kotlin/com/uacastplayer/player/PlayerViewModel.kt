@@ -14,6 +14,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -186,6 +187,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
         override fun onTracksChanged(tracks: Tracks) {
             updateBadgesAndTrackLists(tracks)
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            _uiState.update { it.copy(videoSize = videoSize) }
         }
     }
 

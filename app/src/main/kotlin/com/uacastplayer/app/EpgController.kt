@@ -43,6 +43,10 @@ class EpgController(
      * called once from AppViewModel.init. */
     fun loadInitial() {
         scope.launch {
+            // Before anything else, and regardless of whether this run downloads at all: a process
+            // killed mid-download or mid-parse leaves a full feed behind in filesDir, where nothing
+            // reclaims it. See EpgRepository.deleteStaleDownloads.
+            epgRepository.deleteStaleDownloads()
             val restored = epgRepository.restoreSnapshot()
             if (restored != null) {
                 applyEpgOutcome(restored)

@@ -41,12 +41,15 @@ class PlaylistUrlLoader(private val client: OkHttpClient) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return PlaylistLoadResult.HttpError(response.code)
                 val body = response.body ?: return PlaylistLoadResult.HttpError(response.code)
-                // An explicit charset in the response's own Content-Type is authoritative - only
-                // fall back to sniffing the bytes (see CharsetDetector) when the server didn't say.
+                // The Content-Type charset is passed to CharsetDetector as a hint, NOT used directly.
+                // It used to be treated as authoritative, and IPTV panels are wrong about it often
+                // enough to matter: a body that is really UTF-8 served as `charset=windows-1251`
+                // turned every Cyrillic channel name into mojibake. See CharsetDetector.detect's
+                // second overload for the precedence and why the bytes get to overrule the server.
                 val declaredCharset = body.contentType()?.charset()
                 when (val bounded = BoundedTextReader.readBytes(body.byteStream(), MAX_PLAYLIST_BYTES)) {
                     is BoundedBytesResult.Success -> {
-                        val charset = declaredCharset ?: CharsetDetector.detect(bounded.bytes)
+                        val charset = CharsetDetector.detect(bounded.bytes, declaredCharset)
                         PlaylistLoadResult.Success(String(bounded.bytes, charset))
                     }
                     BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded

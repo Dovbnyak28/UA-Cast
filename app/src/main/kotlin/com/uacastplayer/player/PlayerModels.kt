@@ -1,6 +1,7 @@
 package com.uacastplayer.player
 
 import androidx.media3.common.TrackGroup
+import androidx.media3.common.VideoSize
 import com.uacastplayer.cast.CastCompatibilityVerdict
 import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.data.prefs.PlayerResizeMode
@@ -42,6 +43,16 @@ data class PlayerUiState(
     val isBuffering: Boolean = true,
     val isPlaying: Boolean = false,
     val badges: PlaybackBadgesState = PlaybackBadgesState(),
+    /** The decoded video's dimensions *and* pixel aspect ratio, straight from
+     * [androidx.media3.common.Player.Listener.onVideoSizeChanged].
+     *
+     * Deliberately not derived from [badges], which carries the selected track's declared width and
+     * height but no pixel aspect: broadcast SD is routinely anamorphic (720x576 samples showing a
+     * 4:3 picture), so those two numbers alone describe a shape the viewer never sees. Consumed by
+     * Picture-in-Picture, which has to size a real window - see
+     * [com.uacastplayer.ui.player.PipController.aspectRatioFor]. [VideoSize.UNKNOWN] until the first
+     * frame is decoded, and for audio-only channels. */
+    val videoSize: VideoSize = VideoSize.UNKNOWN,
     val nextChannelsPreview: List<IndexedChannel> = emptyList(),
     val audioTracks: List<SelectableTrack> = emptyList(),
     val textTracks: List<SelectableTrack> = emptyList(),

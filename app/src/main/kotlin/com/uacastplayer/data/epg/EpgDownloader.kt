@@ -1,5 +1,6 @@
 package com.uacastplayer.data.epg
 
+import androidx.annotation.VisibleForTesting
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedFileCopyResult
 import com.uacastplayer.playlist.HttpRetryPolicy
@@ -29,6 +30,7 @@ sealed class EpgDownloadResult {
 class EpgDownloader(private val client: OkHttpClient, private val tempDir: File) {
 
     suspend fun download(url: String): EpgDownloadResult = withContext(Dispatchers.IO) {
+        deleteStaleDownloads()
         var attempt = 0
         var result: EpgDownloadResult
         do {
@@ -37,6 +39,33 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
             result = attemptOnce(url)
         } while (isRetryable(result, attempt))
         result
+    }
+
+    /**
+     * Deletes temp files left behind by a previous run.
+     *
+     * Every path through this class and its caller deletes its own file - but none of that runs when
+     * the *process* dies mid-download or mid-parse, and an EPG parse is exactly where this app has
+     * been killed before (see the OutOfMemoryError entry in CHANGELOG 0.3.0). Nothing else ever swept
+     * them up, and because these live in `filesDir` rather than the cache directory, Android will
+     * never reclaim them either: found on a real device as **13 orphaned files totalling ~500MB**, on
+     * an app whose entire storage footprint was 523MB. One force-stop during a download is enough to
+     * strand another 46MB permanently.
+     *
+     * Age-gated exactly like [com.uacastplayer.data.icons.IconDiskCache]'s equivalent sweep, so a
+     * file another download is still writing into can never be pulled out from under it - the one
+     * created moments from now is far newer than the cutoff.
+     */
+    @VisibleForTesting
+    internal fun deleteStaleDownloads() {
+        val cutoff = System.currentTimeMillis() - STALE_DOWNLOAD_AGE_MILLIS
+        val stale = tempDir.listFiles { file ->
+            file.isFile && file.name.startsWith(TEMP_PREFIX) && file.name.endsWith(TEMP_SUFFIX) &&
+                file.lastModified() < cutoff
+        } ?: return
+        for (file in stale) {
+            runCatching { file.delete() }
+        }
     }
 
     private fun isRetryable(result: EpgDownloadResult, attempt: Int): Boolean = when (result) {
@@ -55,7 +84,7 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return EpgDownloadResult.HttpError(response.code)
                 val body = response.body ?: return EpgDownloadResult.HttpError(response.code)
-                val file = File.createTempFile("epg_download_", ".tmp", tempDir)
+                val file = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, tempDir)
                 tempFile = file
                 when (BoundedByteReader.copyToFile(body.byteStream(), file, MAX_EPG_BYTES)) {
                     is BoundedFileCopyResult.Success -> EpgDownloadResult.Success(file)
@@ -76,5 +105,16 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
 
     companion object {
         const val MAX_EPG_BYTES = 96 * 1024 * 1024
+
+        @VisibleForTesting
+        internal const val TEMP_PREFIX = "epg_download_"
+
+        @VisibleForTesting
+        internal const val TEMP_SUFFIX = ".tmp"
+
+        /** Generous next to the seconds-to-a-minute a real feed download takes, so the sweep can
+         * never delete a file another download is still writing into. */
+        @VisibleForTesting
+        internal const val STALE_DOWNLOAD_AGE_MILLIS = 60L * 60L * 1000L
     }
 }

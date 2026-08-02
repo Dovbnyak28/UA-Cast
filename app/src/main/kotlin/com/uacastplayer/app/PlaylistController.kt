@@ -172,9 +172,12 @@ class PlaylistController(
 
     /** Re-downloads the active playlist from its saved URL - a no-op if it came from a file
      * import (nothing to re-fetch) or nothing has loaded yet. Deliberately doesn't touch
-     * [pendingNewSource]: this reloads the *existing* active source, it doesn't add a new one. */
+     * [pendingNewSource]: this reloads the *existing* active source, it doesn't add a new one.
+     *
+     * Falls back to the saved source's own location for the same reason as [withKnownSourceUrl] -
+     * so a playlist restored from an old cache snapshot is still refreshable. */
     fun refreshPlaylist() {
-        playlistState.value.sourceUrl?.let(::startUrlLoad)
+        (playlistState.value.sourceUrl ?: activeUrlSourceLocation())?.let(::startUrlLoad)
     }
 
     /** Switches to an already-saved source (see Home's source-switcher bottom sheet) - shows its
@@ -246,7 +249,32 @@ class PlaylistController(
         }
     }
 
-    private suspend fun applyPlaylistOutcome(outcome: PlaylistOutcome, fromCache: Boolean = false) {
+    /**
+     * Restores [PlaylistOutcome.Loaded.sourceUrl] from the saved [PlaylistSource] when the outcome
+     * itself doesn't carry one.
+     *
+     * A snapshot written by the pre-`sourceUrl` cache format restores with null (see
+     * `PlaylistSnapshotCodec.decodeV1`), and that left the playlist with no way to be refreshed at
+     * all: Home hides its refresh button when there is no url, and [refreshPlaylist] had nothing to
+     * re-fetch from - so the only way back to a live copy was deleting the source and pasting the
+     * url in again. The url was in the saved source the whole time; this just consults it.
+     *
+     * A FILE source keeps its null, which is the one case where the field genuinely means "there is
+     * nothing to re-fetch" rather than "we forgot".
+     */
+    private fun PlaylistOutcome.withKnownSourceUrl(): PlaylistOutcome =
+        if (this !is PlaylistOutcome.Loaded || sourceUrl != null) {
+            this
+        } else {
+            copy(sourceUrl = activeUrlSourceLocation())
+        }
+
+    private fun activeUrlSourceLocation(): String? = _playlistSources.value
+        .firstOrNull { it.id == _activePlaylistSourceId.value && it.type != PlaylistSourceType.FILE }
+        ?.location
+
+    private suspend fun applyPlaylistOutcome(rawOutcome: PlaylistOutcome, fromCache: Boolean = false) {
+        val outcome = rawOutcome.withKnownSourceUrl()
         if (outcome is PlaylistOutcome.Loaded) {
             // Off the main thread: `scope` is the ViewModel's (Dispatchers.Main.immediate), and
             // this flattens every group of a playlist that routinely runs to tens of thousands of
