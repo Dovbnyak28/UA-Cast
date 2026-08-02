@@ -193,6 +193,27 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   See `docs/SCREENSHOT_TESTING.md`, including why CI enforcement is a separate decision.
 - `testOptions.unitTests.isIncludeAndroidResources` is now `true`, which screenshot tests require.
   All 847 unit tests pass with it on.
+- **The instrumented lifecycle suite passes again - all 6, up from 1.** Three failures shared one
+  cause and one had its own:
+  - `FakeOriginServer` serves bytes no decoder accepts (these tests are about the player's
+    *lifecycle*, not decoding), so every channel fails fatally. With auto-skip on that is not a
+    static failure to assert against: the player marks the channel dead and advances, so a test that
+    opened "Channel 1" found itself on "Channel 3", and once all three were exhausted there was no
+    player left to inspect. The fixture now turns auto-skip off - before the player is opened, since
+    `PlayerViewModel` reads the flag once at construction - and restores it afterwards.
+  - The channel-switch test looked up "Next" by content description, which only the *fullscreen*
+    overlay uses; the player opens inline, where the same control is a `PillButton` exposing its
+    label as text with `contentDescription = null`. The lookup could never have matched from that
+    state, and failed as "could not find any node" - indistinguishable from the player being gone.
+  - The mini/fullscreen test pressed system back and nothing happened, because the search field
+    still had focus behind the player and **the IME swallows the back key to dismiss itself** before
+    the app's `BackHandler` ever runs. The helper now closes the keyboard after opening a channel.
+- **The suite no longer destroys the data of whoever it runs against.** `EmptyPlaylistInstrumentedTest`
+  clears `uacast_prefs` and every playlist file to get a genuinely fresh start, and never put any of
+  it back - on a developer's phone that is the same install they actually watch TV on, so it deleted
+  their configured playlist, EPG source and settings for real. It happened twice during this suite's
+  own repair. The state is now captured before the wipe and restored in `@After`, pass or fail, using
+  the same predicate the wipe deletes by so the two cannot drift apart.
 - **The banner overlap above is covered by a layout assertion, not a golden image.** `RootTopBar`
   was extracted from `RootScaffold`'s `topBar` lambda so it can be composed on its own (the whole
   scaffold would mean supplying sixty-odd parameters), and `RootTopBarLayoutTest` asserts the

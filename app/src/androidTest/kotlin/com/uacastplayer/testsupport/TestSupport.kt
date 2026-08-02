@@ -1,5 +1,6 @@
 package com.uacastplayer.testsupport
 
+import android.content.Context
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -10,10 +11,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.uacastplayer.AppViewModel
 import com.uacastplayer.MainActivity
 import com.uacastplayer.R
+import com.uacastplayer.data.prefs.AppPreferences
 
 private typealias MainActivityComposeRule = AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
 
@@ -40,6 +43,31 @@ fun skipOnboarding(activity: MainActivity) {
     viewModel.selectLanguage(viewModel.uiState.value.language)
     viewModel.acceptTerms()
     viewModel.completeOnboarding()
+}
+
+/**
+ * Turns the "skip dead channels" setting off (or back on), returning what it was before so a test
+ * can restore it.
+ *
+ * [FakeOriginServer] deliberately serves bytes no decoder accepts - these tests are about the
+ * player's *lifecycle*, not about decoding - so every channel fails fatally within a second or two.
+ * With auto-skip on, that is not a static failure to assert against: `giveUpOnCurrentChannel()`
+ * marks the channel dead and advances to the next playable one, so a test that opened "Channel 1"
+ * finds itself on "Channel 3", and once all three are exhausted there is no player left to inspect
+ * at all. Switching it off keeps the player parked on the channel the test opened, which is the
+ * precondition every assertion here was written against.
+ *
+ * Goes through [AppPreferences] rather than the Activity's view model because [PlayerViewModel]
+ * reads the flag once, when it is constructed - so this has to be in place *before* the player is
+ * opened - and because restoring it in `@After` must work whether or not the Activity is still
+ * alive. It is a real, persisted user setting on the device the suite runs against, hence the
+ * restore rather than a blind write.
+ */
+fun setAutoSkipDeadChannels(context: Context, enabled: Boolean): Boolean {
+    val preferences = AppPreferences(context.applicationContext)
+    val previous = preferences.autoSkipDeadEnabled
+    preferences.autoSkipDeadEnabled = enabled
+    return previous
 }
 
 /** Starts loading channels from [server] the same way AddPlaylistScreen's URL field would,
@@ -91,6 +119,14 @@ fun MainActivityComposeRule.openChannelViaSearch(channelName: String) {
     waitForIdle()
     onNodeWithText(activity.getString(R.string.channels_search_all_hint)).performTextInput(channelName)
     tapChannelRow(channelName)
+    // The search field keeps focus behind the player, so the soft keyboard is still up once this
+    // returns. That matters to any test that presses system back afterwards: Android gives the back
+    // key to the IME first, which swallows it to dismiss itself, and the app's own BackHandler never
+    // runs. The symptom is a back press that appears to do nothing at all - the player stays
+    // expanded and a test looking for the collapsed mini bar fails with "could not find any node",
+    // which reads like the mini bar being broken rather than like the key never arriving.
+    Espresso.closeSoftKeyboard()
+    waitForIdle()
 }
 
 /**

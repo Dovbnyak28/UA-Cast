@@ -9,11 +9,13 @@ import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.uacastplayer.MainActivity
 import com.uacastplayer.R
 import com.uacastplayer.testsupport.FakeOriginServer
 import com.uacastplayer.testsupport.loadTestPlaylist
 import com.uacastplayer.testsupport.openChannelViaSearch
+import com.uacastplayer.testsupport.setAutoSkipDeadChannels
 import com.uacastplayer.testsupport.skipOnboarding
 import com.uacastplayer.testsupport.tapChannelRow
 import com.uacastplayer.testsupport.waitForChannelsLoaded
@@ -43,9 +45,16 @@ class PlayerLifecycleInstrumentedTest {
     val composeTestRule = createAndroidComposeRule<MainActivity>()
 
     private lateinit var server: FakeOriginServer
+    private var previousAutoSkip: Boolean = true
 
     @Before
     fun setUp() {
+        // Before the player is ever opened - see setAutoSkipDeadChannels for why these tests cannot
+        // run with auto-skip on, and why PlayerViewModel has to be constructed after this.
+        previousAutoSkip = setAutoSkipDeadChannels(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            enabled = false,
+        )
         server = FakeOriginServer.startWithChannels(channelCount = 3)
         composeTestRule.activityRule.scenario.onActivity { activity ->
             skipOnboarding(activity)
@@ -58,6 +67,8 @@ class PlayerLifecycleInstrumentedTest {
     @After
     fun tearDown() {
         server.shutdown()
+        // A real, persisted setting on whatever device this ran against - put it back.
+        setAutoSkipDeadChannels(InstrumentationRegistry.getInstrumentation().targetContext, previousAutoSkip)
     }
 
     private fun backButton(): SemanticsNodeInteraction =
@@ -131,13 +142,22 @@ class PlayerLifecycleInstrumentedTest {
         assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
     }
 
-    /** Scenario 4: rapid channel switching must reuse the one player, never spin up another one,
-     * and never throw. */
+    /**
+     * Scenario 4: rapid channel switching must reuse the one player, never spin up another one,
+     * and never throw.
+     *
+     * Matched by *text*, not by content description: the player opens inline, and the inline
+     * transport row is a `PillButton` whose label is a Text with `contentDescription = null` on its
+     * icons. Only the fullscreen overlay's `RoundIconButton` carries "Next" as a content
+     * description, so the original lookup could never have matched from this state - it failed with
+     * "could not find any node", which reads like the player being gone rather than like the wrong
+     * matcher.
+     */
     @Test
     fun tenChannelSwitches_reuseSingleInstanceWithoutThrowing() {
         val nextLabel = composeTestRule.activity.getString(R.string.player_next)
         repeat(10) {
-            composeTestRule.onNodeWithContentDescription(nextLabel).performClick()
+            composeTestRule.onNodeWithText(nextLabel).performClick()
             composeTestRule.waitForIdle()
             Thread.sleep(SWITCH_SETTLE_MILLIS) // let PlayerViewModel's switch debounce (220ms) resolve
         }
