@@ -127,6 +127,7 @@
     <string name="epg_source_perfect_player">Perfect Player</string>
     <string name="epg_source_rect_transparent_simple">Simplified: rectangular</string>
     <string name="epg_source_square_dark_simple">Simplified: square</string>
+    <string name="settings_epg_truncated">This guide is larger than the app can hold, so the last channels in it have no programmes. Try a simplified source above.</string>
     <string name="settings_epg_suggestion_hint">An EPG address was found in the playlist</string>
     <string name="settings_epg_suggestion_action">Use</string>
     <string name="settings_detail_level_label">Detail level</string>

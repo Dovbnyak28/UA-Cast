@@ -129,6 +129,7 @@
     <string name="epg_source_perfect_player">Perfect Player</string>
     <string name="epg_source_rect_transparent_simple">Simplificado: rectangular</string>
     <string name="epg_source_square_dark_simple">Simplificado: cuadrado</string>
+    <string name="settings_epg_truncated">Esta guía es más grande de lo que la aplicación puede almacenar, así que los últimos canales se quedaron sin programación. Prueba una fuente simplificada de las de arriba.</string>
     <string name="settings_epg_suggestion_hint">Se encontró una dirección de EPG en la lista de canales</string>
     <string name="settings_epg_suggestion_action">Usar</string>
     <string name="settings_detail_level_label">Nivel de detalle</string>

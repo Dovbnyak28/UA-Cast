@@ -131,6 +131,7 @@
     <string name="epg_source_perfect_player">Perfect Player</string>
     <string name="epg_source_rect_transparent_simple">Упрощённый: прямоугольные</string>
     <string name="epg_source_square_dark_simple">Упрощённый: квадратные</string>
+    <string name="settings_epg_truncated">Эта телепрограмма больше, чем приложение может вместить, поэтому последние каналы в ней остались без передач. Попробуйте упрощённый источник выше.</string>
     <string name="settings_epg_suggestion_hint">В плейлисте найден адрес EPG</string>
     <string name="settings_epg_suggestion_action">Использовать</string>
     <string name="settings_detail_level_label">Уровень детализации</string>

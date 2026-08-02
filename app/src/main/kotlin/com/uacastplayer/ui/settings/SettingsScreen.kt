@@ -94,6 +94,10 @@ fun SettingsScreen(
     currentEpgSource: EpgSource,
     onEpgSourceSelected: (EpgSource) -> Unit,
     suggestedEpgUrl: String?,
+    /** The loaded guide hit [com.uacastplayer.epg.XmlTvParser]'s caps and was cut short - see
+     * [com.uacastplayer.epg.EpgTruncation]. Shown here rather than on Home because the actionable
+     * response is right above it: pick a smaller source. */
+    epgTruncated: Boolean,
     onUseSuggestedEpgUrl: () -> Unit,
     iconWifiOnly: Boolean,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
@@ -161,6 +165,9 @@ fun SettingsScreen(
                         onClick = { onEpgSourceSelected(source) },
                     )
                 }
+            }
+            if (epgTruncated) {
+                EpgTruncatedRow()
             }
             if (suggestedEpgUrl != null) {
                 EpgSuggestionRow(onUseSuggestedEpgUrl)
@@ -762,6 +769,19 @@ private fun EpgSuggestionRow(onUse: () -> Unit) {
         )
         SecondaryButton(text = stringResource(R.string.settings_epg_suggestion_action), onClick = onUse)
     }
+}
+
+/** Warns that the guide was cut off at the parser's cap. Deliberately plain text rather than a
+ * dismissible banner: it is a standing property of the chosen source, not an event, so it should
+ * stay visible for as long as that source is selected. */
+@Composable
+private fun EpgTruncatedRow() {
+    Text(
+        text = stringResource(R.string.settings_epg_truncated),
+        style = Caption,
+        color = UaTheme.palette.amberGlow,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
 }
 
 @Composable

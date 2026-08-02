@@ -275,6 +275,7 @@ fun RootScaffold(
                     currentEpgSource = epgState.selectedSource,
                     onEpgSourceSelected = onEpgSourceSelected,
                     suggestedEpgUrl = epgState.suggestedUrl,
+                    epgTruncated = epgState.data?.truncation?.any == true,
                     onUseSuggestedEpgUrl = onUseSuggestedEpgUrl,
                     iconWifiOnly = iconPrefetchState.wifiOnly,
                     onIconWifiOnlyChanged = onIconWifiOnlyChanged,

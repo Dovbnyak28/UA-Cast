@@ -4,13 +4,14 @@ import android.content.Context
 import com.uacastplayer.core.io.GzipSniffer
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.security.Fingerprint
+import com.uacastplayer.epg.DecodedEpgSnapshot
 import com.uacastplayer.epg.EpgData
 import com.uacastplayer.epg.EpgIndex
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.epg.EpgTruncation
 import com.uacastplayer.epg.XmlTvParseResult
 import com.uacastplayer.epg.XmlTvParser
 import com.uacastplayer.log.AppLog
-import java.io.File
 import java.io.InputStream
 import java.io.PushbackInputStream
 import java.util.zip.GZIPInputStream
@@ -46,7 +47,7 @@ class EpgRepository(context: Context) {
                     val data = withContext(Dispatchers.Default) {
                         result.documentFile.inputStream().use { buildEpgData(parseDocument(it)) }
                     }
-                    persist(url, result.documentFile)
+                    persist(Fingerprint.of(url), data)
                     EpgOutcome.Loaded(data)
                 } finally {
                     result.documentFile.delete()
@@ -72,24 +73,43 @@ class EpgRepository(context: Context) {
     // fall back to null - the caller re-fetches live - not crash startup over stale disk state.
     @Suppress("TooGenericExceptionCaught")
     suspend fun restoreSnapshot(): EpgOutcome? {
-        val documentStream = snapshotStore.openDocumentStream() ?: return null
+        val snapshot = snapshotStore.open() ?: return null
         return try {
-            documentStream.use {
-                val data = withContext(Dispatchers.Default) { buildEpgData(parseDocument(it)) }
-                EpgOutcome.Loaded(data)
+            when (snapshot) {
+                is DecodedEpgSnapshot.Parsed -> EpgOutcome.Loaded(snapshot.data)
+                is DecodedEpgSnapshot.Document -> EpgOutcome.Loaded(upgradeFromDocument(snapshot))
             }
         } catch (e: Exception) {
-            AppLog.w(TAG) { "Failed to parse cached EPG snapshot: ${e.javaClass.simpleName}" }
+            AppLog.w(TAG) { "Failed to read cached EPG snapshot: ${e.javaClass.simpleName}" }
             null
         }
+    }
+
+    /**
+     * Reads a snapshot written by an older version, which stored the raw XMLTV document, and
+     * rewrites it in the parsed form straight away.
+     *
+     * This is the slow path the format change exists to eliminate - on a real device against a real
+     * feed it took 53 seconds of background CPU, against 6.6s for the parsed format. Paying it once,
+     * on the first launch after the upgrade, is still far better than discarding a guide the user
+     * already has, which would leave them with no EPG at all until a fresh download finished -
+     * offline or not.
+     */
+    private suspend fun upgradeFromDocument(snapshot: DecodedEpgSnapshot.Document): EpgData {
+        val data = snapshot.documentStream.use { stream ->
+            withContext(Dispatchers.Default) { buildEpgData(parseDocument(stream)) }
+        }
+        AppLog.w(TAG) { "Upgraded EPG snapshot from the document format; this happens once" }
+        persist(snapshot.header.sourceFingerprint, data)
+        return data
     }
 
     // Best-effort cache write: the EPG data this session already loaded is usable either way,
     // so any persist failure (disk full, I/O error) should just skip the cache, not fail the load.
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun persist(url: String, documentFile: File) {
+    private suspend fun persist(sourceFingerprint: String, data: EpgData) {
         try {
-            snapshotStore.save(Fingerprint.of(url), System.currentTimeMillis(), documentFile)
+            snapshotStore.save(sourceFingerprint, System.currentTimeMillis(), data)
         } catch (e: Exception) {
             AppLog.w(TAG) { "Failed to persist EPG snapshot: ${e.javaClass.simpleName}" }
         }
@@ -110,6 +130,16 @@ class EpgRepository(context: Context) {
         val programmesByChannel = parsed.programmes
             .groupBy { it.channelId }
             .mapValues { (_, programmes) -> programmes.sortedBy { it.startMillis } }
-        return EpgData(EpgIndex(parsed.channels), programmesByChannel)
+        val truncation = EpgTruncation(
+            channelsDropped = parsed.channelLimitExceeded,
+            programmesDropped = parsed.programmeLimitExceeded,
+        )
+        if (truncation.any) {
+            AppLog.w(TAG) {
+                "EPG feed exceeded the parser's caps and was cut short " +
+                    "(channels=${parsed.channelLimitExceeded}, programmes=${parsed.programmeLimitExceeded})"
+            }
+        }
+        return EpgData(EpgIndex(parsed.channels), programmesByChannel, truncation)
     }
 }

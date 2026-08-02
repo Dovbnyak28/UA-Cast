@@ -49,3 +49,48 @@ likely to be seen soon (favorites, last-watched, first group - see its doc comme
 entirely while something is actually playing/casting (`PlaybackActivity`), and skipped altogether on
 `DeviceTier.LOW_END`. Anything outside that selection still gets its icon lazily, one row at a time,
 the first time it's actually scrolled into view - that path was already correct.
+
+## The EPG snapshot no longer stores XML
+
+Measured on a Mi A2 (API 30) against a real 500-channel Ukrainian feed, restoring the cached guide
+took **53 seconds** of background CPU on every cold start:
+
+```
+PROBE restoreSnapshot took 53007ms, 676 channels, 250000 programmes
+```
+
+The cache held the raw XMLTV document as downloaded - 44.9MB - so every launch re-inflated and
+re-parsed all of it to rebuild data the app had already had the previous time. Nothing read the raw
+XML any more: `<desc>` was dropped from `EpgProgramme` precisely because nothing displayed it, so the
+document was being carried at full price for no reader.
+
+`EpgSnapshotCodec` v2 stores the parsed guide instead. Same device, same feed, same 676 channels and
+250,000 programmes:
+
+| | v1 (XMLTV document) | v2 (parsed) |
+|---|---|---|
+| snapshot on disk | 44.9 MB | **14.1 MB** |
+| restore | 53.0 s | **6.6 s** |
+
+The layout leans on the shape the data already has: programmes are grouped by channel id, so the id
+is written once per group rather than once per programme, and on decode every programme in a group
+shares that one `String` instance - the same channel-id pooling the in-memory representation relies
+on, preserved across the file instead of rebuilt on load.
+
+v1 snapshots stay readable, parsed once and immediately rewritten as v2, so upgrading does not throw
+away a guide the user already has. That one launch still pays the 53 seconds; every launch after it
+pays 6.6.
+
+`EpgSnapshotSizeTest` guards the decode-vs-parse margin. It deliberately asserts **nothing about file
+size**: synthetic titles are near-identical, so gzip crushes a generated XMLTV document about
+eighteenfold (41KB against 737KB for the binary) and such a test measures the fixture, not the
+format. What actually shrinks a real file is dropping `<desc>`, which no honest synthetic fixture
+here reproduces - hence the end-to-end device measurement above.
+
+### Note the caps while you are here
+
+That feed hits `XmlTvParser.MAX_PROGRAMMES` (250,000) *exactly*, which is not a coincidence - it is
+being cut off. XMLTV is normally ordered by channel, so the cap does not thin the guide out evenly,
+it leaves the last channels in the file with nothing. The parser had always computed
+`programmeLimitExceeded` and nothing anywhere read it; it now reaches `EpgData.truncation`, gets
+logged, and is shown in Settings under the source picker.

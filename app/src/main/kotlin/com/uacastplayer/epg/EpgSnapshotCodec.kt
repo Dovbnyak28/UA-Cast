@@ -8,42 +8,92 @@ import java.io.InputStream
 import java.io.OutputStream
 
 /**
- * [documentStream] is [input] itself, left positioned right after the header so callers can read
- * the payload straight off it (there is nothing else in the file after the payload, so reading
- * until EOF is safe) without this codec ever buffering the document in memory.
+ * What came back off disk: either the parsed guide (v2, the format written today) or the raw XMLTV
+ * document a previous version cached (v1).
  */
-data class DecodedEpgSnapshot(
-    val header: EpgSnapshotHeader,
-    val documentStream: InputStream,
-)
+sealed class DecodedEpgSnapshot {
+    abstract val header: EpgSnapshotHeader
+
+    /** Ready to use as-is - no XML, no gzip, no parse. */
+    data class Parsed(override val header: EpgSnapshotHeader, val data: EpgData) : DecodedEpgSnapshot()
+
+    /**
+     * A v1 snapshot. [documentStream] is the decode input itself, left positioned right after the
+     * header so the caller can parse straight off it (nothing follows the payload, so reading to
+     * EOF is safe) without this codec ever buffering the document. The caller closes it.
+     */
+    data class Document(
+        override val header: EpgSnapshotHeader,
+        val documentStream: InputStream,
+    ) : DecodedEpgSnapshot()
+}
 
 /**
- * Versioned binary (de)serializer for an [EpgSnapshotHeader] plus its document payload. The
- * payload is streamed directly between [documentStream]/[output] rather than buffered as a
- * ByteArray - EPG documents can run tens of megabytes.
+ * Versioned binary (de)serializer for the cached EPG.
+ *
+ * **v2 stores the parsed guide; v1 stored the raw XMLTV document.** That change is the whole point
+ * of the format bump. Keeping the document meant every cold start re-inflated and re-parsed it to
+ * rebuild data the app had already had the previous time: measured on a real device against a real
+ * feed, restoring a 44.9MB snapshot took **53 seconds** of background CPU to produce 676 channels
+ * and 250,000 programmes. Nothing reads the raw XML any more - `<desc>` was dropped from
+ * [EpgProgramme] precisely because nothing ever displayed it - so the document was being carried at
+ * full price for no reader.
+ *
+ * The layout leans on the shape the data already has: programmes are grouped by channel id, so each
+ * id is written once per group rather than once per programme, and on decode every programme in a
+ * group shares that one [String] instance. That is the same channel-id pooling the in-memory
+ * representation relies on, preserved across the file rather than rebuilt on load.
+ *
+ * v1 is still readable so that upgrading does not throw away a guide the user already has - it is
+ * parsed exactly as before, once, and [com.uacastplayer.data.epg.EpgRepository] immediately
+ * rewrites it as v2 so that penalty is paid on one launch and never again.
  */
 object EpgSnapshotCodec {
 
-    private const val FORMAT_VERSION = 1
-    private const val COPY_BUFFER_SIZE = 8192
+    private const val FORMAT_VERSION = 2
+    private const val FORMAT_VERSION_1 = 1
 
-    fun encode(header: EpgSnapshotHeader, documentStream: InputStream, documentLength: Long, output: OutputStream) {
+    fun encode(header: EpgSnapshotHeader, data: EpgData, output: OutputStream) {
         val out = DataOutputStream(output)
         out.writeInt(FORMAT_VERSION)
         out.writeUTF(header.sourceFingerprint)
         out.writeLong(header.savedAtEpochMillis)
-        out.writeLong(documentLength)
+        out.writeBoolean(data.truncation.channelsDropped)
+        out.writeBoolean(data.truncation.programmesDropped)
+
+        out.writeInt(data.index.channels.size)
+        for (channel in data.index.channels) {
+            out.writeUTF(channel.id)
+            out.writeInt(channel.displayNames.size)
+            for (name in channel.displayNames) out.writeUTF(name)
+            out.writeNullableUTF(channel.iconUrl)
+        }
+
+        out.writeInt(data.programmesByChannelId.size)
+        for ((channelId, programmes) in data.programmesByChannelId) {
+            // Written once for the whole group - the per-programme channelId is implied by it, and
+            // is what the decoder hands back to every programme in the group as one shared String.
+            out.writeUTF(channelId)
+            out.writeInt(programmes.size)
+            for (programme in programmes) {
+                out.writeLong(programme.startMillis)
+                out.writeLong(programme.stopMillis)
+                out.writeUTF(programme.title)
+            }
+        }
         out.flush()
-        documentStream.copyTo(output, COPY_BUFFER_SIZE)
-        output.flush()
     }
 
-    /** Decodes the header from [input] and returns it still attached to [input] for the payload - see [DecodedEpgSnapshot]. */
-    fun decodeHeader(input: InputStream): DecodedEpgSnapshot? {
+    /**
+     * Reads whichever format is on disk. A v1 result stays attached to [input] for its payload, so
+     * the caller must close it; a v2 result has consumed everything it needs.
+     */
+    fun decode(input: InputStream): DecodedEpgSnapshot? {
         return try {
             val in_ = DataInputStream(input)
             when (in_.readInt()) {
-                FORMAT_VERSION -> decodeV1(in_, input)
+                FORMAT_VERSION -> decodeV2(in_)
+                FORMAT_VERSION_1 -> decodeV1(in_, input)
                 else -> null
             }
         } catch (_: EOFException) {
@@ -53,10 +103,56 @@ object EpgSnapshotCodec {
         }
     }
 
-    private fun decodeV1(input: DataInputStream, rawInput: InputStream): DecodedEpgSnapshot {
+    private fun decodeV2(input: DataInputStream): DecodedEpgSnapshot.Parsed {
+        val header = EpgSnapshotHeader(input.readUTF(), input.readLong())
+        val truncation = EpgTruncation(
+            channelsDropped = input.readBoolean(),
+            programmesDropped = input.readBoolean(),
+        )
+
+        val channelCount = input.readInt()
+        val channels = ArrayList<EpgChannel>(channelCount)
+        repeat(channelCount) {
+            val id = input.readUTF()
+            val displayNameCount = input.readInt()
+            val displayNames = ArrayList<String>(displayNameCount)
+            repeat(displayNameCount) { displayNames += input.readUTF() }
+            channels += EpgChannel(id, displayNames, input.readNullableUTF())
+        }
+
+        val groupCount = input.readInt()
+        val programmesByChannelId = LinkedHashMap<String, List<EpgProgramme>>(groupCount)
+        repeat(groupCount) {
+            val channelId = input.readUTF()
+            val programmeCount = input.readInt()
+            val programmes = ArrayList<EpgProgramme>(programmeCount)
+            repeat(programmeCount) {
+                programmes += EpgProgramme(
+                    // The group's own id instance, not a fresh read per programme - one String for
+                    // a channel's whole schedule instead of one per row.
+                    channelId = channelId,
+                    startMillis = input.readLong(),
+                    stopMillis = input.readLong(),
+                    title = input.readUTF(),
+                )
+            }
+            programmesByChannelId[channelId] = programmes
+        }
+
+        return DecodedEpgSnapshot.Parsed(header, EpgData(EpgIndex(channels), programmesByChannelId, truncation))
+    }
+
+    private fun decodeV1(input: DataInputStream, rawInput: InputStream): DecodedEpgSnapshot.Document {
         val sourceFingerprint = input.readUTF()
         val savedAtEpochMillis = input.readLong()
         input.readLong() // documentLength - unused; the payload runs to the stream's natural EOF.
-        return DecodedEpgSnapshot(EpgSnapshotHeader(sourceFingerprint, savedAtEpochMillis), rawInput)
+        return DecodedEpgSnapshot.Document(EpgSnapshotHeader(sourceFingerprint, savedAtEpochMillis), rawInput)
     }
+
+    private fun DataOutputStream.writeNullableUTF(value: String?) {
+        writeBoolean(value != null)
+        if (value != null) writeUTF(value)
+    }
+
+    private fun DataInputStream.readNullableUTF(): String? = if (readBoolean()) readUTF() else null
 }

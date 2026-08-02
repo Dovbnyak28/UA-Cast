@@ -13,9 +13,12 @@ data class EpgChannel(
  * the app ever read it: the guide sheet renders a title and a time and stops there. Holding it
  * pinned the heap at the 256MB growth limit and the process died of an OutOfMemoryError mid-parse.
  *
- * If descriptions are ever shown, they must not come back as a field on 250k retained rows. Read
- * them on demand from the cached document instead (see EpgSnapshotStore, which already keeps the
- * raw XML) so only the handful currently on screen are in memory.
+ * If descriptions are ever shown, they must not come back as a field on 250k retained rows - only
+ * the handful currently on screen belong in memory. Note that reading them on demand from the
+ * cached document is no longer an option: [EpgSnapshotCodec] v2 stores the *parsed* guide and the
+ * raw XML is not kept at all, because re-parsing it on every cold start cost 53 seconds. Fetching
+ * descriptions would mean going back to the network for them, or caching just that field
+ * separately.
  */
 data class EpgProgramme(
     val channelId: String,

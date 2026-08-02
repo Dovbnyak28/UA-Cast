@@ -6,7 +6,9 @@ import com.uacastplayer.playlist.M3uChannel
  * Resolves an M3U channel to its XMLTV [EpgChannel], trying progressively fuzzier signals:
  * exact tvg-id, then normalized tvg-id, then normalized tvg-name, then normalized display name.
  */
-class EpgIndex(epgChannels: List<EpgChannel>) {
+class EpgIndex(val channels: List<EpgChannel>) {
+
+    private val epgChannels = channels
 
     private val byExactId: Map<String, EpgChannel> = epgChannels.associateBy { it.id }
     private val byNormalizedId: Map<String, EpgChannel> =

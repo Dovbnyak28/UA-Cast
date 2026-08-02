@@ -93,6 +93,17 @@ version, and the local player's behaviour during a remote cast changed.
   enough. Writes now report failure instead of throwing; the in-memory state the caller already
   updated stays correct, so a lost write costs that one change at next launch.
 
+### Fixed - EPG
+
+- **The TV guide was being silently cut off.** `XmlTvParser` caps a feed at 250,000 programmes, and
+  a real 500-channel Ukrainian feed hits that *exactly* - XMLTV is normally ordered by channel, so
+  the cap does not thin the guide out evenly, it leaves the last channels in the file with no
+  programmes at all. The parser had computed `programmeLimitExceeded` since it was written and
+  **nothing anywhere read it**: the flag went into `XmlTvParseResult` and died there, the only
+  references outside the parser being two `assertFalse`s in its own test. It now reaches
+  `EpgData.truncation`, is logged, and is shown in Settings directly under the source picker - where
+  the actionable response, choosing a simplified source, already is.
+
 ### Fixed - storage
 
 - **Half a gigabyte of orphaned EPG downloads.** Every path through `EpgDownloader`/`EpgRepository`
@@ -257,6 +268,16 @@ desktop JVM.
   provider lookup and was ~75% of the cost for inputs this short.
 - **EPG memory:** channel ids are pooled, collapsing up to 250k duplicate strings into one per
   distinct channel. Dropping the unread `<desc>` (above) cut the rest by a further 75%.
+- **Restoring the cached TV guide: 53s → 6.6s, and 44.9MB → 14.1MB on disk.** Measured on a Mi A2
+  against a real feed, same 676 channels and 250,000 programmes both ways. The cache held the raw
+  XMLTV document as downloaded, so every single cold start re-inflated and re-parsed all 44.9MB of
+  it to rebuild data the app had already had the previous time - and nothing read the raw XML any
+  more, since `<desc>` was dropped from `EpgProgramme` precisely because nothing displayed it.
+  `EpgSnapshotCodec` v2 stores the parsed guide instead, laid out so each channel id is written once
+  per group rather than once per programme and every programme in a group shares that one `String`
+  on decode. Snapshots written by the previous version stay readable - parsed once, immediately
+  rewritten in the new format - so upgrading never discards a guide the user already has. See
+  `docs/PERFORMANCE.md`.
 - **XMLTV timestamps: 260µs → 49µs** per 500k parses, producing bit-identical results. This runs
   twice per programme, and each call was allocating a `GregorianCalendar` and looking up the UTC
   zone through `TimeZone.getTimeZone`, which is internally synchronized - the same field logcat
