@@ -12,12 +12,14 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.experimental.categories.Category
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -36,6 +38,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h891dp-xhdpi")
+@Category(RequiresComposeTestManifest::class)
 class RootTopBarLayoutTest {
 
     @get:Rule

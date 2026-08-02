@@ -88,18 +88,35 @@ Note API 36 requires **Java 21** (the provider records a required-JDK per SDK; A
 - `@Config(qualifiers = "w411dp-h891dp-xhdpi")` on the test class. Without a pinned surface,
   Robolectric picks its own screen size and density and any change to either rewrites every image.
 
-## Not yet decided: CI enforcement
+## CI enforcement
 
-`verifyRoborazziDebug` is **not** wired into `.github/workflows/android-ci.yml` yet, deliberately.
-The goldens in this repo were recorded on Windows; whether they are byte-identical on the Linux CI
-runner is unverified, and it cannot be verified from a dev machine. Robolectric renders through the
-Skia and fonts bundled in the `android-all` jar - the same artifact everywhere, which is the reason
-to expect stability - but antialiasing differences across platforms are a known failure mode for
-screenshot testing generally.
+Wired in. `.github/workflows/android-ci.yml` runs `:app:verifyRoborazziDebug` as its unit-test
+step - the task *is* `testDebugUnitTest` with verification switched on, so it covers the whole debug
+suite and the goldens in one pass rather than running the suite twice.
 
-Before adding the gate, run `verifyRoborazziDebug` once on a CI runner against these committed
-goldens. If it fails, the goldens have to be recorded on the CI image and this becomes a
-"regenerate on CI" workflow rather than a "regenerate locally" one.
+Two things had to change to make that possible:
+
+- **CI moved from JDK 17 to 21.** Robolectric records a required Java version per Android API level
+  and API 36 demands 21 (`DefaultSdkProvider`'s entry is `("16", "13921718", "REL", 21)`); on 17 every
+  Robolectric test refuses to start. The app is still compiled to Java 17 bytecode - this changes
+  what Gradle runs on, not what ships.
+- **`testReleaseUnitTest` skips the Compose-rule tests.** `createComposeRule()` launches
+  `androidx.activity.ComponentActivity`, declared only by `compose-ui-test-manifest`, which is a
+  `debugImplementation` dependency - so its manifest entry exists in the debug merged manifest and
+  nowhere else, and under the release variant these fail at rule setup with "Unable to resolve
+  activity for Intent ... ComponentActivity". They are excluded by JUnit category
+  (`RequiresComposeTestManifest`) rather than by class-name pattern, so moving or renaming a test
+  cannot quietly drop it back into the release run. Debug runs 868 tests, release 864 - the
+  difference is exactly those four.
+
+**The goldens were recorded on Windows and the runner is Linux.** That is still unverified: the
+first CI run is the experiment. Robolectric renders through the Skia and fonts bundled in the
+`android-all` jar - the same artifact everywhere, which is the reason to expect a match - but
+cross-platform antialiasing is a known failure mode for screenshot testing generally. If the step
+fails on a diff rather than a real regression, the workflow uploads `app/build/outputs/roborazzi`
+as the `roborazzi-screenshot-diffs` artifact (`*_compare.png` side-by-side, `*_actual.png` as
+rendered); compare, then re-record on the runner and this becomes a "regenerate on CI" workflow
+instead of a "regenerate locally" one.
 
 ## Whether it is worth it
 

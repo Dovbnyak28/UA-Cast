@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
@@ -15,6 +16,7 @@ import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.UaTheme
 import org.junit.Rule
 import org.junit.Test
+import org.junit.experimental.categories.Category
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -40,6 +42,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w411dp-h891dp-xhdpi")
+@Category(RequiresComposeTestManifest::class)
 class DesignSystemScreenshotTest {
 
     @get:Rule

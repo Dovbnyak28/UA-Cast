@@ -245,5 +245,8 @@ private fun sampleRateLabel(sampleRateHz: Int?): String? =
  * decimal place. */
 private fun formatKhz(hz: Int): String {
     val khz = hz / UNITS_PER_KILO.toFloat()
-    return if (khz == khz.toInt().toFloat()) khz.toInt().toString() else "%.1f".format(khz)
+    // An on-screen label in the track sheet, never parsed or persisted - so a locale's own decimal
+    // separator ("44,1" in uk or de) is the right thing to show here, not a defect to stamp out.
+    if (khz == khz.toInt().toFloat()) return khz.toInt().toString()
+    return "%.1f".format(khz) // locale-ok: human-read label only, see above
 }

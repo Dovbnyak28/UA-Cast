@@ -283,7 +283,30 @@ dependencies {
     robolectricSdk(libs.robolectric.android.all.instrumented)
 }
 
+/**
+ * Compose-rule tests can only run against the debug variant, so the release unit-test task skips
+ * them.
+ *
+ * `createComposeRule()` launches `androidx.activity.ComponentActivity`, declared solely by the
+ * `compose-ui-test-manifest` artifact - a `debugImplementation` dependency, since it exists to host
+ * tests and has no business in a release build. Its manifest entry is merged into the debug manifest
+ * only, so under `testReleaseUnitTest` these fail at rule setup with "Unable to resolve activity for
+ * Intent ... androidx.activity.ComponentActivity", which says nothing about variants and reads like
+ * a broken test. CI runs `verifyRoborazziDebug` (the whole debug suite plus golden verification), so
+ * nothing goes uncovered by excluding them here.
+ *
+ * By category rather than class-name pattern so renaming or moving a test cannot quietly drop it
+ * back into the release run - see [com.uacastplayer.testing.RequiresComposeTestManifest].
+ */
+private val composeTestManifestCategory = "com.uacastplayer.testing.RequiresComposeTestManifest"
+
 tasks.withType<Test>().configureEach {
+    // Matched by name inside this lazy block rather than tasks.named("testReleaseUnitTest"): AGP
+    // registers the per-variant test tasks itself, and they do not exist yet while this file is
+    // being evaluated.
+    if (name == "testReleaseUnitTest") {
+        useJUnit { excludeCategories(composeTestManifestCategory) }
+    }
     // Resolved lazily through a provider so the 203MB artifact is only fetched when tests actually
     // run, and so the wiring survives the configuration cache.
     val sdkDirectory = robolectricSdk.elements.map { it.first().asFile.parentFile.absolutePath }

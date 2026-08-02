@@ -193,6 +193,30 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   See `docs/SCREENSHOT_TESTING.md`, including why CI enforcement is a separate decision.
 - `testOptions.unitTests.isIncludeAndroidResources` is now `true`, which screenshot tests require.
   All 847 unit tests pass with it on.
+- **Screenshot verification runs in CI**, as `:app:verifyRoborazziDebug` - which is
+  `testDebugUnitTest` with golden verification on, so it covers the whole debug suite in one pass
+  rather than running it twice. A failure uploads the diffs as an artifact, since the goldens were
+  recorded on Windows and the runner is Linux; see `docs/SCREENSHOT_TESTING.md`.
+- **CI moved from JDK 17 to 21.** Robolectric records a required Java version per Android API level
+  and API 36 demands 21 (`DefaultSdkProvider`'s entry is `("16", "13921718", "REL", 21)`); on 17
+  every Robolectric test refuses to start, so the screenshot tests could never have run there. The
+  app is still compiled to Java 17 bytecode - this changes what Gradle runs on, not what ships.
+- **`testReleaseUnitTest` now skips the Compose-rule tests instead of failing on them.**
+  `createComposeRule()` launches `androidx.activity.ComponentActivity`, declared only by
+  `compose-ui-test-manifest` - a `debugImplementation` dependency, so the entry is in the debug
+  merged manifest and nowhere else. Under the release variant they died at rule setup with "Unable
+  to resolve activity for Intent ... ComponentActivity", which names no variant and reads like a
+  broken test. Excluded by JUnit category rather than class-name pattern, so renaming or moving a
+  test cannot quietly return it to the release run: debug runs 868, release 864, and the difference
+  is exactly those four.
+- **Three CI steps that had never actually passed now do.** Nothing had ever run this workflow (the
+  repository has no remote), so its guard scripts had drifted: `check-locale-format` flagged a
+  *comment* in `Fingerprint.kt` that accurately documents the `"%02x".format(...)` loop it replaced
+  - prose that mentions a format call is not a format call, so the script now skips comment lines -
+  and a genuinely locale-sensitive human-read label in the audio-track sheet, which is now marked
+  `// locale-ok`. `check-applog-sensitive-vars` flagged a DLNA SOAP failure log interpolating a raw
+  control URL; that is not a false positive, so the URL is gone from the message rather than
+  annotated away.
 - **The instrumented lifecycle suite passes again - all 6, up from 1.** Three failures shared one
   cause and one had its own:
   - `FakeOriginServer` serves bytes no decoder accepts (these tests are about the player's

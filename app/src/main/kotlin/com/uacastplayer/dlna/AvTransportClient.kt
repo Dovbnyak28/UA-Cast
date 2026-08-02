@@ -42,7 +42,11 @@ class AvTransportClient(private val httpClient: OkHttpClient) {
         return try {
             httpClient.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            AppLog.w(TAG) { "SOAP $action failed for $controlUrl: ${e.javaClass.simpleName}" }
+            // The control URL is deliberately not interpolated. LogSanitizer would redact it to a
+            // scheme/host/port marker anyway, so almost nothing survives into a shared diagnostics
+            // report - and a DLNA session drives one renderer at a time, so the action and the
+            // failure type are what actually identify the problem.
+            AppLog.w(TAG) { "SOAP $action failed: ${e.javaClass.simpleName}" }
             false
         }
     }

@@ -24,11 +24,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      # 21, not 17, because of Robolectric. Its SDK table records a required Java version per
+      # Android API level, and API 36 - this app's targetSdk, so what the screenshot and other
+      # Robolectric tests run against - demands 21. From DefaultSdkProvider in robolectric 4.16,
+      # disassembled: the API 36 entry is ("16", "13921718", "REL", 21), that last field being the
+      # required JDK. On 17 every Robolectric test refuses to start; nothing else here needs the
+      # bump. The app itself is still compiled to Java 17 bytecode (see app/build.gradle.kts), so
+      # this changes what Gradle runs on, not what is shipped.
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -39,8 +46,19 @@ jobs:
       - name: Assemble debug
         run: ./gradlew :app:assembleDebug --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
 
-      - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+      # verifyRoborazziDebug *is* testDebugUnitTest with golden verification switched on, so this
+      # runs the whole debug unit-test suite and the screenshot comparison in one pass rather than
+      # running the suite twice. A golden mismatch surfaces as an ordinary test failure
+      # (DesignSystemScreenshotTest > emptyState_cinema FAILED).
+      #
+      # The goldens in this repository were recorded on Windows and this is the first time they are
+      # checked on Linux. Robolectric renders through the Skia and fonts bundled in the android-all
+      # jar - the same artifact on every platform, which is the reason to expect them to match - but
+      # cross-platform antialiasing differences are a known failure mode for screenshot testing in
+      # general. If this step fails on a diff rather than a real regression, compare the uploaded
+      # images below and re-record on this runner; see docs/SCREENSHOT_TESTING.md.
+      - name: Unit tests and screenshot verification
+        run: ./gradlew :app:verifyRoborazziDebug --stacktrace
 
       - name: Release unit tests
         run: ./gradlew :app:testReleaseUnitTest --stacktrace
@@ -77,6 +95,19 @@ jobs:
         with:
           name: test-reports
           path: app/build/reports
+          retention-days: 14
+
+      # Without these a golden mismatch is just a failed assertion with nothing to look at - and
+      # since the goldens were recorded on a different OS than this runner, "what actually differs"
+      # is the first question anyone will have. Roborazzi writes *_compare.png (side by side, diff
+      # highlighted) and *_actual.png here; the directory is gitignored.
+      - name: Upload screenshot diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-screenshot-diffs
+          path: app/build/outputs/roborazzi
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Upload release APK

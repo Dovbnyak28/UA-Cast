@@ -25,6 +25,15 @@ if [ -n "$matches" ]; then
             *Locale*) continue ;;
             *"// locale-ok"*) continue ;;
         esac
+        # Skip comment lines. Prose that *mentions* a format call is not a format call - e.g.
+        # Fingerprint.kt documents the `"%02x".format(...)` loop it replaced, and flagging that
+        # asks the author to either delete an accurate comment or bolt a `// locale-ok` marker onto
+        # a sentence. grep -n output is `path:line:content`, so strip the two leading fields first.
+        content=${line#*:}
+        content=${content#*:}
+        case "${content#"${content%%[![:space:]]*}"}" in
+            //*|\**) continue ;;
+        esac
         violations="$violations$line"$'\n'
     done <<< "$matches"
 fi
