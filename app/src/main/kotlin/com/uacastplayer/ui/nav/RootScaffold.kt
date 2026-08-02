@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.uacastplayer.R
@@ -52,8 +53,10 @@ import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.SettingsUiState
+import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
+import com.uacastplayer.ui.components.DownloadStatusBanner
 import com.uacastplayer.ui.components.GlassTabBar
 import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
@@ -158,30 +161,12 @@ fun RootScaffold(
         modifier = modifier.fillMaxSize().appBackground(),
         containerColor = Color.Transparent,
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(UaTheme.palette.void)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = ScreenHPadding, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(navState.current.labelRes()),
-                        style = DisplayTitle,
-                        color = UaTheme.palette.labelPrimary,
-                    )
-                    if (castState.isSessionConnected) {
-                        Text(
-                            text = stringResource(R.string.cast_status_connected),
-                            style = com.uacastplayer.ui.theme.Caption,
-                            color = UaTheme.palette.accentText,
-                        )
-                    }
-                }
-                CastButton()
-            }
+            RootTopBar(
+                title = stringResource(navState.current.labelRes()),
+                castConnected = castState.isSessionConnected,
+                iconPrefetchState = iconPrefetchState,
+                epgState = epgState,
+            )
         },
         bottomBar = {
             GlassTabBar(
@@ -326,6 +311,68 @@ fun RootScaffold(
                 )
             }
         }
+        }
+    }
+}
+
+/**
+ * The screen title, the cast button, and - above them - the background-download banner.
+ *
+ * The banner belongs *here*, as part of the measured top bar, and not in an overlay Box stacked on
+ * top of the whole scaffold, which is where it used to live. As an overlay it was simply drawn over
+ * whatever was underneath: while a playlist was loading it cut the screen title in half ("UA Cast
+ * Player" on Home, the first section header in Settings), which is the exact moment the app most
+ * needs to look like it is working rather than broken. As part of the top bar the Scaffold measures
+ * it and hands the content the remaining height, so it pushes instead of covering.
+ *
+ * The status-bar inset is applied once, by the outer Column, and Compose *consumes* it for the
+ * subtree - so [DownloadStatusBanner]'s own `statusBarsPadding()` and the title Row (which used to
+ * carry the inset itself) both resolve to zero here rather than stacking into a double gap. The
+ * background is applied before the inset padding, so it still fills the status bar area.
+ *
+ * Extracted from the `topBar` lambda so the no-overlap property can be asserted directly; composing
+ * the whole of [RootScaffold] in a test would mean supplying sixty-odd parameters. [trailing] is a
+ * slot for the same reason: [CastButton] goes through `CastButtonFactory`, which needs Play
+ * Services and so cannot be composed under Robolectric.
+ */
+@Composable
+internal fun RootTopBar(
+    title: String,
+    castConnected: Boolean,
+    iconPrefetchState: IconPrefetchUiState,
+    epgState: EpgUiState,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = { CastButton() },
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(UaTheme.palette.void)
+            .windowInsetsPadding(WindowInsets.statusBars),
+    ) {
+        DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ScreenHPadding, vertical = 12.dp)
+                .testTag(UiTestTags.ROOT_TOP_BAR_TITLE),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = DisplayTitle,
+                    color = UaTheme.palette.labelPrimary,
+                )
+                if (castConnected) {
+                    Text(
+                        text = stringResource(R.string.cast_status_connected),
+                        style = com.uacastplayer.ui.theme.Caption,
+                        color = UaTheme.palette.accentText,
+                    )
+                }
+            }
+            trailing()
         }
     }
 }

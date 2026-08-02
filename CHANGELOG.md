@@ -93,6 +93,16 @@ version, and the local player's behaviour during a remote cast changed.
   enough. Writes now report failure instead of throwing; the in-memory state the caller already
   updated stays correct, so a lost write costs that one change at next launch.
 
+### Fixed - UI
+
+- **The "Preparing your channels…" banner covered the screen title while it was showing.** It was an
+  overlay pinned to the top of a Box that also held the whole scaffold, so it was simply painted
+  over whatever was underneath: measured at 108dp of overlap, which cut "UA Cast Player" in half on
+  Home and hid Settings' first section header entirely. It now lives inside the top bar, so the
+  Scaffold measures it and the content gets the remaining height - the banner pushes rather than
+  covers. It expands and shrinks instead of sliding, since an animation that only moved the banner
+  would leave the content below it jumping to its new position in a single frame.
+
 ### Fixed - data
 
 - **XMLTV feeds could record the literal string `"null"` as a channel's display name** when a
@@ -138,6 +148,13 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   See `docs/SCREENSHOT_TESTING.md`, including why CI enforcement is a separate decision.
 - `testOptions.unitTests.isIncludeAndroidResources` is now `true`, which screenshot tests require.
   All 847 unit tests pass with it on.
+- **The banner overlap above is covered by a layout assertion, not a golden image.** `RootTopBar`
+  was extracted from `RootScaffold`'s `topBar` lambda so it can be composed on its own (the whole
+  scaffold would mean supplying sixty-odd parameters), and `RootTopBarLayoutTest` asserts the
+  banner's bottom edge is above the title row's top edge - plus that the title moves back up once
+  the download finishes, which catches a hidden banner that still reserves its height. Checked
+  against the old layout before being kept: it fails there with "Banner (bottom=120.0.dp) overlaps
+  the title row (top=12.0.dp)".
 
 ### Performance
 

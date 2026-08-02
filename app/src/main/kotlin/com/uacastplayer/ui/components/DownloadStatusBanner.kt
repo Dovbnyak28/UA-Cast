@@ -4,8 +4,8 @@ import com.uacastplayer.ui.theme.UaTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
@@ -56,6 +58,11 @@ private const val MAX_PERCENT = 100
  * Dismissing only hides it for the current download; it reappears the next time icon prefetch or
  * an EPG load starts (tracked via [IconPrefetchUiState.isRunning]/[EpgUiState.isLoading] flipping
  * false-\>true again).
+ *
+ * Mounted inside [com.uacastplayer.ui.nav.RootScaffold]'s top bar, so it takes part in layout and
+ * pushes the screen down while it is visible. It is deliberately not an overlay: as one it covered
+ * the screen title. That is also why it expands and shrinks rather than sliding - an animation that
+ * only moves the banner would leave the content below it jumping to its new position in one frame.
  */
 @Composable
 fun DownloadStatusBanner(
@@ -73,14 +80,18 @@ fun DownloadStatusBanner(
 
     AnimatedVisibility(
         visible = isActive && !dismissed,
-        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
         modifier = modifier,
     ) {
         val shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag(UiTestTags.DOWNLOAD_STATUS_BANNER)
+                // A no-op in the top bar, which applies and consumes the status-bar inset for the
+                // whole subtree; kept so the banner is still correct if it is ever hosted somewhere
+                // that does not (the @Preview below, for one).
                 .statusBarsPadding()
                 .clip(shape)
                 .background(
