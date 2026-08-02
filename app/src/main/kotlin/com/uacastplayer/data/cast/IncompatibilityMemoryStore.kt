@@ -1,6 +1,7 @@
 package com.uacastplayer.data.cast
 
 import android.content.Context
+import androidx.core.content.edit
 import com.uacastplayer.cast.IncompatibilityMemoryPolicy
 import com.uacastplayer.cast.IncompatibilityRecord
 import com.uacastplayer.core.security.Fingerprint
@@ -45,7 +46,7 @@ class IncompatibilityMemoryStore(context: Context) {
      * trying to re-derive which old entries would still qualify under the new rule. */
     private fun migrateIfNeeded() {
         if (prefs.getInt(SCHEMA_VERSION_KEY, 0) >= SCHEMA_VERSION) return
-        prefs.edit().clear().putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION).apply()
+        prefs.edit { clear().putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION) }
     }
 
     fun lookup(streamUrl: String, receiverId: String): IncompatibilityRecord? {
@@ -58,7 +59,7 @@ class IncompatibilityMemoryStore(context: Context) {
         val lastWriteAtMillis = lastWriteAtMillisByKey[key] ?: 0L
         if (nowMillis - lastWriteAtMillis < MIN_WRITE_INTERVAL_MILLIS) return
         lastWriteAtMillisByKey[key] = nowMillis
-        prefs.edit().putLong(key, nowMillis).apply()
+        prefs.edit { putLong(key, nowMillis) }
     }
 
     private fun keyFor(streamUrl: String, receiverId: String): String = Fingerprint.of("$streamUrl|$receiverId")
@@ -72,8 +73,6 @@ class IncompatibilityMemoryStore(context: Context) {
             .toMap()
         val toRemove = IncompatibilityMemoryPolicy.keysToPrune(entries, nowMillis)
         if (toRemove.isEmpty()) return
-        val editor = prefs.edit()
-        for (key in toRemove) editor.remove(key)
-        editor.apply()
+        prefs.edit { for (key in toRemove) remove(key) }
     }
 }

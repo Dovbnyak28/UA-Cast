@@ -56,7 +56,11 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
      * file another download is still writing into can never be pulled out from under it - the one
      * created moments from now is far newer than the cutoff.
      */
-    @VisibleForTesting
+    /** Called from `EpgRepository` on startup, not only from tests - the annotation this used to
+     * carry said otherwise and lint was right to flag it. Sweeping here rather than before each
+     * download is deliberate: the common case restores from a snapshot and never downloads at all,
+     * which is exactly when the stranded temp files (a `finally` does not run on process death)
+     * would otherwise accumulate unbounded in filesDir, where Android never reclaims them. */
     internal fun deleteStaleDownloads() {
         val cutoff = System.currentTimeMillis() - STALE_DOWNLOAD_AGE_MILLIS
         val stale = tempDir.listFiles { file ->

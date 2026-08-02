@@ -42,8 +42,8 @@ private const val MAX_INITIALS = 2
 fun ChannelIcon(
     channel: M3uChannel,
     resolveIcon: suspend (M3uChannel) -> File?,
-    size: Dp = ChannelLogoSize,
     modifier: Modifier = Modifier,
+    size: Dp = ChannelLogoSize,
     // Included in produceState's key so a caller can force a re-resolve once new information that
     // could change the result becomes available (EPG data arriving, an icon prefetch run
     // finishing) - resolveIcon's own result is otherwise only ever computed once per streamUrl.

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -40,6 +41,10 @@ fun LanguagePickerScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // The one screen with no chrome of its own to pad out of the system bars - and the
+            // first a new install shows. Under edge-to-edge the language list would otherwise run
+            // under the status bar at the top and the navigation bar at the bottom.
+            .safeDrawingPadding()
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {

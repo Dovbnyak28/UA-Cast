@@ -1,8 +1,11 @@
 package com.uacastplayer
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,6 +47,7 @@ import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.onboarding.OnboardingScreen
 import com.uacastplayer.ui.nav.RootScaffold
+import com.uacastplayer.ui.permissions.NotificationPermissionGate
 import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.player.PlayerEnrichmentState
 import com.uacastplayer.ui.player.PlayerFavoriteActions
@@ -86,6 +90,19 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
+        // Opting in rather than waiting to be opted in. From targetSdk 35 the system forces
+        // edge-to-edge and ignores android:statusBarColor/navigationBarColor outright, so on
+        // Android 15+ this happens whether the app asks or not - and the difference between an app
+        // that handles it and one that doesn't is content sliding under the system bars. Declaring
+        // it here means the layout runs the same way on every API level, so a missing
+        // windowInsetsPadding shows up on any test device instead of only on Android 15 hardware.
+        // Both bars are transparent with no scrim: every screen is drawn on the app's own dark
+        // background, and the chrome that meets the bars (RootTopBar, GlassTabBar, the mini player)
+        // pads itself out of them and paints its own background behind them.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
 
         activeLanguage = viewModel.uiState.value.language
@@ -397,6 +414,9 @@ private fun ScaffoldZone(
     val epgState by viewModel.epgState.collectAsStateWithLifecycle()
     val iconPrefetchState by viewModel.iconPrefetchState.collectAsStateWithLifecycle()
     val castState by viewModel.castState.collectAsStateWithLifecycle()
+    // Asks for POST_NOTIFICATIONS the moment a cast starts, so CastProxyService's foreground
+    // notification is actually visible on API 33+ - see NotificationPermissionGate.
+    NotificationPermissionGate(castConnected = castState.isSessionConnected)
     val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()

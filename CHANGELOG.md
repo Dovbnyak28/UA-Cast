@@ -19,6 +19,43 @@ version, and the local player's behaviour during a remote cast changed.
 - **Channel switching while casting to DLNA.** The renderer is re-pointed at the new channel
   instead of being left on the old one.
 
+### Fixed - platform
+
+- **The cast notification never appeared on Android 13 or newer.** `CastProxyService` is a
+  foreground service that posts a notification and holds a partial wake lock plus a Wi-Fi lock for
+  the whole cast, but `POST_NOTIFICATIONS` was neither declared nor requested - and at `targetSdk`
+  36 the system drops the notification silently. The service still ran, so the user was left with
+  something keeping the CPU awake that they could neither see nor stop from outside the app. Now
+  declared, and requested at the moment a cast actually starts (`ui/permissions/`) rather than on
+  first launch, so the notification that follows a second later is the answer to why it was asked.
+  Not reproducible on the test hardware here (Android 11) - found by reading the manifest against
+  the target API, not by running it.
+- **Edge-to-edge is now opted into rather than waited for.** `android:statusBarColor` and
+  `navigationBarColor` are deprecated and become no-ops at `targetSdk` 35, where the system forces
+  edge-to-edge regardless. `enableEdgeToEdge()` makes that the behaviour on every API level, so a
+  missing `windowInsetsPadding` shows up on any test device instead of only on Android 15 hardware -
+  which immediately found one: the language picker, the first screen a new install shows, had no
+  inset handling at all. The two dead theme attributes are gone; they read as the thing controlling
+  the system bars while controlling nothing.
+
+### Fixed - localization
+
+- **The home screen counters were ungrammatical in Ukrainian and Russian.** The count is rendered
+  above its label as two separate pieces of text, and the label was a fixed genitive plural - so the
+  app's main screen in its primary language read "1 Улюблених" and "2863 Каналів". They are plurals
+  now, with all four quantity classes. The counts worth testing are not 1 and 5 but 21 and 22, where
+  Slavic plural rules stop agreeing with the English intuition that "one" means one; a test asserts
+  the declensions directly, since the only screenshot goldens that exist cover empty states and
+  never saw this.
+
+### Changed - build
+
+- **Lint warnings now fail the build.** The project carried 97 of them, and things were genuinely
+  lost in that list: a wrong `@VisibleForTesting` on an API production calls, eight dead colors, a
+  Compose `Modifier` parameter in the wrong position, and an animated `Modifier.offset` using the
+  value overload - which recomposed a segmented control on every frame of its slide. All fixed;
+  every check deliberately not obeyed is named, with its reasoning, in `app/lint.xml`.
+
 ### Fixed - security
 
 - **Credentials embedded in a url no longer leak into a diagnostics report.** `LogSanitizer`

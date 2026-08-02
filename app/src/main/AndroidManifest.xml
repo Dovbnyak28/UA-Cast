@@ -12,6 +12,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- CastProxyService is a foreground service that posts a notification and holds a partial
+         wake lock plus a Wi-Fi lock for the whole cast (see CastWakeLocks). From API 33 that
+         notification is silently dropped without this permission, which would leave the user with
+         an invisible service they cannot see running or stop from outside the app. Requested at
+         runtime the first time a cast session actually starts - see MainActivity. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
         android:name="android.software.leanback"

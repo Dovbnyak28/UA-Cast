@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">UA Cast Player</string>
 
     <!-- Language picker (first run) -->
@@ -23,9 +23,24 @@
     <string name="home_empty_subtitle">Добавьте ссылку на плейлист M3U или M3U8, чтобы смотреть каналы.</string>
     <string name="home_active_playlist_label">Активный плейлист</string>
     <string name="home_restored_from_cache">Восстановлено из кеша</string>
-    <string name="home_stat_channels">Каналов</string>
-    <string name="home_stat_groups">Групп</string>
-    <string name="home_stat_favorites">Избранных</string>
+    <plurals name="home_stat_channels" tools:ignore="ImpliedQuantity">
+        <item quantity="one">Канал</item>
+        <item quantity="few">Канала</item>
+        <item quantity="many">Каналов</item>
+        <item quantity="other">Канала</item>
+    </plurals>
+    <plurals name="home_stat_groups" tools:ignore="ImpliedQuantity">
+        <item quantity="one">Группа</item>
+        <item quantity="few">Группы</item>
+        <item quantity="many">Групп</item>
+        <item quantity="other">Группы</item>
+    </plurals>
+    <plurals name="home_stat_favorites" tools:ignore="ImpliedQuantity">
+        <item quantity="one">Избранный</item>
+        <item quantity="few">Избранных</item>
+        <item quantity="many">Избранных</item>
+        <item quantity="other">Избранных</item>
+    </plurals>
     <string name="home_epg_label">Телепрограмма</string>
     <string name="home_epg_restoring">Обновление телепрограммы…</string>
     <string name="home_epg_ready">Телепрограмма готова</string>

@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -184,17 +185,17 @@ fun HomeScreen(
                 Row(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
                     HomeStatCell(
                         count = totalChannels,
-                        label = stringResource(R.string.home_stat_channels),
+                        label = pluralStringResource(R.plurals.home_stat_channels, totalChannels),
                         modifier = Modifier.weight(1f),
                     )
                     HomeStatCell(
                         count = playlistState.groups.size,
-                        label = stringResource(R.string.home_stat_groups),
+                        label = pluralStringResource(R.plurals.home_stat_groups, playlistState.groups.size),
                         modifier = Modifier.weight(1f),
                     )
                     HomeStatCell(
                         count = favorites.size,
-                        label = stringResource(R.string.home_stat_favorites),
+                        label = pluralStringResource(R.plurals.home_stat_favorites, favorites.size),
                         modifier = Modifier.weight(1f),
                     )
                 }

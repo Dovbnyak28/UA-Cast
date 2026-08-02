@@ -1,6 +1,7 @@
 package com.uacastplayer.app
 
 import android.net.Uri
+import androidx.core.net.toUri
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.data.playlist.PlaylistOutcome
 import com.uacastplayer.data.playlist.PlaylistOutcomeReducer
@@ -195,7 +196,7 @@ class PlaylistController(
                 applyPlaylistOutcome(cached, fromCache = true)
             } else {
                 val outcome = if (source.type == PlaylistSourceType.FILE) {
-                    playlistRepository.loadFromFile(Uri.parse(source.location))
+                    playlistRepository.loadFromFile(source.location.toUri())
                 } else {
                     playlistRepository.loadFromUrl(source.location)
                 }

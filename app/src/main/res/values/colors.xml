@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Only the handful the *platform* needs: this file is not the app's palette, ui/theme/Color.kt
+         is. Anything Compose draws belongs there; an XML color is only justified when something
+         outside Compose has to read it (a theme attribute, a drawable). The surface/primary/cyan/
+         border/on-surface/error entries that used to sit here were a stale mirror of an older
+         palette that nothing referenced. -->
     <color name="uacast_background">#070A12</color>
-    <color name="uacast_surface">#111827</color>
-    <color name="uacast_surface_variant">#1B2333</color>
-    <color name="uacast_primary">#3B82F6</color>
-    <color name="uacast_cyan">#22D3EE</color>
-    <color name="uacast_border">#243044</color>
-    <color name="uacast_on_surface">#E5E7EB</color>
-    <color name="uacast_on_surface_muted">#8B96A8</color>
-    <color name="uacast_error">#F87171</color>
 
     <!-- Mirrors ui/theme/Color.kt's LabelPrimary/Azure so the platform MediaRouteButton (which
          can only be tinted via theme attributes, not Compose) matches the rest of the design

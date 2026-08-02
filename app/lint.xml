@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Every entry here is a check that was read, understood, and decided against - not a pile to hide
+  behind. That distinction is what makes `warningsAsErrors` in app/build.gradle.kts affordable: with
+  the reviewed exceptions named individually, the remaining count is zero, so any *new* warning
+  fails the build instead of disappearing into a backlog of 97.
+-->
+<lint>
+
+    <!-- False positive. Lint looks for setAutoEnterEnabled/setSourceRectHint on a
+         PictureInPictureParams.Builder inside the Activity; both are called, just from
+         PipController.syncParams (ui/player/PlayerGestureLayer.kt), which PlayerScreen drives on
+         every video-size/bounds change. Obeying this would mean inlining a tested helper back into
+         the Activity for the analyzer's benefit. -->
+    <issue id="PictureInPictureIssue" severity="ignore" />
+
+    <!-- False positive. The stream is closed: `openOutputStream(uri)?.use { ... }`. Lint's Recycle
+         detector does not see through the safe-call before `use`. -->
+    <issue id="Recycle" severity="ignore" />
+
+    <!-- Required, not an oversight. This is an IPTV player: playlists point at whatever origin the
+         user's provider runs, and a large share of them are plain http. Refusing cleartext would
+         not make those streams secure, it would make them unplayable. Nothing the app originates
+         goes over cleartext - see LogSanitizer for how credentials are kept out of anything that
+         leaves the device. -->
+    <issue id="InsecureBaseConfiguration" severity="ignore" />
+
+    <!-- Moot. The advice is to pair dataExtractionRules with fullBackupContent for API < 31, but
+         the manifest sets android:allowBackup="false", which disables backup at every API level -
+         there is no pre-31 path left for fullBackupContent to govern. -->
+    <issue id="DataExtractionRules" severity="ignore" />
+
+    <!-- Deliberate: the wordmark is a wide rectangle, which is the point of a TV banner. The 200x200
+         guidance is about icons. -->
+    <issue id="VectorRaster" severity="ignore">
+        <ignore path="src/main/res/drawable/tv_banner.xml" />
+    </issue>
+
+    <!-- Informational nags about newer releases being available, not defects in this code. Upgrading
+         a toolchain or a dependency is a deliberate act with its own verification, so it must not be
+         something a build failure pressures anyone into doing on the spot. -->
+    <issue id="AndroidGradlePluginVersion" severity="informational" />
+    <issue id="GradleDependency" severity="informational" />
+    <issue id="NewerVersionAvailable" severity="informational" />
+
+    <!-- Accepted, and tracked rather than fixed blind: both want launcher artwork this project does
+         not have. IconLauncherShape wants the legacy pre-API-26 PNGs inset from their square (the
+         adaptive icon in mipmap-anydpi-v26 already handles every API 26+ device, leaving only 24-25);
+         MonochromeLauncherIcon wants a single-colour vector layer for Android 13 themed icons. Both
+         are design work on the wordmark, not something to invent from the existing raster. -->
+    <issue id="IconLauncherShape" severity="informational" />
+    <issue id="MonochromeLauncherIcon" severity="informational" />
+    <issue id="IconDuplicates" severity="informational" />
+
+    <!-- The flagged strings interpolate a percentage or a diagnostics counter, not a countable noun
+         ("currently %d percent", "%d attempted, %d played, %d failed"). The places where a number
+         really does govern a noun already use plurals - see home_stat_* and channels_total_count. -->
+    <issue id="PluralsCandidate" severity="ignore" />
+
+    <!-- Standard for a View inflated into a Compose AndroidView factory: there is no parent to
+         measure against at inflation time, and PlayerView's own modifier drives its size. -->
+    <issue id="InflateParams" severity="ignore">
+        <ignore path="src/main/kotlin/com/uacastplayer/ui/player/VideoSurface.kt" />
+    </issue>
+
+    <!-- Obeying this would ship the broken TV experience docs/TV_SUPPORT.md exists to prevent: the
+         manifest declares android.software.leanback (required=false) without a LEANBACK_LAUNCHER
+         category on purpose, because the UI has no D-pad focus navigation and appearing on a TV
+         launcher would strand the user with no way to move between channels. -->
+    <issue id="MissingLeanbackLauncher" severity="ignore" />
+
+    <!-- The check's heuristic does not fit this one layout. It fires when a plural has no %d in it,
+         reasoning that a developer writing `one` probably means literally 1 - which in uk/ru is
+         wrong, since `one` also covers 21, 31, 41... Here the count is rendered separately, as a
+         large numeral above its label (HomeScreen's HomeStatCell), so the label genuinely carries
+         no number. The selection still uses the real count via pluralStringResource(id, count), so
+         21 correctly picks `one` and reads "21 / Канал"; 22 picks `few` and reads "22 / Канали".
+         Scoped to these three resources rather than disabled globally: anywhere a plural really is
+         a whole sentence, the check is right and should keep firing. -->
+         Suppressed at the three resources themselves (tools:ignore in values-uk/values-ru), not
+         here, so the exemption sits next to the thing it exempts. -->
+    <!-- (no global entry - see the note above) -->
+
+</lint>

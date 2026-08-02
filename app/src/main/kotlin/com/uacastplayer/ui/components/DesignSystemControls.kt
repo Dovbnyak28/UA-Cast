@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
@@ -292,7 +293,12 @@ fun SegmentedControl(
         if (containerSizePx.width > 0) {
             Box(
                 modifier = Modifier
-                    .offset(x = offsetX)
+                    // Lambda overload on purpose: offsetX is animated, and the value-taking
+                    // overload reads it during composition, so the whole segmented control
+                    // recomposed on every frame of the slide. Read inside the lambda it is a
+                    // layout-phase read - the animation moves the highlight without recomposing
+                    // anything.
+                    .offset { IntOffset(x = offsetX.roundToPx(), y = 0) }
                     .width(with(density) { segmentWidthPx.toDp() })
                     .fillMaxHeight()
                     .raisedSurface(segmentShape, palette.accentGradient, shadow = true),

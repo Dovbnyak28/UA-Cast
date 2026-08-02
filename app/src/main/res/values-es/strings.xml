@@ -23,9 +23,21 @@
     <string name="home_empty_subtitle">Añade un enlace de lista M3U o M3U8 para ver canales.</string>
     <string name="home_active_playlist_label">Lista activa</string>
     <string name="home_restored_from_cache">Restaurada desde la caché</string>
-    <string name="home_stat_channels">Canales</string>
-    <string name="home_stat_groups">Grupos</string>
-    <string name="home_stat_favorites">Favoritos</string>
+    <plurals name="home_stat_channels">
+        <item quantity="one">Canal</item>
+        <item quantity="many">Canales</item>
+        <item quantity="other">Canales</item>
+    </plurals>
+    <plurals name="home_stat_groups">
+        <item quantity="one">Grupo</item>
+        <item quantity="many">Grupos</item>
+        <item quantity="other">Grupos</item>
+    </plurals>
+    <plurals name="home_stat_favorites">
+        <item quantity="one">Favorito</item>
+        <item quantity="many">Favoritos</item>
+        <item quantity="other">Favoritos</item>
+    </plurals>
     <string name="home_epg_label">Guía TV</string>
     <string name="home_epg_restoring">Actualizando la guía TV…</string>
     <string name="home_epg_ready">Guía TV lista</string>

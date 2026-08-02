@@ -2,6 +2,7 @@ package com.uacastplayer.diagnostics
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 
 /**
  * Persists [RemuxEffectivenessCounts] across app restarts - see [RemuxEffectivenessPolicy] for the
@@ -58,17 +59,17 @@ class RemuxEffectivenessStore(context: Context) {
     )
 
     private fun persist(counts: RemuxEffectivenessCounts) {
-        prefs.edit()
-            .putInt(KEY_DIRECT_ATTEMPTED, counts.directAttempted)
-            .putInt(KEY_DIRECT_PLAYING, counts.directPlaying)
-            .putInt(KEY_DIRECT_FAILED, counts.directFailed)
-            .putInt(KEY_REMUX_ATTEMPTED, counts.remuxAttempted)
-            .putInt(KEY_REMUX_PLAYING, counts.remuxPlaying)
-            .putInt(KEY_REMUX_FAILED, counts.remuxFailed)
-            .putInt(KEY_PROXY_REWRITE_ATTEMPTED, counts.proxyRewriteAttempted)
-            .putInt(KEY_PROXY_REWRITE_PLAYING, counts.proxyRewritePlaying)
-            .putInt(KEY_PROXY_REWRITE_FAILED, counts.proxyRewriteFailed)
-            .apply()
+        prefs.edit {
+            putInt(KEY_DIRECT_ATTEMPTED, counts.directAttempted)
+            putInt(KEY_DIRECT_PLAYING, counts.directPlaying)
+            putInt(KEY_DIRECT_FAILED, counts.directFailed)
+            putInt(KEY_REMUX_ATTEMPTED, counts.remuxAttempted)
+            putInt(KEY_REMUX_PLAYING, counts.remuxPlaying)
+            putInt(KEY_REMUX_FAILED, counts.remuxFailed)
+            putInt(KEY_PROXY_REWRITE_ATTEMPTED, counts.proxyRewriteAttempted)
+            putInt(KEY_PROXY_REWRITE_PLAYING, counts.proxyRewritePlaying)
+            putInt(KEY_PROXY_REWRITE_FAILED, counts.proxyRewriteFailed)
+        }
     }
 
     companion object {

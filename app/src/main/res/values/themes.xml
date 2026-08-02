@@ -7,9 +7,11 @@
          drawable from AppCompat's light/dark theme resolution, not from colorControlNormal alone -
          with DayNight, a phone in system light mode got the icon variant meant for light
          backgrounds, rendering nearly invisible on this app's always-dark UI. -->
+    <!-- Deliberately no android:statusBarColor/navigationBarColor: both are deprecated and are
+         no-ops from targetSdk 35, and MainActivity's enableEdgeToEdge() sets the bars transparent
+         on every API level anyway (see its own comment). Leaving them here would have read as the
+         thing controlling the bars while controlling nothing. -->
     <style name="Theme.UaCastPlayer" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:statusBarColor">@color/uacast_background</item>
-        <item name="android:navigationBarColor">@color/uacast_background</item>
         <item name="android:windowBackground">@color/uacast_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>

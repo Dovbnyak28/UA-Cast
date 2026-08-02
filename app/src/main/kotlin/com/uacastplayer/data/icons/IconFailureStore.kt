@@ -2,6 +2,7 @@ package com.uacastplayer.data.icons
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.icons.FailureRecord
 import com.uacastplayer.icons.IconFailurePolicy
@@ -25,12 +26,12 @@ class IconFailureStore(context: Context) {
         // chance. See IconFailureStoreMigration for the stored-vs-current version decision.
         val storedVersion = if (prefs.contains(KEY_SCHEMA_VERSION)) prefs.getInt(KEY_SCHEMA_VERSION, 0) else null
         if (IconFailureStoreMigration.shouldClearPermanentFailures(storedVersion, SCHEMA_VERSION)) {
-            val editor = prefs.edit()
-            for (key in prefs.all.keys) {
-                if (key != KEY_SCHEMA_VERSION) editor.remove(key)
+            prefs.edit {
+                for (key in prefs.all.keys) {
+                    if (key != KEY_SCHEMA_VERSION) remove(key)
+                }
+                putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
             }
-            editor.putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
-            editor.apply()
         }
     }
 
@@ -41,7 +42,7 @@ class IconFailureStore(context: Context) {
         if (permanentAt != null) {
             val record = FailureRecord(permanentAt, isPermanent = true)
             if (!IconFailurePolicy.isExpired(record, nowMillis)) return true
-            prefs.edit().remove(key).apply()
+            prefs.edit { remove(key) }
         }
 
         val transientAt = transientFailures[key]
@@ -57,7 +58,7 @@ class IconFailureStore(context: Context) {
     fun recordFailure(url: String, isPermanent: Boolean, nowMillis: Long = System.currentTimeMillis()) {
         val key = Fingerprint.of(url)
         if (isPermanent) {
-            prefs.edit().putLong(key, nowMillis).apply()
+            prefs.edit { putLong(key, nowMillis) }
         } else {
             transientFailures[key] = nowMillis
         }
@@ -95,9 +96,7 @@ class IconFailureStore(context: Context) {
             }
             .keys
         if (expired.isEmpty()) return
-        val editor = prefs.edit()
-        expired.forEach(editor::remove)
-        editor.apply()
+        prefs.edit { expired.forEach(::remove) }
     }
 
     private companion object {

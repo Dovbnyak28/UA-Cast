@@ -1,6 +1,7 @@
 package com.uacastplayer.data.icons
 
 import android.content.Context
+import androidx.core.content.edit
 import org.json.JSONArray
 
 /**
@@ -23,7 +24,7 @@ class CustomIconSourceStore(context: Context) {
 
     fun saveBaseUrls(urls: List<String>) {
         val array = JSONArray().apply { urls.forEach(::put) }
-        preferences.edit().putString(KEY_BASE_URLS, array.toString()).apply()
+        preferences.edit { putString(KEY_BASE_URLS, array.toString()) }
     }
 
     private companion object {

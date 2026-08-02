@@ -118,18 +118,16 @@ android {
     }
 
     lint {
-        // The one lint error in this project that is asking for the wrong thing. It fires because
-        // the manifest declares `android.software.leanback` (required=false) without a
-        // LEANBACK_LAUNCHER category - but that omission is the deliberate decision documented in
-        // docs/TV_SUPPORT.md and in the manifest itself: the UI has no D-pad focus navigation, so
-        // appearing on a TV launcher would strand the user with no way to move between channels.
-        // Adding the category to satisfy lint would ship exactly the broken experience the comment
-        // exists to prevent, so the rule is off rather than obeyed or baselined.
-        disable += "MissingLeanbackLauncher"
-
         // CI runs lintDebug and treats it as a gate (see .github/workflows/android-ci.yml), which
-        // only means anything if a *new* error fails the build rather than joining a growing pile.
+        // only means anything if a *new* finding fails the build rather than joining a growing pile.
         abortOnError = true
+
+        // Warnings count too, now that there are none left. The 97 this project used to carry were
+        // not harmless: a genuinely wrong @VisibleForTesting on a production API and eight dead
+        // colors sat in that list for as long as it was long enough to stop reading. Every check
+        // deliberately not being obeyed is named, with its reason, in app/lint.xml - so the honest
+        // way to add a warning is to fix it or to argue for it there, not to let the count creep.
+        warningsAsErrors = true
     }
 
     testOptions {

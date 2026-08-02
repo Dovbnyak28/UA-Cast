@@ -23,9 +23,21 @@
     <string name="home_empty_subtitle">Add an M3U or M3U8 playlist link to view channels.</string>
     <string name="home_active_playlist_label">Active playlist</string>
     <string name="home_restored_from_cache">Restored from cache</string>
-    <string name="home_stat_channels">Channels</string>
-    <string name="home_stat_groups">Groups</string>
-    <string name="home_stat_favorites">Favorites</string>
+    <!-- The count is rendered separately, above the label, so these carry the noun alone. Still
+         plurals: the number governs the label's form, and a fixed one reads as "1 Channels" here
+         and is outright ungrammatical in the Slavic locales, which need three forms. -->
+    <plurals name="home_stat_channels">
+        <item quantity="one">Channel</item>
+        <item quantity="other">Channels</item>
+    </plurals>
+    <plurals name="home_stat_groups">
+        <item quantity="one">Group</item>
+        <item quantity="other">Groups</item>
+    </plurals>
+    <plurals name="home_stat_favorites">
+        <item quantity="one">Favorite</item>
+        <item quantity="other">Favorites</item>
+    </plurals>
     <string name="home_epg_label">TV guide</string>
     <string name="home_epg_restoring">Updating TV guide…</string>
     <string name="home_epg_ready">TV guide ready</string>
