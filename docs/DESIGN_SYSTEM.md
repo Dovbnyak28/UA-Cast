@@ -113,13 +113,20 @@ app-wide.
 | --- | --- | --- | --- |
 | `AppTheme.AZURE` (default) | neutral near-black, textured | cool blue | unchanged from before themes existed |
 | `AppTheme.CINEMA` | warm charcoal, textured | champagne gold | serif display type, pill-shaped controls |
-| `AppTheme.MIDNIGHT` | true `#000000`, flat | violet | no wallpaper texture, no vignette, maximum contrast |
+| `AppTheme.MIDNIGHT` | true `#000000`, flat | muted pewter | no wallpaper texture, no vignette, maximum contrast |
 
 They're deliberately spread across the axes rather than being three shades of the same idea: Azure
 and Cinema differ in *temperature* while painting the same faint wallpaper texture a few percent
 above black, so Midnight takes the axis both leave open - unlit, textureless, and the only one whose
-`void` is actually black. Its violet is the one hue neither other theme nor the three route-health
-colors (green/amber/red) occupy, so an accent is never confusable with a status.
+`void` is actually black.
+
+**Midnight's accent is deliberately near-neutral, and that is the theme's idea rather than a
+compromise.** A saturated accent on true black is the loudest thing a phone screen can do: there is
+no ambient tone for it to sit against, so it glows. The first attempt was a violet and read as
+candy. At a fifth of normal saturation the chrome reads as chrome, and saturation belongs to the
+only things that should compete for the eye - `routeGreen`, `routeAmber`, `routeRed`. In this theme
+colour means status and nothing else, so a new element that wants attention has to earn it with
+contrast or size rather than by turning the accent up.
 
 ### How it works
 

@@ -18,11 +18,12 @@ version, and the local player's behaviour during a remote cast changed.
   does not do.
 - **Channel switching while casting to DLNA.** The renderer is re-pointed at the new channel
   instead of being left on the old one.
-- **A third theme, Midnight** - true black, violet accent, no wallpaper texture. Azure and Cinema
-  differ in temperature but both paint the same faint texture a few percent above black; Midnight
-  takes the axis they leave open, which on an OLED panel is the one that costs no backlight. Violet
-  is also the only accent hue that can't be mistaken for one of the three route-health colours.
-  Selectable in Settings alongside the other two.
+- **A third theme, Midnight** - true black, no wallpaper texture, and a deliberately muted pewter
+  accent. Azure and Cinema differ in temperature but both paint the same faint texture a few percent
+  above black; Midnight takes the axis they leave open, which on an OLED panel is the one that costs
+  no backlight. The accent is desaturated on purpose: a saturated colour on true black has no
+  ambient tone to sit against and simply glows, so here colour is reserved for the three
+  route-health states and chrome stays neutral. Selectable in Settings alongside the other two.
 
 ### Fixed - contrast
 
