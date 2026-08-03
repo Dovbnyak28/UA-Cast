@@ -3,6 +3,7 @@ package com.uacastplayer.player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.VideoSize
 import com.uacastplayer.cast.CastCompatibilityVerdict
+import com.uacastplayer.cast.CastStatusMessage
 import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.playlist.M3uChannel
@@ -61,18 +62,15 @@ data class PlayerUiState(
     /** Mirrors the view model's private isCasting flag so the UI can decide things like
      * keepScreenOn - the phone screen doesn't need to stay awake for a receiver it isn't driving. */
     val isCasting: Boolean = false,
-    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.codecIncompatibility] - see
-     * [com.uacastplayer.cast.CastCompatibilityPolicy] for how it's decided. */
-    val castCodecIncompatibility: CodecIncompatibility? = null,
-    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.receiverLoadFailed]. */
-    val castReceiverLoadFailed: Boolean = false,
-    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.likelyCompatibilityHint] - only consulted
-     * when [castReceiverLoadFailed] is true, to name a likely cause instead of a generic message. */
-    val castLikelyCompatibilityHint: CastCompatibilityVerdict.LikelyCompatible? = null,
-    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.isRecovering]. */
-    val castIsRecovering: Boolean = false,
-    /** Mirrors [com.uacastplayer.cast.CastPlaybackState.proxyUnavailableIpv4Only]. */
-    val castProxyUnavailableIpv4Only: Boolean = false,
+    /**
+     * What to tell the user about a cast that is not playing, already resolved - see
+     * [com.uacastplayer.cast.CastStatusMessagePolicy].
+     *
+     * One field rather than the five pieces of cast state it is derived from. Those were mirrored
+     * here individually and combined by a `when` in the composable, which is where their precedence
+     * silently went wrong; nothing else on this screen ever read them separately.
+     */
+    val castStatusMessage: CastStatusMessage? = null,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */

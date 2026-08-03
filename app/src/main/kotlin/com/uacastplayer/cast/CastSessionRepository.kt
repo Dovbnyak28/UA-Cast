@@ -328,7 +328,12 @@ class CastSessionRepository private constructor(context: Context) {
 
     private fun scheduleReload(channel: CastChannel, decision: CastRecoveryDecision.Reload) {
         recoveryAttempts = decision.attempt
-        _state.update { it.copy(isRecovering = true) }
+        val withoutPlayback = CastStatusMessagePolicy.isRecoveringWithoutPlayback(
+            everReachedPlaying = everReachedPlaying,
+            deliveryMode = _state.value.deliveryMode,
+            attempt = decision.attempt,
+        )
+        _state.update { it.copy(isRecovering = true, recoveringWithoutPlayback = withoutPlayback) }
         recoveryJob?.cancel()
         recoveryJob = scope.launch {
             delay(decision.backoffMillis)
@@ -507,6 +512,7 @@ class CastSessionRepository private constructor(context: Context) {
                 codecIncompatibility = null,
                 receiverLoadFailed = false,
                 isRecovering = false,
+                recoveringWithoutPlayback = false,
                 proxyUnavailableIpv4Only = false,
                 likelyCompatibilityHint = null,
             )

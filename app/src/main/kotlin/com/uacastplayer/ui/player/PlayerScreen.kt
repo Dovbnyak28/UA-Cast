@@ -60,6 +60,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import com.uacastplayer.R
+import com.uacastplayer.cast.CastStatusMessage
 import com.uacastplayer.cast.CodecDisplayName
 import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.core.ui.findActivity
@@ -485,26 +486,22 @@ fun PlayerScreen(
                 }
             }
 
-            // Codec incompatibility is the more specific, actionable explanation, so it takes
-            // precedence in the rare case both could apply (see CastReceiverStatusReducer).
-            // Recovering comes next - CastRecoveryPolicy is actively retrying, so there's no
-            // failure to explain yet, just a transient hiccup. A LikelyCompatible hint is weaker
-            // still - it only ever supplies a likely cause for a receiverLoadFailed that already
-            // happened (recovery gave up), never a standalone reason on its own (video hint over
-            // audio hint, matching CastCompatibilityPolicy's own priority).
-            val incompatibility = uiState.castCodecIncompatibility
-            val hint = uiState.castLikelyCompatibilityHint
-            val castIncompatibilityMessage = when {
-                incompatibility is CodecIncompatibility.Video ->
-                    stringResource(R.string.cast_incompatible_video_message, CodecDisplayName.of(incompatibility.codec))
-                uiState.castIsRecovering -> stringResource(R.string.cast_recovering_message)
-                uiState.castProxyUnavailableIpv4Only -> stringResource(R.string.cast_proxy_ipv4_unavailable_message)
-                uiState.castReceiverLoadFailed && hint?.videoHint != null ->
-                    stringResource(R.string.cast_likely_incompatible_video_message, CodecDisplayName.of(hint.videoHint))
-                uiState.castReceiverLoadFailed && hint?.audioHint != null ->
-                    stringResource(R.string.cast_likely_incompatible_audio_message, CodecDisplayName.of(hint.audioHint))
-                uiState.castReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
-                else -> null
+            // Which explanation wins is CastStatusMessagePolicy's decision, not this composable's.
+            // It used to be a when-chain here, and its ordering was wrong in a way no test could
+            // reach: the recovering branch sat above the codec hints, and recovery never ends on
+            // its own, so the hint branches were dead code. See that policy's KDoc.
+            val castIncompatibilityMessage = when (val message = uiState.castStatusMessage) {
+                null -> null
+                is CastStatusMessage.IncompatibleVideo ->
+                    stringResource(R.string.cast_incompatible_video_message, CodecDisplayName.of(message.codec))
+                CastStatusMessage.Recovering -> stringResource(R.string.cast_recovering_message)
+                CastStatusMessage.ProxyUnavailableIpv4Only ->
+                    stringResource(R.string.cast_proxy_ipv4_unavailable_message)
+                is CastStatusMessage.LikelyIncompatibleVideo ->
+                    stringResource(R.string.cast_likely_incompatible_video_message, CodecDisplayName.of(message.codec))
+                is CastStatusMessage.LikelyIncompatibleAudio ->
+                    stringResource(R.string.cast_likely_incompatible_audio_message, CodecDisplayName.of(message.codec))
+                CastStatusMessage.ReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
             }
             castIncompatibilityMessage?.let { message ->
                 CastIncompatibilityBanner(

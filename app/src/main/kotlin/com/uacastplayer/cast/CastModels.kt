@@ -39,6 +39,12 @@ data class CastPlaybackState(
     // CastSessionRepository.tryRecover. Shown to the user instead of silently bouncing to local
     // playback and back on a transient hiccup that a same-channel reload will likely fix.
     val isRecovering: Boolean = false,
+    // True once the retries in isRecovering are demonstrably not getting anywhere: the receiver has
+    // never played a millisecond, the proxy fallback has already been taken, and the fast attempts
+    // are spent (see CastStatusMessagePolicy.isRecoveringWithoutPlayback). Retrying continues - this
+    // only decides whether the user is shown "recovering" or the actual likely cause, which until
+    // now was unreachable because recovery never ends on its own.
+    val recoveringWithoutPlayback: Boolean = false,
     // True when a proxy fallback was needed but the phone has no IPv4 LAN address to serve it from
     // (an IPv6-only network - see data/cast/LocalNetworkAddress.kt) - unlike every other failure
     // here, retrying can never fix this, so it's surfaced as its own explicit message instead of

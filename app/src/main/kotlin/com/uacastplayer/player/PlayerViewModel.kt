@@ -26,6 +26,7 @@ import androidx.media3.session.SessionResult
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.MainActivity
 import com.uacastplayer.cast.CastChannel
+import com.uacastplayer.cast.CastStatusMessagePolicy
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.cast.CastSideEffect
 import com.uacastplayer.data.prefs.AppPreferences
@@ -216,11 +217,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.update {
                     it.copy(
                         isCasting = isCasting,
-                        castCodecIncompatibility = state.codecIncompatibility,
-                        castReceiverLoadFailed = state.receiverLoadFailed,
-                        castLikelyCompatibilityHint = state.likelyCompatibilityHint,
-                        castIsRecovering = state.isRecovering,
-                        castProxyUnavailableIpv4Only = state.proxyUnavailableIpv4Only,
+                        castStatusMessage = CastStatusMessagePolicy.messageFor(state),
                     )
                 }
                 updateSeekability()

@@ -37,7 +37,13 @@ object CastReceiverStatusReducer {
         val effects = mutableListOf<CastSideEffect>()
         when {
             status == ReceiverStatus.PLAYING -> {
-                newState = newState.copy(receiverLoadFailed = false, isRecovering = false)
+                // PLAYING clears recoveringWithoutPlayback by definition - the premise it stands on
+                // is that nothing has ever played.
+                newState = newState.copy(
+                    receiverLoadFailed = false,
+                    isRecovering = false,
+                    recoveringWithoutPlayback = false,
+                )
                 effects += CastSideEffect.PauseLocalPlayer
             }
             status == ReceiverStatus.IDLE && idleReason == IdleReason.ERROR -> {
@@ -81,6 +87,7 @@ object CastReceiverStatusReducer {
             receiverLoadFailed = false,
             likelyCompatibilityHint = null,
             isRecovering = false,
+            recoveringWithoutPlayback = false,
             proxyUnavailableIpv4Only = false,
         )
         return CastReducerResult(newState, effects)
