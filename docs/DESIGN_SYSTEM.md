@@ -106,6 +106,10 @@ it appears:
 - **`ui/components/LiveRing.kt`** - `Modifier.liveRing(active, color)`. A slow ring leaving a
   circular button while something is genuinely live. Draws and animates nothing when `active` is
   false.
+- **`ui/components/OpenTransform.kt`** - `Modifier.openTransform(key)`. Scales and fades a screen in
+  as it opens over what the user was looking at, once per `key`. Safe on the player specifically
+  because the video renders into a `texture_view`; a `SurfaceView` would tear away from a scaling
+  parent.
 - **`ui/components/ArtworkTone.kt`** - `rememberArtworkTone` + `Modifier.artworkWash`. Borrows only
   the *hue* of a channel logo to wash the surface it sits on (`icons/ArtworkTonePolicy.kt` does the
   pixel maths). Skipped where `UaTheme.palette.wallpaperTexture` is false - Midnight is true black on

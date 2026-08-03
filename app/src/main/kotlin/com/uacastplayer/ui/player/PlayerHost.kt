@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import com.uacastplayer.ui.components.openTransform
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
@@ -110,6 +111,10 @@ fun PlayerHost(
                 resolveIcon = resolveIcon,
                 epgState = epgState,
                 iconPrefetchState = iconPrefetchState,
+                // Keyed on the request, not on `collapsed`: expanding the mini bar back to full
+                // screen is a return to something already open, and replaying the opening there
+                // would say a channel had just been picked when none had.
+                modifier = Modifier.openTransform(key = channels to startIndex),
             )
         }
     }
