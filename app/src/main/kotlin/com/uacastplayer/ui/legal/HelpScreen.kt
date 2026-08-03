@@ -60,14 +60,22 @@ fun HelpScreen(
     val context = LocalContext.current
     var diagnosticsReport by remember { mutableStateOf<String?>(null) }
 
+    // "How things work" first, in the order a new user meets them, then the three
+    // troubleshooting entries, then where the data lives. The DLNA entry sits directly under the
+    // Cast one because the two buttons sit side by side in the player and the question a user
+    // actually has is "which of these two is mine?".
     val entries = listOf(
         R.string.help_q1_title to R.string.help_q1_body,
         R.string.help_q2_title to R.string.help_q2_body,
         R.string.help_q3_title to R.string.help_q3_body,
+        R.string.help_dlna_title to R.string.help_dlna_body,
         R.string.help_q4_title to R.string.help_q4_body,
         R.string.help_q5_title to R.string.help_q5_body,
         R.string.help_q6_title to R.string.help_q6_body,
         R.string.help_q7_title to R.string.help_q7_body,
+        R.string.help_playlist_errors_title to R.string.help_playlist_errors_body,
+        R.string.help_channel_unavailable_title to R.string.help_channel_unavailable_body,
+        R.string.help_cast_errors_title to R.string.help_cast_errors_body,
         R.string.help_q8_title to R.string.help_q8_body,
     )
 
