@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Plain Theme.SplashScreen, not .IconBackground: the wordmark artwork (splash_logo) is a
-         wide rectangle, and IconBackground's circular/squircle chip behind the icon would clip
-         its sides - see themes.xml's base style for the non-v31 fallback, kept in sync. -->
+    <!-- Plain Theme.SplashScreen, not .IconBackground: no chip is wanted behind the artwork, which
+         already carries its own circular badge.
+
+         Choosing the plain variant does NOT mean the icon escapes masking, which is what the note
+         here used to claim. On API 31+ the system masks the splash icon with the device's icon
+         shape either way; the variants differ only in the size of the guaranteed-visible area
+         (inner 192 of 288dp without a background chip, 160 of 240dp with one). splash_logo.png was
+         an opaque square whose artwork reached 92% of the canvas, so the mask cut through the
+         bright ring - visibly on a Xiaomi HyperOS mask, invisibly on an emulator whose gentler mask
+         happened to cut only background-coloured pixels. The asset now sits inside the inner
+         two-thirds with a transparent surround, which is the actual requirement. -->
+    <!-- See themes.xml's base style for the non-v31 fallback, kept in sync. -->
     <style name="Theme.UaCastPlayer.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/uacast_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
