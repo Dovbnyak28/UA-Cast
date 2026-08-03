@@ -21,6 +21,24 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Added
 
+- **Help now covers DLNA and the errors a playlist can produce.** Four new entries in all four
+  languages: casting to a TV without Chromecast, what each playlist load failure means, why a
+  channel says it is not available, and why a channel plays on the phone but not on the TV. Each
+  quotes the app's own error strings verbatim so a user can match what is on screen to the
+  explanation.
+- **Motion the design system had declared but never implemented.** `DurEnter`, `DurRing`,
+  `StaggerMs` and `GlideMs` existed as tokens and were used by nothing:
+  - Channel and group items arrive as a wave rather than all at once, capped at 10 items so a
+    2863-channel playlist does not stagger item 400 half a minute into the future.
+  - A shimmering skeleton replaces the spinner on first playlist load, so the screen shows the
+    shape of what is coming instead of swapping a spinner for a full layout.
+  - A slow ring leaves the Cast and DLNA buttons while a session is live. That state previously had
+    one channel - the icon's tint - which is legible only if you already know to compare two
+    buttons against each other.
+  - The player grows and fades in when a channel is opened, instead of hard-cutting over the list.
+- **The now-playing card takes its tone from the channel's logo.** Only the hue is borrowed: a
+  logo's own lightness varies wildly between providers, and honouring it would make the card
+  near-black for one channel and glaring for the next. Off entirely on Midnight.
 - **DLNA/UPnP casting** to any AVTransport renderer on the LAN - typically an older Smart TV with
   no Chromecast support. Own SSDP discovery and SOAP client, no new dependencies, reusing the same
   local HLS proxy Chromecast already goes through. See `docs/DLNA.md` for what this MVP does and
@@ -33,6 +51,18 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   no backlight. The accent is desaturated on purpose: a saturated colour on true black has no
   ambient tone to sit against and simply glows, so here colour is reserved for the three
   route-health states and chrome stays neutral. Selectable in Settings alongside the other two.
+
+### Removed
+
+- **Group cards no longer show a collage of channel logos from the playlist.** The collage was a
+  picture of the *icon cache* rather than of the group, so the same group looked different on two
+  launches; and a group whose first channels happened to have no cached logo fell through to the
+  curated category artwork instead, leaving one screen where some cards carried four tiny mismatched
+  provider logos and others carried an illustration, with nothing telling the user why. Every card
+  is now its category, on every launch and every playlist.
+- **The star on grid tiles.** Tapping a channel in grid view sat a favourite toggle inside a 48dp
+  touch target overlapping the tile, so opening a channel often favourited it instead. Favourites
+  are still one long-press away, and the star remains in list view and in the player.
 
 ### Fixed - contrast
 
