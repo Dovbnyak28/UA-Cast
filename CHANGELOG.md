@@ -2,13 +2,22 @@
 
 Versions are marked in two places, which must move together: the local defaults in
 `app/build.gradle.kts` and `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`. CI appends
-its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.3.0.<run>` with a
+its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.0.<run>` with a
 `versionCode` of the run number - the values below are what a local build produces.
 
-## 0.3.0 - unreleased
+## 0.9.0 - unreleased
 
-`versionCode` 3. A minor bump rather than a patch: DLNA casting became a real feature in this
-version, and the local player's behaviour during a remote cast changed.
+`versionCode` 9. Renumbered from 0.3.0 while still unreleased, and the jump past 0.4-0.8 is
+deliberate rather than an accident of counting: what this section describes is not a third
+increment on a small app but the app becoming the thing it set out to be - playlists, EPG,
+favorites, Chromecast, DLNA, the local proxy, three themes and four languages, verified on real
+hardware rather than only an emulator. 0.3.0 would have told a user holding the APK that they were
+early in a series. They are not; they are one step short of 1.0.0, and the number should say so.
+
+**Why not 1.0.0.** Only one person has ever run this app. 1.0.0 is a claim about behaviour holding
+still for other people, and nothing here has been exposed to a device, a playlist or a TV that was
+not chosen by its author. That claim is earned by other people's devices, not by more commits.
+See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Added
 

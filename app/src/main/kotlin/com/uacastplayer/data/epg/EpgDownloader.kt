@@ -46,7 +46,7 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
      *
      * Every path through this class and its caller deletes its own file - but none of that runs when
      * the *process* dies mid-download or mid-parse, and an EPG parse is exactly where this app has
-     * been killed before (see the OutOfMemoryError entry in CHANGELOG 0.3.0). Nothing else ever swept
+     * been killed before (see the OutOfMemoryError entry in CHANGELOG 0.9.0). Nothing else ever swept
      * them up, and because these live in `filesDir` rather than the cache directory, Android will
      * never reclaim them either: found on a real device as **13 orphaned files totalling ~500MB**, on
      * an app whose entire storage footprint was 523MB. One force-stop during a download is enough to

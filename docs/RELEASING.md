@@ -67,6 +67,40 @@ Marking a new version touches **three** files, and they have to move together:
 `versionCode` only has to increase monotonically; CI derives its own from the run number, so the
 default in `build.gradle.kts` matters only for locally built APKs.
 
+### Which digit moves
+
+Semantic versioning, with the meanings pinned to what a *user of the APK* experiences - this app
+publishes no API, so "breaking change" has to mean something they can feel:
+
+| Digit | Moves when | Examples from this project |
+|---|---|---|
+| **major** | Something a user relies on stops working the way it did, or the app is claimed stable for people other than its author | raising `minSdk` past a device that used to run it; a stored playlist/favorites format that an older build cannot read back; removing a feature |
+| **minor** | A new user-visible capability, or a behaviour change worth noticing | DLNA casting; the Midnight theme; the local player's behaviour changing during a remote cast |
+| **patch** | Fixes and corrections only, nothing new to learn | the splash mask crop; the `701` refusal on channel switch; contrast repairs |
+
+Refactors, test additions, CI work and doc changes move nothing on their own. They ride along with
+whatever release ships next.
+
+The fourth component CI appends is **not** part of this scheme. `0.9.0.147` is "0.9.0, built by run
+147" - it exists so two artifacts of the same version are distinguishable, and it resets nothing and
+means nothing about content.
+
+### What 1.0.0 waits for
+
+The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
+
+1. **The app has run on hardware nobody here chose.** Every device it has been verified on - one
+   Xiaomi phone, one Samsung UE40KU6000, one Chromecast 4th gen - belongs to its author. A first
+   report from a stranger's TV is worth more than another 100 tests.
+2. **A signing key exists and is backed up.** Right now every release APK is unsigned
+   (`app-release-unsigned`). An installed app whose key is later lost can never be updated -
+   deciding this *after* people have installed 1.0.0 is deciding it too late.
+3. **The instrumented tests actually run somewhere.** They compile and are never executed; the whole
+   Cast/DLNA/proxy path is covered by unit tests over pure policy objects and by hand on one phone.
+
+None of the three is a code change, which is exactly why none of them gets closer by writing more
+code.
+
 ## Regenerating the baseline profile
 
 **Current status: successfully run once (2026-07-30), on a Pixel 10 Pro emulator (API 37,
