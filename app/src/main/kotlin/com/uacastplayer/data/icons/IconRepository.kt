@@ -11,6 +11,7 @@ import com.uacastplayer.icons.IconMemoryCacheKey
 import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
+import com.uacastplayer.log.AppLog
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -124,14 +125,24 @@ class IconRepository(context: Context) {
      * picks a URL out of it, so it is safe to call straight from the main thread while switching
      * channels. The receiver does its own fetching.
      */
-    fun castArtworkUrl(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): String? =
-        CastArtworkPolicy.artworkUrl(
-            IconResolver.candidates(
-                tvgLogo, epgIconUrl, tvgId,
-                customBaseUrls = customBaseUrls(),
-                cdnFallbackUrl = ::cdnFallbackUrl,
-            ),
+    fun castArtworkUrl(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): String? {
+        val candidates = IconResolver.candidates(
+            tvgLogo, epgIconUrl, tvgId,
+            customBaseUrls = customBaseUrls(),
+            cdnFallbackUrl = ::cdnFallbackUrl,
         )
+        val url = CastArtworkPolicy.artworkUrl(candidates)
+        // `cast load: artwork=false` in CastSessionRepository says a receiver got no picture; it
+        // cannot say why, and the two reasons want opposite fixes. A playlist entry with no tvg-id
+        // at all is the provider's doing and nothing here can help. An entry that reaches only the
+        // cache-only CDN guess is *this policy* declining a URL the phone may well be displaying
+        // from disk right now - see CastArtworkPolicy's last paragraph. Never the url itself: this
+        // ends up in a shared diagnostics report.
+        if (url == null) {
+            AppLog.d(TAG) { "cast artwork: none, candidates=${candidates.size} (fetchable=0)" }
+        }
+        return url
+    }
 
     suspend fun trimCache() = diskCache.trim()
 
@@ -174,3 +185,5 @@ class IconRepository(context: Context) {
         const val MEMORY_CACHE_SIZE = 256
     }
 }
+
+private const val TAG = "IconRepository"

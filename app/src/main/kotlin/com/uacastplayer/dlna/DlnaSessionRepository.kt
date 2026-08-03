@@ -186,14 +186,20 @@ class DlnaSessionRepository private constructor(context: Context) {
         proxyServer.ensureStarted(sessionToken = token, host = host)
         val localUrl = proxyServer.buildLocalUrl(proxyServer.registerPlaylist(streamUrl))
 
-        // Stop first when re-pointing, and ignore whether it worked. The AVTransport state table
-        // only guarantees SetAVTransportURI from STOPPED and NO_MEDIA_PRESENT; from PLAYING it is
+        // Always stop first, and ignore whether it worked. The AVTransport state table only
+        // guarantees SetAVTransportURI from STOPPED and NO_MEDIA_PRESENT; from PLAYING it is
         // renderer-specific, and the ones that do accept it still spend time transitioning, which
         // is what made Play come back 701 four times in a row on a Samsung. Stopping first turns a
         // renderer-specific case into the one every renderer implements. The result is ignored on
         // purpose: a renderer that refuses Stop because it was not playing anyway has told us
-        // nothing that should abort the switch.
-        if (isRepoint) avTransportClient.stop(device.controlUrl)
+        // nothing that should abort the connect.
+        //
+        // This was `if (isRepoint)` on the reasoning that a fresh connect finds an idle renderer.
+        // A logcat says otherwise: a first connect to the Samsung took five refused Plays - three
+        // seconds of the user watching nothing - because the set was still PLAYING whatever the
+        // *previous* app had left on it. A renderer keeps its transport state across senders, so
+        // "first connect for us" says nothing about what state it is in.
+        avTransportClient.stop(device.controlUrl)
 
         val ok = avTransportClient.setAvTransportUri(device.controlUrl, localUrl, title) &&
             avTransportClient.play(device.controlUrl)
