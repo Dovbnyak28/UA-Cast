@@ -358,6 +358,5 @@
     <string name="dlna_sheet_title">Otros dispositivos (DLNA)</string>
     <string name="dlna_sheet_searching">Buscando dispositivos…</string>
     <string name="dlna_sheet_no_devices">No se encontraron dispositivos</string>
-    <string name="dlna_sheet_connected_to">Conectado a %1$s</string>
-    <string name="dlna_stop_casting">Detener transmisión</string>
+    <string name="dlna_stop_casting">Detener</string>
 </resources>

@@ -365,6 +365,5 @@
     <string name="dlna_sheet_title">Другие устройства (DLNA)</string>
     <string name="dlna_sheet_searching">Поиск устройств…</string>
     <string name="dlna_sheet_no_devices">Устройства не найдены</string>
-    <string name="dlna_sheet_connected_to">Подключено к %1$s</string>
-    <string name="dlna_stop_casting">Остановить трансляцию</string>
+    <string name="dlna_stop_casting">Остановить</string>
 </resources>

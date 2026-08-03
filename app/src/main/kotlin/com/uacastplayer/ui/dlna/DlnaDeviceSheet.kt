@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
@@ -88,24 +89,28 @@ fun DlnaDeviceSheet(
                 color = UaTheme.palette.labelPrimary,
             )
 
-            connectionState.connectedDevice?.let { device ->
+            val connected = connectionState.connectedDevice
+            connected?.let { device ->
                 DlnaConnectedRow(deviceName = device.friendlyName, onStop = onStopCasting)
             }
 
+            // The connected device is already the card above, so listing it again below it said the
+            // same name twice in a row and offered a tap that would only re-point the renderer at
+            // what it is already playing. What stays listed is what the user could switch *to*.
+            val switchable = devices.filter { it != connected }
             when {
                 searching -> DlnaSearchingRow()
-                devices.isEmpty() -> Text(
+                // Only when there is nothing at all. With a device connected, an empty remainder
+                // means "nothing else to switch to", and "No devices found" directly under a card
+                // naming a connected TV reads as a contradiction.
+                switchable.isEmpty() && connected == null -> Text(
                     text = stringResource(R.string.dlna_sheet_no_devices),
                     style = BodyText,
                     color = UaTheme.palette.labelSecondary,
                     modifier = Modifier.padding(vertical = GapS),
                 )
-                else -> devices.forEach { device ->
-                    DlnaDeviceRow(
-                        device = device,
-                        isConnected = device == connectionState.connectedDevice,
-                        onClick = { onDeviceSelected(device) },
-                    )
+                else -> switchable.forEach { device ->
+                    DlnaDeviceRow(device = device, onClick = { onDeviceSelected(device) })
                 }
             }
         }
@@ -139,15 +144,26 @@ private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusItem))
             .background(UaTheme.palette.surface1)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(start = 14.dp, end = GapS, top = 10.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(GapS),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
+        Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.azure)
+        // weight(1f) is the whole fix for what this row used to look like. With SpaceBetween and an
+        // unweighted Column, the text was measured at its full intrinsic width first and the button
+        // got whatever was left - which for a real device name was almost nothing, so "Stop casting"
+        // laid itself out one character per line and the card grew to half the sheet. Weighted, the
+        // button is measured first at the width it actually needs and the name takes the remainder.
+        Column(modifier = Modifier.weight(1f)) {
+            // The name alone, not "Connected to <name>": the green line right below already says
+            // this is a live cast, and the name was appearing a third time in the device list under
+            // the card. Ellipsized because a friendlyName is whatever the TV's owner typed into it.
             Text(
-                text = stringResource(R.string.dlna_sheet_connected_to, deviceName),
+                text = deviceName,
                 style = BodyText,
                 color = UaTheme.palette.labelPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = stringResource(R.string.cast_status_connected),
@@ -156,13 +172,17 @@ private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
             )
         }
         TextButton(onClick = onStop) {
-            Text(text = stringResource(R.string.dlna_stop_casting), color = UaTheme.palette.azure)
+            Text(
+                text = stringResource(R.string.dlna_stop_casting),
+                color = UaTheme.palette.azure,
+                maxLines = 1,
+            )
         }
     }
 }
 
 @Composable
-private fun DlnaDeviceRow(device: DlnaDevice, isConnected: Boolean, onClick: () -> Unit) {
+private fun DlnaDeviceRow(device: DlnaDevice, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -172,12 +192,14 @@ private fun DlnaDeviceRow(device: DlnaDevice, isConnected: Boolean, onClick: () 
         horizontalArrangement = Arrangement.spacedBy(GapS),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            AppIcons.Tv,
-            contentDescription = null,
-            tint = if (isConnected) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
+        Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.labelSecondary)
+        Text(
+            text = device.friendlyName,
+            style = BodyText,
+            color = UaTheme.palette.labelPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Text(text = device.friendlyName, style = BodyText, color = UaTheme.palette.labelPrimary)
     }
 }
 
@@ -189,10 +211,11 @@ private fun DlnaDeviceRow(device: DlnaDevice, isConnected: Boolean, onClick: () 
 private fun DlnaDeviceSheetRowsPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
     UaCastTheme(theme) {
         Column(verticalArrangement = Arrangement.spacedBy(GapS), modifier = Modifier.padding(ScreenHPadding)) {
-            DlnaConnectedRow(deviceName = "Samsung TV", onStop = {})
+            // The real friendlyName of the TV this layout was fixed against - a short placeholder
+            // is exactly what hid the wrapping bug from this preview in the first place.
+            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", onStop = {})
             DlnaDeviceRow(
                 device = DlnaDevice(friendlyName = "LG webOS TV", controlUrl = "http://192.168.1.5/upnp/control"),
-                isConnected = false,
                 onClick = {},
             )
             DlnaSearchingRow()
