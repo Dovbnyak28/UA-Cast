@@ -68,6 +68,43 @@ class AvTransportSoapBuilderTest {
         assertEquals("http://10.0.0.5/stream.m3u8", firstTextOf(doc, "res"))
     }
 
+    /**
+     * The proxy url serves a rewritten HLS playlist, remuxed MPEG-TS or an origin passthrough
+     * depending on what the channel turns out to be, and which one is not known when this metadata
+     * is built. Naming one type was a claim the proxy could not keep - and it named HLS, which most
+     * non-Samsung sets will not take over DLNA, so a renderer that filters on protocolInfo refused
+     * channels it could have played.
+     */
+    @Test
+    fun `the res protocolInfo does not commit to a content type the proxy may not serve`() {
+        val didl = AvTransportSoapBuilder.didlLite("http://10.0.0.5/hls/tok/abc", "Any")
+        val protocolInfo = parseXml(didl).getElementsByTagName("res").item(0)
+            .attributes.getNamedItem("protocolInfo").nodeValue
+
+        assertTrue("must be an http-get resource", protocolInfo.startsWith("http-get:*:"))
+        assertTrue("MIME field must stay a wildcard: $protocolInfo", protocolInfo.startsWith("http-get:*:*:"))
+    }
+
+    /** Without these a renderer may treat a live channel as a seekable file and stall on the first
+     * range request the origin answers with the head of the stream. */
+    @Test
+    fun `the res advertises a non-seekable live stream`() {
+        val didl = AvTransportSoapBuilder.didlLite("http://10.0.0.5/hls/tok/abc", "Any")
+        val protocolInfo = parseXml(didl).getElementsByTagName("res").item(0)
+            .attributes.getNamedItem("protocolInfo").nodeValue
+
+        assertTrue("no seek support: $protocolInfo", protocolInfo.contains("DLNA.ORG_OP=00"))
+        assertTrue("streaming-mode flags: $protocolInfo", protocolInfo.contains("DLNA.ORG_FLAGS=8D5"))
+    }
+
+    /** videoBroadcast rather than the generic videoItem is what tells a renderer to render a live
+     * channel - no duration, no scrub bar - instead of a progress bar for a stream with no end. */
+    @Test
+    fun `the item is classed as a live broadcast`() {
+        val didl = AvTransportSoapBuilder.didlLite("http://10.0.0.5/hls/tok/abc", "Any")
+        assertEquals("object.item.videoItem.videoBroadcast", firstTextOf(parseXml(didl), "upnp:class"))
+    }
+
     @Test
     fun `soapAction quotes the service type and action name for the SOAPACTION header`() {
         assertEquals(

@@ -15,11 +15,16 @@ private val SOAP_MEDIA_TYPE = "text/xml; charset=\"utf-8\"".toMediaType()
  * fail fast rather than hang the UI. Envelope/DIDL-Lite building is pure and lives in
  * [AvTransportSoapBuilder]; this class is just the HTTP POST.
  */
-class AvTransportClient(private val httpClient: OkHttpClient) {
+class AvTransportClient(
+    private val httpClient: OkHttpClient,
+    /** Longer-timeout client for the one action a renderer answers only after fetching the url -
+     * see `DlnaSessionRepository.SET_URI_TIMEOUT_SECONDS`. */
+    private val setUriHttpClient: OkHttpClient = httpClient,
+) {
 
     fun setAvTransportUri(controlUrl: String, mediaUrl: String, title: String): Boolean {
         val envelope = AvTransportSoapBuilder.setAvTransportUriEnvelope(mediaUrl, title)
-        return postSoapAction(controlUrl, "SetAVTransportURI", envelope) == SoapOutcome.OK
+        return postSoapAction(controlUrl, "SetAVTransportURI", envelope, setUriHttpClient) == SoapOutcome.OK
     }
 
     /**
@@ -54,14 +59,23 @@ class AvTransportClient(private val httpClient: OkHttpClient) {
      * much as a renderer answering with something OkHttp cannot even parse as a response, so
      * narrowing this would only turn one class of unreachable-renderer into a crash. */
     @Suppress("TooGenericExceptionCaught")
-    private fun postSoapAction(controlUrl: String, action: String, envelope: String): SoapOutcome {
+    private fun postSoapAction(
+        controlUrl: String,
+        action: String,
+        envelope: String,
+        client: OkHttpClient = httpClient,
+    ): SoapOutcome {
         val request = Request.Builder()
             .url(controlUrl)
             .addHeader("SOAPACTION", AvTransportSoapBuilder.soapAction(action))
+            // Some renderers reject a SOAP POST that does not announce a user agent, and the DLNA
+            // convention is to identify the OS and the DLNA doc version. Sent on every action so a
+            // renderer that gates on it does not fail only on some of them.
+            .addHeader("User-Agent", DLNA_USER_AGENT)
             .post(envelope.toRequestBody(SOAP_MEDIA_TYPE))
             .build()
         return try {
-            httpClient.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 // A renderer that *refuses* an action answers HTTP 500 with a UPnP fault in the
                 // body - no exception is thrown, so until this was here a rejected action produced
                 // no log line at all and was indistinguishable from one that worked. The error code
@@ -85,6 +99,8 @@ class AvTransportClient(private val httpClient: OkHttpClient) {
     }
 
     private companion object {
+        const val DLNA_USER_AGENT = "Android/11 UPnP/1.0 DLNADOC/1.50 UACastPlayer"
+
         // A Samsung UE40KU6000 switching between two live HLS channels refused Play three times
         // over about 2.4s before accepting it. The budget here is deliberately well past that
         // rather than just over it: the measurement is one TV on an idle network, and the cost of

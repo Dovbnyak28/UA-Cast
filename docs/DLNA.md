@@ -71,8 +71,39 @@ it is resolved against the device's own `LOCATION` url before being stored.
 `dlna/AvTransportClient` POSTs three SOAP actions to the renderer's control url:
 `SetAVTransportURI` (with a minimal DIDL-Lite metadata block - title only, no elaborate library
 metadata since this is live TV, not a movie), `Play`, and `Stop`. Envelope/DIDL-Lite string
-building is pure (`dlna/AvTransportSoapBuilder`); the HTTP POST is the only impure part. Timeouts
-are a few seconds - a renderer that doesn't respond promptly fails fast rather than hanging the UI.
+building is pure (`dlna/AvTransportSoapBuilder`); the HTTP POST is the only impure part.
+
+Four details here are compatibility, not style, and each was a real failure:
+
+- **A channel switch sends `Stop` first.** The AVTransport state table only guarantees
+  `SetAVTransportURI` from STOPPED/NO_MEDIA_PRESENT; from PLAYING it is renderer-specific. A Samsung
+  UE40KU6000 accepted the new url but then refused `Play` with `701 Transition not available` four
+  times in a row while it moved between the two. Stopping first turns a renderer-specific case into
+  the one every renderer implements - with it, the same switch produces no refusals at all.
+- **`Play` retries while - and only while - the renderer answers 701.** That is the one refusal that
+  resolves on its own; `716 Resource not found` and everything else fail immediately, since retrying
+  them only delays the fallback. This is the safety net under the `Stop`, not the primary fix.
+- **`protocolInfo` keeps a wildcard MIME** (`http-get:*:*:...`). One proxy url serves a rewritten
+  HLS playlist, remuxed `video/MP2T`, or an origin passthrough depending on the channel, and which
+  is not known when the metadata is built. It used to name the HLS type specifically - a claim the
+  proxy could not keep, and one most non-Samsung sets reject outright since they do not do HLS over
+  DLNA. Renderers play by the response's `Content-Type`; protocolInfo is a pre-flight filter, so the
+  safe value is the one that filters nothing. The DLNA attributes (`DLNA.ORG_OP=00`, streaming-mode
+  `DLNA.ORG_FLAGS`) and the `videoBroadcast` class say "live, not seekable", so a renderer does not
+  treat the channel as a file and stall on a range request.
+- **`SetAVTransportURI` gets a much longer timeout than `Play`/`Stop`.** Renderers commonly fetch
+  the url inside the action to validate it - the Samsung answers `716` for a dead url, which it can
+  only know by having tried - so that action's reply is gated on the proxy's first round trip to the
+  origin. On the shared few-second budget a slow origin surfaced as a socket timeout and a failed
+  connect on a TV that was working fine.
+
+A failed channel switch no longer tears the session down. Only a first connect does. On a re-point
+the renderer is still playing the previous channel through this proxy, and stopping it was itself
+what put an error on the TV - the failure is usually a refused action, not a dead stream.
+
+A renderer that refuses an action answers HTTP 500 with a UPnP fault rather than throwing, so until
+`dlna/UpnpFault` existed a rejected action produced no log line at all and looked exactly like one
+that worked. The error code is the whole diagnosis; it is now logged.
 
 `ui/dlna/DlnaDeviceSheet` is the "Other devices (DLNA)" bottom sheet opened from a small icon next
 to the player's other overlay controls: it runs discovery once per appearance, lists whatever it

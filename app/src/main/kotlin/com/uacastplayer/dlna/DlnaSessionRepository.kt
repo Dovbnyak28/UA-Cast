@@ -24,6 +24,19 @@ import okhttp3.OkHttpClient
 
 private const val TAG = "DlnaSessionRepository"
 private const val SOAP_TIMEOUT_SECONDS = 4L
+
+/**
+ * `SetAVTransportURI` gets its own, much longer budget than [SOAP_TIMEOUT_SECONDS].
+ *
+ * Play and Stop are pure state changes and a renderer that cannot answer them in a few seconds is
+ * not going to. SetAVTransportURI is not like that: renderers commonly *fetch the url inside the
+ * action* to validate it before replying - a Samsung UE40KU6000 answers 716 "Resource not found"
+ * for a dead url, which it can only know by having tried. So this action's reply is gated on the
+ * proxy's first upstream round trip to the origin, and sharing the short timeout meant a slow
+ * origin surfaced as a socket timeout and a failed connect on a TV that was working fine.
+ */
+private const val SET_URI_TIMEOUT_SECONDS = 20L
+
 private const val DEVICE_DESCRIPTION_TIMEOUT_SECONDS = 4L
 
 // Deliberately NOT the discovery client's few seconds - see [DlnaSessionRepository.proxyHttpClient].
@@ -74,7 +87,14 @@ class DlnaSessionRepository private constructor(context: Context) {
     )
 
     private val proxyServer = ProxyServer(proxyHttpClient)
-    private val avTransportClient = AvTransportClient(soapHttpClient)
+    private val setUriHttpClient = soapHttpClient.newBuilder()
+        .readTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
+
+    // Shares the connection pool and dispatcher with soapHttpClient (newBuilder does), so the
+    // second client costs nothing beyond its own timeout settings.
+    private val avTransportClient = AvTransportClient(soapHttpClient, setUriHttpClient)
     private val ssdpDiscovery = SsdpDiscovery(appContext, discoveryHttpClient)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -110,15 +130,23 @@ class DlnaSessionRepository private constructor(context: Context) {
     }
 
     /** Starts the proxy for [streamUrl] and points [device] at the resulting local url. */
-    fun connect(device: DlnaDevice, streamUrl: String, title: String) {
+    fun connect(device: DlnaDevice, streamUrl: String, title: String) =
+        startSession(device, streamUrl, title, isRepoint = false)
+
+    private fun startSession(device: DlnaDevice, streamUrl: String, title: String, isRepoint: Boolean) {
         _state.update { it.copy(isConnecting = true) }
         connectJob?.cancel()
         connectJob = scope.launch {
-            val connected = withContext(Dispatchers.IO) { connectBlocking(device, streamUrl, title) }
-            _state.value = if (connected) {
-                DlnaConnectionState(connectedDevice = device)
-            } else {
-                DlnaConnectionState()
+            val connected = withContext(Dispatchers.IO) { connectBlocking(device, streamUrl, title, isRepoint) }
+            _state.value = when {
+                connected -> DlnaConnectionState(connectedDevice = device)
+                // A re-point that failed leaves the renderer where it was - still connected, still
+                // playing the previous channel. Dropping to disconnected here would be a worse lie
+                // than the stale channel name: the user would lose the Stop button for a cast that
+                // is demonstrably still running, and the proxy feeding it is deliberately still up
+                // (see connectBlocking).
+                isRepoint -> DlnaConnectionState(connectedDevice = device)
+                else -> DlnaConnectionState()
             }
         }
     }
@@ -135,10 +163,10 @@ class DlnaSessionRepository private constructor(context: Context) {
      */
     fun setActiveChannel(streamUrl: String, title: String) {
         val device = _state.value.connectedDevice ?: return
-        connect(device, streamUrl, title)
+        startSession(device, streamUrl, title, isRepoint = true)
     }
 
-    private fun connectBlocking(device: DlnaDevice, streamUrl: String, title: String): Boolean {
+    private fun connectBlocking(device: DlnaDevice, streamUrl: String, title: String, isRepoint: Boolean): Boolean {
         val host = LocalNetworkAddress.currentIpv4Address(appContext)
         if (host == null) {
             AppLog.w(TAG) { "No LAN address available; cannot start DLNA proxy" }
@@ -157,13 +185,28 @@ class DlnaSessionRepository private constructor(context: Context) {
         val token = sessionToken ?: UUID.randomUUID().toString().also { sessionToken = it }
         proxyServer.ensureStarted(sessionToken = token, host = host)
         val localUrl = proxyServer.buildLocalUrl(proxyServer.registerPlaylist(streamUrl))
+
+        // Stop first when re-pointing, and ignore whether it worked. The AVTransport state table
+        // only guarantees SetAVTransportURI from STOPPED and NO_MEDIA_PRESENT; from PLAYING it is
+        // renderer-specific, and the ones that do accept it still spend time transitioning, which
+        // is what made Play come back 701 four times in a row on a Samsung. Stopping first turns a
+        // renderer-specific case into the one every renderer implements. The result is ignored on
+        // purpose: a renderer that refuses Stop because it was not playing anyway has told us
+        // nothing that should abort the switch.
+        if (isRepoint) avTransportClient.stop(device.controlUrl)
+
         val ok = avTransportClient.setAvTransportUri(device.controlUrl, localUrl, title) &&
             avTransportClient.play(device.controlUrl)
         if (!ok) {
-            AppLog.w(TAG) { "DLNA connect failed for ${device.friendlyName}" }
-            proxyServer.stop()
-            CastProxyService.stop(appContext)
-            sessionToken = null
+            AppLog.w(TAG) { "DLNA ${if (isRepoint) "channel switch" else "connect"} failed for ${device.friendlyName}" }
+            // Only a first connect tears the session down. On a re-point the renderer is still
+            // playing the previous channel *through this proxy* - stopping it was what put an error
+            // on the TV, since the failure is usually a refused action rather than a dead stream.
+            if (!isRepoint) {
+                proxyServer.stop()
+                CastProxyService.stop(appContext)
+                sessionToken = null
+            }
         }
         return ok
     }
