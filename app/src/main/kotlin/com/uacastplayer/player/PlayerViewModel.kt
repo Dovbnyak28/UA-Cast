@@ -136,6 +136,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val player: Player get() = exoPlayer
 
     private var channels: List<M3uChannel> = emptyList()
+    private var castArtworkUrlFor: (M3uChannel) -> String? = DEFAULT_CAST_ARTWORK
     private var currentIndex: Int = -1
     private val deadIndices = mutableSetOf<Int>()
     private var retryState = RetryState()
@@ -299,8 +300,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun start(channels: List<M3uChannel>, startIndex: Int) {
+    /** [castArtworkUrlFor] resolves the logo a Cast receiver is shown for a channel; see
+     * [com.uacastplayer.AppViewModel.castArtworkUrlFor] for why it is a function and not a value.
+     * The default is the channel's own `tvg-logo`, i.e. what this class did before anything richer
+     * was passed in. */
+    fun start(
+        channels: List<M3uChannel>,
+        startIndex: Int,
+        castArtworkUrlFor: (M3uChannel) -> String? = DEFAULT_CAST_ARTWORK,
+    ) {
         this.channels = channels
+        this.castArtworkUrlFor = castArtworkUrlFor
         deadIndices.clear()
         retryState = RetryState()
         liveWindowRecoveryHistory = emptyList()
@@ -393,7 +403,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 title = channel.displayName,
                 userAgent = channel.userAgent,
                 referrer = channel.referrer,
-                logoUrl = channel.tvgLogo,
+                logoUrl = castArtworkUrlFor(channel),
             ),
         )
         // No-op unless a DLNA renderer is actually connected. Unconditional on purpose: the local
@@ -692,6 +702,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         exoPlayer.clearMediaItems()
         currentIndex = -1
         channels = emptyList()
+        castArtworkUrlFor = DEFAULT_CAST_ARTWORK
         _uiState.update { PlayerUiState(resizeMode = it.resizeMode) }
         PlaybackActivity.setActive(false)
     }
@@ -763,6 +774,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         private const val CHANNEL_SWITCH_DEBOUNCE_MILLIS = 220L
         private const val MAX_PREVIEW_SIZE = 20
         private const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
+
+        /** What [start] falls back to when no resolver is supplied: the channel's own `tvg-logo`,
+         * the only artwork source this class had before [start] took one. */
+        private val DEFAULT_CAST_ARTWORK: (M3uChannel) -> String? = { it.tvgLogo }
 
         // Process-wide guard: at most one PlayerViewModel (hence one ExoPlayer) may be alive at a
         // time. Incremented as the first thing each instance does, decremented in onCleared; a value

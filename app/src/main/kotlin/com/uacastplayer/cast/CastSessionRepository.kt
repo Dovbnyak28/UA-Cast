@@ -61,8 +61,10 @@ data class CastChannel(
     val title: String,
     val userAgent: String? = null,
     val referrer: String? = null,
-    /** The channel's `tvg-logo`, shown as artwork on the receiver - see [CastMediaLoader]. Not part
-     * of [LoadRetryContext] because nothing about *retrying* depends on it: a wrong thumbnail on a
+    /** The channel's artwork URL, shown on the receiver - see [CastMediaLoader]. Resolved by the
+     * caller out of the full icon candidate chain, not just `tvg-logo`, so the TV shows the same
+     * logo the phone does - see [com.uacastplayer.icons.CastArtworkPolicy]. Not part of
+     * [LoadRetryContext] because nothing about *retrying* depends on it: a wrong thumbnail on a
      * racing channel switch is cosmetic, where a wrong stream URL would not be. */
     val logoUrl: String? = null,
 )

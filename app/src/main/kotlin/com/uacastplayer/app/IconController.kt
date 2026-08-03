@@ -85,6 +85,18 @@ class IconController(
         return iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrl, channel.tvgId)
     }
 
+    /**
+     * The logo URL to hand a Cast receiver for [channel] - see
+     * [CastArtworkPolicy][com.uacastplayer.icons.CastArtworkPolicy].
+     *
+     * Deliberately ignores [IconDisplayMode] where its two neighbours honour it: PLACEHOLDERS is a
+     * choice about what *this* phone renders in a list of hundreds of rows, and says nothing about
+     * a TV showing one channel at a time. Suppressing artwork there would leave the receiver on a
+     * bare title for a setting the user picked to keep the channel list light.
+     */
+    fun castArtworkUrl(channel: M3uChannel, epgIconUrl: String?): String? =
+        iconRepository.castArtworkUrl(channel.tvgLogo, epgIconUrl, channel.tvgId)
+
     /** For GroupIconCollage - a disk-cache-only lookup, never fetches. See [IconRepository.cachedIconFile]. */
     suspend fun cachedChannelIcon(channel: M3uChannel, iconDisplayMode: IconDisplayMode, epgIconUrl: String?): File? {
         if (iconDisplayMode == IconDisplayMode.PLACEHOLDERS) return null

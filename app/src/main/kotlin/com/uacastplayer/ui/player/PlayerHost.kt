@@ -58,6 +58,7 @@ fun PlayerHost(
     onExit: () -> Unit,
     onTapCollapsed: () -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
+    castArtworkUrl: (M3uChannel) -> String?,
     favoriteActions: PlayerFavoriteActions,
     enrichment: PlayerEnrichmentState,
     modifier: Modifier = Modifier,
@@ -67,8 +68,12 @@ fun PlayerHost(
 
     val viewModel: PlayerViewModel = viewModel()
 
+    // castArtworkUrl is deliberately not a key: it is a bound reference on the Activity-scoped
+    // AppViewModel, so a fresh instance each recomposition would carry identical behavior while
+    // restarting playback. It reads EPG/settings state at call time, so the one captured here does
+    // not go stale as the EPG loads.
     LaunchedEffect(channels, startIndex) {
-        viewModel.start(channels, startIndex)
+        viewModel.start(channels, startIndex, castArtworkUrl)
     }
 
     // The Activity-scoped ViewModel outlives this composable, so its ExoPlayer would otherwise keep

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.collection.LruCache
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.net.HttpDefaults
+import com.uacastplayer.icons.CastArtworkPolicy
 import com.uacastplayer.icons.IconCandidate
 import com.uacastplayer.icons.IconFailurePolicy
 import com.uacastplayer.icons.IconMemoryCacheKey
@@ -136,6 +137,24 @@ class IconRepository(context: Context) {
         }
         null
     }
+
+    /**
+     * The URL a Cast receiver should be given as artwork for this channel, picked out of the same
+     * candidate chain [resolveIconFile] walks - see [CastArtworkPolicy] for why it is not simply
+     * the first candidate.
+     *
+     * Unlike its two neighbours this touches neither disk nor network: it builds the chain and
+     * picks a URL out of it, so it is safe to call straight from the main thread while switching
+     * channels. The receiver does its own fetching.
+     */
+    fun castArtworkUrl(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): String? =
+        CastArtworkPolicy.artworkUrl(
+            IconResolver.candidates(
+                tvgLogo, epgIconUrl, tvgId,
+                customBaseUrls = customBaseUrls(),
+                cdnFallbackUrl = ::cdnFallbackUrl,
+            ),
+        )
 
     suspend fun trimCache() = diskCache.trim()
 

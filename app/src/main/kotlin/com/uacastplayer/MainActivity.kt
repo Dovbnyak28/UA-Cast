@@ -595,6 +595,7 @@ private fun BoxScope.PlayerZone(
             )
         },
         resolveIcon = viewModel::resolveChannelIcon,
+        castArtworkUrl = viewModel::castArtworkUrlFor,
         favoriteActions = PlayerFavoriteActions(
             isFavorite = isFavorite,
             onToggleFavorite = viewModel::toggleFavorite,

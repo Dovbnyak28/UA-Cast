@@ -366,6 +366,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return iconController.cachedChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))
     }
 
+    /**
+     * The artwork URL for a channel being cast - handed to [PlayerViewModel] as a function rather
+     * than a value on purpose. EPG data usually arrives *after* playback has already started, so a
+     * URL resolved once at start time would be permanently missing the [epgIconUrlFor] half of the
+     * chain for exactly the channels that need it. Called per channel switch, it sees whatever the
+     * EPG knows by then.
+     */
+    fun castArtworkUrlFor(channel: M3uChannel): String? =
+        iconController.castArtworkUrl(channel, epgIconUrlFor(channel))
+
     fun isFavorite(channel: M3uChannel): Boolean = favoritesRepository.isFavorite(channel)
 
     fun toggleFavorite(channel: M3uChannel) = favoritesRepository.toggleFavorite(channel)
