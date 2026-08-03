@@ -29,14 +29,36 @@ Two consequences of "same proxy" that are easy to get wrong, and were:
 
 ## Discovery
 
-`dlna/SsdpDiscovery` sends a single SSDP M-SEARCH multicast datagram (`ST:
-urn:schemas-upnp-org:service:AVTransport:1`) to `239.255.255.250:1900` and collects `LOCATION`
-headers from replies for about 3 seconds. SSDP replies come back as plain unicast UDP to the
+`dlna/SsdpDiscovery` sends SSDP M-SEARCH multicast datagrams to `239.255.255.250:1900` and collects
+`LOCATION` headers from replies for about 4 seconds. SSDP replies come back as plain unicast UDP to the
 sender's ephemeral port, so a normal `DatagramSocket` is enough - no `MulticastSocket` needed. A
 `WifiManager.MulticastLock` is still held for the duration of the search only, acquired right
 before sending the M-SEARCH and released the moment the search window ends (success or failure),
 the same acquire/release discipline `data/cast/CastWakeLocks` uses for the proxy session's
 power/Wi-Fi locks.
+
+What is sent is `dlna/SsdpSearchRequests`, and both details there matter more than they look:
+
+- **Three search targets** (`AVTransport:1`, `MediaRenderer:1`, `ssdp:all`), not just the service
+  one. A renderer is supposed to answer an `ST` naming its own service and many do, but plenty of
+  real TVs only answer at the device level or ignore anything but the wildcard. Asking one narrow
+  question makes the device list depend on a quirk of the TV's firmware. The extra replies are free:
+  a description with no AVTransport service is dropped by `DeviceDescriptionParser` anyway, which is
+  already how a non-renderer gets rejected.
+- **Each target sent twice**, spaced 100ms apart. Multicast UDP has no retransmission, and over
+  Wi-Fi it goes at the lowest basic rate and is the first thing dropped under load. One datagram per
+  search made "the TV was busy for 40ms" indistinguishable from "there is no TV". The spacing is
+  there because a back-to-back burst is itself something the Wi-Fi driver may drop.
+
+The listen window is measured from the *first* datagram sent, not the last: devices spread replies
+randomly over `MX` seconds, so the window must cover the send sweep plus a full `MX` after it. The
+`ssdp:all` target means a busy LAN can return many locations, so the list is capped before the
+description fetches - renderers show up long before the cap.
+
+Discovery logs its counts at each stage (datagrams sent, distinct locations, usable renderers),
+including - especially - when the result is empty. An empty device sheet is the symptom users
+report, and the counts are what separate "nothing answered the multicast" from "several devices
+answered but none of them can receive video".
 
 Each collected `LOCATION` is fetched (body size capped via `core/io/BoundedByteReader`) and parsed
 by `dlna/DeviceDescriptionParser`, a hardened SAX parser (external entities disabled, same

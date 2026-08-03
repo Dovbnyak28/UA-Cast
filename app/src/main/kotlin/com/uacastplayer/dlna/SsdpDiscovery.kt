@@ -21,8 +21,25 @@ import okhttp3.Response
 private const val TAG = "SsdpDiscovery"
 private const val SSDP_ADDRESS = "239.255.255.250"
 private const val SSDP_PORT = 1900
-private const val SEARCH_TARGET = "urn:schemas-upnp-org:service:AVTransport:1"
-private const val DISCOVERY_WINDOW_SECONDS = 3
+private const val SEARCH_MX_SECONDS = 2
+
+/**
+ * Measured from the *first* datagram sent, not the last. Devices spread their replies randomly over
+ * [SEARCH_MX_SECONDS] to avoid answering in one burst, and the sends themselves are spaced out (see
+ * [SEND_SPACING_MILLIS]), so the window has to cover the send sweep plus a full MX after it.
+ */
+private const val DISCOVERY_WINDOW_SECONDS = 4
+private const val SEARCH_REPEATS_PER_TARGET = 2
+
+/** Back-to-back multicast sends are a burst the Wi-Fi driver may itself drop, which would defeat
+ * the point of repeating them. */
+private const val SEND_SPACING_MILLIS = 100L
+
+/** `ssdp:all` answers for every device on the LAN - routers, printers, speakers - and each distinct
+ * LOCATION costs an HTTP fetch. Renderers that matter are found long before this many; the cap
+ * exists so a noisy network cannot turn one tap into dozens of requests. */
+private const val MAX_LOCATIONS = 32
+
 private const val MILLIS_PER_SECOND = 1000L
 private const val RECEIVE_POLL_TIMEOUT_MILLIS = 500
 private const val MAX_DEVICE_DESCRIPTION_BYTES = 256 * 1024
@@ -59,9 +76,14 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
         val multicastLock = acquireMulticastLock()
         return try {
             val locations = withContext(Dispatchers.IO) { collectLocations() }
-            coroutineScope {
+            val devices = coroutineScope {
                 locations.map { location -> async(Dispatchers.IO) { fetchDevice(location) } }.awaitAll()
             }.filterNotNull()
+            // The other half of the empty-sheet diagnosis: locations that answered but yielded no
+            // usable renderer are the normal ssdp:all result (routers, printers, speakers), so this
+            // pair of numbers says whether the LAN is silent or simply has nothing to cast to.
+            AppLog.d(TAG) { "DLNA discovery: ${devices.size} renderer(s) from ${locations.size} location(s)" }
+            devices
         } finally {
             multicastLock?.let { if (it.isHeld) it.release() }
         }
@@ -77,23 +99,51 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
         try {
             DatagramSocket().use { socket ->
                 socket.soTimeout = RECEIVE_POLL_TIMEOUT_MILLIS
-                sendSearchRequest(socket)
-                receiveResponsesUntilDeadline(socket, locations)
+                val deadline = System.currentTimeMillis() + DISCOVERY_WINDOW_SECONDS * MILLIS_PER_SECOND
+                sendSearchRequests(socket)
+                receiveResponsesUntilDeadline(socket, deadline, locations)
             }
         } catch (e: Exception) {
             AppLog.w(TAG) { "SSDP discovery failed: ${e.javaClass.simpleName}" }
         }
-        return locations.toList()
+        // Logged even (especially) when empty: an empty device sheet is the symptom users report,
+        // and without this there is no way to tell "nothing answered the multicast" from "several
+        // devices answered but none of them is a renderer".
+        AppLog.d(TAG) { "SSDP search finished: ${locations.size} distinct location(s)" }
+        return locations.take(MAX_LOCATIONS)
     }
 
-    private fun sendSearchRequest(socket: DatagramSocket) {
-        val message = searchRequest().toByteArray(Charsets.UTF_8)
+    /** Sends every payload [SsdpSearchRequests] defines - several targets, each repeated. A send
+     * that fails on one datagram must not abandon the rest: a network can refuse the multicast
+     * momentarily and still answer the next one. */
+    @Suppress("TooGenericExceptionCaught")
+    private fun sendSearchRequests(socket: DatagramSocket) {
         val address = InetAddress.getByName(SSDP_ADDRESS)
-        socket.send(DatagramPacket(message, message.size, address, SSDP_PORT))
+        val payloads = SsdpSearchRequests.payloads(
+            address = SSDP_ADDRESS,
+            port = SSDP_PORT,
+            mx = SEARCH_MX_SECONDS,
+            repeats = SEARCH_REPEATS_PER_TARGET,
+        )
+        var sent = 0
+        for (payload in payloads) {
+            val message = payload.toByteArray(Charsets.UTF_8)
+            try {
+                socket.send(DatagramPacket(message, message.size, address, SSDP_PORT))
+                sent++
+            } catch (e: Exception) {
+                AppLog.w(TAG) { "M-SEARCH send failed: ${e.javaClass.simpleName}" }
+            }
+            Thread.sleep(SEND_SPACING_MILLIS)
+        }
+        AppLog.d(TAG) { "M-SEARCH sent: $sent of ${payloads.size} datagram(s)" }
     }
 
-    private fun receiveResponsesUntilDeadline(socket: DatagramSocket, locations: MutableSet<String>) {
-        val deadline = System.currentTimeMillis() + DISCOVERY_WINDOW_SECONDS * MILLIS_PER_SECOND
+    private fun receiveResponsesUntilDeadline(
+        socket: DatagramSocket,
+        deadline: Long,
+        locations: MutableSet<String>,
+    ) {
         val buffer = ByteArray(RECEIVE_BUFFER_BYTES)
         while (System.currentTimeMillis() < deadline) {
             try {
@@ -106,13 +156,6 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
             }
         }
     }
-
-    private fun searchRequest(): String =
-        "M-SEARCH * HTTP/1.1\r\n" +
-            "HOST: $SSDP_ADDRESS:$SSDP_PORT\r\n" +
-            "MAN: \"ssdp:discover\"\r\n" +
-            "MX: $DISCOVERY_WINDOW_SECONDS\r\n" +
-            "ST: $SEARCH_TARGET\r\n\r\n"
 
     /** One unreachable or misbehaving renderer must not lose the whole discovery result - a device
      * whose description cannot be fetched is simply dropped from the list (see the mapNotNull in
