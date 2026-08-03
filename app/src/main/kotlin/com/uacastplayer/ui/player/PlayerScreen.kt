@@ -72,6 +72,14 @@ import com.uacastplayer.player.PlayerViewModel
 import com.uacastplayer.player.ResizeModeCycle
 import com.uacastplayer.player.StallRetryPolicy
 import com.uacastplayer.playlist.M3uChannel
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.PointerEventPass
+import com.uacastplayer.ui.components.CastPeerIconGlyphSize
+import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.EaseSpring
+import com.uacastplayer.ui.theme.PressScaleIcon
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.dlna.DlnaDeviceSheet
 import com.uacastplayer.ui.components.SmallRoundIconButton
@@ -398,7 +406,7 @@ fun PlayerScreen(
                 // reaches their TV was the one control they had to already know about to find.
                 // The Cast button next to it has never been hidden that way.
                 SmallRoundIconButton(
-                    icon = AppIcons.Tv,
+                    icon = AppIcons.CastToTv,
                     onClick = { showDlnaSheet = true },
                     contentDescription = stringResource(R.string.player_dlna_cast),
                     tint = if (dlnaState.connectedDevice != null) {
@@ -406,6 +414,10 @@ fun PlayerScreen(
                     } else {
                         UaTheme.palette.labelPrimary
                     },
+                    // The platform Cast button beside this one draws its glyph at its own scale,
+                    // well past the 20dp the app's icon buttons use - so at the default size this
+                    // one read as the smaller, lesser of the two even though the circles match.
+                    iconSize = CastPeerIconGlyphSize,
                 )
                 PlayerCastButton(background = UaTheme.palette.surface1, modifier = Modifier.padding(start = 8.dp))
             }
@@ -637,6 +649,17 @@ private fun RecoveringPlaybackIndicator(attempt: Int, onPickAnotherChannel: () -
  */
 @Composable
 internal fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = UaTheme.palette.scrimBackground) {
+    // The press animation every other icon button in this row gets from SmallRoundIconButton. It
+    // cannot come from an interactionSource here: the thing being clicked is a platform
+    // MediaRouteButton inside an AndroidView, which handles its own touches and opens its own
+    // dialog. So the press is *observed* on the Initial pass and never consumed - the view
+    // underneath still sees the whole gesture, and the only thing this adds is the scale.
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) PressScaleIcon else 1f,
+        animationSpec = tween(DurPress, easing = EaseSpring),
+        label = "castButtonScale",
+    )
     Box(
         // Same raisedSurface treatment as SmallRoundIconButton (the other circular overlay icons
         // in this row) instead of a flat background - without it this button had no edge highlight
@@ -644,6 +667,15 @@ internal fun PlayerCastButton(modifier: Modifier = Modifier, background: Color =
         // was already the same size and position.
         modifier = modifier
             .size(IconButtonSize)
+            .scale(scale)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        pressed = event.changes.any { it.pressed }
+                    }
+                }
+            }
             .raisedSurface(CircleShape, background, shadow = false),
         contentAlignment = Alignment.Center,
     ) {

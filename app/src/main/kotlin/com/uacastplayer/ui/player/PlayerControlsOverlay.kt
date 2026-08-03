@@ -104,7 +104,7 @@ internal fun PlayerControlsOverlay(
             // hardware (Cast for Google devices, DLNA for the Samsung/LG/Sony sets with no Cast
             // receiver), so a user with either kind needs to see the one that applies to them.
             SmallRoundIconButton(
-                icon = AppIcons.Tv,
+                icon = AppIcons.CastToTv,
                 onClick = onOpenDlnaSheet,
                 contentDescription = stringResource(R.string.player_dlna_cast),
                 background = UaTheme.palette.scrimBackground,

@@ -347,6 +347,82 @@ object AppIcons {
         }.build()
     }
 
+    /**
+     * "Send this to a TV" - a screen with a stand, and broadcast waves radiating from its
+     * bottom-left corner.
+     *
+     * Deliberately the same waves-in-a-screen idiom as the Google Cast button it sits beside,
+     * because to a user those two buttons do the same thing and only differ in which TVs they
+     * reach; an unrelated shape would read as an unrelated feature. The stand is what tells them
+     * apart, and it is also what says "TV" rather than "monitor". The plain [Tv] glyph this
+     * replaced said only "there is a television somewhere in this app" - nothing about casting.
+     *
+     * Drawn to fill the viewport at roughly the density of the Cast button's own glyph. The old
+     * one used 11 of 24 units of height for the screen, which is most of why it looked shrunken
+     * next to it even though both buttons are the same size.
+     */
+    val CastToTv: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "CastToTv", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f
+        ).apply {
+            // Screen frame: outer rect minus inner rect under EvenOdd leaves the border. 2.3 units
+            // rather than 2 - the Cast button's glyph next to it is drawn heavier, and a thinner
+            // frame is most of what made this one look like the lesser of the two.
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(2f, 3f)
+                lineTo(22f, 3f)
+                lineTo(22f, 17f)
+                lineTo(2f, 17f)
+                close()
+                moveTo(4.3f, 5.3f)
+                lineTo(4.3f, 14.7f)
+                lineTo(19.7f, 14.7f)
+                lineTo(19.7f, 5.3f)
+                close()
+            }
+            // Stand: neck plus foot, the half that distinguishes this from the Cast glyph.
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(11f, 17f)
+                lineTo(13f, 17f)
+                lineTo(13f, 19f)
+                lineTo(11f, 19f)
+                close()
+                moveTo(8f, 19f)
+                lineTo(16f, 19f)
+                lineTo(16f, 21f)
+                lineTo(8f, 21f)
+                close()
+            }
+            // Broadcast waves anchored at the screen's bottom-left corner (6.3, 12.7): a solid
+            // quarter disc and two quarter rings, each 1.4 units thick with a 1.4 gap.
+            //
+            // The radii are the point. A first attempt used 1.4/2.6/3.8 and the three arcs blurred
+            // into one smudge at 24dp - the size these are actually rendered at. The Cast glyph
+            // beside it spends most of its height on the waves, so these reach 7.3 of the ~9.4
+            // units of screen interior; anything smaller reads as a monitor with a scuff on it
+            // rather than a screen receiving a signal.
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(6.3f, 12.7f)
+                lineTo(6.3f, 11f)
+                arcTo(1.7f, 1.7f, 0f, isMoreThanHalf = false, isPositiveArc = true, 8f, 12.7f)
+                close()
+            }
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(6.3f, 8.2f)
+                arcTo(4.5f, 4.5f, 0f, isMoreThanHalf = false, isPositiveArc = true, 10.8f, 12.7f)
+                lineTo(9.4f, 12.7f)
+                arcTo(3.1f, 3.1f, 0f, isMoreThanHalf = false, isPositiveArc = false, 6.3f, 9.6f)
+                close()
+                moveTo(6.3f, 5.4f)
+                arcTo(7.3f, 7.3f, 0f, isMoreThanHalf = false, isPositiveArc = true, 13.6f, 12.7f)
+                lineTo(12.2f, 12.7f)
+                arcTo(5.9f, 5.9f, 0f, isMoreThanHalf = false, isPositiveArc = false, 6.3f, 6.8f)
+                close()
+            }
+        }.build()
+    }
+
     val Tv: ImageVector by lazy {
         ImageVector.Builder(
             name = "Tv", defaultWidth = 24.dp, defaultHeight = 24.dp,

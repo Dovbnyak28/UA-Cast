@@ -66,6 +66,7 @@ import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusSeg
 import com.uacastplayer.ui.theme.RadiusSegInner
 import com.uacastplayer.ui.theme.RoundButtonSize
+import androidx.compose.ui.unit.Dp
 import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.SecondaryButtonStyle
 import com.uacastplayer.ui.theme.TabLabel
@@ -180,6 +181,10 @@ fun SmallRoundIconButton(
     contentDescription: String? = null,
     tint: Color = UaTheme.palette.labelPrimary,
     background: Color = UaTheme.palette.surface1,
+    /** The glyph inside the circle. Raise it for an icon that has to hold its own beside the
+     * platform Cast button, whose `MediaRouteButton` draws at its own scale and is noticeably
+     * heavier than [SmallIconGlyphSize] - see `PlayerCastButton`. */
+    iconSize: Dp = SmallIconGlyphSize,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -201,9 +206,15 @@ fun SmallRoundIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(iconSize))
     }
 }
+
+/** Default glyph size inside [SmallRoundIconButton]'s [IconButtonSize] circle. */
+val SmallIconGlyphSize = 20.dp
+
+/** For a glyph sitting next to the platform Cast button - see [SmallRoundIconButton]'s iconSize. */
+val CastPeerIconGlyphSize = 24.dp
 
 enum class StatusPillVariant { Good, Proxy, Bad }
 
