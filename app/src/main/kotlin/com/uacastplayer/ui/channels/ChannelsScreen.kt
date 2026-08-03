@@ -72,7 +72,7 @@ fun ChannelsScreen(
     val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
     val openChannel = rememberChannelOpener(flatChannels, onChannelSelected)
     var guideChannel by remember { mutableStateOf<M3uChannel?>(null) }
-    // Long-press target for ChannelActionsSheet (Guide/Lock toggle) - separate from guideChannel,
+    // Long-press target for ChannelActionsSheet (Guide/Favorite/Lock) - separate from guideChannel,
     // which only opens once the sheet's "Guide" row is tapped.
     var channelActionsFor by remember { mutableStateOf<M3uChannel?>(null) }
 
@@ -190,8 +190,10 @@ fun ChannelsScreen(
     channelActionsFor?.let { channel ->
         ChannelActionsSheet(
             channelName = channel.displayName,
+            isFavorite = isFavorite(channel),
             isLocked = isChannelLocked(channel),
             onOpenGuide = { guideChannel = channel },
+            onToggleFavorite = { onToggleFavorite(channel) },
             onToggleLock = {
                 if (isChannelLocked(channel)) onUnlockChannel(channel) else onLockChannel(channel)
             },

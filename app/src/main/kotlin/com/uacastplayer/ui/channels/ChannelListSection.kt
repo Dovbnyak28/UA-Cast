@@ -220,8 +220,6 @@ internal fun SingleGroupChannelList(
                         iconRefreshKey = iconRefreshKey,
                         resolveIcon = resolveIcon,
                         large = layout == ChannelLayout.LARGE_ICONS,
-                        isFavorite = isFavorite(channel),
-                        onToggleFavorite = { onToggleFavorite(channel) },
                         isLocked = isLocked(channel),
                         onClick = { onChannelClick(channel) },
                         onLongClick = { onLongPressChannel(channel) },
@@ -392,8 +390,6 @@ private fun ChannelTile(
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
     large: Boolean,
-    isFavorite: Boolean,
-    onToggleFavorite: () -> Unit,
     isLocked: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -432,20 +428,14 @@ private fun ChannelTile(
                 )
             }
         }
-        IconButton(
-            onClick = onToggleFavorite,
-            // minimumInteractiveComponentSize() first, then the smaller visual size - same order
-            // as RoundIconButton/SmallRoundIconButton (see ui/components/DesignSystemControls.kt) -
-            // keeps the 28dp glyph fitting this tile while still getting a 48dp touch target.
-            modifier = Modifier.align(Alignment.TopEnd).minimumInteractiveComponentSize().size(28.dp),
-        ) {
-            Icon(
-                AppIcons.Favorites,
-                contentDescription = stringResource(R.string.favorites_title),
-                tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
-                modifier = Modifier.size(16.dp),
-            )
-        }
+        // No favorite star here, unlike ChannelRow. A tile is roughly 150dp wide, and the star was
+        // an IconButton with minimumInteractiveComponentSize() - a 48dp touch target around a 16dp
+        // glyph, which reached well past the corner and over the channel's own icon. Tapping what
+        // looked like the middle of the tile favorited the channel instead of opening it, and since
+        // the grid is the default layout that was most users. The star showed favorite *state*
+        // too, but not at a cost worth paying: a 16dp tint on a small tile was the least legible
+        // place in the app to read it, and toggling now lives in ChannelActionsSheet on long press,
+        // beside lock/unlock - where a per-channel action that is not "play this" belongs.
         if (isLocked) {
             Icon(
                 AppIcons.Lock,

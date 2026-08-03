@@ -81,6 +81,8 @@
     <string name="channels_group_unpin">Unpin group</string>
     <string name="channels_group_hide">Hide group</string>
     <string name="channels_channel_guide">Guide</string>
+    <string name="channels_channel_add_favorite">Add to favorites</string>
+    <string name="channels_channel_remove_favorite">Remove from favorites</string>
     <string name="channels_channel_lock">Lock channel</string>
     <string name="channels_channel_unlock">Unlock channel</string>
     <string name="channels_channel_locked">Locked - tap to enter PIN</string>

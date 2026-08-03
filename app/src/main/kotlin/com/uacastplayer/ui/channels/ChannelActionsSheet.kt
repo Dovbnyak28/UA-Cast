@@ -25,13 +25,20 @@ import com.uacastplayer.ui.theme.Title
  * mirrors. [isLocked] picks between "Lock"/"Unlock" wording; unlocking is the only action that
  * bubbles up to a PIN prompt (see `app/ParentalControlController` - locking a channel is always
  * allowed, unlocking one requires the current session to already be PIN-unlocked).
+ *
+ * Favoriting lives here rather than on the tile itself: the grid's star was an IconButton whose
+ * 48dp touch target overflowed a ~150dp tile, so a tap aimed at the channel toggled the favorite
+ * instead of opening it (see `ChannelTile`). A long press is the same gesture that already reaches
+ * lock/unlock, and it cannot be hit by accident while picking a channel.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChannelActionsSheet(
     channelName: String,
+    isFavorite: Boolean,
     isLocked: Boolean,
     onOpenGuide: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onToggleLock: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -47,6 +54,16 @@ fun ChannelActionsSheet(
             ChannelActionRow(
                 label = stringResource(R.string.channels_channel_guide),
                 onClick = { onOpenGuide(); onDismiss() },
+            )
+            ChannelActionRow(
+                label = stringResource(
+                    if (isFavorite) {
+                        R.string.channels_channel_remove_favorite
+                    } else {
+                        R.string.channels_channel_add_favorite
+                    },
+                ),
+                onClick = { onToggleFavorite(); onDismiss() },
             )
             ChannelActionRow(
                 label = stringResource(

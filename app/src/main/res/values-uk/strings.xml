@@ -84,6 +84,8 @@
     <string name="channels_group_unpin">Відкріпити групу</string>
     <string name="channels_group_hide">Приховати групу</string>
     <string name="channels_channel_guide">Гід</string>
+    <string name="channels_channel_add_favorite">Додати в улюблені</string>
+    <string name="channels_channel_remove_favorite">Прибрати з улюблених</string>
     <string name="channels_channel_lock">Заблокувати канал</string>
     <string name="channels_channel_unlock">Розблокувати канал</string>
     <string name="channels_channel_locked">Заблоковано - торкніться, щоб ввести PIN</string>

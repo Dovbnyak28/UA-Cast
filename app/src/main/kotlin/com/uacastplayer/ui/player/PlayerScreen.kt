@@ -392,6 +392,21 @@ fun PlayerScreen(
                         tint = if (isFavorite(currentChannel)) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
                     )
                 }
+                // Beside the Cast button here, not only inside PlayerControlsOverlay. The overlay
+                // copy is still there, but it only appears after a tap on the video and only in
+                // fullscreen - so for a user whose TV has no Cast receiver, the one control that
+                // reaches their TV was the one control they had to already know about to find.
+                // The Cast button next to it has never been hidden that way.
+                SmallRoundIconButton(
+                    icon = AppIcons.Tv,
+                    onClick = { showDlnaSheet = true },
+                    contentDescription = stringResource(R.string.player_dlna_cast),
+                    tint = if (dlnaState.connectedDevice != null) {
+                        UaTheme.palette.azure
+                    } else {
+                        UaTheme.palette.labelPrimary
+                    },
+                )
                 PlayerCastButton(background = UaTheme.palette.surface1, modifier = Modifier.padding(start = 8.dp))
             }
 

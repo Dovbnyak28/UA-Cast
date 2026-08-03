@@ -81,6 +81,8 @@
     <string name="channels_group_unpin">Dejar de fijar grupo</string>
     <string name="channels_group_hide">Ocultar grupo</string>
     <string name="channels_channel_guide">Guía</string>
+    <string name="channels_channel_add_favorite">Añadir a favoritos</string>
+    <string name="channels_channel_remove_favorite">Quitar de favoritos</string>
     <string name="channels_channel_lock">Bloquear canal</string>
     <string name="channels_channel_unlock">Desbloquear canal</string>
     <string name="channels_channel_locked">Bloqueado - toca para introducir el PIN</string>
