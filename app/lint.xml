@@ -43,6 +43,19 @@
     <issue id="GradleDependency" severity="informational" />
     <issue id="NewerVersionAvailable" severity="informational" />
 
+    <!-- Same category as the three above, and the one that actually broke CI: OldTargetApi compares
+         targetSdk against the newest platform *installed on the machine running lint*, so it passed
+         locally and failed on a GitHub runner carrying a newer one, on identical code. Under
+         warningsAsErrors that made the build's outcome depend on Google's release calendar and on
+         which SDK a given machine happens to have - the two things a build gate should never key on.
+
+         Kept visible rather than ignored, because the advice is worth acting on eventually. But
+         raising targetSdk is not a lint fix: it opts the app into new runtime behaviour (background
+         limits, permission semantics, foreground-service rules) that the cast proxy and its
+         foreground service are directly exposed to, so it needs a deliberate pass with device
+         testing - not a one-line bump made to get a red build green. -->
+    <issue id="OldTargetApi" severity="informational" />
+
     <!-- The flagged strings interpolate a percentage or a diagnostics counter, not a countable noun
          ("currently %d percent", "%d attempted, %d played, %d failed"). The places where a number
          really does govern a noun already use plurals - see home_stat_* and channels_total_count. -->
@@ -67,9 +80,11 @@
          no number. The selection still uses the real count via pluralStringResource(id, count), so
          21 correctly picks `one` and reads "21 / Канал"; 22 picks `few` and reads "22 / Канали".
          Scoped to these three resources rather than disabled globally: anywhere a plural really is
-         a whole sentence, the check is right and should keep firing. -->
+         a whole sentence, the check is right and should keep firing.
+
          Suppressed at the three resources themselves (tools:ignore in values-uk/values-ru), not
-         here, so the exemption sits next to the thing it exempts. -->
+         here, so the exemption sits next to the thing it exempts - which is why this block carries
+         no <issue> entry of its own. -->
     <!-- (no global entry - see the note above) -->
 
 </lint>
