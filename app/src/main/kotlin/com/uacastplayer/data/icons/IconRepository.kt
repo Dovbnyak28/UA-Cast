@@ -116,29 +116,6 @@ class IconRepository(context: Context) {
     }
 
     /**
-     * Cache-only lookup for group icon collages (see GroupIconCollage/GroupCollagePolicy): checks
-     * [diskCache] for the same candidate chain [resolveIconFile] would try, but never fetches over
-     * the network. A group overview can render dozens of cards at once - speculatively fetching
-     * icons nobody explicitly asked for yet would multiply traffic for something that's decorative,
-     * not the channel list itself.
-     */
-    suspend fun cachedIconFile(
-        tvgLogo: String?,
-        epgIconUrl: String?,
-        tvgId: String?,
-    ): File? = withContext(Dispatchers.IO) {
-        val candidates = IconResolver.candidates(
-            tvgLogo, epgIconUrl, tvgId,
-            customBaseUrls = customBaseUrls(),
-            cdnFallbackUrl = ::cdnFallbackUrl,
-        )
-        for (candidate in candidates) {
-            diskCache.get(candidate.url)?.let { return@withContext it }
-        }
-        null
-    }
-
-    /**
      * The URL a Cast receiver should be given as artwork for this channel, picked out of the same
      * candidate chain [resolveIconFile] walks - see [CastArtworkPolicy] for why it is not simply
      * the first candidate.

@@ -97,12 +97,6 @@ class IconController(
     fun castArtworkUrl(channel: M3uChannel, epgIconUrl: String?): String? =
         iconRepository.castArtworkUrl(channel.tvgLogo, epgIconUrl, channel.tvgId)
 
-    /** For GroupIconCollage - a disk-cache-only lookup, never fetches. See [IconRepository.cachedIconFile]. */
-    suspend fun cachedChannelIcon(channel: M3uChannel, iconDisplayMode: IconDisplayMode, epgIconUrl: String?): File? {
-        if (iconDisplayMode == IconDisplayMode.PLACEHOLDERS) return null
-        return iconRepository.cachedIconFile(channel.tvgLogo, epgIconUrl, channel.tvgId)
-    }
-
     fun setIconWifiOnly(enabled: Boolean) {
         preferences.iconWifiOnly = enabled
         _iconPrefetchState.update { it.copy(wifiOnly = enabled) }

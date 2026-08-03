@@ -37,6 +37,8 @@ import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.player.ResizeModeCycle
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.ChannelIcon
+import com.uacastplayer.ui.components.artworkWash
+import com.uacastplayer.ui.components.rememberArtworkTone
 import com.uacastplayer.ui.components.GradientPlayButton
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
@@ -128,16 +130,25 @@ internal fun ChannelInfoCard(
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
 ) {
+    // Borrowed from the logo about to be drawn two lines below, so the card belongs to the channel
+    // playing rather than being the same grey box for all 2863 of them. Skipped entirely on a theme
+    // that paints no wallpaper texture: Midnight is true black on purpose, and any wash at all is
+    // the one thing it exists not to have.
+    val artworkTone = rememberArtworkTone(channel = channel, resolveIcon = resolveIcon)
+        .takeIf { UaTheme.palette.wallpaperTexture }
+    val cardShape = RoundedCornerShape(RadiusCard)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenHPadding)
             .raisedSurface(
-                RoundedCornerShape(RadiusCard),
+                cardShape,
                 UaTheme.palette.surface1,
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
+            .artworkWash(tone = artworkTone, shape = cardShape)
             .padding(CardPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {

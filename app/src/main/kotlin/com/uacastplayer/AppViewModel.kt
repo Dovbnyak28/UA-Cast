@@ -361,11 +361,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return iconController.resolveChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))
     }
 
-    /** For GroupIconCollage - a disk-cache-only lookup, never fetches. See [IconRepository.cachedIconFile]. */
-    suspend fun cachedChannelIcon(channel: M3uChannel): File? {
-        return iconController.cachedChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))
-    }
-
     /**
      * The artwork URL for a channel being cast - handed to [PlayerViewModel] as a function rather
      * than a value on purpose. EPG data usually arrives *after* playback has already started, so a

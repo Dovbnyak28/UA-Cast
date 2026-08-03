@@ -44,6 +44,7 @@ import com.uacastplayer.player.SleepTimerFormatter
 import com.uacastplayer.ui.components.GradientPlayButton
 import com.uacastplayer.ui.components.RoundIconButton
 import com.uacastplayer.ui.components.SmallRoundIconButton
+import com.uacastplayer.ui.components.liveRing
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BreatheMs
 import com.uacastplayer.ui.theme.Caption
@@ -109,8 +110,9 @@ internal fun PlayerControlsOverlay(
                 contentDescription = stringResource(R.string.player_dlna_cast),
                 background = UaTheme.palette.scrimBackground,
                 tint = if (isDlnaCasting) UaTheme.palette.azure else Color.White,
+                modifier = Modifier.liveRing(active = isDlnaCasting, color = UaTheme.palette.azure),
             )
-            PlayerCastButton()
+            PlayerCastButton(isCasting = uiState.isCasting)
         }
 
         // TalkBack-reachable alternative to the fullscreen brightness/volume drag gesture (see

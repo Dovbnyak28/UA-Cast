@@ -82,6 +82,7 @@ import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.PressScaleIcon
 import com.uacastplayer.ui.cast.CastButton
+import com.uacastplayer.ui.components.liveRing
 import com.uacastplayer.ui.dlna.DlnaDeviceSheet
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.theme.AppIcons
@@ -406,21 +407,23 @@ fun PlayerScreen(
                 // fullscreen - so for a user whose TV has no Cast receiver, the one control that
                 // reaches their TV was the one control they had to already know about to find.
                 // The Cast button next to it has never been hidden that way.
+                val dlnaConnected = dlnaState.connectedDevice != null
                 SmallRoundIconButton(
                     icon = AppIcons.CastToTv,
                     onClick = { showDlnaSheet = true },
                     contentDescription = stringResource(R.string.player_dlna_cast),
-                    tint = if (dlnaState.connectedDevice != null) {
-                        UaTheme.palette.azure
-                    } else {
-                        UaTheme.palette.labelPrimary
-                    },
+                    tint = if (dlnaConnected) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
                     // The platform Cast button beside this one draws its glyph at its own scale,
                     // well past the 20dp the app's icon buttons use - so at the default size this
                     // one read as the smaller, lesser of the two even though the circles match.
                     iconSize = CastPeerIconGlyphSize,
+                    modifier = Modifier.liveRing(active = dlnaConnected, color = UaTheme.palette.azure),
                 )
-                PlayerCastButton(background = UaTheme.palette.surface1, modifier = Modifier.padding(start = 8.dp))
+                PlayerCastButton(
+                    background = UaTheme.palette.surface1,
+                    isCasting = uiState.isCasting,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
             }
 
             Box(
@@ -645,7 +648,11 @@ private fun RecoveringPlaybackIndicator(attempt: Int, onPickAnotherChannel: () -
  * doesn't line up with the app's icon buttons otherwise.
  */
 @Composable
-internal fun PlayerCastButton(modifier: Modifier = Modifier, background: Color = UaTheme.palette.scrimBackground) {
+internal fun PlayerCastButton(
+    modifier: Modifier = Modifier,
+    background: Color = UaTheme.palette.scrimBackground,
+    isCasting: Boolean = false,
+) {
     // The press animation every other icon button in this row gets from SmallRoundIconButton. It
     // cannot come from an interactionSource here: the thing being clicked is a platform
     // MediaRouteButton inside an AndroidView, which handles its own touches and opens its own
@@ -665,6 +672,7 @@ internal fun PlayerCastButton(modifier: Modifier = Modifier, background: Color =
         modifier = modifier
             .size(IconButtonSize)
             .scale(scale)
+            .liveRing(active = isCasting, color = UaTheme.palette.azure)
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {

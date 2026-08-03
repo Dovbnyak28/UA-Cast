@@ -49,7 +49,6 @@ fun ChannelsScreen(
     epgState: EpgUiState,
     iconPrefetchState: IconPrefetchUiState,
     resolveIcon: suspend (M3uChannel) -> File?,
-    cachedIconFile: suspend (M3uChannel) -> File?,
     density: ListDensity,
     layout: ChannelLayout,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
@@ -76,7 +75,7 @@ fun ChannelsScreen(
     // which only opens once the sheet's "Guide" row is tapped.
     var channelActionsFor by remember { mutableStateOf<M3uChannel?>(null) }
 
-    // Forces every ChannelIcon/GroupIconCollage in this screen to re-resolve when either signal
+    // Forces every ChannelIcon in this screen to re-resolve when either signal
     // fires: EPG data arriving unlocks its icon-URL source (see AppViewModel.resolveChannelIcon),
     // and a completed prefetch run may have just written new files for channels that previously
     // resolved to nothing. Deliberately NOT nowMillis or anything else that changes often - a
@@ -133,7 +132,6 @@ fun ChannelsScreen(
                     epgState = epgState,
                     iconRefreshKey = iconRefreshKey,
                     resolveIcon = resolveIcon,
-                    cachedIconFile = cachedIconFile,
                     density = density,
                     layout = layout,
                     onChannelLayoutSelected = onChannelLayoutSelected,
@@ -158,7 +156,6 @@ fun ChannelsScreen(
                 epgState = epgState,
                 iconRefreshKey = iconRefreshKey,
                 resolveIcon = resolveIcon,
-                cachedIconFile = cachedIconFile,
                 density = density,
                 layout = layout,
                 onChannelLayoutSelected = onChannelLayoutSelected,
@@ -235,7 +232,6 @@ private fun ChannelsContent(
     epgState: EpgUiState,
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
-    cachedIconFile: suspend (M3uChannel) -> File?,
     density: ListDensity,
     layout: ChannelLayout,
     onChannelLayoutSelected: (ChannelLayout) -> Unit,
@@ -267,7 +263,6 @@ private fun ChannelsContent(
                         onGroupClick = onOpenGroup,
                         iconRefreshKey = iconRefreshKey,
                         resolveIcon = resolveIcon,
-                        cachedIconFile = cachedIconFile,
                         isFavorite = isFavorite,
                         onToggleFavorite = onToggleFavorite,
                         onChannelClick = onOpenChannel,
@@ -295,7 +290,9 @@ private fun ChannelsContent(
                     )
                 }
             }
-            playlistState.isLoading -> LoadingState()
+            // A skeleton, not a spinner: this branch only runs on a *first* load (hasChannels wins
+            // above), which is exactly when the user has no idea what is about to appear.
+            playlistState.isLoading -> GroupsSkeletonGrid(layout = layout)
             playlistState.error != null -> ErrorState(playlistState.error)
             // No playlist loaded at all - unlike ErrorState (a load that failed) or the search's
             // NoSearchResults (a query with no matches), this dead end has no action button here:
@@ -304,21 +301,6 @@ private fun ChannelsContent(
                 icon = AppIcons.Channels,
                 title = stringResource(R.string.channels_empty_message),
                 subtitle = stringResource(R.string.channels_empty_subtitle),
-            )
-        }
-    }
-}
-
-@Composable
-private fun LoadingState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator()
-            Text(
-                text = stringResource(R.string.playlist_loading),
-                style = BodyText,
-                color = UaTheme.palette.labelSecondary,
-                modifier = Modifier.padding(top = 12.dp),
             )
         }
     }

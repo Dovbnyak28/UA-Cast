@@ -62,6 +62,8 @@ import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.rememberEntryStagger
+import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
@@ -106,6 +108,9 @@ internal fun SingleGroupChannelList(
             grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
         }
     }
+    // Replays when the filter changes: a search that narrows 400 rows to 3 is new content arriving,
+    // and the wave is what makes that legible. Also covers opening a different group.
+    val entryStagger = rememberEntryStagger(filteredChannels)
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
@@ -165,10 +170,12 @@ internal fun SingleGroupChannelList(
                     // flat by design: each row's own rounding varies (see ChannelRowShape) so
                     // adjacent rows read as one continuous card with hairline dividers between
                     // them - a per-row raisedSurface border would draw a seam at every row instead.
+                    val entryKey = ChannelListKeys.keyFor(index, channel.streamUrl)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .animateItem()
+                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index)
                             .clip(shape)
                             .background(UaTheme.palette.surface1),
                     ) {
@@ -214,7 +221,8 @@ internal fun SingleGroupChannelList(
                 gridItemsIndexed(
                     filteredChannels,
                     key = { index, channel -> ChannelListKeys.keyFor(index, channel.streamUrl) },
-                ) { _, channel ->
+                ) { index, channel ->
+                    val entryKey = ChannelListKeys.keyFor(index, channel.streamUrl)
                     ChannelTile(
                         channel = channel,
                         iconRefreshKey = iconRefreshKey,
@@ -223,7 +231,9 @@ internal fun SingleGroupChannelList(
                         isLocked = isLocked(channel),
                         onClick = { onChannelClick(channel) },
                         onLongClick = { onLongPressChannel(channel) },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier
+                            .animateItem()
+                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index),
                     )
                 }
             }

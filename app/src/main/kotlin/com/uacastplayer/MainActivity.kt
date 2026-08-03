@@ -511,7 +511,6 @@ private fun ScaffoldZone(
             iconPrefetchState = iconPrefetchState,
             onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
             resolveIcon = viewModel::resolveChannelIcon,
-            cachedIconFile = viewModel::cachedChannelIcon,
             castState = castState,
             settingsState = settingsState,
             onIconDisplayModeSelected = viewModel::setIconDisplayMode,

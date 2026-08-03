@@ -50,8 +50,12 @@ reaching for `MaterialTheme.typography.bodyMedium` etc.
 
 - `EaseSpring` - the standard easing curve for all token-driven animations.
 - `DurPress` (250ms) - press/release scale and highlight-slide animations.
-- `DurEnter` (700ms), `DurRing` (1400ms), `StaggerMs`, `GlideMs`, `BreatheMs` - screen-entry and
-  ambient animation timings.
+- `DurEnter` (700ms) + `StaggerMs` (70ms) - list/grid entry, via `Modifier.staggeredEntry` (see
+  `ui/components/EntryStagger.kt`).
+- `GlideMs` (2200ms) - the loading skeleton's shimmer sweep (`ui/components/Skeleton.kt`).
+- `DurRing` (1400ms) - the ring that leaves a Cast/DLNA button while a session is live
+  (`ui/components/LiveRing.kt`).
+- `BreatheMs` (2000ms) - the player overlay's ambient pulse.
 - **Rule 2 (press-scale)** - interactive controls scale down slightly on press using
   `collectIsPressedAsState()` + `animateFloatAsState`: `PressScalePlay` (0.94, play button),
   `PressScaleRound` (0.88, round icon buttons), `PressScaleIcon` (0.90, small icon buttons). New
@@ -84,6 +88,28 @@ reaching for `MaterialTheme.typography.bodyMedium` etc.
 - **§4 rule 3** - lives in `ui/player/PlayerScreen.kt`; the transient toast-style gesture indicator
   (fade in/out overlay) used for seek/volume/brightness/resize-mode feedback during playback. The
   reference pattern for any other "brief transient feedback over content" need.
+
+### Entry, loading and live-state motion
+
+Three small components, each the one implementation of an effect that should look the same wherever
+it appears:
+
+- **`ui/components/EntryStagger.kt`** - `rememberEntryStagger(resetKey)` + `Modifier.staggeredEntry`.
+  Fades and lifts lazy-list items in as a wave. The state object exists because a lazy list disposes
+  items that scroll away: without a record that outlives the item, scrolling back replays the fade.
+  Pass the *same key the list uses*, and a `resetKey` that changes only when the content genuinely
+  does (a new playlist, a new filter) - not on every recomposition.
+- **`ui/components/Skeleton.kt`** - `rememberShimmer()` + `SkeletonBlock`/`SkeletonTextLine`/
+  `SkeletonBadge`. One shimmer clock per screen, shared by every block on it; independent clocks
+  twinkle instead of sweeping. Use a skeleton, not a spinner, wherever the shape of what is coming is
+  known (see `ui/channels/GroupsSkeleton.kt`).
+- **`ui/components/LiveRing.kt`** - `Modifier.liveRing(active, color)`. A slow ring leaving a
+  circular button while something is genuinely live. Draws and animates nothing when `active` is
+  false.
+- **`ui/components/ArtworkTone.kt`** - `rememberArtworkTone` + `Modifier.artworkWash`. Borrows only
+  the *hue* of a channel logo to wash the surface it sits on (`icons/ArtworkTonePolicy.kt` does the
+  pixel maths). Skipped where `UaTheme.palette.wallpaperTexture` is false - Midnight is true black on
+  purpose.
 
 ### Banner pattern (`DownloadStatusBanner`, `IconTierBanner`)
 

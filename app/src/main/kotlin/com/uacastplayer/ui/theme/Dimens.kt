@@ -65,3 +65,6 @@ val RouteGlowDot = 7.dp
 // Health ring
 val RingSize = 96.dp
 val RingStroke = 9.dp
+
+// Entry motion (see ui/components/EntryStagger.kt)
+val EntryLift = 12.dp

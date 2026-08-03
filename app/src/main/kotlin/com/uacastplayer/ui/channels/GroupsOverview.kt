@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.data.prefs.ChannelLayout
@@ -50,8 +51,9 @@ import com.uacastplayer.playlist.GroupOrderPolicy
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.groupDisplayKey
-import com.uacastplayer.ui.components.GroupIconCollage
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.rememberEntryStagger
+import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
@@ -83,7 +85,6 @@ internal fun GroupsOverviewGrid(
     onGroupClick: (GroupedChannels) -> Unit,
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
-    cachedIconFile: suspend (M3uChannel) -> File?,
     isFavorite: (M3uChannel) -> Boolean,
     onToggleFavorite: (M3uChannel) -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
@@ -99,6 +100,9 @@ internal fun GroupsOverviewGrid(
         GroupOrderPolicy.order(groups, pinnedGroupKeys, hiddenGroupKeys)
     }
     var groupActionsFor by remember { mutableStateOf<GroupedChannels?>(null) }
+    // Keyed on the ordered list, so pinning or hiding a group replays the wave over the new order
+    // rather than leaving the moved cards as the only static things on screen.
+    val entryStagger = rememberEntryStagger(orderedGroups)
     val totalChannels = remember(orderedGroups) { orderedGroups.sumOf { it.channels.size } }
     // LIST mode stays a literal single column (a list of group cards); GRID/LARGE_ICONS lets the
     // width fit as many ~GroupTileMinWidth tiles as the screen allows, unlike a fixed column count.
@@ -169,14 +173,15 @@ internal fun GroupsOverviewGrid(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(orderedGroups, key = { groupDisplayKey(it.group) }) { grouped ->
+                itemsIndexed(orderedGroups, key = { _, grouped -> groupDisplayKey(grouped.group) }) { index, grouped ->
+                    val key = groupDisplayKey(grouped.group)
                     GroupCard(
                         grouped = grouped,
-                        iconRefreshKey = iconRefreshKey,
-                        cachedIconFile = cachedIconFile,
                         onClick = { onGroupClick(grouped) },
                         onLongClick = { groupActionsFor = grouped },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier
+                            .animateItem()
+                            .staggeredEntry(stagger = entryStagger, key = key, index = index),
                     )
                 }
             }
@@ -226,6 +231,20 @@ internal fun GroupsOverviewGrid(
     }
 }
 
+private val GroupBadgeSize = 44.dp
+
+/**
+ * A group card's badge is decided by the group's *category*, never by what happens to be in the
+ * playlist or the icon cache.
+ *
+ * It used to be a collage of up to 4 channel logos from the group, drawn only from files already on
+ * disk. Two things were wrong with that. The obvious one: the same group rendered differently on two
+ * launches, because the collage was a picture of the cache rather than of the group - and with a
+ * large playlist the cache is a moving target. The worse one: a group whose first channels have no
+ * cached logo fell through to the badge below, so on one screen some cards carried four tiny
+ * mismatched provider logos and others carried the curated illustration, with nothing telling the
+ * user why. A category badge is the same on every launch, on every playlist, for every user.
+ */
 private sealed class GroupBadge {
     data class Artwork(@DrawableRes val drawableRes: Int) : GroupBadge()
     data class Label(val text: String) : GroupBadge()
@@ -269,8 +288,6 @@ private fun groupBadge(group: ChannelGroup, label: String): GroupBadge {
 @Composable
 private fun GroupCard(
     grouped: GroupedChannels,
-    iconRefreshKey: Any,
-    cachedIconFile: suspend (M3uChannel) -> File?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -298,34 +315,26 @@ private fun GroupCard(
             )
             .padding(16.dp),
     ) {
-        GroupIconCollage(
-            channels = grouped.channels,
-            cachedIconFile = cachedIconFile,
-            refreshKey = iconRefreshKey,
-            size = 44.dp,
-            fallback = {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .raisedSurface(RoundedCornerShape(RadiusItem), UaTheme.palette.surface2, shadow = false),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    when (val badge = groupBadge(grouped.group, groupLabel(grouped.group))) {
-                        is GroupBadge.Artwork -> Image(
-                            painter = painterResource(badge.drawableRes),
-                            contentDescription = null,
-                            modifier = Modifier.size(44.dp),
-                        )
-                        is GroupBadge.Label -> Text(
-                            text = badge.text,
-                            style = Caption,
-                            color = UaTheme.palette.accentText,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        )
-                    }
-                }
-            },
-        )
+        Box(
+            modifier = Modifier
+                .size(GroupBadgeSize)
+                .raisedSurface(RoundedCornerShape(RadiusItem), UaTheme.palette.surface2, shadow = false),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (val badge = groupBadge(grouped.group, groupLabel(grouped.group))) {
+                is GroupBadge.Artwork -> Image(
+                    painter = painterResource(badge.drawableRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(GroupBadgeSize),
+                )
+                is GroupBadge.Label -> Text(
+                    text = badge.text,
+                    style = Caption,
+                    color = UaTheme.palette.accentText,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .padding(top = 12.dp)
