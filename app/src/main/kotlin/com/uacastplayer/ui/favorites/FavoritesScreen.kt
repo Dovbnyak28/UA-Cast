@@ -21,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -118,7 +119,7 @@ fun FavoritesScreen(
             groupTitle = fav.groupTitle,
         )
     }
-    var rowHeightPx by remember { mutableStateOf(0f) }
+    var rowHeightPx by remember { mutableFloatStateOf(0f) }
     var dragState by remember { mutableStateOf<FavoriteDragState?>(null) }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
