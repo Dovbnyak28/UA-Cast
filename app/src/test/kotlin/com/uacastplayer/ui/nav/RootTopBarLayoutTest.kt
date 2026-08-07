@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.epg.EpgUiState
@@ -16,6 +16,8 @@ import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
+import com.uacastplayer.update.UpdateSectionState
+import com.uacastplayer.update.UpdateUiState
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -94,6 +96,15 @@ class RootTopBarLayoutTest {
                         total = 120,
                     ),
                     epgState = EpgUiState(isLoading = state.value),
+                    // No update to announce: this test is about the download banner's effect on
+                    // the title row's height, and a second banner would change what it measures.
+                    updateSection = UpdateSectionState(
+                        state = UpdateUiState(),
+                        onCheckNow = {},
+                        onOpenRelease = {},
+                        onDismissBanner = {},
+                        onOutcomeShown = {},
+                    ),
                     // Stands in for CastButton, which goes through Play Services' CastButtonFactory
                     // and cannot be composed here. Given a size so the title row's height still
                     // depends on something other than the text alone.

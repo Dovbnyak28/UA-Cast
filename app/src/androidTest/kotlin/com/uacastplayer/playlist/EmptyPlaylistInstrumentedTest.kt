@@ -1,7 +1,7 @@
 package com.uacastplayer.playlist
 
 import android.content.Context
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
@@ -21,7 +21,7 @@ import org.junit.runner.RunWith
  * Scenario 5 of the Session B lifecycle suite: a completely fresh start, with no playlist ever
  * loaded, must show the Channels tab's empty state rather than crashing. Uses
  * [createEmptyComposeRule] + a manually-launched [ActivityScenario] (instead of
- * [androidx.compose.ui.test.junit4.createAndroidComposeRule]) specifically so persisted playlist
+ * [androidx.compose.ui.test.junit4.v2.createAndroidComposeRule]) specifically so persisted playlist
  * state can be wiped *before* the Activity - and the ViewModel that reads it - is constructed.
  */
 @RunWith(AndroidJUnit4::class)

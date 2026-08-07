@@ -24,7 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,7 +71,9 @@ fun DownloadStatusBanner(
     modifier: Modifier = Modifier,
 ) {
     val isActive = iconPrefetchState.isRunning || epgState.isLoading
-    var dismissed by remember { mutableStateOf(false) }
+    // Saveable, so a dismissal is not undone by an Activity recreation while the same download is
+    // still running - the banner reappearing on its own reads as it having ignored the dismissal.
+    var dismissed by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(iconPrefetchState.isRunning, epgState.isLoading) {
         if (isActive) {
             dismissed = false
