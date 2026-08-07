@@ -49,6 +49,29 @@ baselineProfile {
     useConnectedDevices = true
 }
 
+// ...except that the comment above was only half true, and `./gradlew build --dry-run` says so:
+//
+//     assemble -> collectNonMinifiedReleaseBaselineProfile -> connectedNonMinifiedReleaseAndroidTest
+//
+// The plugin treats "assemble this module" as "produce a baseline profile", which means running
+// the macrobenchmark on a connected device. Since the root `build` reaches every module's
+// `build`, and `build` = `assemble` + `check`, a plain `./gradlew build` silently turned into a
+// device-attended run of tens of minutes that fails outright with no phone plugged in.
+//
+// So `build` here is rebound to the work it is actually meant to cover - compile and package both
+// variants, then `check` - and the lifecycle `assemble` is left exactly as the plugin wired it, so
+// the profile is still generated on request (./gradlew :app:generateBaselineProfile, and see
+// docs/RELEASING.md), just no longer by accident.
+tasks.named("build") {
+    setDependsOn(
+        listOf(
+            tasks.named("assembleBenchmarkRelease"),
+            tasks.named("assembleNonMinifiedRelease"),
+            tasks.named("check"),
+        )
+    )
+}
+
 dependencies {
     implementation(libs.androidx.test.ext.junit)
     implementation(libs.androidx.test.espresso.core)

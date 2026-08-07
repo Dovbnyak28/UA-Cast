@@ -10,6 +10,17 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+/**
+ * Whether this invocation is producing an Android App Bundle rather than APKs - see the `splits`
+ * block, which has to switch itself off when it is.
+ *
+ * Read from the requested task names rather than from a property, so that the plain
+ * `./gradlew bundleRelease` a release runbook (or Play's own tooling) would use just works, with
+ * nothing extra to remember. It is deliberately broad: `bundleRelease`, `bundleDebug` and
+ * `:app:bundleRelease` all match.
+ */
+val isBundleBuild: Boolean = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
+
 detekt {
     // Default rule set plus a handful of Compose-awareness overrides (see the config file) - not
     // a hand-tuned ruleset. The baseline is what keeps this from blocking on pre-existing code;
@@ -52,9 +63,15 @@ android {
     // without first asking what CPU their phone has. Publishing to Play Store would not need any
     // of this - `bundleRelease` produces an .aab and Play does the same split server-side - but
     // the bundle path cannot serve a direct download.
+    //
+    // The two outputs are alternatives, and AGP will not build them together: with per-ABI splits
+    // configured, `bundleRelease` fails outright with "Multiple shrunk-resources files found ...
+    // Please disable building multiple APKs when building an Android app bundle"
+    // (issuetracker.google.com/402800800). Since Play does its own splitting from the bundle, the
+    // block below simply turns itself off for a bundle build, leaving `assembleRelease` unchanged.
     splits {
         abi {
-            isEnable = true
+            isEnable = !isBundleBuild
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86_64")
             isUniversalApk = true
@@ -200,7 +217,6 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)

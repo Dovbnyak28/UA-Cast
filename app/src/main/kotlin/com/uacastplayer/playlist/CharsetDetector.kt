@@ -32,14 +32,40 @@ object CharsetDetector {
      * the largest playlists this app accepts (see PlaylistUrlLoader.MAX_PLAYLIST_BYTES). */
     private const val SAMPLE_SIZE_BYTES = 64 * 1024
 
+    private const val CONTINUATION_BYTE_MASK = 0xC0
+    private const val CONTINUATION_BYTE_MARKER = 0x80
+
     fun detect(bytes: ByteArray): Charset {
         val bomCharset = charsetForBom(bytes)
         if (bomCharset != null) return bomCharset
         return if (isValidUtf8(sampleOf(bytes))) Charsets.UTF_8 else WINDOWS_1251
     }
 
-    private fun sampleOf(bytes: ByteArray): ByteArray =
-        if (bytes.size > SAMPLE_SIZE_BYTES) bytes.copyOf(SAMPLE_SIZE_BYTES) else bytes
+    /**
+     * The sample must end on a character boundary, and that is not a detail.
+     *
+     * Slicing at a fixed byte offset cuts a multi-byte sequence in half roughly as often as not:
+     * for a Cyrillic playlist every letter is two bytes, so byte 65536 lands mid-character about
+     * half the time. An incomplete trailing sequence is *not* valid UTF-8, so [isValidUtf8] said no
+     * about a document that was valid UTF-8 throughout, and [detect] fell through to the
+     * Windows-1251 tier - decoding every Cyrillic name in the file into mojibake. The failure is
+     * silent, deterministic per file, and flips the moment a provider renames one channel earlier
+     * in the list.
+     *
+     * A UTF-8 continuation byte is `10xxxxxx`, so walking back from the cut while the byte *at* the
+     * boundary is one lands on the lead byte of the sequence being split; cutting there drops the
+     * partial sequence and keeps everything before it. At most three bytes are given up.
+     */
+    private fun sampleOf(bytes: ByteArray): ByteArray {
+        if (bytes.size <= SAMPLE_SIZE_BYTES) return bytes
+        var end = SAMPLE_SIZE_BYTES
+        while (end > 0 && isContinuationByte(bytes[end])) end--
+        return bytes.copyOf(end)
+    }
+
+    /** A UTF-8 continuation byte is `10xxxxxx`: mask off the low six bits and compare the marker. */
+    private fun isContinuationByte(byte: Byte): Boolean =
+        (byte.toInt() and CONTINUATION_BYTE_MASK) == CONTINUATION_BYTE_MARKER
 
     /**
      * As [detect], but with a charset the source claimed for itself (an HTTP `Content-Type`
