@@ -56,3 +56,7 @@ style:
       # theme failed the build on nothing but its own colour literals. Adding a theme should not
       # require editing the detekt config.
       - '**/ui/theme/*Palette.kt'
+      # Same reasoning as Color.kt, different kind of colour: FlagColors holds national flag values,
+      # which are fixed specifications rather than theme values (see the file's own doc). 0xFF0057B7
+      # is the most readable form Ukraine's blue has, and the property name carries the meaning.
+      - '**/ui/theme/FlagColors.kt'

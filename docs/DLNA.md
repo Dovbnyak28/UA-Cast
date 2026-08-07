@@ -75,11 +75,14 @@ building is pure (`dlna/AvTransportSoapBuilder`); the HTTP POST is the only impu
 
 Four details here are compatibility, not style, and each was a real failure:
 
-- **A channel switch sends `Stop` first.** The AVTransport state table only guarantees
-  `SetAVTransportURI` from STOPPED/NO_MEDIA_PRESENT; from PLAYING it is renderer-specific. A Samsung
-  UE40KU6000 accepted the new url but then refused `Play` with `701 Transition not available` four
-  times in a row while it moved between the two. Stopping first turns a renderer-specific case into
-  the one every renderer implements - with it, the same switch produces no refusals at all.
+- **Every connect sends `Stop` first** - a channel switch and a first connect alike. The AVTransport
+  state table only guarantees `SetAVTransportURI` from STOPPED/NO_MEDIA_PRESENT; from anything else
+  it is renderer-specific. A Samsung UE40KU6000 accepted the new url but then refused `Play` with
+  `701 Transition not available` four times in a row on a channel switch, and five times on a first
+  connect - three seconds of a user watching nothing. The first connect was exempt at first, on the
+  reasoning that a fresh connect finds an idle set. It does not; see *What the renderer's state
+  actually does* below. Stopping first turns a renderer-specific case into the one every renderer
+  implements.
 - **`Play` retries while - and only while - the renderer answers 701.** That is the one refusal that
   resolves on its own; `716 Resource not found` and everything else fail immediately, since retrying
   them only delays the fallback. This is the safety net under the `Stop`, not the primary fix.
@@ -124,6 +127,44 @@ teardown behind the coroutine that first waits out a renderer's timeout, a user 
 immediately picked another device had that pending teardown kill the proxy the new session had just
 bound. Neither call blocks - `ProxyServer.stop` closes sockets and signals its reader threads
 without joining them.
+
+## What the renderer's state actually does
+
+Measured on the Samsung UE40KU6000 on 2026-08-04 by calling `GetTransportInfo` and `GetMediaInfo`
+against the set's own control url from outside the app (`curl` on the phone, since the renderer and
+the development machine sit on different subnets). The app itself still polls neither - see
+*Explicitly out of scope* below; this was a diagnostic, not a feature.
+
+Three findings, each of which contradicts something the code around `Stop` assumed:
+
+- **A renderer does not stay PLAYING when its sender dies.** Killing the app takes the proxy with
+  it, and about eight seconds later the set reports `STOPPED` with `ERROR_OCCURRED` - it notices the
+  stream is gone and gives up on its own. So "it is still PLAYING whatever the previous app left on
+  it" is *not* the mechanism behind the refusals, however plausible it sounded.
+- **The state that actually bites is `PAUSED_PLAYBACK`, and the app's own clean stop is what
+  produces it.** After `DlnaSessionRepository.stop`, the Samsung sat in `PAUSED_PLAYBACK`
+  indefinitely rather than `STOPPED`. Every first connect that follows a normal "Stop casting"
+  therefore starts from a state the AVTransport table does not guarantee `SetAVTransportURI` from -
+  which is the ordinary path through the app, not an edge case.
+- **"We sent `Stop`" does not mean "it is stopped".** The set answered `Stop` with HTTP 200 and
+  still reported `PAUSED_PLAYBACK`; a second `Stop` was needed before it read `STOPPED`. This is the
+  real argument for sending it unconditionally *and* ignoring its result: the action's return value
+  says nothing about the state that follows it, so there is nothing to branch on.
+
+**Verified.** Four first connects - from a cold-booted idle set, from `STOPPED`/`ERROR_OCCURRED`,
+and from `PAUSED_PLAYBACK` - produced zero SOAP refusals across 4,779 lines of logcat, against five
+`701`s in a row on the same hardware before the fix. `AvTransportClient` logs only refusals and
+failures, so the absence of the tag is the measurement.
+
+Getting a renderer into `PAUSED_PLAYBACK` with no DLNA session live takes a second sender to keep
+the proxy alive: cast to Chromecast, connect DLNA, stop the DLNA session, then connect again. Worth
+knowing before anyone tries to reproduce this from a cold TV, where every state is one the table
+already guarantees and the bug cannot appear.
+
+Unrelated to the state machine but found the same way: **this set cannot fetch HTTPS.** An external
+`https://` url is refused outright with `716 Resource not found`. Nothing in the app depends on
+that - every url it hands out is the local plain-HTTP proxy - but it does mean the proxy is not
+merely a convenience for this renderer.
 
 ## Channel switching
 
