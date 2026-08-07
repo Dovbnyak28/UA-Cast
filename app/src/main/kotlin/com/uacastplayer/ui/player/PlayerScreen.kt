@@ -32,15 +32,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.graphics.toAndroidRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -96,10 +98,29 @@ import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_MILLIS = 3000L
 private const val GESTURE_INDICATOR_AUTO_HIDE_MILLIS = 900L
+
+/**
+ * The smallest integral rectangle that still contains all of [this].
+ *
+ * Compose measures in fractional pixels and `android.graphics.Rect` cannot hold them, so some
+ * rounding has to happen; the deprecated `toAndroidRect()` picked truncation, which shrinks the
+ * rectangle on every edge. The one caller hands the result to PiP as the source rectangle to scale
+ * out of, and a source rect that is a fraction of a pixel smaller than the surface samples from
+ * just inside it - so rounding outward is the choice that never crops the picture, and the surface
+ * bounds are already a deliberate over-approximation of the video (see the call site).
+ */
+private fun Rect.toEnclosingRect(): android.graphics.Rect = android.graphics.Rect(
+    floor(left).toInt(),
+    floor(top).toInt(),
+    ceil(right).toInt(),
+    ceil(bottom).toInt(),
+)
 
 @OptIn(markerClass = [UnstableApi::class])
 @Composable
@@ -136,13 +157,16 @@ fun PlayerScreen(
 
     // Tracks the app's own brightness/volume overrides across drags - re-reading the system value
     // every frame would fight the WindowManager override this same gesture just applied.
+    // Float/Int-specialised state, not the generic one: brightness and volume are written on every
+    // frame of a drag, and the generic MutableState would box a java.lang.Float per write - GC
+    // pressure in the one place where a dropped frame is most visible.
     var brightnessLevel by remember(activity) {
-        mutableStateOf(activity?.let(::initialBrightnessLevel) ?: DEFAULT_BRIGHTNESS_LEVEL)
+        mutableFloatStateOf(activity?.let(::initialBrightnessLevel) ?: DEFAULT_BRIGHTNESS_LEVEL)
     }
-    var volumeLevel by remember(audioManager) { mutableStateOf(audioManager.currentVolumeFraction()) }
+    var volumeLevel by remember(audioManager) { mutableFloatStateOf(audioManager.currentVolumeFraction()) }
     var gestureIndicator by remember { mutableStateOf<GestureIndicatorKind?>(null) }
-    var gestureIndicatorNonce by remember { mutableStateOf(0) }
-    var resizeModeToastNonce by remember { mutableStateOf(0) }
+    var gestureIndicatorNonce by remember { mutableIntStateOf(0) }
+    var resizeModeToastNonce by remember { mutableIntStateOf(0) }
     var showResizeModeToast by remember { mutableStateOf(false) }
 
     LaunchedEffect(gestureIndicatorNonce) {
@@ -298,7 +322,7 @@ fun PlayerScreen(
                 // and costs a slightly larger starting rect, nothing more.
                 modifier = Modifier
                     .fillMaxSize()
-                    .onGloballyPositioned { videoBounds = it.boundsInWindow().toAndroidRect() },
+                    .onGloballyPositioned { videoBounds = it.boundsInWindow().toEnclosingRect() },
             )
 
             if (uiState.isRecoveringPlayback) {

@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -21,7 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +46,10 @@ private const val STEP_COUNT = 3
  */
 @Composable
 fun OnboardingScreen(onFinished: (openAddPlaylist: Boolean) -> Unit, modifier: Modifier = Modifier) {
-    var step by remember { mutableIntStateOf(0) }
+    // Saveable: rotation is handled by MainActivity's `configChanges`, but a process death - or a
+    // font-size change, which is *not* in that list and so does recreate the Activity - would
+    // otherwise drop the user back onto step 1 of a walkthrough they had almost finished.
+    var step by rememberSaveable { mutableIntStateOf(0) }
     val isLastStep = step == STEP_COUNT - 1
 
     // System back behaves like "Skip" - there is nothing behind this screen to reveal (it sits
@@ -60,7 +61,10 @@ fun OnboardingScreen(onFinished: (openAddPlaylist: Boolean) -> Unit, modifier: M
         modifier = modifier
             .fillMaxSize()
             .background(UaTheme.palette.void)
-            .windowInsetsPadding(WindowInsets.statusBars)
+            // safeDrawing, not statusBars alone - one of the full-bleed gate screens with no
+            // scaffold above it to pad the bottom, so under edge-to-edge the Next/Start button ran
+            // under the navigation bar.
+            .safeDrawingPadding()
             .padding(horizontal = ScreenHPadding),
     ) {
         Row(
