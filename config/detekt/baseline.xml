@@ -1,17 +1,14 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
-  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <ManuallySuppressedIssues/>
   <CurrentIssues>
     <ID>ComplexCondition:AddPlaylistScreen.kt$hasStartedLoading &amp;&amp; playlistState.hasChannels &amp;&amp; !playlistState.isLoading &amp;&amp; playlistState.error == null</ID>
     <ID>CyclomaticComplexMethod:M3uParser.kt$M3uParser$fun parse(text: String): M3uParseResult</ID>
-    <ID>CyclomaticComplexMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>CyclomaticComplexMethod:MiniJson.kt$MiniJson.Parser$private fun parseString(): String</ID>
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(markerClass = [UnstableApi::class]) @Composable fun PlayerScreen( viewModel: PlayerViewModel, onExit: () -&gt; Unit, isFavorite: (M3uChannel) -&gt; Boolean, onToggleFavorite: (M3uChannel) -&gt; Unit, resolveIcon: suspend (M3uChannel) -&gt; File?, epgState: EpgUiState, iconPrefetchState: IconPrefetchUiState, modifier: Modifier = Modifier, )</ID>
     <ID>CyclomaticComplexMethod:ProxyHttpServer.kt$ProxyHttpServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
-    <ID>DestructuringDeclarationWithTooManyEntries:PlayerViewModel.kt$val (minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs) = when (bufferSize) { BufferSize.SMALL -&gt; BufferProfile(10_000, 20_000, 1_000, 2_000) BufferSize.MEDIUM -&gt; BufferProfile( DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, 1_000, 2_500, ) BufferSize.LARGE -&gt; BufferProfile(30_000, 90_000, 2_000, 5_000) }</ID>
     <ID>LargeClass:AppIcons.kt$AppIcons</ID>
     <ID>LongMethod:M3uParser.kt$M3uParser$fun parse(text: String): M3uParseResult</ID>
-    <ID>LongMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>LongParameterList:XmlTvTimeParserTest.kt$XmlTvTimeParserTest$(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, offsetHours: Int)</ID>
     <ID>LoopWithTooManyJumpStatements:ChannelSearch.kt$ChannelSearch$for</ID>
     <ID>LoopWithTooManyJumpStatements:IconRepository.kt$IconRepository$for</ID>
@@ -54,11 +51,11 @@
     <ID>MagicNumber:PlaybackBadges.kt$PlaybackBadges$6</ID>
     <ID>MagicNumber:PlaybackBadges.kt$PlaybackBadges$720</ID>
     <ID>MagicNumber:PlaybackBadges.kt$PlaybackBadges$8</ID>
-    <ID>MagicNumber:PlayerGesturePolicy.kt$PlayerGesturePolicy$3f</ID>
     <ID>MagicNumber:PlayerControlsOverlay.kt$0.6f</ID>
     <ID>MagicNumber:PlayerGestureLayer.kt$0.01f</ID>
     <ID>MagicNumber:PlayerGestureLayer.kt$PipController$16</ID>
     <ID>MagicNumber:PlayerGestureLayer.kt$PipController$9</ID>
+    <ID>MagicNumber:PlayerGesturePolicy.kt$PlayerGesturePolicy$3f</ID>
     <ID>MagicNumber:PlayerScreen.kt$16f</ID>
     <ID>MagicNumber:PlayerScreen.kt$9f</ID>
     <ID>MagicNumber:PlayerViewModel.kt$10_000</ID>
@@ -68,22 +65,18 @@
     <ID>MagicNumber:PlayerViewModel.kt$2_500</ID>
     <ID>MagicNumber:PlayerViewModel.kt$30_000</ID>
     <ID>MagicNumber:PlayerViewModel.kt$5_000</ID>
-    <ID>MagicNumber:PlayerViewModel.kt$90_000</ID>
     <ID>MagicNumber:PlaylistDetector.kt$PlaylistDetector$0xBB</ID>
     <ID>MagicNumber:PlaylistDetector.kt$PlaylistDetector$0xBF</ID>
     <ID>MagicNumber:PlaylistDetector.kt$PlaylistDetector$0xEF</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer$0xFF</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer$15_000</ID>
+    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$400</ID>
+    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$405</ID>
+    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$50</ID>
+    <ID>MagicNumber:ProxyResourceRegistry.kt$ProxyResourceRegistry.&lt;no name provided&gt;$0.75f</ID>
+    <ID>MagicNumber:ProxyResourceRegistry.kt$ProxyResourceRegistry.&lt;no name provided&gt;$16</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$200</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$3</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$4</ID>
-    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$400</ID>
     <ID>MagicNumber:ProxyServer.kt$ProxyServer$404</ID>
-    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$405</ID>
-    <ID>MagicNumber:ProxyHttpServer.kt$ProxyHttpServer$50</ID>
-    <ID>MagicNumber:ProxyServer.kt$ProxyServer$502</ID>
-    <ID>MagicNumber:ProxyResourceRegistry.kt$ProxyResourceRegistry.&lt;no name provided&gt;$0.75f</ID>
-    <ID>MagicNumber:ProxyResourceRegistry.kt$ProxyResourceRegistry.&lt;no name provided&gt;$16</ID>
     <ID>MagicNumber:RawTsRemuxSession.kt$RawTsRemuxSession$0xFF</ID>
     <ID>MagicNumber:SettingsScreen.kt$1024</ID>
     <ID>MagicNumber:SettingsScreen.kt$1024.0</ID>
@@ -153,23 +146,15 @@
     <ID>MaxLineLength:AppViewModel.kt$AppViewModel$/** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]); manufacturer battery managers (MIUI/HyperOS and friends) otherwise silently kill the cast proxy in the background. */</ID>
     <ID>MaxLineLength:BoundedByteReader.kt$BoundedByteReader$/** Same streaming-with-early-bailout shape as [com.uacastplayer.playlist.BoundedTextReader], for binary content (the EPG gzip blob is stored as-is and must not go through text decoding). */</ID>
     <ID>MaxLineLength:CachePaths.kt$CachePaths$/** Mirrors the literal path segments each cache store already uses under `filesDir`, kept in one place for cache-management UI. */</ID>
-    <ID>MaxLineLength:CastCompatibilityPolicy.kt$CastCompatibilityPolicy$videoCodec != null &amp;&amp; videoCodec != VideoCodec.H264 -&gt; CastCompatibilityVerdict.IncompatibleVideo(videoCodec)</ID>
-    <ID>MaxLineLength:CastCompatibilityPolicyTest.kt$CastCompatibilityPolicyTest$assertEquals(CastCompatibilityVerdict.IncompatibleVideo(VideoCodec.Hevc), CastCompatibilityPolicy.classify(info))</ID>
     <ID>MaxLineLength:CastSessionRepository.kt$CastSessionRepository$applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)</ID>
-    <ID>MaxLineLength:CastSessionRepository.kt$CastSessionRepository$fun</ID>
-    <ID>MaxLineLength:CastSessionRepository.kt$CastSessionRepository$loadOnReceiver(proxyServer.buildLocalUrl(resourceId), title, originalStreamUrl = streamUrl, userAgent = userAgent, referrer = referrer)</ID>
     <ID>MaxLineLength:CastSessionRepository.kt$CastSessionRepository$private</ID>
     <ID>MaxLineLength:ChannelGroupNormalizer.kt$ChannelGroupNormalizer$put(ChannelGroup.KEY_KIDS, "kids|cartoons|дети|детские|дитячі|діти|мультфильмы|мультфільми|infantil|niños|ninos")</ID>
-    <ID>MaxLineLength:ChannelsScreen.kt$Column</ID>
     <ID>MaxLineLength:ChannelListSection.kt$val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth</ID>
-    <ID>MaxLineLength:DayScheduleBuilderTest.kt$DayScheduleBuilderTest$EpgProgramme(channelId = "ch", startMillis = startMillis, stopMillis = stopMillis, title = id, description = null)</ID>
     <ID>MaxLineLength:DesignSystemControls.kt$fun</ID>
     <ID>MaxLineLength:DesignSystemControls.kt$val height = if (bold) com.uacastplayer.ui.theme.ProgressHeightBold else com.uacastplayer.ui.theme.ProgressHeightThin</ID>
     <ID>MaxLineLength:DevicePerformanceClassifierTest.kt$DevicePerformanceClassifierTest$val tier = DevicePerformanceClassifier.classify(totalRamBytes = 512L * 1024 * 1024, cpuCoreCount = 1, sdkInt = 21)</ID>
     <ID>MaxLineLength:DeviceTierDefaults.kt$DeviceTierDefaults$/** Computed defaults for a device tier - always overridable, and once the user picks a value explicitly it wins forever. */</ID>
     <ID>MaxLineLength:EmptyState.kt$/** The icon-badge/title/subtitle block on its own, sized to its content - for use alongside other composables (e.g. import controls) where a full-screen centered [EmptyState] would conflict with a scrolling sibling. */</ID>
-    <ID>MaxLineLength:EpgSnapshotCodec.kt$EpgSnapshotCodec$/** Decodes the header from [input] and returns it still attached to [input] for the payload - see [DecodedEpgSnapshot]. */</ID>
-    <ID>MaxLineLength:EpgSnapshotStore.kt$EpgSnapshotStore$suspend</ID>
     <ID>MaxLineLength:FavoritesJsonCodecTest.kt$FavoritesJsonCodecTest$FavoriteChannel(key = "News:abc123", displayName = "News", streamUrl = "http://x/1", tvgId = null, groupTitle = null)</ID>
     <ID>MaxLineLength:FavoritesJsonCodecTest.kt$FavoritesJsonCodecTest$FavoriteChannel(key = "ch$it", displayName = "Channel $it", streamUrl = "http://x/$it", tvgId = null, groupTitle = null)</ID>
     <ID>MaxLineLength:FavoritesScreen.kt$val moved = ReorderPolicy.move(orderedFavorites.toList(), state.draggedIndex, targetIndex)</ID>
@@ -186,24 +171,20 @@
     <ID>MaxLineLength:MiniJsonTest.kt$MiniJsonTest$assertEquals(emptyList&lt;Map&lt;String, String?&gt;&gt;(), MiniJson.parseArrayOfObjects(MiniJson.writeArrayOfObjects(emptyList())))</ID>
     <ID>MaxLineLength:PlayerScreen.kt$.</ID>
     <ID>MaxLineLength:PlayerScreen.kt$SmallRoundIconButton(icon = AppIcons.ArrowBack, onClick = onExit, contentDescription = stringResource(R.string.common_back))</ID>
-    <ID>MaxLineLength:PlayerScreen.kt$private</ID>
-    <ID>MaxLineLength:PlayerViewModel.kt$PlayerViewModel$castRepository.setActiveChannel(index, channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)</ID>
     <ID>MaxLineLength:PlayerViewModel.kt$PlayerViewModel$private</ID>
     <ID>MaxLineLength:PlayerViewModel.kt$PlayerViewModel.MediaSessionCallback$override</ID>
     <ID>MaxLineLength:PlayerViewModel.kt$PlayerViewModel.MediaSessionCallback$return MediaSession.ConnectionResult.accept(connectionResult.availableSessionCommands, availablePlayerCommands)</ID>
     <ID>MaxLineLength:PlaylistOutcomeReducerTest.kt$PlaylistOutcomeReducerTest$val result = PlaylistOutcomeReducer.reduce(loadedState, PlaylistOutcome.ReadError("timeout"), fromCache = false, displayName = null)</ID>
     <ID>MaxLineLength:PlaylistOutcomeReducerTest.kt$PlaylistOutcomeReducerTest$val result = PlaylistOutcomeReducer.reduce(loadedState, PlaylistOutcome.SizeLimitExceeded, fromCache = false, displayName = null)</ID>
+    <ID>MaxLineLength:ProxyResourceRegistry.kt$ResourceEntry$internal data</ID>
     <ID>MaxLineLength:ProxyServer.kt$ProxyServer$/** Exposed only so tests can verify header inheritance (see [servePlaylist]) without going through a real socket. */</ID>
     <ID>MaxLineLength:ProxyServer.kt$ProxyServer$PlaylistDetector.isPlaylist(response.header("Content-Type"), response.peekBody(PLAYLIST_SNIFF_BYTES).bytes())</ID>
-    <ID>MaxLineLength:ProxyServer.kt$ProxyServer$registerResource(RESOURCE_TYPE_PLAYLIST, url, userAgent?.ifBlank { null } ?: HttpDefaults.BROWSER_USER_AGENT, referrer?.ifBlank { null })</ID>
-    <ID>MaxLineLength:ProxyResourceRegistry.kt$ResourceEntry$internal data</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_coil_label, settingsState.cacheSizes.coilCacheBytes) { onClearCache(CacheKind.COIL) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_icons_label, settingsState.cacheSizes.iconCacheBytes) { onClearCache(CacheKind.ICONS) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$CacheRow(R.string.cache_playlist_label, settingsState.cacheSizes.playlistBytes) { onClearCache(CacheKind.PLAYLIST) }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$SwitchRow(stringResource(R.string.settings_auto_skip_label), settingsState.autoSkipDeadEnabled, onAutoSkipChanged)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$SwitchRow(stringResource(R.string.settings_wrap_around_label), settingsState.wrapAroundEnabled, onWrapAroundChanged)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes())</ID>
-    <ID>MaxLineLength:TsFirstSegmentDiagnostic.kt$TsFirstSegmentDiagnostic$val</ID>
     <ID>MaxLineLength:TsProgramInfoParser.kt$TsProgramInfoParser$private val AUDIO_STREAM_TYPES = setOf(0x03, 0x04, 0x06, 0x0F, 0x11, 0x1C, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x8A)</ID>
     <ID>NestedBlockDepth:ChannelSearch.kt$ChannelSearch$fun search(groups: List&lt;GroupedChannels&gt;, query: String): ChannelSearchOutcome</ID>
     <ID>NestedBlockDepth:M3uParser.kt$M3uParser$fun parse(text: String): M3uParseResult</ID>
@@ -218,7 +199,6 @@
     <ID>ReturnCount:HttpRetryPolicy.kt$HttpRetryPolicy$fun shouldRetry(attemptNumber: Int, isNetworkError: Boolean, httpStatusCode: Int? = null): Boolean</ID>
     <ID>ReturnCount:IconFailureStore.kt$IconFailureStore$fun shouldSkip(url: String, nowMillis: Long = System.currentTimeMillis()): Boolean</ID>
     <ID>ReturnCount:IconPrefetcher.kt$IconPrefetcher$private fun isConnected(): Boolean</ID>
-    <ID>ReturnCount:IconRepository.kt$IconRepository$private suspend fun resolveIconFileUncached(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File?</ID>
     <ID>ReturnCount:ImageFormat.kt$ImageFormatDetector$private fun regionMatches(bytes: ByteArray, offset: Int, needle: ByteArray): Boolean</ID>
     <ID>ReturnCount:M3u8Rewriter.kt$M3u8Rewriter$private fun resolveAndMap(reference: String, baseUrl: String, mapUrl: (String) -&gt; String?): String?</ID>
     <ID>ReturnCount:PlaybackRetryPolicy.kt$PlaybackRetryPolicy$fun onError(state: RetryState, errorType: PlaybackErrorType): RetryDecision</ID>
@@ -232,7 +212,6 @@
     <ID>ReturnCount:ProxyHttpServer.kt$ProxyHttpServer$private fun readRequest(input: InputStream): ParsedRequest?</ID>
     <ID>ReturnCount:ProxyServer.kt$ProxyServer$private fun serveRequest(request: ParsedRequest, output: OutputStream)</ID>
     <ID>ReturnCount:ReorderPolicy.kt$ReorderPolicy$fun &lt;T&gt; move(items: List&lt;T&gt;, fromIndex: Int, toIndex: Int): List&lt;T&gt;</ID>
-    <ID>ReturnCount:TsFirstSegmentDiagnostic.kt$TsFirstSegmentDiagnostic$fun diagnose(streamUrl: String, httpClient: OkHttpClient): TsProgramInfo?</ID>
     <ID>ReturnCount:TsProgramInfoParser.kt$TsProgramInfoParser$fun parse(bytes: ByteArray): TsProgramInfo?</ID>
     <ID>ReturnCount:TsProgramInfoParser.kt$TsProgramInfoParser$private fun parsePatFirstProgramPid(packet: ByteArray): Int?</ID>
     <ID>ReturnCount:TsProgramInfoParser.kt$TsProgramInfoParser$private fun parsePmtStreamTypes(packet: ByteArray): List&lt;Int&gt;</ID>
@@ -244,16 +223,9 @@
     <ID>ReturnCount:TsSegmenter.kt$private fun parsePmtFirstVideoPid(data: ByteArray, offset: Int): Int?</ID>
     <ID>ReturnCount:TsSegmenter.kt$private fun sectionPayload(data: ByteArray, offset: Int): ByteArray?</ID>
     <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : AndroidViewModel</ID>
-    <ID>TooManyFunctions:CastSessionRepository.kt$CastSessionRepository</ID>
-    <ID>TooManyFunctions:ChannelsScreen.kt$com.uacastplayer.ui.channels.ChannelsScreen.kt</ID>
     <ID>TooManyFunctions:IconController.kt$IconController</ID>
-    <ID>TooManyFunctions:PlayerScreen.kt$com.uacastplayer.ui.player.PlayerScreen.kt</ID>
     <ID>TooManyFunctions:PlayerViewModel.kt$PlayerViewModel : AndroidViewModel</ID>
-    <ID>TooManyFunctions:PlaylistController.kt$PlaylistController</ID>
-    <ID>TooManyFunctions:ProxyServer.kt$ProxyServer</ID>
-    <ID>TooManyFunctions:RawTsRemuxSession.kt$RawTsRemuxSession</ID>
     <ID>TooManyFunctions:SettingsController.kt$SettingsController</ID>
-    <ID>TooManyFunctions:SettingsScreen.kt$com.uacastplayer.ui.settings.SettingsScreen.kt</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$/** Unified pressed-state darkening (rule 2 extension, see ui/theme/Depth.kt's [darken]) - how much * darker a [com.uacastplayer.ui.theme.raisedSurface]'s base color gets while pressed, instead of * each control picking its own ad-hoc pressed color. */ const val PressedDarkenFraction = 0.10f</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$// Press-scale targets (rule 2) const val PressScalePlay = 0.94f</ID>
     <ID>TopLevelPropertyNaming:Motion.kt$const val BreatheMs = 2000</ID>
