@@ -5,6 +5,14 @@ coreKtx = "1.18.0"
 splashscreen = "1.2.0"
 activityCompose = "1.13.0"
 composeBom = "2026.06.01"
+# media3 and nextlib move together - do not bump one alone.
+#
+# nextlib publishes as <media3 version>-<its own version>, so 1.10.1-0.13.0 is built against
+# media3 1.10.1 and nothing else. media3 1.11.0 exists; the matching nextlib does not (checked
+# against its maven-metadata: 1.10.1-0.13.0 is the newest there is). Taking 1.11.0 alone means
+# dropping nextlib, and nextlib is what supplies FfmpegVideoRenderer - the software decoder that
+# plays the codecs a given phone has no hardware for. On a Mi A2 it is visibly loaded at every
+# playback start. Losing it does not fail the build; it fails a channel, on someone else's device.
 media3 = "1.10.1"
 nextlibMedia3ext = "1.10.1-0.13.0"
 castFramework = "22.3.1"

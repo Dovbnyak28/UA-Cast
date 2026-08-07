@@ -100,7 +100,7 @@
         <item quantity="other">%1$d canales</item>
     </plurals>
     <string name="playlist_loading">Cargando lista…</string>
-    <string name="playlist_error_size_limit">La lista supera el límite de 8 MB</string>
+    <string name="playlist_error_size_limit">La lista supera el límite de 8 MB, unos 45.000 canales. Pide a tu proveedor una lista más pequeña o dividida por categorías.</string>
     <string name="playlist_error_http">Error del servidor (código %1$d)</string>
     <string name="playlist_error_network">Error de red, inténtalo de nuevo</string>
 

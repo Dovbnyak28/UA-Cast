@@ -98,7 +98,7 @@
         <item quantity="other">%1$d channels</item>
     </plurals>
     <string name="playlist_loading">Loading playlist…</string>
-    <string name="playlist_error_size_limit">Playlist is larger than the 8 MB limit</string>
+    <string name="playlist_error_size_limit">Playlist is larger than the 8 MB limit — that is roughly 45,000 channels. Ask your provider for a smaller list, or one split by category.</string>
     <string name="playlist_error_http">Server error (code %1$d)</string>
     <string name="playlist_error_network">Network error, please try again</string>
 
