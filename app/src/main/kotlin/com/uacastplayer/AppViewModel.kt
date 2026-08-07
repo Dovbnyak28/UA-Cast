@@ -13,6 +13,13 @@ import com.uacastplayer.app.IconController
 import com.uacastplayer.app.ParentalControlController
 import com.uacastplayer.app.PlaylistController
 import com.uacastplayer.app.SettingsController
+import com.uacastplayer.app.UpdateController
+import com.uacastplayer.data.premium.FakeBillingProvider
+import com.uacastplayer.data.premium.PremiumRepository
+import com.uacastplayer.data.update.UpdateRepository
+import com.uacastplayer.premium.Entitlements
+import com.uacastplayer.premium.FeatureManager
+import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupFavorite
 import com.uacastplayer.backup.BackupImportSummary
@@ -129,6 +136,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pinnedGroupKeys: StateFlow<Set<String>> = groupVisibilityController.pinnedKeys
     val hiddenGroupKeys: StateFlow<Set<String>> = groupVisibilityController.hiddenKeys
 
+    private val updateController = UpdateController(
+        releaseSource = UpdateRepository(),
+        storage = preferences,
+        scope = viewModelScope,
+        installedVersionName = BuildConfig.VERSION_NAME,
+    )
+    val updateState: StateFlow<UpdateUiState> = updateController.state
+
+    /**
+     * Premium access. There is no `PremiumController` beside the other controllers on purpose:
+     * [PremiumRepository] already is one - it owns the state, the scope and the side effects - and a
+     * class that only forwarded to it would be ceremony rather than structure.
+     *
+     * The provider is the one line that changes on the day Google Play Billing is turned on. Until
+     * then [FakeBillingProvider] reports, truthfully, that there is no store: nothing is for sale
+     * yet.
+     */
+    private val premiumRepository = PremiumRepository(
+        provider = FakeBillingProvider(),
+        storage = preferences,
+        scope = viewModelScope,
+    )
+    val entitlements: StateFlow<Entitlements> = premiumRepository.entitlements
+
+    /** The only way anything in this app asks whether a feature is available. */
+    val featureManager = FeatureManager(entitlements)
+
     private val parentalControlController =
         ParentalControlController(ParentalControlStore(application), preferences, viewModelScope)
     val lockedChannelKeys: StateFlow<Set<String>> = parentalControlController.lockedKeys
@@ -210,6 +244,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         epgController.startTicking()
         groupVisibilityController.loadInitial()
         parentalControlController.loadInitial()
+        // At most one request a week, and only ever adds a banner - see UpdateController.
+        updateController.checkOnLaunch()
+        // Grants the first-launch trial if this device has never held a license, then starts
+        // listening to whatever store there is.
+        premiumRepository.loadInitial()
         viewModelScope.launch {
             activePlaylistSourceId.collect { groupVisibilityController.setActiveSource(it) }
         }
@@ -238,6 +277,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         preferences.hasSeenBatteryOptimizationHint = true
         _showBatteryOptimizationHint.value = false
     }
+
+    /** The Settings button. Unlike the weekly check this ignores the throttle and reports failure -
+     * see [UpdateController]. */
+    fun checkForUpdatesNow() = updateController.checkNow()
+
+    /** Closes the update banner for that release only. */
+    fun dismissUpdateBanner() = updateController.dismissAvailableUpdate()
+
+    /** Clears the one-shot result line under the Settings button once it has been read. */
+    fun clearUpdateCheckOutcome() = updateController.clearLastOutcome()
 
     /** Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
      * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without

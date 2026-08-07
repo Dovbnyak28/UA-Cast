@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -141,84 +143,14 @@ fun HomeScreen(
         )
 
         if (playlistState.hasChannels) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = GapL)
-                    .raisedSurface(
-                        RoundedCornerShape(RadiusCard),
-                        UaTheme.palette.surface1,
-                        edgeColor = UaTheme.palette.hairline,
-                        shadow = true,
-                    )
-                    .clickable { showSourceSheet = true }
-                    .padding(CardPadding),
-            ) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.home_active_playlist_label),
-                            style = SectionLabel,
-                            color = UaTheme.palette.labelSecondary,
-                        )
-                        Text(
-                            text = playlistState.displayName ?: playlistState.activePlaylistId ?: "—",
-                            style = Title,
-                            color = UaTheme.palette.labelPrimary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                    // Only a file import has no sourceUrl to re-fetch - nothing to refresh from.
-                    if (playlistState.sourceUrl != null) {
-                        RefreshPlaylistButton(isLoading = playlistState.isLoading, onClick = onRefreshPlaylist)
-                    }
-                }
-                if (playlistState.restoredFromCache) {
-                    Text(
-                        text = stringResource(R.string.home_restored_from_cache),
-                        style = Caption,
-                        color = UaTheme.palette.labelSecondary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-
-                Row(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
-                    HomeStatCell(
-                        count = totalChannels,
-                        label = pluralStringResource(R.plurals.home_stat_channels, totalChannels),
-                        modifier = Modifier.weight(1f),
-                    )
-                    HomeStatCell(
-                        count = playlistState.groups.size,
-                        label = pluralStringResource(R.plurals.home_stat_groups, playlistState.groups.size),
-                        modifier = Modifier.weight(1f),
-                    )
-                    HomeStatCell(
-                        count = favorites.size,
-                        label = pluralStringResource(R.plurals.home_stat_favorites, favorites.size),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                Column(modifier = Modifier.padding(top = GapM)) {
-                    Text(
-                        text = stringResource(R.string.home_epg_label),
-                        style = SectionLabel,
-                        color = UaTheme.palette.labelSecondary,
-                    )
-                    Text(
-                        text = when {
-                            epgState.isLoading -> stringResource(R.string.home_epg_restoring)
-                            epgState.data != null -> stringResource(R.string.home_epg_ready)
-                            epgState.hasError -> stringResource(R.string.home_epg_unavailable)
-                            else -> stringResource(R.string.home_epg_restoring)
-                        },
-                        style = BodyText,
-                        color = UaTheme.palette.labelPrimary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-            }
+            PlaylistDashboardCard(
+                playlistState = playlistState,
+                epgState = epgState,
+                totalChannels = totalChannels,
+                favoriteCount = favorites.size,
+                onRefreshPlaylist = onRefreshPlaylist,
+                onClick = { showSourceSheet = true },
+            )
 
             homeContent.continueWatching?.let { channel ->
                 ContinueWatchingCard(
@@ -247,6 +179,13 @@ fun HomeScreen(
                     modifier = Modifier.padding(top = GapL, bottom = GapL),
                 )
             }
+        } else if (playlistState.isLoading) {
+            // hasChannels wins over isLoading, and isLoading over the empty state - the same order
+            // ChannelsScreen uses, and for the same reason: a restore in progress is not the
+            // absence of a playlist, and saying so is a lie the user has no way to check. Without
+            // this branch a cold start showed "no playlist yet" plus an add-a-playlist button for
+            // the whole restore, which on a debug build over a 2863-channel snapshot is ~30s.
+            HomeDashboardSkeleton()
         } else {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -282,12 +221,117 @@ fun HomeScreen(
     }
 }
 
+/**
+ * The active-playlist card: which playlist is loaded, its three counters, and the EPG's state.
+ *
+ * Extracted from [HomeScreen] rather than left inline - the screen was at its complexity ceiling,
+ * and this is the largest self-contained piece of it. [HomeDashboardSkeleton] mirrors these
+ * proportions.
+ */
+@Composable
+private fun PlaylistDashboardCard(
+    playlistState: PlaylistUiState,
+    epgState: EpgUiState,
+    totalChannels: Int,
+    favoriteCount: Int,
+    onRefreshPlaylist: () -> Unit,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = GapL)
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = true,
+            )
+            .clickable(onClick = onClick)
+            .padding(CardPadding),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_active_playlist_label),
+                    style = SectionLabel,
+                    color = UaTheme.palette.labelSecondary,
+                )
+                Text(
+                    text = playlistState.displayName ?: playlistState.activePlaylistId ?: "—",
+                    style = Title,
+                    color = UaTheme.palette.labelPrimary,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            // Only a file import has no sourceUrl to re-fetch - nothing to refresh from.
+            if (playlistState.sourceUrl != null) {
+                RefreshPlaylistButton(isLoading = playlistState.isLoading, onClick = onRefreshPlaylist)
+            }
+        }
+        if (playlistState.restoredFromCache) {
+            Text(
+                text = stringResource(R.string.home_restored_from_cache),
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+
+        Row(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
+            HomeStatCell(
+                count = totalChannels,
+                label = pluralStringResource(R.plurals.home_stat_channels, totalChannels),
+                modifier = Modifier.weight(1f),
+            )
+            HomeStatCell(
+                count = playlistState.groups.size,
+                label = pluralStringResource(R.plurals.home_stat_groups, playlistState.groups.size),
+                modifier = Modifier.weight(1f),
+            )
+            HomeStatCell(
+                count = favoriteCount,
+                label = pluralStringResource(R.plurals.home_stat_favorites, favoriteCount),
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Column(modifier = Modifier.padding(top = GapM)) {
+            Text(
+                text = stringResource(R.string.home_epg_label),
+                style = SectionLabel,
+                color = UaTheme.palette.labelSecondary,
+            )
+            Text(
+                text = when {
+                    epgState.isLoading -> stringResource(R.string.home_epg_restoring)
+                    epgState.data != null -> stringResource(R.string.home_epg_ready)
+                    epgState.hasError -> stringResource(R.string.home_epg_unavailable)
+                    else -> stringResource(R.string.home_epg_restoring)
+                },
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
 /** Re-fetches the active playlist from its saved URL - see [PlaylistUiState.sourceUrl]. Swaps to a
  * spinner instead of disabling outright while a load is already in flight, so the user can see
  * their tap registered rather than wondering if the button is just unresponsive. */
 @Composable
 private fun RefreshPlaylistButton(isLoading: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = !isLoading) {
+    // The label sits on the button rather than on the icon, because the icon is only there in one of
+    // the two states: while loading it is a spinner, and a spinner carries no description - which
+    // left this control announcing itself to TalkBack as an unnamed disabled button for exactly as
+    // long as the refresh it was reporting.
+    val label = stringResource(R.string.home_refresh_playlist)
+    IconButton(
+        onClick = onClick,
+        enabled = !isLoading,
+        modifier = Modifier.semantics { contentDescription = label },
+    ) {
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(20.dp),
@@ -295,11 +339,7 @@ private fun RefreshPlaylistButton(isLoading: Boolean, onClick: () -> Unit) {
                 strokeWidth = 2.dp,
             )
         } else {
-            Icon(
-                AppIcons.Refresh,
-                contentDescription = stringResource(R.string.home_refresh_playlist),
-                tint = UaTheme.palette.azure,
-            )
+            Icon(AppIcons.Refresh, contentDescription = null, tint = UaTheme.palette.azure)
         }
     }
 }

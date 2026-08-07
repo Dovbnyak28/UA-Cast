@@ -8,13 +8,17 @@ import com.uacastplayer.core.i18n.LanguageResolver
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.premium.License
+import com.uacastplayer.premium.LicenseStorage
+import com.uacastplayer.premium.LicenseTier
+import com.uacastplayer.update.UpdateCheckStorage
 
 /**
  * Small, synchronous wrapper around the app's single general-settings [SharedPreferences] file.
  * Values here are all tiny scalars; there is no need for the AtomicFile/versioned-snapshot
  * machinery used by the playlist/EPG/favorites caches.
  */
-class AppPreferences(context: Context) : ParentalControlPinStorage {
+class AppPreferences(context: Context) : ParentalControlPinStorage, UpdateCheckStorage, LicenseStorage {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -170,6 +174,58 @@ class AppPreferences(context: Context) : ParentalControlPinStorage {
         get() = prefs.getString(KEY_PARENTAL_CONTROL_PIN_SALT, null)
         set(value) = prefs.edit { putString(KEY_PARENTAL_CONTROL_PIN_SALT, value) }
 
+    /** Wall clock of the last update check of either kind, so the automatic one can hold itself to
+     * once a week (see [com.uacastplayer.update.UpdateCheckSchedule]). Null means never checked. */
+    override var lastUpdateCheckAtMillis: Long?
+        get() = if (prefs.contains(KEY_LAST_UPDATE_CHECK)) prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L) else null
+        set(value) {
+            if (value == null) {
+                prefs.edit { remove(KEY_LAST_UPDATE_CHECK) }
+            } else {
+                prefs.edit { putLong(KEY_LAST_UPDATE_CHECK, value) }
+            }
+        }
+
+    /** Release tag whose update banner the user closed, so it stays closed - for that version only.
+     * Stored as the tag rather than a boolean: the next release has a different tag and so gets to
+     * announce itself, which a "banner dismissed" flag would have to remember to reset. */
+    override var dismissedUpdateTag: String?
+        get() = prefs.getString(KEY_DISMISSED_UPDATE_TAG, null)
+        set(value) = prefs.edit { putString(KEY_DISMISSED_UPDATE_TAG, value) }
+
+    /**
+     * The last license this device saw. Null means it has never held one, which is the single
+     * condition under which [com.uacastplayer.data.premium.PremiumRepository] grants the
+     * first-launch trial - so this staying non-null after the trial ends is what stops it being
+     * granted again on every launch.
+     *
+     * An unrecognised tier resolves to [License.FREE] rather than null, deliberately: null would
+     * read as "never held a license" and hand out a fresh trial, so a corrupted value must not be
+     * more generous than a valid one.
+     */
+    override var storedLicense: License?
+        get() {
+            val storedTier = prefs.getString(KEY_LICENSE_TIER, null) ?: return null
+            val tier = LicenseTier.entries.firstOrNull { it.name == storedTier } ?: LicenseTier.FREE
+            val expiry = if (prefs.contains(KEY_LICENSE_EXPIRY)) prefs.getLong(KEY_LICENSE_EXPIRY, 0L) else null
+            return License(tier, expiry, prefs.getString(KEY_LICENSE_SOURCE, null))
+        }
+        set(value) = prefs.edit {
+            if (value == null) {
+                remove(KEY_LICENSE_TIER)
+                remove(KEY_LICENSE_EXPIRY)
+                remove(KEY_LICENSE_SOURCE)
+            } else {
+                putString(KEY_LICENSE_TIER, value.tier.name)
+                putString(KEY_LICENSE_SOURCE, value.source)
+                if (value.expiresAtMillis == null) {
+                    remove(KEY_LICENSE_EXPIRY)
+                } else {
+                    putLong(KEY_LICENSE_EXPIRY, value.expiresAtMillis)
+                }
+            }
+        }
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
@@ -197,5 +253,10 @@ class AppPreferences(context: Context) : ParentalControlPinStorage {
         const val KEY_RAW_TS_REMUX_ENABLED = "raw_ts_remux_enabled"
         const val KEY_PARENTAL_CONTROL_PIN_HASH = "parental_control_pin_hash"
         const val KEY_PARENTAL_CONTROL_PIN_SALT = "parental_control_pin_salt"
+        const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
+        const val KEY_DISMISSED_UPDATE_TAG = "dismissed_update_tag"
+        const val KEY_LICENSE_TIER = "license_tier"
+        const val KEY_LICENSE_EXPIRY = "license_expires_at"
+        const val KEY_LICENSE_SOURCE = "license_source"
     }
 }

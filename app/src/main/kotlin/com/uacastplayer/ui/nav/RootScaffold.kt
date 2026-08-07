@@ -57,6 +57,8 @@ import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.components.DownloadStatusBanner
+import com.uacastplayer.ui.components.UpdateBanner
+import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.GlassTabBar
 import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
@@ -140,6 +142,7 @@ fun RootScaffold(
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
     remuxEffectiveness: RemuxEffectivenessCounts,
+    updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -165,6 +168,7 @@ fun RootScaffold(
                 castConnected = castState.isSessionConnected,
                 iconPrefetchState = iconPrefetchState,
                 epgState = epgState,
+                updateSection = updateSection,
             )
         },
         bottomBar = {
@@ -296,6 +300,7 @@ fun RootScaffold(
                     onOpenHelp = onOpenHelp,
                     onOpenTerms = onOpenTerms,
                     remuxEffectiveness = remuxEffectiveness,
+                    updateSection = updateSection,
                     playlistState = playlistState,
                     onOpenAddPlaylist = onOpenAddPlaylist,
                     hiddenGroupKeys = hiddenGroupKeys,
@@ -340,6 +345,7 @@ internal fun RootTopBar(
     castConnected: Boolean,
     iconPrefetchState: IconPrefetchUiState,
     epgState: EpgUiState,
+    updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
     trailing: @Composable () -> Unit = { CastButton() },
 ) {
@@ -350,6 +356,11 @@ internal fun RootTopBar(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState)
+        UpdateBanner(
+            release = updateSection.state.availableRelease,
+            onOpen = updateSection.onOpenRelease,
+            onDismiss = updateSection.onDismissBanner,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

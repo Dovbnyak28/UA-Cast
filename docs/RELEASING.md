@@ -67,6 +67,28 @@ Marking a new version touches **three** files, and they have to move together:
 `versionCode` only has to increase monotonically; CI derives its own from the run number, so the
 default in `build.gradle.kts` matters only for locally built APKs.
 
+### Publishing the release, and why the tag is now load-bearing
+
+The app checks for updates itself: once a week when it is opened, and on demand from Settings ->
+Updates. It asks
+`https://api.github.com/repos/Dovbnyak28/UA-Cast/releases/latest` and compares that release's
+`tag_name` against its own `versionName` (see `com.uacastplayer.update`). Two consequences for
+this runbook:
+
+1. **A version only exists to installed apps once there is a published GitHub Release for it.**
+   Pushing a tag is not enough, and neither is a draft or a pre-release - `/releases/latest` skips
+   both, and the parser re-checks the flags anyway. Until the release is published, every installed
+   copy is correctly told it is up to date.
+2. **The tag has to be a version number**, with or without a leading `v`: `v0.10.0`, `0.10.0` and
+   `1.0.0-rc1` all parse; `nightly` or `release-2026` do not, and a release tagged that way is
+   ignored rather than guessed at. Comparison is numeric per component, so `v0.10.0` is correctly
+   newer than `v0.9.0` - and a CI build reporting `0.9.0.147` is newer than the `v0.9.0` release it
+   came from, so it is not offered an "update" back to itself.
+
+The check never downloads or installs anything: the banner and the Settings row open the release
+page in a browser. Note that until a signing key exists (see below), an update cannot install over
+an existing install anyway - Android refuses an APK signed with a different key.
+
 ### Which digit moves
 
 Semantic versioning, with the meanings pinned to what a *user of the APK* experiences - this app
@@ -160,6 +182,30 @@ file compiles before committing: `./gradlew :app:compileNonMinifiedReleaseArtPro
 Once a run succeeds, review the diff before committing - a profile that shrank a lot usually means
 the generator's UI automation didn't get as far as it used to (see the next paragraph), not that
 the app suddenly needs less warm code.
+
+**The same UTP failure hits the ordinary instrumented tests**, not only the profile generator:
+`./gradlew :app:connectedDebugAndroidTest` reports FAILURE with `Failed to receive the UTP test
+results` while the device's own logcat shows the suite passing. So the tests are run the same way
+the profile is, bypassing Gradle's result channel:
+
+```bash
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+# Debug is split per ABI too, so there is no plain app-debug.apk - universal always fits.
+adb install -r app/build/outputs/apk/debug/app-universal-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w com.uacastplayer.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Last run: `OK (6 tests)` in 34s. Note that `connectedDebugAndroidTest` **uninstalls the app under
+test when it finishes**, taking the imported playlist, the EPG snapshot and the icon cache with it -
+so on a phone carrying real data, prefer the `am instrument` route above, which does not.
+
+**`./gradlew build` does not need a device**, though it used to demand one. The Baseline Profile
+plugin attaches profile generation to `:baselineprofile:assemble`, and `build` is `assemble` plus
+`check` in every module, so the root `build` reached `connectedNonMinifiedReleaseAndroidTest` and
+sat there. `:baselineprofile`'s `build` is now bound to compiling and packaging its two variants
+plus `check`; generating a profile stays an explicit request, exactly as described above. A full
+`./gradlew build` takes about two minutes on this machine.
 
 **Why the generator clicks by accessibility role/tree-order instead of text**: none of the three
 gate screens have `testTag`s, and `:baselineprofile` is a black-box `com.android.test` module (no

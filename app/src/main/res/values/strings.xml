@@ -59,6 +59,7 @@
     <string name="add_playlist_status_empty_xtream">Enter the server address, login, and password</string>
     <string name="add_playlist_status_loading">Loading…</string>
     <string name="add_playlist_status_ready">Ready to load</string>
+    <string name="add_playlist_status_no_channels">Loaded, but no channels were found - check the link</string>
     <string name="add_playlist_save_button">Download and save</string>
     <string name="add_playlist_file_button">Load from file</string>
     <string name="add_playlist_tip">Tip: paste the M3U / M3U8 link from your provider, or upload a playlist file from your device.</string>
@@ -367,4 +368,15 @@
     <string name="dlna_sheet_searching">Searching for devices…</string>
     <string name="dlna_sheet_no_devices">No devices found</string>
     <string name="dlna_stop_casting">Stop</string>
+
+    <string name="update_banner_title">A new version is available</string>
+    <string name="update_banner_message">Version %1$s is ready to download.</string>
+    <string name="update_banner_action">Open release</string>
+    <string name="settings_section_updates">Updates</string>
+    <string name="settings_update_hint">The app checks for a new version once a week when you open it. It never downloads or installs anything on its own — the button below opens the release page in your browser.</string>
+    <string name="settings_update_check_button">Check for updates</string>
+    <string name="settings_update_checking">Checking…</string>
+    <string name="settings_update_up_to_date">You have the latest version.</string>
+    <string name="settings_update_available">Version %1$s is available.</string>
+    <string name="settings_update_failed">Could not check. Try again later.</string>
 </resources>

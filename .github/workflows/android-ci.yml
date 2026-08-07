@@ -101,6 +101,12 @@ jobs:
       - name: AppLog sensitive-variable check
         run: bash scripts/check-applog-sensitive-vars.sh
 
+      # The premium layer's whole value is that it depends on nothing - not on Android, not on a
+      # store SDK, not on the rest of the app. That is a property, not a preference, so it is
+      # enforced here rather than left to whoever reviews the next hurried afternoon's commit.
+      - name: Premium layer dependency-direction check
+        run: bash scripts/check-premium-purity.sh
+
       # Compile-only - there's no emulator/device here to actually run instrumentation tests
       # against (see MainActivitySmokeTest).
       - name: Compile instrumentation tests
@@ -108,6 +114,15 @@ jobs:
 
       - name: Assemble release (unsigned)
         run: ./gradlew :app:assembleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+
+      # The artifact Google Play actually accepts, and until it was first run by hand it did not
+      # build at all: AGP refuses to shrink resources for a bundle while per-ABI APK splits are
+      # configured. The splits block now disables itself for bundle tasks, which is why this has to
+      # be its own Gradle invocation rather than another task appended to the step above - the
+      # switch reads the invoked task names. Kept in CI so that failure cannot come back unnoticed
+      # a second time.
+      - name: Bundle release (unsigned)
+        run: ./gradlew :app:bundleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
 
       - name: Upload test reports
         if: always()
@@ -136,4 +151,12 @@ jobs:
         with:
           name: app-release-unsigned
           path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+      - name: Upload release bundle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-bundle-unsigned
+          path: app/build/outputs/bundle/release/*.aab
           retention-days: 14

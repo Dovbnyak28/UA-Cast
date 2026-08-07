@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +73,8 @@ import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.update.UpdateCheckOutcome
+import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.components.SetPinDialog
 import com.uacastplayer.ui.components.uaTextFieldColors
@@ -130,6 +134,7 @@ fun SettingsScreen(
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
     remuxEffectiveness: RemuxEffectivenessCounts,
+    updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -319,6 +324,10 @@ fun SettingsScreen(
             }
         }
 
+        SettingsSection(title = stringResource(R.string.settings_section_updates), icon = AppIcons.Refresh) {
+            UpdateCheckRow(updateSection)
+        }
+
         SettingsSection(title = stringResource(R.string.settings_help), icon = AppIcons.HelpCircle) {
             Text(
                 text = stringResource(R.string.settings_device_tier_label) + ": " + stringResource(settingsState.deviceTier.labelRes()),
@@ -461,6 +470,80 @@ private fun BackupImportSummaryBanner(
                 tint = UaTheme.palette.labelSecondary,
                 modifier = Modifier.size(16.dp),
             )
+        }
+    }
+}
+
+/**
+ * "Check for updates", plus one line saying how that went.
+ *
+ * The result line is only ever written by a *manual* check (see
+ * [com.uacastplayer.app.UpdateController]): the weekly automatic one is silent, so this row does
+ * not report a failure the user never asked about. It is cleared on the way out, so returning to
+ * Settings tomorrow does not show yesterday's answer as if it were fresh.
+ */
+@Composable
+private fun UpdateCheckRow(section: UpdateSectionState) {
+    DisposableEffect(Unit) { onDispose { section.onOutcomeShown() } }
+
+    Text(
+        text = stringResource(R.string.settings_update_hint),
+        style = Caption,
+        color = UaTheme.palette.labelSecondary,
+    )
+
+    if (section.state.isChecking) {
+        // A spinner in place of the button, not a disabled button beside one: the button is the
+        // only control here, and leaving it tappable is how six taps become six requests.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = UaTheme.palette.azure,
+                strokeWidth = 2.dp,
+            )
+            Text(
+                text = stringResource(R.string.settings_update_checking),
+                style = BodyRegular,
+                color = UaTheme.palette.labelSecondary,
+            )
+        }
+    } else {
+        SecondaryButton(
+            text = stringResource(R.string.settings_update_check_button),
+            onClick = section.onCheckNow,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
+    }
+
+    val outcome = section.state.lastOutcome
+    if (outcome != null && !section.state.isChecking) {
+        val version = section.state.availableRelease?.tagName.orEmpty()
+        Text(
+            text = when (outcome) {
+                UpdateCheckOutcome.UP_TO_DATE -> stringResource(R.string.settings_update_up_to_date)
+                UpdateCheckOutcome.UPDATE_AVAILABLE -> stringResource(R.string.settings_update_available, version)
+                UpdateCheckOutcome.FAILED -> stringResource(R.string.settings_update_failed)
+            },
+            style = BodyRegular,
+            color = when (outcome) {
+                UpdateCheckOutcome.FAILED -> UaTheme.palette.labelSecondary
+                else -> UaTheme.palette.labelPrimary
+            },
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        if (outcome == UpdateCheckOutcome.UPDATE_AVAILABLE) {
+            val url = section.state.availableRelease?.releaseUrl
+            if (url != null) {
+                SecondaryButton(
+                    text = stringResource(R.string.update_banner_action),
+                    onClick = { section.onOpenRelease(url) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
         }
     }
 }
