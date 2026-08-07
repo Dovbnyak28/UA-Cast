@@ -59,6 +59,7 @@
     <string name="add_playlist_status_empty_xtream">Introduce la dirección del servidor, el usuario y la contraseña</string>
     <string name="add_playlist_status_loading">Cargando…</string>
     <string name="add_playlist_status_ready">Listo para cargar</string>
+    <string name="add_playlist_status_no_channels">Se cargó, pero no se encontraron canales: comprueba el enlace</string>
     <string name="add_playlist_save_button">Descargar y guardar</string>
     <string name="add_playlist_file_button">Cargar desde archivo</string>
     <string name="add_playlist_tip">Consejo: pega el enlace M3U / M3U8 de tu proveedor, o sube un archivo de lista desde tu dispositivo.</string>
@@ -367,4 +368,15 @@
     <string name="dlna_sheet_searching">Buscando dispositivos…</string>
     <string name="dlna_sheet_no_devices">No se encontraron dispositivos</string>
     <string name="dlna_stop_casting">Detener</string>
+
+    <string name="update_banner_title">Hay una nueva versión disponible</string>
+    <string name="update_banner_message">La versión %1$s está lista para descargar.</string>
+    <string name="update_banner_action">Abrir la versión</string>
+    <string name="settings_section_updates">Actualizaciones</string>
+    <string name="settings_update_hint">La aplicación busca una nueva versión una vez por semana al abrirla. Nunca descarga ni instala nada por su cuenta: el botón de abajo abre la página de la versión en tu navegador.</string>
+    <string name="settings_update_check_button">Buscar actualizaciones</string>
+    <string name="settings_update_checking">Comprobando…</string>
+    <string name="settings_update_up_to_date">Tienes la última versión.</string>
+    <string name="settings_update_available">La versión %1$s está disponible.</string>
+    <string name="settings_update_failed">No se pudo comprobar. Inténtalo más tarde.</string>
 </resources>

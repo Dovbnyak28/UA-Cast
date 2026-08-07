@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,9 +41,12 @@ import com.uacastplayer.player.PlayerContainerStateMachine
 import java.time.LocalDate
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
+import androidx.compose.ui.platform.LocalUriHandler
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
 import com.uacastplayer.ui.components.ParentalControlPinDialog
 import com.uacastplayer.ui.language.LanguagePickerScreen
+import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.onboarding.OnboardingScreen
@@ -223,7 +227,7 @@ private fun MainAppContent(
     // Incremented (never reset) each time a playlist load finishes from AddPlaylistScreen, so
     // RootScaffold's LaunchedEffect(token) fires again even if the value happened to repeat - it's
     // a one-shot "switch to Channels" signal, not a persisted tab selection.
-    var focusChannelsToken by remember { mutableStateOf(0) }
+    var focusChannelsToken by remember { mutableIntStateOf(0) }
 
     // Mirrors the live playerRequest into the Bundle-safe form on every open/close, so the saved
     // state always reflects "what would need re-opening if the process dies right now" without
@@ -421,6 +425,25 @@ private fun ScaffoldZone(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()
     val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+
+    // LocalUriHandler rather than a raw ACTION_VIEW intent: it needs no queries entry in the
+    // manifest, and it is the one place a device with no browser at all - a TV box, say - would
+    // otherwise throw on what is meant to be an optional convenience.
+    val uriHandler = LocalUriHandler.current
+    val updateSection = UpdateSectionState(
+        state = updateState,
+        onCheckNow = viewModel::checkForUpdatesNow,
+        onOpenRelease = { url ->
+            try {
+                uriHandler.openUri(url)
+            } catch (e: IllegalArgumentException) {
+                AppLog.w("MainActivity") { "no app can open the release page: ${e.javaClass.simpleName}" }
+            }
+        },
+        onDismissBanner = viewModel::dismissUpdateBanner,
+        onOutcomeShown = viewModel::clearUpdateCheckOutcome,
+    )
 
     // Derived from the flows collected right above rather than delegated to viewModel::isFavorite /
     // viewModel::isChannelLocked, which read StateFlow.value directly - a plain function call is not
@@ -539,6 +562,7 @@ private fun ScaffoldZone(
             onOpenHelp = onOpenHelp,
             onOpenTerms = onOpenTerms,
             remuxEffectiveness = remuxEffectiveness,
+            updateSection = updateSection,
         )
     }
 }

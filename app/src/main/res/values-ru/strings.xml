@@ -62,6 +62,7 @@
     <string name="add_playlist_status_empty_xtream">Введите адрес сервера, логин и пароль</string>
     <string name="add_playlist_status_loading">Загрузка…</string>
     <string name="add_playlist_status_ready">Готово к загрузке</string>
+    <string name="add_playlist_status_no_channels">Загружено, но каналов не найдено — проверьте ссылку</string>
     <string name="add_playlist_save_button">Загрузить и сохранить</string>
     <string name="add_playlist_file_button">Загрузить из файла</string>
     <string name="add_playlist_tip">Совет: вставьте ссылку M3U / M3U8 от вашего провайдера или загрузите файл плейлиста с устройства.</string>
@@ -374,4 +375,15 @@
     <string name="dlna_sheet_searching">Поиск устройств…</string>
     <string name="dlna_sheet_no_devices">Устройства не найдены</string>
     <string name="dlna_stop_casting">Остановить</string>
+
+    <string name="update_banner_title">Доступна новая версия</string>
+    <string name="update_banner_message">Версию %1$s можно загрузить.</string>
+    <string name="update_banner_action">Открыть релиз</string>
+    <string name="settings_section_updates">Обновления</string>
+    <string name="settings_update_hint">Приложение проверяет новую версию раз в неделю при открытии. Оно ничего не загружает и не устанавливает само — кнопка ниже открывает страницу релиза в браузере.</string>
+    <string name="settings_update_check_button">Проверить обновления</string>
+    <string name="settings_update_checking">Проверяем…</string>
+    <string name="settings_update_up_to_date">У вас последняя версия.</string>
+    <string name="settings_update_available">Доступна версия %1$s.</string>
+    <string name="settings_update_failed">Не удалось проверить. Попробуйте позже.</string>
 </resources>

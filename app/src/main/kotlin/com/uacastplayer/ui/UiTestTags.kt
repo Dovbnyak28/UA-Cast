@@ -15,4 +15,8 @@ object UiTestTags {
     /** The download banner's outer bounds, so a test can assert it does not overlap what follows
      * it - the banner's own texts are only part of its height. See `RootTopBarLayoutTest`. */
     const val DOWNLOAD_STATUS_BANNER = "download_status_banner"
+
+    /** The update banner's outer bounds. Matched by tag rather than by its text, which carries a
+     * localised string and a version number that changes with every release. */
+    const val UPDATE_BANNER = "update_banner"
 }
