@@ -105,7 +105,7 @@
         <item quantity="other">%1$d каналу</item>
     </plurals>
     <string name="playlist_loading">Завантаження плейлиста…</string>
-    <string name="playlist_error_size_limit">Плейлист перевищує ліміт 8 МБ</string>
+    <string name="playlist_error_size_limit">Плейлист перевищує ліміт 8 МБ — це приблизно 45 000 каналів. Попросіть у провайдера менший список або розділений за категоріями.</string>
     <string name="playlist_error_http">Помилка сервера (код %1$d)</string>
     <string name="playlist_error_network">Помилка мережі, спробуйте ще раз</string>
 
