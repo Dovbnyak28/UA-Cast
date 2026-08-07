@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -83,7 +81,10 @@ fun HelpScreen(
         modifier = modifier
             .fillMaxSize()
             .background(UaTheme.palette.void)
-            .windowInsetsPadding(WindowInsets.statusBars),
+            // safeDrawing, not statusBars alone - same reason as TermsScreen: a full-bleed screen
+            // with nothing above it to pad the bottom, so under edge-to-edge its last list row and
+            // the diagnostics button ran under the navigation bar.
+            .safeDrawingPadding(),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),

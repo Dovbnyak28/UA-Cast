@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,7 +91,11 @@ fun AddPlaylistScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.statusBars)
+            // safeDrawing, not statusBars alone, and outside the scroll so it shrinks the viewport
+            // rather than scrolling away: this is a full-bleed gate screen, so nothing above it pads
+            // the bottom, and safeDrawing also covers the IME - which matters here more than on the
+            // other gates, since this is the one screen with text fields to type into.
+            .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = ScreenHPadding),
     ) {
@@ -179,6 +181,7 @@ fun AddPlaylistScreen(
             xtreamServer = xtreamServer,
             xtreamUsername = xtreamUsername,
             xtreamPassword = xtreamPassword,
+            isLoading = playlistState.isLoading,
             onLoadUrl = onLoadUrl,
             onLoadXtream = onLoadXtream,
             onPickFile = onPickFile,
@@ -198,6 +201,17 @@ fun AddPlaylistScreen(
 private fun effectiveDisplayName(name: String, sourceType: PlaylistSourceType, xtreamServer: String): String =
     if (name.isBlank() && sourceType == PlaylistSourceType.XTREAM) XtreamUrlBuilder.serverHost(xtreamServer) else name
 
+/**
+ * [isLoading] disables the button for the duration of a load, and that is not cosmetic. Every tap
+ * used to start another independent load: six taps during one slow request produced six concurrent
+ * downloads, six parses of up to `MAX_PLAYLIST_BYTES` each, and a final state decided by whichever
+ * response happened to land last. A user has every reason to tap again - a hung server leaves the
+ * status on "Loading…" for about a minute and a half while the loader retries, with nothing on
+ * screen to say a request is still in flight.
+ *
+ * `RefreshPlaylistButton` on Home has always guarded its own load this way; this is the same guard
+ * on the screen where the load actually starts.
+ */
 @Composable
 private fun SourceActionButton(
     sourceType: PlaylistSourceType,
@@ -205,6 +219,7 @@ private fun SourceActionButton(
     xtreamServer: String,
     xtreamUsername: String,
     xtreamPassword: String,
+    isLoading: Boolean,
     onLoadUrl: (String) -> Unit,
     onLoadXtream: (server: String, username: String, password: String) -> Unit,
     onPickFile: () -> Unit,
@@ -212,6 +227,7 @@ private fun SourceActionButton(
     if (sourceType == PlaylistSourceType.FILE) {
         OutlinedButton(
             onClick = onPickFile,
+            enabled = !isLoading,
             modifier = Modifier.fillMaxWidth().padding(top = GapL),
         ) {
             Icon(AppIcons.Upload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
@@ -226,6 +242,7 @@ private fun SourceActionButton(
                     onLoadXtream(xtreamServer, xtreamUsername, xtreamPassword)
                 }
             },
+            enabled = !isLoading,
             modifier = Modifier.fillMaxWidth().padding(top = GapL),
         ) {
             Text(stringResource(R.string.add_playlist_save_button))
@@ -311,6 +328,14 @@ private fun statusMessage(
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
     }
+    // A load that finished, reported no error, and produced nothing. Without this branch the
+    // status fell through to "ready to load" - the exact words shown *before* the button was pressed,
+    // so a user whose provider returned 200 with an empty body, an HTML error page, or bytes that
+    // are not a playlist at all had no way to tell a failure from a tap that never registered.
+    // Reached whenever the response parses to zero channels; `activePlaylistId` is what says a load
+    // actually ran, since PlaylistOutcomeReducer sets it on every Loaded outcome including this one.
+    playlistState.activePlaylistId != null && !playlistState.hasChannels ->
+        stringResource(R.string.add_playlist_status_no_channels)
     !hasInput && sourceType == PlaylistSourceType.XTREAM -> stringResource(R.string.add_playlist_status_empty_xtream)
     !hasInput -> stringResource(R.string.add_playlist_status_empty)
     else -> stringResource(R.string.add_playlist_status_ready)
