@@ -21,6 +21,33 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Added
 
+- **The app tells you when there is a newer version.** It asks GitHub for the latest published
+  release when it is opened, at most once every seven days, and shows a banner naming the version.
+  Settings -> Updates has a button that checks on demand, ignoring that weekly limit. Both open the
+  release page in a browser; **nothing is downloaded or installed by the app**, which is what keeps
+  it clear of `REQUEST_INSTALL_PACKAGES` and leaves the user able to see what they are installing.
+
+  Driving it off the app being opened, rather than a periodic background job, is the choice worth
+  recording: an app nobody opens has nothing to gain from a notification, and this way there is no
+  notification permission to ask for up front, no work scheduled while the phone is idle, and
+  nothing for a manufacturer's background killer to silently disable.
+
+  The two schedules behave differently on purpose. The weekly check is silent - it can add a banner
+  and nothing else, because a user who asked no question should not be shown an error. The Settings
+  button does report failure, since somebody is waiting for an answer. A failed check still counts
+  against the weekly limit, so a device that is offline at every launch does not retry at every
+  launch. Closing the banner remembers the release *tag* rather than setting a flag, so the next
+  version announces itself without anything having to remember to reset.
+
+  Version comparison is numeric per component, and that is the whole reason it is its own class with
+  its own tests: as strings `"0.10.0" < "0.9.0"`, so the obvious implementation works perfectly from
+  0.1 through 0.9 and then stops offering updates forever, silently, at exactly the point the
+  project is old enough for it to matter. A CI build's run-number suffix (`0.9.0.147`) reads as
+  newer than the `v0.9.0` release it was built from; a pre-release sorts below the same version
+  without one; a tag that is not a version number is ignored rather than treated as ancient.
+
+  See `docs/RELEASING.md` - the release tag is now load-bearing, and a version is invisible to
+  installed apps until its GitHub Release is actually published.
 - **Help now covers DLNA and the errors a playlist can produce.** Four new entries in all four
   languages: casting to a TV without Chromecast, what each playlist load failure means, why a
   channel says it is not available, and why a channel plays on the phone but not on the TV. Each
@@ -99,6 +126,26 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   first launch, so the notification that follows a second later is the answer to why it was asked.
   Not reproducible on the test hardware here (Android 11) - found by reading the manifest against
   the target API, not by running it.
+- **The first-run flow no longer forgets where it was.** `MainActivity` handles rotation itself
+  (`orientation|screenSize` are in its `configChanges`), which hid this: what does recreate it is a
+  process death after the app has been backgrounded, the "don't keep activities" developer option,
+  and - not in that `configChanges` list, so easy to miss - a change to font size or display size.
+  Through any of those, the language picker lost the language the user had just tapped and put its
+  Continue button back to disabled, and onboarding dropped the user onto step 1 of a walkthrough
+  they had nearly finished. Both now hold their state in `rememberSaveable`; a dismissed download
+  banner does too, since it otherwise reappeared on its own while the same download ran.
+  `StateRestorationTest` covers all of it and fails against plain `remember`.
+- **The playlist refresh button was invisible to TalkBack while it was refreshing.** Its label lived
+  on the icon, and during a refresh there is no icon - it is replaced by a spinner, which carries no
+  description. So for the whole duration of the operation it announced itself as an unnamed disabled
+  button. The label now sits on the button, where it holds in both states.
+- **The Picture-in-Picture source rectangle no longer shrinks by up to a pixel on each edge.**
+  Compose measures in fractional pixels, `android.graphics.Rect` cannot hold them, and the
+  `toAndroidRect()` used to convert the video surface's bounds resolves that by truncating - it is
+  deprecated for exactly this reason, since truncation is only one of several roundings and rarely
+  the right one. The bounds are handed to the system as the rectangle PiP scales out of, so a rect
+  a fraction smaller than the surface samples from just inside it. Now rounded outward to the
+  smallest integral rect that still contains the surface.
 - **Edge-to-edge is now opted into rather than waited for.** `android:statusBarColor` and
   `navigationBarColor` are deprecated and become no-ops at `targetSdk` 35, where the system forces
   edge-to-edge regardless. `enableEdgeToEdge()` makes that the behaviour on every API level, so a
@@ -120,6 +167,65 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Changed - build
 
+- **`bundleRelease` could not build at all**, so the one artifact Google Play accepts did not exist.
+  AGP refuses to shrink resources for an app bundle while per-ABI APK splits are configured and
+  fails the build outright: *"Multiple shrunk-resources files found ... Please disable building
+  multiple APKs when building an Android app bundle"*
+  ([issuetracker 402800800](https://issuetracker.google.com/402800800)). The splits block now turns
+  itself off when the invoked tasks are building a bundle, which leaves `assembleRelease` and its
+  four sideload APKs exactly as they were.
+
+  The comment above that block already said the two outputs were alternatives - "Publishing to Play
+  Store would not need any of this" - so the incompatibility was half-known. What was missing is
+  that nobody had ever run the command: `bundleRelease` appears in no script, no CI job and no
+  document in this repo, and it fails on the first invocation. `bundleRelease` now produces a 19.2MB
+  `app-release.aab`, and CI builds and uploads it on every run - a check that never existed is why
+  this one lasted as long as it did.
+- **`./gradlew build` demanded a phone.** The Baseline Profile plugin hangs profile generation off
+  `:baselineprofile:assemble`, and the root `build` reaches every module's `build`, which is
+  `assemble` plus `check` - so the plain, obvious, documented-everywhere build command quietly
+  became `connectedNonMinifiedReleaseAndroidTest`: a macrobenchmark that needs a device plugged in,
+  runs for tens of minutes, and fails outright on a machine that has none. That is the command a
+  new contributor runs first and the one a CI job runs by default.
+
+  The comment in `baselineprofile/build.gradle.kts` asserted the opposite - that generation "only
+  runs when explicitly invoked (`./gradlew :app:generateBaselineProfile`), not on every release
+  build" - and `./gradlew build --dry-run` disagreed. `build` in that module is now bound to the
+  work it is meant to cover, compiling and packaging both variants and then `check`; the lifecycle
+  `assemble` is left as the plugin wired it, so the profile is still generated on request and no
+  longer by accident.
+- **The Navigation Compose dependency is gone.** It had no imports anywhere - not in `main`, not in
+  either test source set, not in `:baselineprofile` - and no `NavHost` to go with them, since the
+  player's nested one was removed earlier and the tabs are switched by plain state in
+  `RootScaffold`. Beyond the weight it added, a declared navigation library tells the next reader
+  the app navigates in a way it does not.
+- **Five dependencies moved, including two major versions**: OkHttp 4.12.0 -> 5.4.0, Coil 3.4.0 ->
+  3.5.0, Roborazzi 1.32.2 -> 1.70.0, detekt 1.23.7 -> 1.23.8, org.json 20240303 -> 20260719. Each
+  went through the whole gate - lint, detekt, unit tests, screenshot goldens, R8 and
+  `bundleRelease` - rather than being bumped and assumed. OkHttp's major turned out to need no code
+  change at all, and Roborazzi crossed 38 minor versions without moving a single golden by a byte.
+
+  **AGP 9 was tried and reverted**, and what it costs is worth writing down so the next attempt does
+  not start from zero. It does deliver: under AGP 9's R8 the "parsing kotlin metadata" warnings go
+  to none, so the optimizations currently skipped are applied - and the count is not static, it
+  grew from 42 to 88 per release build with these five bumps, because newer libraries carry newer
+  Kotlin metadata for the same R8 to fail on. It also unblocks four androidx
+  bumps that refuse to install otherwise (`core-ktx 1.19.0` says outright that it "requires Android
+  Gradle plugin 9.1.0 or higher"). Against that: Gradle 9 does not download on this machine at all
+  (`PKIX path building failed`, so the distribution had to be fetched out of band and pointed at
+  with a `file:///` url that cannot be committed); the Kotlin plugin has to be removed from both
+  modules, since AGP 9 has its own Kotlin support and forbids `org.jetbrains.kotlin.android`; the
+  Baseline Profile plugin only works at `1.5.0-beta01`, as stable 1.4.1 answers `Module ':app' is
+  not a supported android module`; and `testReleaseUnitTest` **stops existing** - Gradle just says
+  it cannot locate the task, which is the very step CI runs. Trading a stable plugin for a beta one
+  and silently dropping the release variant's unit tests to remove build-time warnings is a bad
+  deal in a release week. It is a deliberate migration for after 0.9.0.
+
+  Worth knowing before that migration starts: this project is wedged between two constraints.
+  Gradle 8.14.5 cannot resolve Coil 3 (which is why the wrapper is pinned to 8.13 - see the comment
+  in `gradle-wrapper.properties`), while the Kotlin plugin already warns that "the minimum supported
+  Gradle version will become Gradle 8.14.4 in Kotlin 2.5.0". The next Kotlin upgrade forces the knot
+  open.
 - **Lint warnings now fail the build.** The project carried 97 of them, and things were genuinely
   lost in that list: a wrong `@VisibleForTesting` on an API production calls, eight dead colors, a
   Compose `Modifier` parameter in the wrong position, and an animated `Modifier.offset` using the
@@ -178,6 +284,27 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   receiver then had a url on a private range it cannot route to, accepted the load, fetched nothing,
   and went idle/error, which is indistinguishable on the sender from a codec problem. Matches the
   field reports of casting being unusable specifically while a VPN is connected.
+- **A superseded DLNA connect could tear down the session that replaced it.** `connectBlocking`
+  runs on `Dispatchers.IO` through blocking OkHttp calls and `Thread.sleep`, and cancellation
+  interrupts neither - so `connectJob.cancel()` stopped a superseded attempt from writing state, but
+  never stopped the attempt. It ran to completion and reached its own failure teardown, which calls
+  `proxyServer.stop()` and clears the session token: tap a device, tap again while it is thinking,
+  and the first attempt's eventual failure killed the proxy the second attempt was already casting
+  through. A generation counter now gates that teardown on the attempt still being the current one,
+  and `stop()` bumps it too, so a connect that outlives the session it belonged to cannot tear down
+  twice. The Chromecast path has guarded the same class of race with `loadGeneration` and
+  `StaleChannelGuard` all along; this is the DLNA counterpart it was missing.
+- **A first connect to a DLNA renderer spent three seconds refusing to start.** `Stop` before
+  `SetAVTransportURI` was sent only when re-pointing an already-connected renderer, on the reasoning
+  that a fresh connect finds the set idle. A field logcat from a Samsung UE40KU6000 said otherwise:
+  five `701 Transition not available` refusals in a row, 600ms apart, before the stream appeared.
+  `Stop` is now unconditional, with its result ignored exactly as before - a renderer that refuses
+  `Stop` because it was not playing anyway has said nothing that should abort a connect. Verified on
+  that set on 2026-08-04: four first connects, from three different renderer states, produced no
+  refusals at all. The explanation first written down for this - that the set was still PLAYING what
+  a previous app had left on it - turned out to be wrong, and the state that actually causes it is
+  the one the app's own "Stop casting" leaves behind; `docs/DLNA.md` records what the renderer does
+  instead of what was assumed.
 - **The DLNA proxy read live streams through a 4-second-timeout HTTP client** meant for fetching one
   small device-description XML, so any four seconds without a byte read as a dropped connection and
   sent the reader into a backoff reconnect. It now gets the same 10s/15s budget as the Chromecast
@@ -257,6 +384,21 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Fixed - data
 
+- **A large UTF-8 playlist could decode entirely as mojibake, and which one did was a coin flip.**
+  `CharsetDetector` decides an encoding from the first 64KB, and it sliced that sample at a fixed
+  byte offset. In Cyrillic text every letter is two bytes, so the cut lands mid-character about half
+  the time - and an incomplete trailing sequence is not valid UTF-8, so the UTF-8 check said no about
+  a document that was valid UTF-8 from beginning to end. Detection then fell through to its
+  Windows-1251 tier and every Cyrillic channel and group name in the file came out as mojibake. The
+  sample now backs off to a character boundary, giving up at most three bytes.
+
+  Two things made this worth hunting rather than noticing: it is silent - the streams still play, only
+  the text is wrong, which is the exact failure mode this class was written to prevent - and it is
+  deterministic per file, so a playlist that renders correctly today flips the moment the provider
+  renames a channel early in the list and shifts every byte after it. Found by fuzzing the
+  byte-to-channels path, not on a device. `CharsetDetectorBoundaryTest` walks the padding one byte at
+  a time across the boundary so every alignment of a two-byte character against the cut is covered;
+  before the fix, half of those cases failed.
 - **Cyrillic channel names arrived as mojibake from playlists served over HTTP.** The charset in the
   response's `Content-Type` was treated as authoritative, and IPTV panels are wrong about it often
   enough to matter: a body that is really UTF-8 announced as `charset=windows-1251` had each Cyrillic
@@ -277,6 +419,51 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Fixed - UI
 
+- **Six taps on "Load and save" started six downloads.** The button had no `enabled` guard, so every
+  tap during an in-flight load began another independent one: six concurrent fetches, six parses of
+  up to 8MB, and a final state decided by whichever response landed last. Tapping again is the
+  natural thing to do, because a hung server leaves the status on "Loading…" for about ninety seconds
+  while the loader retries three times, with nothing on screen saying a request is still running.
+  Found by holding a server open and tapping; fixed and re-verified the same way - six taps now
+  produce exactly one request. `RefreshPlaylistButton` on Home had always guarded its own load like
+  this; the screen where the load actually starts did not.
+- **A playlist that loaded but contained nothing said "Ready to load".** The status had branches for
+  loading, for an explicit error, and for ready - but none for the fourth outcome, a 200 response
+  that parses to zero channels. An empty body, an HTML error page served as 200, or bytes that are
+  not a playlist at all landed on the same words the screen shows *before* the button is pressed, so
+  a failure was indistinguishable from a tap that never registered. It now says what happened, in all
+  four languages.
+- **The language picker is centred, and each language carries its flag.** The list and its heading
+  sat top-left with the four cards stretched edge to edge, which reads as scattered rather than as a
+  choice. The block is now centred within a 420dp column, headings included, and each row leads with
+  a drawn flag. Drawn, not emoji: Android's system font has no country-flag glyphs, so `🇺🇦` renders
+  as the letters "UA" on most devices. The `LazyColumn` also became a plain `Column` - four static
+  rows never needed virtualisation, and removing it removes the shape of the landscape bug above at
+  its root.
+- **A fresh install could not get past its first screen in landscape.** The language picker's
+  `LazyColumn` had no `weight(1f)`, so it took the entire remaining height of its `Column` and left
+  the Continue button with none - the button was not clipped, it was outside the layout. In portrait
+  there was room for both and nothing looked wrong; in landscape the list scrolled to its end and
+  there was simply no Continue to reach, on the one screen a new user cannot skip. Found by rotating
+  the device during a first-run walkthrough, not by reading the code. Pinned by a golden recorded at
+  `h411dp` (`language_picker_short`) - the qualifier is the test, since a portrait golden would have
+  passed before the fix.
+- **Four full-screen gates ran under the navigation bar.** Terms, Help, onboarding and add-playlist
+  each padded `WindowInsets.statusBars` only. None of them sits inside the scaffold, so nothing
+  above them handled the bottom, and under edge-to-edge (opted into in this release) their bottom
+  controls sat beneath the navigation bar - on a 3-button device, "Decline and exit" was covered
+  outright. All four now use `safeDrawingPadding()`, which the language picker already did, and
+  which also covers a landscape display cutout. On add-playlist it additionally fixes the keyboard:
+  it is the one gate with text fields, and `safeDrawing` includes the IME.
+- **Home told the user they had no playlist while restoring the one they had.** The screen branched
+  on `hasChannels` alone, so for the whole of a cold-start restore it rendered the "playlist not
+  added yet" empty state and an add-a-playlist button - over a cached snapshot of 2863 channels that
+  was seconds from appearing. The Channels tab already had the right three-way order (channels beat
+  loading, loading beats empty) and a shimmering skeleton for the middle case; Home simply never got
+  its half. It has one now, shaped like the dashboard card it stands in for. Worth stating plainly
+  because the empty state is not a vague "nothing here yet" - it names a cause and offers a fix for a
+  problem the user does not have, and the only tell that it is wrong is waiting. Pinned by a golden
+  (`home_skeleton`), since the state is unreachable by hand on a device that restores from cache.
 - **The player's title bar said "UA Cast Player" instead of naming the channel.** On the one screen
   where the user is least in doubt about which app they are in and most in doubt about what is
   playing, it showed the app name - while the channel it was playing sat in a card further down.
@@ -342,12 +529,35 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   The count is accumulated during the copy and reported from a `finally`, so a receiver that takes
   part of a segment and hangs up is distinguishable from one that never read a byte.
 - A request for a resource this session never registered is logged instead of a silent 404.
+- **`cast load: artwork=false` now says which of its two causes it was.** That line reports a
+  receiver getting no picture but cannot say why, and the two reasons want opposite fixes: a
+  playlist entry with no `tvg-id` at all is the provider's doing, while an entry reaching only the
+  cache-only CDN guess is `CastArtworkPolicy` declining a url the phone may be showing from disk at
+  that moment. `IconRepository` now logs the candidate count alongside it - zero means the former,
+  non-zero the latter. Never the url itself: this ends up in a shared diagnostics report.
 - Proxy connection errors say which phase they happened in and, where known, the path. A peer that
   connects and hangs up without sending a request - a routine reachability probe - is no longer
   reported as a warning.
 
 ### Testing
 
+- **The first-run screens are now held at every font scale Android offers.** `FontScaleLayoutTest`
+  renders the language picker and onboarding at 0.85x through 2.0x on a `w320dp-h480dp` viewport -
+  a 4.5" phone, and equally what a modern phone becomes at the largest Display Size setting, since
+  that setting works by raising density - and fails if the primary button leaves the viewport by so
+  much as an edge. Both screens survive all six scales, which is a property of their `weight(1f)`
+  layout rather than luck: the test was confirmed to fail when that layout is squeezed past what it
+  can absorb, so it is a guard and not a tautology.
+- **The instrumented tests moved to the v2 Compose test rules.** `createAndroidComposeRule` and
+  `createEmptyComposeRule` from `androidx.compose.ui.test.junit4` are deprecated in favour of the
+  same names under `...junit4.v2`, which return the identical types - the only difference is that
+  the v2 rules drive the composition on a `StandardTestDispatcher` rather than an
+  `UnconfinedTestDispatcher`, so work is queued instead of running the instant it is launched. That
+  is the standard coroutine behaviour, and a test that only ever observes the UI through the rule's
+  own synchronization cannot tell the difference; a test that relied on immediate execution can.
+  **These three files compile but have not been run since the change** - no device was attached -
+  so the first `am instrument` run on hardware is what actually confirms it. See `docs/RELEASING.md`
+  for that command.
 - **Screenshot tests now run** (Roborazzi + Robolectric 4.16), covering the design system's empty
   state in both themes. `recordRoborazziDebug` regenerates goldens, `verifyRoborazziDebug` fails on
   a pixel diff. This had been shelved as blocked: the real obstacle was that Robolectric fetches its
@@ -411,6 +621,14 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
   the title row (top=12.0.dp)".
 
 ### Performance
+
+- **The player's gesture state no longer boxes a `Float` per frame.** Brightness and volume are
+  written on every frame of a drag, and both used the generic `mutableStateOf` - so each write
+  allocated a `java.lang.Float`, putting GC pressure on the one interaction where a dropped frame is
+  most visible. They use `mutableFloatStateOf` now; four other primitives across the player, the
+  favourites list and `MainActivity` moved to the specialised factories with them. Android Lint
+  reports these as `AutoboxingStateCreation`, at Hint severity - which is why a build that fails on
+  warnings had been passing with six of them.
 
 Measured before and after; ratios hold on device even though the absolute numbers are from a
 desktop JVM.
