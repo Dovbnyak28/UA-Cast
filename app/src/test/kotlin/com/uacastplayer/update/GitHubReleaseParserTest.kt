@@ -30,7 +30,6 @@ class GitHubReleaseParserTest {
         assertNotNull(parsed)
         assertEquals("v1.2.0", parsed!!.tagName)
         assertEquals("https://github.com/Dovbnyak28/UA-Cast/releases/tag/v1.2.0", parsed.releaseUrl)
-        assertEquals("Fixed the thing", parsed.notes)
         assertEquals(AppVersion.parse("1.2.0"), parsed.version)
     }
 
@@ -66,10 +65,4 @@ class GitHubReleaseParserTest {
         assertNull(GitHubReleaseParser.parse("[]"))
     }
 
-    @Test
-    fun emptyReleaseNotesBecomeNullRatherThanAnEmptyLine() {
-        val parsed = GitHubReleaseParser.parse(release(body = ""))
-        assertNotNull(parsed)
-        assertNull(parsed!!.notes)
-    }
 }

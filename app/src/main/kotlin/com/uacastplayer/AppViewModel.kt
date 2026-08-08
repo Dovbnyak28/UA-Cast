@@ -20,7 +20,6 @@ import com.uacastplayer.data.update.UpdateRepository
 import com.uacastplayer.premium.DeveloperMode
 import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.FeatureManager
-import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
@@ -165,8 +164,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The only way anything in this app asks whether a feature is available. */
     val featureManager = FeatureManager(entitlements)
-
-    val premiumConnection: StateFlow<BillingConnectionState> = premiumRepository.connection
 
     private val _premiumProducts = MutableStateFlow<List<BillingProduct>>(emptyList())
 

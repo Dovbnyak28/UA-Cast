@@ -1,6 +1,5 @@
 package com.uacastplayer.premium
 
-import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 
 /**
@@ -17,7 +16,6 @@ import com.uacastplayer.premium.billing.BillingProduct
  */
 data class PremiumSectionState(
     val entitlements: Entitlements,
-    val connection: BillingConnectionState,
     val products: List<BillingProduct>,
     val onPurchase: (BillingProduct) -> Unit,
     val onRestore: () -> Unit,

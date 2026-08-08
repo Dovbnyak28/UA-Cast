@@ -7,15 +7,16 @@ import org.json.JSONObject
  * The parts of a GitHub release this app cares about: which version it is, and where a human can
  * go to read about it and download it.
  *
- * No download URL is kept. The update flow deliberately ends at the release page in a browser
- * rather than fetching an APK itself - installing one needs `REQUEST_INSTALL_PACKAGES`, and letting
- * the user see what they are installing is worth two extra taps for an app distributed by sideload.
+ * Neither a download URL nor the release notes are kept. The flow deliberately ends at the release
+ * page in a browser rather than fetching an APK itself - installing one needs
+ * `REQUEST_INSTALL_PACKAGES`, and letting the user see what they are installing is worth two extra
+ * taps for an app distributed by sideload. The notes live on that page, so carrying a copy of them
+ * through the app would be a field nothing reads.
  */
 data class GitHubRelease(
     val version: AppVersion,
     val tagName: String,
     val releaseUrl: String,
-    val notes: String?,
 )
 
 /**
@@ -49,7 +50,6 @@ object GitHubReleaseParser {
             version = version,
             tagName = tagName,
             releaseUrl = releaseUrl,
-            notes = obj.optString("body").takeIf { it.isNotBlank() },
         )
     }
 }

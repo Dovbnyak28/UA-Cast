@@ -7,7 +7,6 @@ import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseTier
 import com.uacastplayer.premium.PremiumSectionState
-import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
@@ -36,7 +35,6 @@ class UpgradeBannerTest {
 
     private fun sectionFor(license: License) = PremiumSectionState(
         entitlements = Entitlements.of(license, now),
-        connection = BillingConnectionState.UNAVAILABLE,
         products = emptyList(),
         onPurchase = {},
         onRestore = {},
