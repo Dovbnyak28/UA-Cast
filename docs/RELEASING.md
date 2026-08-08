@@ -117,8 +117,11 @@ The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; 
 2. **A signing key exists and is backed up.** Right now every release APK is unsigned
    (`app-release-unsigned`). An installed app whose key is later lost can never be updated -
    deciding this *after* people have installed 1.0.0 is deciding it too late.
-3. **The instrumented tests actually run somewhere.** They compile and are never executed; the whole
-   Cast/DLNA/proxy path is covered by unit tests over pure policy objects and by hand on one phone.
+3. **The instrumented tests cover more than the launch path.** They now genuinely run - on an
+   emulator in CI's `instrumented` job, and by hand through `scripts/run-instrumented-tests.sh`
+   (last: `OK (6 tests)` on a Mi A2). But six tests over app launch, the player's lifecycle and the
+   empty-playlist state is not coverage of this app: the whole Cast/DLNA/proxy path is still held
+   up by unit tests over pure policy objects plus one person trying it on one phone.
 
 None of the three is a code change, which is exactly why none of them gets closer by writing more
 code.
@@ -189,16 +192,20 @@ results` while the device's own logcat shows the suite passing. So the tests are
 the profile is, bypassing Gradle's result channel:
 
 ```bash
-./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
-# Debug is split per ABI too, so there is no plain app-debug.apk - universal always fits.
-adb install -r app/build/outputs/apk/debug/app-universal-debug.apk
-adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w com.uacastplayer.debug.test/androidx.test.runner.AndroidJUnitRunner
+scripts/run-instrumented-tests.sh
 ```
 
-Last run: `OK (6 tests)` in 34s. Note that `connectedDebugAndroidTest` **uninstalls the app under
-test when it finishes**, taking the imported playlist, the EPG snapshot and the icon cache with it -
-so on a phone carrying real data, prefer the `am instrument` route above, which does not.
+That script is the whole route - build both APKs, install with `-r`, run through `am instrument` -
+and it is what CI's `instrumented` job runs too, so a local pass and a CI pass mean the same thing.
+
+It also inspects the runner's output rather than its exit code, because **`am instrument` exits 0
+whether the tests passed or failed**: pointed at a class that does not exist it prints
+`FAILURES!!!` and still returns 0. A check that trusted the exit code would be green forever.
+
+Last run: `OK (6 tests)` in 32s on a Mi A2 (Android 11). Note that `connectedDebugAndroidTest`
+**uninstalls the app under test when it finishes**, taking the imported playlist, the EPG snapshot
+and the icon cache with it - so on a phone carrying real data, use the script above, which does
+not.
 
 **`./gradlew build` does not need a device**, though it used to demand one. The Baseline Profile
 plugin attaches profile generation to `:baselineprofile:assemble`, and `build` is `assemble` plus
