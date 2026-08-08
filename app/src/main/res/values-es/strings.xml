@@ -379,4 +379,30 @@
     <string name="settings_update_up_to_date">Tienes la última versión.</string>
     <string name="settings_update_available">La versión %1$s está disponible.</string>
     <string name="settings_update_failed">No se pudo comprobar. Inténtalo más tarde.</string>
+
+    <string name="settings_section_premium">Premium</string>
+    <string name="premium_status_free">Versión gratuita</string>
+    <string name="premium_status_trial">Prueba: quedan %1$d días</string>
+    <string name="premium_status_active">Premium activo</string>
+    <string name="premium_status_lapsed">Tu Premium ha terminado</string>
+    <string name="premium_open">Qué añade Premium</string>
+    <string name="premium_screen_intro">El reproductor, una lista, la guía de TV, los favoritos, los tres temas, Chromecast y la imagen en imagen son gratis y seguirán siéndolo. Premium añade lo que amplía la aplicación.</string>
+    <string name="premium_locked_badge">Función Premium</string>
+    <string name="premium_unlock_title">%1$s es una función Premium</string>
+    <string name="premium_unlock_message">Forma parte de Premium junto con todo lo demás que aparece en la pantalla de Premium.</string>
+    <string name="premium_unlock_cta">Ver Premium</string>
+    <string name="premium_unlock_later">Ahora no</string>
+    <string name="premium_restore">Restaurar compras</string>
+    <string name="premium_no_store">Todavía no hay nada que comprar: la aplicación no está publicada en ninguna tienda. Durante la prueba, Premium está abierto para todos.</string>
+    <string name="premium_upgrade_trial">Tu prueba termina en %1$d días.</string>
+    <string name="premium_upgrade_lapsed">Tu Premium ha terminado. Las funciones Premium están bloqueadas.</string>
+    <string name="feature_dlna">Enviar a un televisor por DLNA</string>
+    <string name="feature_multi_playlist">Más de una lista</string>
+    <string name="feature_parental_control">Control parental</string>
+    <string name="feature_backup">Copia de seguridad y restauración</string>
+    <string name="feature_xtream">Cuentas Xtream</string>
+    <string name="feature_custom_epg">Tu propia fuente de guía de TV</string>
+    <string name="feature_custom_icons">Tus propias fuentes de logotipos</string>
+    <string name="feature_raw_ts_remux">Retransmitir emisiones que el televisor no reproduce</string>
+    <string name="settings_developer_license">Desarrollador: estado de licencia</string>
 </resources>

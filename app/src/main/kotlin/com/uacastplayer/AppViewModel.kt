@@ -17,8 +17,11 @@ import com.uacastplayer.app.UpdateController
 import com.uacastplayer.data.premium.FakeBillingProvider
 import com.uacastplayer.data.premium.PremiumRepository
 import com.uacastplayer.data.update.UpdateRepository
+import com.uacastplayer.premium.DeveloperMode
 import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.FeatureManager
+import com.uacastplayer.premium.billing.BillingConnectionState
+import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupFavorite
@@ -163,6 +166,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** The only way anything in this app asks whether a feature is available. */
     val featureManager = FeatureManager(entitlements)
 
+    val premiumConnection: StateFlow<BillingConnectionState> = premiumRepository.connection
+
+    private val _premiumProducts = MutableStateFlow<List<BillingProduct>>(emptyList())
+
+    /** What the store offers. Empty until something asks - and empty forever while there is no
+     * store, which the premium screen says out loud rather than showing an empty price list. */
+    val premiumProducts: StateFlow<List<BillingProduct>> = _premiumProducts.asStateFlow()
+
     private val parentalControlController =
         ParentalControlController(ParentalControlStore(application), preferences, viewModelScope)
     val lockedChannelKeys: StateFlow<Set<String>> = parentalControlController.lockedKeys
@@ -287,6 +298,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Clears the one-shot result line under the Settings button once it has been read. */
     fun clearUpdateCheckOutcome() = updateController.clearLastOutcome()
+
+    /** Re-reads what the store offers. Called when a premium surface opens rather than at startup:
+     * an app that never shows the premium screen should not talk to a store at all. */
+    fun refreshPremiumProducts() {
+        viewModelScope.launch { _premiumProducts.value = premiumRepository.products() }
+    }
+
+    fun purchasePremium(product: BillingProduct, launchContext: Any?) {
+        viewModelScope.launch { premiumRepository.purchase(product.id, launchContext) }
+    }
+
+    fun restorePremiumPurchases() {
+        viewModelScope.launch { premiumRepository.restore() }
+    }
+
+    /** License states the developer menu can force this build into - empty in a release build, where
+     * the code that fills [DeveloperMode] is not compiled at all. */
+    val developerLicenseStates: List<String> get() = DeveloperMode.states
+
+    /**
+     * Puts the app into one of [developerLicenseStates]. A no-op when there is no developer menu,
+     * which is the only state a release build can be in.
+     */
+    fun applyDeveloperLicenseState(state: String) {
+        val provider = DeveloperMode.apply?.invoke(state, preferences) ?: return
+        premiumRepository.useProvider(provider)
+        // The state may have been written straight to storage rather than reported as a purchase -
+        // a trial and an expired subscription are not things a store can express - so the stored
+        // license has to be re-read rather than waited for.
+        premiumRepository.refresh()
+    }
 
     /** Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
      * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without

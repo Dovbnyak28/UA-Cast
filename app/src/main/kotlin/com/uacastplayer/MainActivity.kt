@@ -46,6 +46,9 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.ui.components.BatteryOptimizationDialog
 import com.uacastplayer.ui.components.ParentalControlPinDialog
 import com.uacastplayer.ui.language.LanguagePickerScreen
+import androidx.compose.ui.platform.LocalContext
+import com.uacastplayer.core.ui.findActivity
+import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
@@ -426,6 +429,26 @@ private fun ScaffoldZone(
     val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()
     val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
+    val premiumConnection by viewModel.premiumConnection.collectAsStateWithLifecycle()
+    val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
+    // The store's purchase flow needs an Activity to show its own UI over; findActivity() is
+    // this project's existing way of reaching one from a composable.
+    val activity = LocalContext.current.findActivity()
+
+    // Asked for when a premium surface is about to be shown rather than at startup: an app whose
+    // user never opens the premium screen should not be talking to a store at all.
+    LaunchedEffect(Unit) { viewModel.refreshPremiumProducts() }
+
+    val premiumSection = PremiumSectionState(
+        entitlements = entitlements,
+        connection = premiumConnection,
+        products = premiumProducts,
+        onPurchase = { product -> viewModel.purchasePremium(product, activity) },
+        onRestore = viewModel::restorePremiumPurchases,
+        developerStates = viewModel.developerLicenseStates,
+        onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
+    )
 
     // LocalUriHandler rather than a raw ACTION_VIEW intent: it needs no queries entry in the
     // manifest, and it is the one place a device with no browser at all - a TV box, say - would
@@ -563,6 +586,7 @@ private fun ScaffoldZone(
             onOpenTerms = onOpenTerms,
             remuxEffectiveness = remuxEffectiveness,
             updateSection = updateSection,
+            premiumSection = premiumSection,
         )
     }
 }

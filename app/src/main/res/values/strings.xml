@@ -379,4 +379,30 @@
     <string name="settings_update_up_to_date">You have the latest version.</string>
     <string name="settings_update_available">Version %1$s is available.</string>
     <string name="settings_update_failed">Could not check. Try again later.</string>
+
+    <string name="settings_section_premium">Premium</string>
+    <string name="premium_status_free">Free version</string>
+    <string name="premium_status_trial">Trial — %1$d days left</string>
+    <string name="premium_status_active">Premium is active</string>
+    <string name="premium_status_lapsed">Your premium has ended</string>
+    <string name="premium_open">What premium adds</string>
+    <string name="premium_screen_intro">The player, one playlist, the TV guide, favourites, all three themes, Chromecast and picture-in-picture are free and stay that way. Premium adds the things that scale it up.</string>
+    <string name="premium_locked_badge">Premium feature</string>
+    <string name="premium_unlock_title">%1$s is a premium feature</string>
+    <string name="premium_unlock_message">It is part of premium along with everything else listed on the premium screen.</string>
+    <string name="premium_unlock_cta">See premium</string>
+    <string name="premium_unlock_later">Not now</string>
+    <string name="premium_restore">Restore purchases</string>
+    <string name="premium_no_store">There is nothing to buy yet — this app is not published in a store. Premium is unlocked for everyone during the trial.</string>
+    <string name="premium_upgrade_trial">Your trial ends in %1$d days.</string>
+    <string name="premium_upgrade_lapsed">Your premium has ended. Premium features are locked.</string>
+    <string name="feature_dlna">Casting to a DLNA TV</string>
+    <string name="feature_multi_playlist">More than one playlist</string>
+    <string name="feature_parental_control">Parental control</string>
+    <string name="feature_backup">Backup and restore</string>
+    <string name="feature_xtream">Xtream accounts</string>
+    <string name="feature_custom_epg">Your own TV guide source</string>
+    <string name="feature_custom_icons">Your own logo sources</string>
+    <string name="feature_raw_ts_remux">Relaying streams a TV cannot play</string>
+    <string name="settings_developer_license">Developer: license state</string>
 </resources>
