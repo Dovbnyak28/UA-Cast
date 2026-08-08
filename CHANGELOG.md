@@ -48,6 +48,33 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
   See `docs/RELEASING.md` - the release tag is now load-bearing, and a version is invisible to
   installed apps until its GitHub Release is actually published.
+- **A premium layer, with nothing locked behind it yet.** The free version stays a working player -
+  one playlist, local playback, the TV guide, favourites, all three themes, Chromecast and
+  picture-in-picture - and a fresh install is granted 14 days of everything. What is sold is what
+  scales the app up: a second playlist, DLNA, parental control, backup, Xtream, and your own EPG and
+  logo sources.
+
+  `FeatureManager` is the only way anything asks whether a feature is available, and `FeaturePolicy`
+  is the only place that knows what is sold, so moving a feature between free and paid is one table
+  and one test rather than a search through screens. `scripts/check-premium-purity.sh` fails the
+  build on any `android.*`, store-SDK or cross-package import inside `premium/`, which turns "this
+  layer depends on nothing" from a review comment into a property.
+
+  Five surfaces: a lock badge that marks without blocking, an unlock dialog that only ever answers a
+  tap the user made, the premium section in Settings, a bottom sheet for the short path, and an
+  upgrade banner that appears in exactly two situations - the last days of a trial and after one has
+  lapsed. Never to someone on the free tier who never had premium: they are losing nothing, and an
+  app that asks for money on its home screen from day one is the app people uninstall.
+
+  The developer menu that drives all seven license states lives in `src/debug` and in a debug-only
+  `Application`, so a release build does not contain the code capable of granting a license at all -
+  which is stronger than a `BuildConfig.DEBUG` check that leaves it in the APK behind one condition.
+  Verified rather than asserted: `DeveloperModeBillingProvider` compiles into the debug variant's
+  output and is absent from the release variant's.
+
+  Nothing is gated yet - `featureManager` has no callers in the feature code. Turning that on is a
+  separate, deliberate step, and it should not be taken before the free/paid boundary has been
+  looked at by someone other than its author.
 - **Help now covers DLNA and the errors a playlist can produce.** Four new entries in all four
   languages: casting to a TV without Chromecast, what each playlist load failure means, why a
   channel says it is not available, and why a channel plays on the phone but not on the TV. Each

@@ -22,7 +22,11 @@ private const val COIL_DISK_CACHE_MAX_BYTES = 128L * 1024 * 1024
 // disk in IconDiskCache, so the cost of a miss is a decode, not a refetch.
 private const val COIL_MEMORY_CACHE_PERCENT = 0.10
 
-class UaCastPlayerApp : Application(), SingletonImageLoader.Factory {
+/** `open` for one reason: the debug variant's `DebugUaCastPlayerApp` extends it to install the
+ * developer license menu (see `premium/DeveloperMode.kt`). That subclass exists only in
+ * `src/debug`, so a release build both keeps this class as its Application and contains no code
+ * capable of granting a license. */
+open class UaCastPlayerApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()

@@ -58,6 +58,7 @@ import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.components.DownloadStatusBanner
 import com.uacastplayer.ui.components.UpdateBanner
+import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.GlassTabBar
 import com.uacastplayer.ui.components.TabBarItem
@@ -143,6 +144,7 @@ fun RootScaffold(
     onOpenTerms: () -> Unit,
     remuxEffectiveness: RemuxEffectivenessCounts,
     updateSection: UpdateSectionState,
+    premiumSection: PremiumSectionState,
     modifier: Modifier = Modifier,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -301,6 +303,7 @@ fun RootScaffold(
                     onOpenTerms = onOpenTerms,
                     remuxEffectiveness = remuxEffectiveness,
                     updateSection = updateSection,
+                    premiumSection = premiumSection,
                     playlistState = playlistState,
                     onOpenAddPlaylist = onOpenAddPlaylist,
                     hiddenGroupKeys = hiddenGroupKeys,

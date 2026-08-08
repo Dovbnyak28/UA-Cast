@@ -19,4 +19,8 @@ object UiTestTags {
     /** The update banner's outer bounds. Matched by tag rather than by its text, which carries a
      * localised string and a version number that changes with every release. */
     const val UPDATE_BANNER = "update_banner"
+
+    /** The upgrade banner's outer bounds - the one premium surface that can appear unasked, so a
+     * test needs to assert both that it shows when it should and that it stays away otherwise. */
+    const val UPGRADE_BANNER = "upgrade_banner"
 }

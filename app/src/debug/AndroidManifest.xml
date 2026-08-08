@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Points the debug build at DebugUaCastPlayerApp, which installs the developer license menu (see
+     premium/DeveloperMode.kt). This manifest is merged only into the debug variant, so a release
+     build keeps .UaCastPlayerApp and never has an Application capable of granting a license.
+
+     tools:replace is required because the main manifest already declares android:name; without it
+     the merger treats the two as a conflict and fails rather than letting this one win. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:name=".DebugUaCastPlayerApp"
+        tools:replace="android:name" />
+</manifest>

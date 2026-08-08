@@ -388,4 +388,30 @@
     <string name="settings_update_up_to_date">У вас найновіша версія.</string>
     <string name="settings_update_available">Доступна версія %1$s.</string>
     <string name="settings_update_failed">Не вдалося перевірити. Спробуйте пізніше.</string>
+
+    <string name="settings_section_premium">Premium</string>
+    <string name="premium_status_free">Безкоштовна версія</string>
+    <string name="premium_status_trial">Пробний період — лишилось днів: %1$d</string>
+    <string name="premium_status_active">Premium активний</string>
+    <string name="premium_status_lapsed">Ваш Premium завершився</string>
+    <string name="premium_open">Що дає Premium</string>
+    <string name="premium_screen_intro">Плеєр, один плейлист, телепрограма, вибране, усі три теми, Chromecast і картинка в картинці — безкоштовні й такими лишаються. Premium додає те, що розширює застосунок.</string>
+    <string name="premium_locked_badge">Функція Premium</string>
+    <string name="premium_unlock_title">%1$s — функція Premium</string>
+    <string name="premium_unlock_message">Вона входить до Premium разом з усім іншим, що перелічено на екрані Premium.</string>
+    <string name="premium_unlock_cta">Подивитись Premium</string>
+    <string name="premium_unlock_later">Не зараз</string>
+    <string name="premium_restore">Відновити покупки</string>
+    <string name="premium_no_store">Купувати поки нічого — застосунок не опубліковано в магазині. На час пробного періоду Premium відкритий усім.</string>
+    <string name="premium_upgrade_trial">Пробний період завершиться через %1$d дн.</string>
+    <string name="premium_upgrade_lapsed">Ваш Premium завершився. Функції Premium заблоковані.</string>
+    <string name="feature_dlna">Трансляція на телевізор через DLNA</string>
+    <string name="feature_multi_playlist">Більше одного плейлиста</string>
+    <string name="feature_parental_control">Батьківський контроль</string>
+    <string name="feature_backup">Резервна копія й відновлення</string>
+    <string name="feature_xtream">Акаунти Xtream</string>
+    <string name="feature_custom_epg">Власне джерело телепрограми</string>
+    <string name="feature_custom_icons">Власні джерела логотипів</string>
+    <string name="feature_raw_ts_remux">Ретрансляція потоків, які телевізор не тягне</string>
+    <string name="settings_developer_license">Розробнику: стан ліцензії</string>
 </resources>

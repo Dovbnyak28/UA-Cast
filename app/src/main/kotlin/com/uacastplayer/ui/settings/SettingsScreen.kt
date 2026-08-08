@@ -73,6 +73,8 @@ import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.premium.PremiumSectionState
+import com.uacastplayer.ui.premium.PremiumContent
 import com.uacastplayer.update.UpdateCheckOutcome
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.SegmentedControl
@@ -135,6 +137,7 @@ fun SettingsScreen(
     onOpenTerms: () -> Unit,
     remuxEffectiveness: RemuxEffectivenessCounts,
     updateSection: UpdateSectionState,
+    premiumSection: PremiumSectionState,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -321,6 +324,24 @@ fun SettingsScreen(
                     onClick = onImportBackup,
                     modifier = Modifier.weight(1f),
                 )
+            }
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_section_premium), icon = AppIcons.Lock) {
+            PremiumContent(section = premiumSection, nowMillis = System.currentTimeMillis())
+
+            // Debug builds only: DeveloperMode.states is empty in a release build because the class
+            // that fills it lives in src/debug and is not compiled into that variant at all.
+            if (premiumSection.developerStates.isNotEmpty()) {
+                LabeledRow(stringResource(R.string.settings_developer_license), AppIcons.Lock) {
+                    for (state in premiumSection.developerStates) {
+                        SettingsChip(
+                            label = state,
+                            isSelected = false,
+                            onClick = { premiumSection.onDeveloperStateSelected(state) },
+                        )
+                    }
+                }
             }
         }
 
