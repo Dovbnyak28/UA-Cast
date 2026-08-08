@@ -269,6 +269,24 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Fixed - casting
 
+- **Disconnecting one remote target while the other was still playing started the phone playing too.**
+  Chromecast and a DLNA renderer are connected and dropped independently, and both resume paths in
+  `PlayerViewModel` ran `prepare(); play()` without asking whether anything else was still playing.
+  So: cast to a Chromecast, connect a DLNA renderer, disconnect the renderer - and the same stream
+  is now coming out of the phone and the receiver at once. Mirrored the other way round too.
+
+  The audible duplicate is the smaller half. An origin that allows one connection per account gives
+  the slot to whoever asks, the phone just did, and the receiver that was playing perfectly a second
+  earlier starves - which is the exact failure the `stop()`-rather-than-`pause()` comments a few
+  lines above were written to prevent.
+
+  `LocalPlaybackPolicy` already said so: its doc explains that a DLNA renderer starves on a second
+  local connection "exactly the way a Chromecast receiver does". It was applied in one of the three
+  places that touch the local player and not in the two resume paths. Both now ask it.
+  `LocalPlaybackPolicyTest` covers the truth table; simulating the old unconditional resume fails
+  three of its five cases.
+
+
 - **A channel casting through the proxy could reload itself to death without ever playing.** The
   stall watchdog asked "has the receiver reported PLAYING within 4 seconds", which on the proxy path
   it cannot: every byte goes origin → phone → receiver, and one segment of an HD channel measured

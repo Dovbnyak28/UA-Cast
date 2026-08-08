@@ -255,7 +255,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         isDlnaCasting = isConnected
         if (isConnected) {
             exoPlayer.stop()
-        } else {
+        } else if (
+            // isCasting, not "nothing else is connected": a Chromecast session can still be running,
+            // and resuming here would put the same stream on the phone and the receiver at once -
+            // audible twice, and the phone takes the origin's one allowed connection, starving the
+            // receiver that was playing fine a second ago. See LocalPlaybackPolicy.
+            LocalPlaybackPolicy.shouldResumeAfterDisconnect(
+                isChromecastActive = isCasting,
+                isDlnaActive = false,
+            )
+        ) {
             exoPlayer.prepare()
             exoPlayer.play()
         }
@@ -282,7 +291,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             // The media item survives stop(), and ResumeLocalPlayer's prepare()+play() below fully
             // recovers from it. sampleForStall can't fight this: it bails while isCasting.
             CastSideEffect.PauseLocalPlayer -> exoPlayer.stop()
-            CastSideEffect.ResumeLocalPlayer -> {
+            CastSideEffect.ResumeLocalPlayer -> if (
+                // A DLNA renderer can still be playing: the two targets are connected and dropped
+                // independently, so "the cast ended" is not "nothing is playing remotely". Resuming
+                // anyway puts the same stream on the phone and the renderer at once, and the phone
+                // takes the origin's one allowed connection - the renderer then starves. See
+                // LocalPlaybackPolicy.
+                //
+                // isChromecastActive is passed as false rather than read from isCasting: this
+                // effect *is* the end of the cast, and it arrives on a different flow from the one
+                // that clears that flag, with no ordering between them. Reading it here would
+                // sometimes see a session that is already over and leave the phone silent.
+                LocalPlaybackPolicy.shouldResumeAfterDisconnect(
+                    isChromecastActive = false,
+                    isDlnaActive = isDlnaCasting,
+                )
+            ) {
                 // While casting, switchToIndexImmediate() skips prepare() for whatever channel is
                 // current (see there) so the phone isn't buffering the same stream twice in
                 // parallel with the receiver - the media item is still set, just never prepared,

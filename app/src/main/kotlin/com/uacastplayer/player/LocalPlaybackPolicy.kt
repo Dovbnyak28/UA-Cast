@@ -14,4 +14,23 @@ package com.uacastplayer.player
  */
 object LocalPlaybackPolicy {
     fun shouldPrepareLocally(isRemoteCasting: Boolean): Boolean = !isRemoteCasting
+
+    /**
+     * Whether disconnecting one remote target should hand playback back to the local player.
+     *
+     * There are two remote targets and they are disconnected independently, so "the cast ended"
+     * does not mean "nothing is playing remotely". Resuming unconditionally is how the phone ends
+     * up playing the same stream as a still-connected receiver: audible twice, and - because an
+     * origin routinely allows one connection per account - the phone takes the slot and the
+     * receiver starves. That is the exact failure [shouldPrepareLocally] exists to prevent, applied
+     * to the other end of the session.
+     *
+     * Both arguments are passed explicitly rather than read from one combined flag because the two
+     * targets report through separate flows with no ordering between them: when Chromecast's
+     * "resume local" effect arrives, its own connected flag may not have been cleared yet, so the
+     * caller says `isChromecastActive = false` itself rather than asking a value that is about to
+     * change.
+     */
+    fun shouldResumeAfterDisconnect(isChromecastActive: Boolean, isDlnaActive: Boolean): Boolean =
+        !isChromecastActive && !isDlnaActive
 }
