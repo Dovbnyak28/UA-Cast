@@ -267,6 +267,26 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   purpose is keeping credentials out of a report the user shares. It now keeps only scheme, host
   and port, and redacts a url whole when the host cannot be parsed.
 
+### Fixed - playback
+
+- **Losing the network made the player walk the playlist.** Four failed attempts, mark the channel
+  dead, skip to the next, repeat - roughly one channel every three seconds, each with its own
+  decoder and audio-focus request. Measured on a Mi A2 during a 70-second Wi-Fi outage: about
+  twenty error/focus cycles, and the user came back to a channel several positions from the one
+  they opened.
+
+  The churn ends with the outage; the damage does not. Every channel walked past was added to the
+  dead set, and that set outlives the outage - so once the network returned, auto-skip went on
+  skipping working channels for the rest of the session, on the strength of a failure that was
+  never theirs. Each retry also re-requested audio focus, which interrupts whatever else is playing
+  on the phone, twenty times over.
+
+  Giving up on a channel now asks whether the device had a network to reach it through. With no
+  validated network the channel is neither blamed nor abandoned - the same one is retried every ten
+  seconds, twice the whole retry ladder, because nothing this app does brings a network back.
+  Re-measured on the same 70-second outage: audio-focus requests fell from ~20 to 8, and channel
+  switches from four to **zero**. `DeadChannelPolicyTest` covers the decision.
+
 ### Fixed - casting
 
 - **Disconnecting one remote target while the other was still playing started the phone playing too.**
