@@ -1,6 +1,9 @@
 package com.uacastplayer.player
 
 import android.app.Application
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.app.PendingIntent
 import android.content.Intent
 import android.util.Log
@@ -474,7 +477,28 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Called once [PlaybackRetryPolicy] has spent its four attempts on the current channel.
+     *
+     * The network check is the whole point. Without it, an outage made every channel fail, and each
+     * failure marked a channel dead and skipped to the next - so the app walked the playlist at
+     * roughly one channel every three seconds, each with its own decoder and audio-focus request,
+     * and left behind a dead set full of channels that were never broken. Measured on a Mi A2:
+     * about twenty such cycles in a 70-second Wi-Fi outage. See [DeadChannelPolicy].
+     */
     private fun giveUpOnCurrentChannel() {
+        if (!DeadChannelPolicy.shouldBlameChannel(hasNetwork())) {
+            // Nothing here is evidence about this channel, so it is neither blamed nor abandoned -
+            // just tried again, slowly, until the network comes back.
+            AppLog.d(TAG) { "No network: retrying the same channel instead of marking it dead" }
+            retryState = RetryState()
+            retryJob?.cancel()
+            retryJob = viewModelScope.launch {
+                delay(DeadChannelPolicy.NO_NETWORK_RETRY_MILLIS)
+                exoPlayer.prepare()
+            }
+            return
+        }
         deadIndices += currentIndex
         val next = if (autoSkipDeadEnabled) {
             ChannelNavigator.nextPlayableIndex(currentIndex, channels.size, wrapAroundEnabled) {
@@ -488,6 +512,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             _uiState.update { it.copy(fatalError = true, isBuffering = false) }
         }
+    }
+
+    /**
+     * Whether the system reports a network with validated internet access.
+     *
+     * Validated, not merely connected: a captive portal that has not been signed into looks like a
+     * working Wi-Fi connection and reaches nothing, which is exactly the case that would otherwise
+     * be mistaken for every channel being broken at once.
+     */
+    private fun hasNetwork(): Boolean {
+        val connectivityManager = getApplication<Application>()
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val capabilities = connectivityManager?.activeNetwork
+            ?.let(connectivityManager::getNetworkCapabilities)
+        return capabilities != null &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     /**
