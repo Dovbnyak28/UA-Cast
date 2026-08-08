@@ -35,7 +35,6 @@ class UpdateControllerTest {
         version = AppVersion.parse(tag)!!,
         tagName = tag,
         releaseUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/tag/$tag",
-        notes = "notes",
     )
 
     private val now = 1_800_000_000_000L

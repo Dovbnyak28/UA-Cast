@@ -430,7 +430,6 @@ private fun ScaffoldZone(
     val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
-    val premiumConnection by viewModel.premiumConnection.collectAsStateWithLifecycle()
     val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
     // The store's purchase flow needs an Activity to show its own UI over; findActivity() is
     // this project's existing way of reaching one from a composable.
@@ -440,33 +439,46 @@ private fun ScaffoldZone(
     // user never opens the premium screen should not be talking to a store at all.
     LaunchedEffect(Unit) { viewModel.refreshPremiumProducts() }
 
-    val premiumSection = PremiumSectionState(
-        entitlements = entitlements,
-        connection = premiumConnection,
-        products = premiumProducts,
-        onPurchase = { product -> viewModel.purchasePremium(product, activity) },
-        onRestore = viewModel::restorePremiumPurchases,
-        developerStates = viewModel.developerLicenseStates,
-        onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
-    )
+    // remember, not a plain construction: this holder carries a Set and lambdas, so Compose treats
+    // it as unstable and compares it by identity. Built fresh on every pass it is never equal to
+    // the previous one, and since ScaffoldZone recomposes whenever any of the fifteen flows above
+    // emits - the EPG clock ticks twice a minute on its own - that would stop SettingsScreen from
+    // ever skipping. Keyed on the values it actually derives from.
+    val premiumSection = remember(entitlements, premiumProducts, activity) {
+        PremiumSectionState(
+            entitlements = entitlements,
+            products = premiumProducts,
+            onPurchase = { product -> viewModel.purchasePremium(product, activity) },
+            onRestore = viewModel::restorePremiumPurchases,
+            // Fixed for the lifetime of the process: filled in by the debug Application before any
+            // composition runs, and empty forever in a release build.
+            developerStates = viewModel.developerLicenseStates,
+            onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
+        )
+    }
 
     // LocalUriHandler rather than a raw ACTION_VIEW intent: it needs no queries entry in the
     // manifest, and it is the one place a device with no browser at all - a TV box, say - would
     // otherwise throw on what is meant to be an optional convenience.
     val uriHandler = LocalUriHandler.current
-    val updateSection = UpdateSectionState(
-        state = updateState,
-        onCheckNow = viewModel::checkForUpdatesNow,
-        onOpenRelease = { url ->
-            try {
-                uriHandler.openUri(url)
-            } catch (e: IllegalArgumentException) {
-                AppLog.w("MainActivity") { "no app can open the release page: ${e.javaClass.simpleName}" }
-            }
-        },
-        onDismissBanner = viewModel::dismissUpdateBanner,
-        onOutcomeShown = viewModel::clearUpdateCheckOutcome,
-    )
+    // remembered for the same reason as premiumSection above: rebuilt on every pass it would be a
+    // new instance each time, and this one reaches the top bar, so it would also re-invalidate the
+    // update banner twice a minute for nothing.
+    val updateSection = remember(updateState, uriHandler) {
+        UpdateSectionState(
+            state = updateState,
+            onCheckNow = viewModel::checkForUpdatesNow,
+            onOpenRelease = { url ->
+                try {
+                    uriHandler.openUri(url)
+                } catch (e: IllegalArgumentException) {
+                    AppLog.w("MainActivity") { "no app can open the release page: ${e.javaClass.simpleName}" }
+                }
+            },
+            onDismissBanner = viewModel::dismissUpdateBanner,
+            onOutcomeShown = viewModel::clearUpdateCheckOutcome,
+        )
+    }
 
     // Derived from the flows collected right above rather than delegated to viewModel::isFavorite /
     // viewModel::isChannelLocked, which read StateFlow.value directly - a plain function call is not

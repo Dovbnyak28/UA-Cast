@@ -47,7 +47,6 @@ class UpdateBannerTest {
         version = AppVersion.parse("v1.4.0")!!,
         tagName = "v1.4.0",
         releaseUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/tag/v1.4.0",
-        notes = "Some notes",
     )
 
     @Test

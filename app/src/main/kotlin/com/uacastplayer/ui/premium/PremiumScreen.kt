@@ -107,15 +107,22 @@ private fun FeatureRow(feature: Feature, unlocked: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(
-            imageVector = if (unlocked) AppIcons.Check else AppIcons.Lock,
-            // Null, because the row's text already says which feature this is and the lock state is
-            // carried by the text colour *and* by the icon - a screen reader announcing "lock,
-            // Parental control" twice per row is noise, not information.
-            contentDescription = null,
-            tint = if (unlocked) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
-            modifier = Modifier.size(16.dp),
-        )
+        if (unlocked) {
+            Icon(
+                imageVector = AppIcons.Check,
+                // Null: the row's text already names the feature, and "unlocked" is carried by the
+                // text colour too. A screen reader saying "tick, Parental control" on every row is
+                // noise, not information.
+                contentDescription = null,
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(16.dp),
+            )
+        } else {
+            // The same badge used to mark a locked control anywhere else in the app, rather than a
+            // second lock icon drawn inline here - one lock, one look. This one *does* carry a
+            // description, because "locked" is the thing a non-sighted user cannot otherwise tell.
+            PremiumBadge()
+        }
         Text(
             text = stringResource(nameRes),
             style = BodyRegular,
