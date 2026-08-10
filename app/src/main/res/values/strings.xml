@@ -22,6 +22,7 @@
     <string name="home_empty_message">No playlist added yet</string>
     <string name="home_empty_subtitle">Add an M3U or M3U8 playlist link to view channels.</string>
     <string name="home_active_playlist_label">Active playlist</string>
+    <string name="playlist_unnamed">Playlist from a file</string>
     <string name="home_restored_from_cache">Restored from cache</string>
     <!-- The count is rendered separately, above the label, so these carry the noun alone. Still
          plurals: the number governs the label's form, and a fixed one reads as "1 Channels" here

@@ -3,6 +3,7 @@ package com.uacastplayer.ui.diagnostics
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.net.toUri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
+import com.uacastplayer.diagnostics.DiagnosticsArchive
 import com.uacastplayer.diagnostics.DiagnosticsEmail
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.ui.theme.BodyText
@@ -55,6 +57,26 @@ fun diagnosticsEmailIntent(report: String): Intent =
     }
 
 /**
+ * The same email with the full log attached.
+ *
+ * `ACTION_SENDTO` cannot carry a stream, so an attachment means `ACTION_SEND` and the chooser that
+ * comes with it - which is the trade this makes only when there is something worth attaching. The
+ * body stays the readable summary either way; the file is the summary plus the process's own log,
+ * which is where the libraries that actually fail write their side of the story.
+ */
+private fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Intent =
+    Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(DiagnosticsEmail.RECIPIENT))
+        putExtra(Intent.EXTRA_SUBJECT, DiagnosticsEmail.subject(BuildConfig.VERSION_NAME, android.os.Build.MODEL))
+        putExtra(Intent.EXTRA_TEXT, report)
+        putExtra(Intent.EXTRA_STREAM, attachment)
+        // The receiving app gets to read this one file and nothing else, for as long as it holds
+        // the intent. Without this the attachment arrives as a URI it has no permission to open.
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+/**
  * Opens [diagnosticsEmailIntent], or falls back to a plain share sheet.
  *
  * A phone with no mail app at all is unusual but real - a stripped ROM, a work profile, a TV box -
@@ -63,6 +85,15 @@ fun diagnosticsEmailIntent(report: String): Intent =
  * remains after that is one nothing can fix: no app on the device can send anything.
  */
 fun sendDiagnostics(context: Context, report: String, chooserTitle: String) {
+    // Written first, because whether there is a file decides which intent is used. A device that
+    // will not give up its log still sends the summary, which is how this worked before.
+    val attachment = DiagnosticsArchive.write(context, report)
+    if (attachment != null) {
+        val withLog = Intent.createChooser(diagnosticsEmailIntentWithLog(report, attachment), chooserTitle)
+        runCatching { context.startActivity(withLog) }
+            .onSuccess { return }
+            .onFailure { AppLog.w(TAG) { "Nothing could take the report with its log; sending the summary" } }
+    }
     try {
         context.startActivity(diagnosticsEmailIntent(report))
     } catch (_: ActivityNotFoundException) {

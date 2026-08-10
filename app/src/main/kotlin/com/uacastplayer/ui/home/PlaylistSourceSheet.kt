@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.playlist.PlaylistSource
+import com.uacastplayer.playlist.PlaylistSourceLabel
 import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
@@ -80,7 +81,9 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
         RadioButton(selected = isActive, onClick = onSelect)
         Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
             Text(
-                text = source.displayName ?: source.location,
+                text = source.displayName
+                    ?: PlaylistSourceLabel.forLocation(source.type, source.location)
+                    ?: stringResource(R.string.playlist_unnamed),
                 style = BodyText,
                 color = UaTheme.palette.labelPrimary,
                 maxLines = 1,

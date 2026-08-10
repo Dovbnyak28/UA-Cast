@@ -22,6 +22,7 @@
     <string name="home_empty_message">Плейлист ещё не добавлен</string>
     <string name="home_empty_subtitle">Добавьте ссылку на плейлист M3U или M3U8, чтобы смотреть каналы.</string>
     <string name="home_active_playlist_label">Активный плейлист</string>
+    <string name="playlist_unnamed">Плейлист из файла</string>
     <string name="home_restored_from_cache">Восстановлено из кеша</string>
     <plurals name="home_stat_channels" tools:ignore="ImpliedQuantity">
         <item quantity="one">Канал</item>

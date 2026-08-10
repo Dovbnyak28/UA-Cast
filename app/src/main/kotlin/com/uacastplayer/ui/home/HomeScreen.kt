@@ -276,7 +276,7 @@ private fun PlaylistDashboardCard(
                     color = UaTheme.palette.labelSecondary,
                 )
                 Text(
-                    text = playlistState.displayName ?: playlistState.activePlaylistId ?: "—",
+                    text = playlistState.displayName ?: stringResource(R.string.playlist_unnamed),
                     style = Title,
                     color = UaTheme.palette.labelPrimary,
                     modifier = Modifier.padding(top = 4.dp),

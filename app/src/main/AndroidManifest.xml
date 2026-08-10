@@ -95,6 +95,20 @@
             android:enabled="false"
             android:exported="false" />
 
+        <!-- Lets a diagnostics report be attached to an email as a file. Not exported: the grant
+             travels with the intent (FLAG_GRANT_READ_URI_PERMISSION) to the one app the user picks,
+             for the one file named in it, and lapses on its own. See DiagnosticsArchive, and
+             res/xml/diagnostics_paths.xml for how little of the app it can reach. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.diagnostics"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/diagnostics_paths" />
+        </provider>
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

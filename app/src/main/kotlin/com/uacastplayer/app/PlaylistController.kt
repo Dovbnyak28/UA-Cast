@@ -11,6 +11,7 @@ import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceAddResult
+import com.uacastplayer.playlist.PlaylistSourceLabel
 import com.uacastplayer.playlist.PlaylistSourcePolicy
 import com.uacastplayer.playlist.PlaylistSourceRemovalResult
 import com.uacastplayer.playlist.PlaylistSourceType
@@ -127,9 +128,13 @@ class PlaylistController(
     fun setPlaylistDisplayName(name: String) {
         val pending = pendingNewSource ?: return
         pendingNewSource = null
-        val effectiveName = name.ifBlank {
-            if (pending.type == PlaylistSourceType.XTREAM) XtreamUrlBuilder.serverHost(pending.location) else null
-        }
+        // What the user typed, else what the source already knows about itself (a picked file
+        // carries its own name - see loadPlaylistFromFile), else one derived from where it came
+        // from. The last step used to be an Xtream-only special case; PlaylistSourceLabel answers
+        // for every type, which is what stops a URL playlist falling through to its own SHA-256.
+        val effectiveName = name.ifBlank { null }
+            ?: pending.displayName
+            ?: PlaylistSourceLabel.forLocation(pending.type, pending.location)
         val newSource = pending.copy(displayName = effectiveName)
         when (val result = PlaylistSourcePolicy.add(_playlistSources.value, newSource)) {
             is PlaylistSourceAddResult.Added -> {
@@ -170,7 +175,11 @@ class PlaylistController(
     }
 
     fun loadPlaylistFromFile(uri: Uri) {
+        // Asked while the grant from the picker is still current - a saved source outlives it, and
+        // the provider will not answer later. Without this the only label a file playlist ever had
+        // was its own SHA-256 (see PlaylistSourceLabel).
         pendingNewSource = newPendingSource(PlaylistSourceType.FILE, uri.toString())
+            .copy(displayName = playlistRepository.documentName(uri))
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
         launchLoad {
             applyPlaylistOutcome(playlistRepository.loadFromFile(uri))
@@ -296,7 +305,10 @@ class PlaylistController(
         // this point - setPlaylistDisplayName patches displayName in directly once it's known,
         // same as it always has.
         val displayName = (outcome as? PlaylistOutcome.Loaded)?.sourceFingerprint
-            ?.let { id -> _playlistSources.value.firstOrNull { it.id == id }?.displayName }
+            ?.let { id -> _playlistSources.value.firstOrNull { it.id == id } }
+            // The name the user gave it, or one derived from where it came from. Never the id: that
+            // is a SHA-256, and the screens used to print its first eight characters as the title.
+            ?.let { source -> source.displayName ?: PlaylistSourceLabel.forLocation(source.type, source.location) }
         _playlistState.value = PlaylistOutcomeReducer.reduce(
             current = _playlistState.value,
             outcome = outcome,

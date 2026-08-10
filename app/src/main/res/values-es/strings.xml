@@ -22,6 +22,7 @@
     <string name="home_empty_message">Aún no se ha añadido ninguna lista</string>
     <string name="home_empty_subtitle">Añade un enlace de lista M3U o M3U8 para ver canales.</string>
     <string name="home_active_playlist_label">Lista activa</string>
+    <string name="playlist_unnamed">Lista desde un archivo</string>
     <string name="home_restored_from_cache">Restaurada desde la caché</string>
     <plurals name="home_stat_channels">
         <item quantity="one">Canal</item>

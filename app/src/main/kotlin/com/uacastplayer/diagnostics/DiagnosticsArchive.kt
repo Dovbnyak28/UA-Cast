@@ -1,0 +1,77 @@
+package com.uacastplayer.diagnostics
+
+import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
+import com.uacastplayer.log.AppLog
+import com.uacastplayer.log.LogcatReader
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private const val TAG = "DiagnosticsArchive"
+
+/**
+ * The diagnostics report as a file the user's mail app can attach.
+ *
+ * The report used to be the body of the email and nothing else, which capped it at what a person
+ * will scroll past and at what a mail client will not mangle. It also meant the only log in it was
+ * this app's own in-memory buffer - so a report sent after restarting the app carried three lines
+ * and said nothing.
+ *
+ * A file lifts both limits at once: the body stays the short readable summary, and the attachment
+ * carries the same summary plus the whole recent log of the process, which is where media3, the
+ * Cast SDK and OkHttp write the things that actually explain a failure.
+ *
+ * Written to `cacheDir`, deliberately. It is a copy made to be sent, the system may reclaim it, and
+ * nothing should be keeping half-megabyte logs in the app's permanent storage.
+ */
+object DiagnosticsArchive {
+
+    private const val DIRECTORY = "diagnostics"
+    private const val AUTHORITY_SUFFIX = ".diagnostics"
+
+    /** Old reports are of no use to anyone once a new one is made, and they are the largest thing
+     * this app writes on demand. */
+    private fun clearPrevious(directory: File) {
+        directory.listFiles()?.forEach { runCatching { it.delete() } }
+    }
+
+    /**
+     * Writes [report] plus this process's log to a file and returns a `content://` URI for it, or
+     * null when the file could not be written.
+     *
+     * Null is a degraded send, not a failed one - the caller still has the report for the body, and
+     * an email with a summary and no attachment beats no email at all.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun write(context: Context, report: String): Uri? = try {
+        val directory = File(context.cacheDir, DIRECTORY).apply { mkdirs() }
+        clearPrevious(directory)
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val file = File(directory, "ua-cast-log-$stamp.txt")
+
+        val logcat = LogcatReader.read()
+        file.writeText(
+            buildString {
+                append(report)
+                appendLine()
+                appendLine()
+                if (logcat == null) {
+                    // Said out loud rather than left as an absence: "the log is missing" and "the
+                    // log is empty" are different problems, and only one of them is the app's.
+                    appendLine("--- Full log unavailable on this device ---")
+                } else {
+                    appendLine("--- Full log for this process ---")
+                    appendLine(logcat)
+                    appendLine("--- End of log ---")
+                }
+            },
+        )
+        FileProvider.getUriForFile(context, context.packageName + AUTHORITY_SUFFIX, file)
+    } catch (e: Exception) {
+        AppLog.w(TAG) { "Could not write the diagnostics file: ${e.javaClass.simpleName}" }
+        null
+    }
+}

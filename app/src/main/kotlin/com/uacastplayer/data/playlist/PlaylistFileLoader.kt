@@ -3,6 +3,7 @@ package com.uacastplayer.data.playlist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.BoundedBytesResult
 import com.uacastplayer.playlist.BoundedTextReader
@@ -40,6 +41,26 @@ class PlaylistFileLoader(private val context: Context) {
     }
 
     /**
+     * The file name the document provider knows [uri] by, or null if it will not say.
+     *
+     * A Storage Access Framework URI carries nothing readable - the user's own playlist is
+     * `content://com.android.providers.downloads.documents/document/msf%3A965`, where the last
+     * segment is a row id in someone else's database. The name lives behind the provider, and this
+     * is the only way to ask for it: `playlist.m3u8` instead of a hash on the home screen.
+     *
+     * Asked once, when the playlist is added, and stored - not looked up on every render. The
+     * answer needs the read grant, and a saved playlist outlives grants (see [rememberAccess]).
+     */
+    fun documentName(uri: Uri): String? = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+            }
+            ?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    /**
      * Reads [uri], or says why it could not.
      *
      * **Every failure is caught, including the ones that are not [IOException].** What sits on the
@@ -54,6 +75,7 @@ class PlaylistFileLoader(private val context: Context) {
      * shipped once already.
      */
     @Suppress("TooGenericExceptionCaught")
+
     suspend fun load(uri: Uri): PlaylistLoadResult = withContext(Dispatchers.IO) {
         try {
             val stream = context.contentResolver.openInputStream(uri)

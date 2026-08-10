@@ -53,6 +53,10 @@ class PlaylistRepository(context: Context) {
         return outcome
     }
 
+    /** The file name behind a picked document, for naming the source - see
+     * [PlaylistFileLoader.documentName]. */
+    fun documentName(uri: Uri): String? = fileLoader.documentName(uri)
+
     suspend fun loadFromFile(uri: Uri): PlaylistOutcome {
         // Asked for on every load, not only the first: taking a grant already held is a no-op, and
         // this is the one place every path to a file playlist goes through - the initial pick, a
