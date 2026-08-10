@@ -273,16 +273,6 @@
     <string name="terms_gate_footer">Щоб користуватися застосунком, потрібно прийняти ці умови.</string>
     <string name="terms_accept_button">Прийняти й продовжити</string>
     <string name="terms_decline_button">Відхилити й вийти</string>
-    <string name="onboarding_step1_title">Вітаємо в UA Cast</string>
-    <string name="onboarding_step1_body">UA Cast - це плеєр для ВАШИХ власних підписок: застосунок не надає, не продає і не містить жодних телеканалів чи контенту. Ви підключаєте плейлист від провайдера, яким уже користуєтесь, а застосунок його відтворює.</string>
-    <string name="onboarding_step2_title">Що таке плейлист?</string>
-    <string name="onboarding_step2_body">Плейлист - це список каналів від вашого провайдера: або посилання M3U, або логін Xtream Codes (адреса сервера, логін і пароль). Ви додасте його з вкладки «Канали», коли будете готові.</string>
-    <string name="onboarding_step3_title">Дивіться на великому екрані</string>
-    <string name="onboarding_step3_body">Натисніть іконку трансляції під час відтворення каналу, щоб надіслати його на Chromecast або Google TV в тій самій мережі Wi-Fi. Якщо потік не відтворюється напряму на приймачі, UA Cast автоматично повторює спробу через локальний ретранслятор на телефоні.</string>
-    <string name="onboarding_skip_button">Пропустити</string>
-    <string name="onboarding_next_button">Далі</string>
-    <string name="onboarding_get_started_button">Додати плейлист</string>
-    <string name="onboarding_step_indicator">Крок %1$d з %2$d</string>
 
     <!-- Player -->
     <string name="player_live_indicator">LIVE</string>
@@ -377,6 +367,40 @@
     <string name="dlna_sheet_searching">Пошук пристроїв…</string>
     <string name="dlna_sheet_no_devices">Пристроїв не знайдено</string>
     <string name="dlna_stop_casting">Зупинити</string>
+    <!-- Guided tour -->
+    <string name="guided_tour_welcome_title">Ласкаво просимо до UA Cast IPTV</string>
+    <string name="guided_tour_welcome_body">Швидко покажемо основні можливості додатка.</string>
+    <string name="guided_tour_start">Почати</string>
+    <string name="guided_tour_skip">Пропустити</string>
+    <string name="guided_tour_back">Назад</string>
+    <string name="guided_tour_next">Далі</string>
+    <string name="guided_tour_progress">%1$d / %2$d</string>
+    <string name="guided_tour_done_title">Готово!</string>
+    <string name="guided_tour_done_body">Тепер ви знаєте основні можливості UA Cast IPTV.</string>
+    <string name="guided_tour_finish">Почати користуватися</string>
+    <string name="guided_tour_playlist_title">Додайте плейлист</string>
+    <string name="guided_tour_playlist_body">Канали беруться з вашого плейлиста — файл M3U або посилання від провайдера. Тут його додають і тут перемикаються між кількома.</string>
+    <string name="guided_tour_channels_title">Знайдіть канал</string>
+    <string name="guided_tour_channels_body">Канали згруповані так, як їх назвав ваш плейлист. Пошук шукає одразу по всіх групах, тож не треба вгадувати, у якій саме канал.</string>
+    <string name="guided_tour_player_title">Дивіться</string>
+    <string name="guided_tour_player_body">Торкніться каналу, щоб запустити. Плеєр відкриється смужкою внизу; торкніться її для повного екрана, а стрілками або свайпом перемикайте канали.</string>
+    <string name="guided_tour_favorites_title">Збережіть те, що дивитеся</string>
+    <string name="guided_tour_favorites_body">Канали, які ви позначите зірочкою, потрапляють сюди — в окрему вкладку. Зірочка є біля кожного каналу у списку. «Обране» — це короткий список, який можна переставляти, замість гортання довгого.</string>
+    <string name="guided_tour_epg_title">Програма передач</string>
+    <string name="guided_tour_epg_body">Якщо плейлист має програму передач, кожен канал показує, що йде зараз і далі. Утримайте канал і виберіть «Програма передач», щоб побачити повний розклад.</string>
+    <string name="guided_tour_cast_title">Трансляція на телевізор</string>
+    <string name="guided_tour_cast_body">Ця кнопка передає зображення на Chromecast. Телевізори без нього — Samsung, LG, Sony — доступні через DLNA з плеєра.</string>
+    <string name="guided_tour_settings_title">Налаштування</string>
+    <string name="guided_tour_settings_body">Мова й тема, розмір буфера, іконки каналів, батьківський контроль, резервна копія та оновлення. Тут же живе і це навчання, якщо схочете пройти ще раз.</string>
+
+    <string name="settings_section_tutorial">Навчання</string>
+    <string name="settings_tutorial_label">Інтерактивний тур</string>
+    <string name="settings_tutorial_button">Показати</string>
+    <string name="settings_tutorial_hint_unseen">Короткий огляд основних можливостей.</string>
+    <string name="settings_tutorial_hint_seen">Ви вже пройшли тур. Його можна запустити знову будь-коли.</string>
+
+    <string name="dlna_volume">Гучність телевізора</string>
+    <string name="dlna_volume_value">%1$d%%</string>
 
     <string name="update_banner_title">Доступна нова версія</string>
     <string name="update_banner_message">Версію %1$s можна завантажити.</string>
@@ -403,6 +427,10 @@
     <string name="premium_unlock_later">Не зараз</string>
     <string name="premium_restore">Відновити покупки</string>
     <string name="premium_no_store">Купувати поки нічого — застосунок не опубліковано в магазині. На час пробного періоду Premium відкритий усім.</string>
+    <string name="premium_restore_nothing">На цьому акаунті Google немає що відновлювати.</string>
+    <string name="premium_already_owned">Це вже куплено. Натисніть «Відновити покупки».</string>
+    <string name="premium_store_unreachable">Не вдалося звʼязатися з Google Play. Перевірте зʼєднання та спробуйте ще раз.</string>
+    <string name="premium_purchase_failed">Покупка не відбулася. Кошти не списано.</string>
     <string name="premium_upgrade_trial">Пробний період завершиться через %1$d дн.</string>
     <string name="premium_upgrade_lapsed">Ваш Premium завершився. Функції Premium заблоковані.</string>
     <string name="feature_dlna">Трансляція на телевізор через DLNA</string>
@@ -412,6 +440,5 @@
     <string name="feature_xtream">Акаунти Xtream</string>
     <string name="feature_custom_epg">Власне джерело телепрограми</string>
     <string name="feature_custom_icons">Власні джерела логотипів</string>
-    <string name="feature_raw_ts_remux">Ретрансляція потоків, які телевізор не тягне</string>
     <string name="settings_developer_license">Розробнику: стан ліцензії</string>
 </resources>

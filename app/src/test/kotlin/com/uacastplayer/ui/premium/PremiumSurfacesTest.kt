@@ -11,6 +11,7 @@ import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseTier
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.premium.billing.BillingProduct
+import com.uacastplayer.premium.billing.PurchaseResult
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -23,12 +24,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * The premium surfaces that have **no production call site yet**, because nothing in the app is
- * gated: the unlock dialog is opened by tapping a locked control, and there are none.
+ * The premium surfaces, each composed and asserted.
  *
- * That makes these tests the only thing standing between "the code compiles" and "the screen is
- * correct". Shipping a surface nobody has ever rendered is how a paywall turns out to be broken on
- * the day it is switched on - so each one is composed here, and its one job is asserted.
+ * They are now reachable in the app - the unlock dialog opens from any of the seven gated controls,
+ * and the section is in Settings - but they still cannot be *exercised*: everything below them is
+ * decided by a store that only answers a build installed from Play. So these tests remain the only
+ * thing standing between "the code compiles" and "the screen is correct" on the day it is switched
+ * on, which is the day it is first seen by someone holding a card.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
@@ -40,13 +42,17 @@ class PremiumSurfacesTest {
 
     private val now = 1_800_000_000_000L
 
-    private fun section(license: License, products: List<BillingProduct> = emptyList()) =
-        PremiumSectionState(
-            entitlements = Entitlements.of(license, now),
-            products = products,
-            onPurchase = {},
-            onRestore = {},
-        )
+    private fun section(
+        license: License,
+        products: List<BillingProduct> = emptyList(),
+        outcome: PurchaseResult? = null,
+    ) = PremiumSectionState(
+        entitlements = Entitlements.of(license, now),
+        products = products,
+        onPurchase = {},
+        onRestore = {},
+        lastOutcome = outcome,
+    )
 
     @Test
     fun theUnlockDialogNamesTheFeatureThatWasTapped() {
@@ -90,7 +96,7 @@ class PremiumSurfacesTest {
 
         composeRule.onNodeWithText("Безкоштовна версія").assertIsDisplayed()
         composeRule.onNodeWithText("Трансляція на телевізор через DLNA").assertIsDisplayed()
-        composeRule.onAllNodesWithContentDescriptionCount("Функція Premium", expected = 8)
+        composeRule.onAllNodesWithContentDescriptionCount("Функція Premium", expected = 7)
     }
 
     /** During the trial every sold feature is unlocked, so no badge should be drawn at all. */
@@ -135,6 +141,63 @@ class PremiumSurfacesTest {
         composeRule.onNodeWithText("Місячна").assertIsDisplayed()
         composeRule.onNodeWithText("60,00 ₴").assertIsDisplayed()
         composeRule.onNodeWithText("Відновити покупки").assertIsDisplayed()
+    }
+
+    private val product = BillingProduct("monthly", LicenseTier.MONTHLY, "Місячна", "60,00 ₴")
+
+    private fun showOutcome(outcome: PurchaseResult?) {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                PremiumContent(section = section(License.FREE, listOf(product), outcome), nowMillis = now)
+            }
+        }
+    }
+
+    /**
+     * The failure this whole outcome path exists for: a restore that reached Play and found nothing
+     * must not be reported as a store that could not be reached.
+     *
+     * They are the same `Unavailable` in a naive mapping, and the difference is what the user does
+     * next - one of them sends somebody to restart their router over an account that simply never
+     * bought anything.
+     */
+    @Test
+    fun anEmptyRestoreIsAnAnswerAndNotAConnectionProblem() {
+        showOutcome(PurchaseResult.NothingToRestore)
+
+        composeRule.onNodeWithText("На цьому акаунті Google немає що відновлювати.").assertIsDisplayed()
+    }
+
+    @Test
+    fun anUnreachableStoreSaysSo() {
+        showOutcome(PurchaseResult.Unavailable)
+
+        composeRule.onNodeWithText(
+            "Не вдалося звʼязатися з Google Play. Перевірте зʼєднання та спробуйте ще раз.",
+        ).assertIsDisplayed()
+    }
+
+    /** Money: a purchase that did not go through has to say that nothing was charged, or the user's
+     * next move is to try again and risk paying twice. */
+    @Test
+    fun aFailedPurchaseSaysNothingWasCharged() {
+        showOutcome(PurchaseResult.Failed("card declined for account foo@example.com"))
+
+        composeRule.onNodeWithText("Покупка не відбулася. Кошти не списано.").assertIsDisplayed()
+        // Play's debug message can name the account or the product. It stays in the log.
+        composeRule.onNodeWithText("card declined for account foo@example.com").assertDoesNotExist()
+    }
+
+    /**
+     * Closing Play's sheet is a decision, not an error. An app that answers it with a message is
+     * scolding the user for not buying, on the screen where it is asking to be trusted with money.
+     */
+    @Test
+    fun cancellingSaysNothingAtAll() {
+        showOutcome(PurchaseResult.Cancelled)
+
+        composeRule.onNodeWithText("Покупка не відбулася. Кошти не списано.").assertDoesNotExist()
+        composeRule.onNodeWithText("На цьому акаунті Google немає що відновлювати.").assertDoesNotExist()
     }
 }
 

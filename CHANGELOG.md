@@ -21,6 +21,60 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Added
 
+- **A crash leaves a record behind.** The app installs an uncaught-exception handler that writes the
+  stack trace, the build it happened on, and the last 60 log lines to a file in its own private
+  storage. The next diagnostics report includes it, and Settings can clear it.
+
+  **Nothing is uploaded.** No network, no service, no identifier - the same bargain the rest of the
+  app makes. Until now "it crashed" was all anyone could report, because the rolling log buffer died
+  with the process that held it.
+
+  Only the exception *messages* are redacted, not the frame lines - found by crashing a real build
+  rather than reasoning about it. Running frames through the sanitizer too turned
+  `ActivityThread.throwRemoteServiceException` into `ActivityThread.<token:675806>`: a long method
+  name is a 24-character run of token characters. Frames come from class metadata and cannot carry
+  user data, so redacting them cost the diagnosis and protected nothing.
+
+- **Predictive back.** The app opts into `enableOnBackInvokedCallback`, so Android 13+ can animate
+  the back gesture instead of cutting to it. Verified on Android 17: back leaves the guided tour
+  without leaving the app, walks the bottom-tab stack, and exits from Home - the same order as
+  before, now with the system's animation. Previously written for but never once executed above
+  API 30.
+
+- **A guided tour that points at the real app, not at pictures of it.** Seven steps - playlist,
+  channel list, player, favorites, TV guide, casting, settings - shown once on first launch and
+  available again from Settings → Tutorial. Each step dims the screen, cuts a hole around the
+  control it is describing, and puts a card in whichever half of the screen that control is not in.
+
+  Steps are data (`guidedtour/GuidedTourSteps`), so adding or reordering one is an edit to a list.
+  Targets are named (`playlist_add`, `cast_button`, …) and elements register their own bounds, so a
+  layout change moves the highlight with it and nothing anywhere stores a coordinate.
+
+  The design decision worth recording is what happens when the target is **not on screen**, which is
+  the normal case rather than the error case: the tour is most useful to someone who has no playlist
+  yet, and that user has no channel list, nothing playing and possibly no Chromecast on the network.
+  Such a step falls back to a prepared screenshot if it has one and to plain text if it does not -
+  it never highlights a stale rectangle and never waits for something to appear. A tour that only
+  worked once everything already existed would be a tour for people who no longer need one.
+
+  Skipping is remembered exactly like finishing: the user was asked and answered. The stored
+  edition number is what lets a later release offer a longer tour once, without that also meaning
+  "ask again on every launch".
+
+- **The TV's volume can be set from the phone while casting over DLNA.** Casting hands the audio to
+  the TV, so the phone's volume keys control nothing and the TV's own remote was the only way to
+  turn it down. The DLNA sheet now carries a slider under the connected device.
+
+  It talks to `RenderingControl`, which is a *separate* UPnP service from the one that plays and
+  stops - its own control URL, its own namespace - so a renderer that does not advertise it simply
+  gets **no slider at all** rather than a dead one. That distinction is the point: an unknown volume
+  drawn as a slider at zero would say the TV is muted, and the user would act on it.
+
+  What is sent is the release of a drag, not every pixel of it, and what is shown afterwards is what
+  the renderer reports back rather than where the finger stopped. A TV whose real scale is smaller
+  than the 0-100 this app assumes clamps the request, and the correction lands visibly on the
+  control instead of leaving a number the TV is not at. See `docs/DLNA.md`.
+
 - **The app tells you when there is a newer version.** It asks GitHub for the latest published
   release when it is opened, at most once every seven days, and shows a banner naming the version.
   Settings -> Updates has a button that checks on demand, ignoring that weekly limit. Both open the
@@ -72,9 +126,87 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   Verified rather than asserted: `DeveloperModeBillingProvider` compiles into the debug variant's
   output and is absent from the release variant's.
 
-  Nothing is gated yet - `featureManager` has no callers in the feature code. Turning that on is a
-  separate, deliberate step, and it should not be taken before the free/paid boundary has been
-  looked at by someone other than its author.
+  The gates are now wired at all seven offer points - a second playlist, Xtream, DLNA, backup and
+  restore, parental control, a custom EPG source, a custom logo source - through one
+  `LocalFeatureGate` rather than seven copies of the same condition. Each refuses *before* the work
+  starts: Xtream is stopped at the tab, not after the credentials are typed. The upgrade banner sits
+  on Home, where it draws nothing at all except in its two situations - asserted by measuring the
+  screen, since a hidden banner that still occupied its own spacing would put dead space at the top
+  of the app for everyone who never sees it.
+
+  **They still take nothing away, and cannot, until there is a store.** `FeatureManager` will not
+  withhold a feature a build has no way of selling, so with `PremiumAvailability.STORE_IS_LIVE`
+  false every gate is open and the lock badges are the only visible part.
+
+- **Real Google Play purchases, behind that same constant.** `PlayBillingProvider` is a full Play
+  Billing 8 implementation - connect, query both catalogues, launch the purchase flow, restore, and
+  acknowledge - not a stub: Play refunds anything unacknowledged after three days, which fails by
+  quietly reversing a sale rather than by erroring. The three product ids live in one table
+  (`PremiumProducts`) with a test holding them still, because Play answers a query for an id its
+  console does not have with an ordinary empty success, and a rename would otherwise orphan every
+  purchase already made in silence.
+
+  **The gates refuse to close against an empty catalogue.** The same silence means a build flipped
+  live one day early, or with one id misspelled, would reach users as an app that had taken DLNA,
+  backups and extra playlists away with nothing to buy them back. So the repository asks the store
+  what it sells as soon as it connects - on its own, not when someone opens the paywall - and the
+  gates stay open until a real price has been seen. That answer latches and is stored, or the first
+  launch on a plane would hand the app out for free.
+
+  **A purchase now answers.** The result of buying or restoring used to be dropped on the floor -
+  the call was launched and its answer discarded - so a declined card, an unreachable store and an
+  account that owns nothing were all the same event from the user's side: nothing happens, and the
+  only move left is to tap buy again. Each now says which of the three it was, and a failed purchase
+  says outright that nothing was charged, because the alternative is someone paying twice to find
+  out. Cancelling still says nothing: closing Play's sheet is a decision, not an error.
+
+  "Nothing to restore" is a separate outcome from "the store cannot be reached", which is the
+  distinction a naive mapping loses - and losing it sends somebody to restart their router over an
+  account that simply never bought anything.
+
+  Two more failures found by reading the provider against Play's actual behaviour rather than
+  against the happy path:
+
+  - **A failed purchase query no longer reads as "you own nothing".** Play fails those for ordinary
+    reasons - its service restarting mid-call, a network that dropped between connecting and
+    asking - and the empty list that came back would have been handed to the repository as a
+    cancellation and cleared a paid license. A query that could not be answered now leaves the last
+    known one standing, which is the same rule the cached license already followed.
+  - **A subscription with an introductory offer shows what it will cost, not what the first month
+    costs.** Play delivers a base plan with a free trial or a discounted first period as a list of
+    pricing phases ending in the one that repeats; reading the first would have printed "0,00 ₴" as
+    the price of a monthly subscription - true today, and a lie about what is being agreed to.
+  - **The store no longer goes deaf after Play restarts its service.** Play does that on its own
+    schedule, which is the entire reason automatic reconnection is enabled - but the connection
+    state was only ever published from the first connection, so it stayed `DISCONNECTED` for the
+    rest of the process. Since only a connected store is allowed to speak about what is owned, a
+    cancellation would never have been noticed and a purchase made on another device never picked
+    up until the app was restarted.
+
+  **A feature that was being sold and gated nowhere is no longer sold.** `RAW_TS_REMUX` — relaying a
+  stream a receiver cannot play directly — was listed on the premium screen, with a name and a lock
+  badge, while every free user had it. Gating it would have been the wrong fix: Chromecast is free,
+  this is the fallback that makes free casting work on awkward streams, and it engages by itself
+  deep in the cast path with no user action to put a paywall in front of. Selling it would have
+  produced no paywall at all — only a free user whose casting silently failed on some channels.
+  It is now free, and `scripts/check-sold-features-are-gated.sh` fails the build if anything else
+  is ever advertised without a gate.
+
+  **The trial can no longer be taken twice.** "Storage is empty" was the whole test for "this is a
+  first launch", and Settings → Apps → Storage → Clear data produces exactly that on a stock,
+  unrooted phone: three taps bought another fortnight, indefinitely. The install's own age now has
+  to agree, read from `firstInstallTime`, which clearing data does not touch. A genuine first launch
+  is unaffected, and an install whose age cannot be read is still given the benefit of the doubt —
+  refusing would deny the whole app to someone whose phone has the wrong date.
+
+  **Nor extended by winding the clock back.** Every expiry decision is `now < expiresAt` against the
+  system clock, and the system clock is a setting: turning off automatic date and time and moving
+  the date back a month made a lapsed trial current again. The newest time the app has seen is now
+  remembered, and a clock behind it is ignored. Moving the clock *forward* is deliberately not
+  resisted — that only ends an entitlement early, which costs the user rather than the app, and is
+  what crossing a date line does.
+
+  `docs/RELEASING.md` has what must exist in Play Console first, and the order.
 - **Help now covers DLNA and the errors a playlist can produce.** Four new entries in all four
   languages: casting to a TV without Chromecast, what each playlist load failure means, why a
   channel says it is not available, and why a channel plays on the phone but not on the TV. Each
@@ -107,6 +239,49 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   route-health states and chrome stays neutral. Selectable in Settings alongside the other two.
 
 ### Removed
+
+- **The illustrated icons on group cards**, replaced by the app's own mark engraved into the card.
+  Eleven curated per-category pictures - one for films, sports, kids and so on - sat above each
+  group's name. The name was already there, in words, directly beneath, so the picture repeated it
+  in a form carrying less information than the text did; and on a provider whose categories map
+  cleanly onto the known keys, a wall of them is what the Channels tab opened with.
+
+  In their place every card carries the same neutral mark, recessed rather than raised
+  (`Modifier.sunkenSurface`, and the glyph drawn twice - an offset copy in `edgeHighlightNeutral`
+  for the lit lower lip of the groove, the copy over it in `void` for the groove). Making no claim
+  about the group is the point: it reads as the card's material rather than as a statement, and a
+  mark that recedes cannot compete with the group's name for attention. A `4K`/`HD` badge still
+  takes the plate when the name states a quality, matched on the label rather than the category
+  since quality is not a category - a provider's "Sport FHD" is a sports group that happens to be
+  high definition, and the old code never let it say so because the category matched first.
+
+  This is the second illustration scheme removed from these cards and the first one's reasoning
+  applies to it too: a *picture* on a group card claims to say something about the group. The
+  collage of cached channel logos could not (it drew the icon cache, not the group); the curated set
+  could, but only what the title said better. **The eleven PNGs go with it: release APK 24.4MB to
+  23.7MB, bundle 19.6MB to 18.8MB** - the replacement is a vector already in the binary.
+
+- **The three-card first-launch walkthrough.** The guided tour explains the same things by pointing
+  at the buttons that do them, and back to back the two were four screens of reading before the
+  first useful tap. First launch is now language, terms, and the app - with the tour offering itself
+  over it.
+
+  The old `seen_onboarding` flag is deliberately *not* migrated into the tour's completion flag:
+  someone who saw those three cards has not seen the tour, and offering it to them once is the
+  point.
+
+- **The premium section, until there is a store behind it.** `FakeBillingProvider` reports,
+  truthfully, that this build has nothing for sale - so the section showed no prices, and its
+  upgrade button led nowhere. Shipping a payment screen that cannot take a payment is worse than
+  shipping none, on the one screen asking to be trusted with money.
+
+  `FeaturePolicy`, `FeatureManager`, `Entitlements` and the license storage all stay: they are
+  correct, tested, and cost nothing dormant. The gates that call them are wired but open, because a
+  build with nothing for sale is not allowed to withhold anything - so hiding the section takes
+  nothing away from anyone. One `const val` (`PremiumAvailability.STORE_IS_LIVE`) turns it back on,
+  and R8 strips the unreachable screen from a release build meanwhile - verified by reading
+  `classes.dex`, where the product ids are simply absent. The debug developer license menu is
+  untouched.
 
 - **Group cards no longer show a collage of channel logos from the playlist.** The collage was a
   picture of the *icon cache* rather than of the group, so the same group looked different on two
@@ -194,6 +369,27 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Changed - build
 
+- **Release builds are signed with v3 as well as v2.** v3 is what makes signing-key rotation
+  possible on Android 9+, and without it the key created for the first release would have been the
+  only key this app could ever be updated with, permanently. Adding it later works, but only from
+  that release forward — so the one moment it is free is before anything has shipped.
+
+- **The universal APK now outranks the per-ABI ones, so an install can always move to it.** Each
+  per-ABI APK takes the base `versionCode` times ten plus a digit; the universal APK used to keep
+  the plain base code, which put it *below* all three. An install can never move to a lower
+  `versionCode` — Android refuses, and tells the user only "App not installed" — so anyone who took
+  the arm64 APK of 0.9.0 (code 92) could not have installed the universal APK of 0.10.0 (code 10),
+  or of any release until the version itself passed 9.3. Nor could Play have updated them, since a
+  bundle carries no ABI filter and would have landed on the same plain base code.
+
+  Universal is the build that runs everywhere, so it is the one every other install has to be able
+  to move *to*. It now takes the highest offset. The direction this gives up — universal to per-ABI
+  — costs nothing, because there is no device the universal APK fails to serve.
+
+  `scripts/check-version-code-ordering.sh` reads the codes back out of `output-metadata.json` after
+  `assembleRelease` and fails CI if the ordering inverts again. A comment could not have caught
+  this one, because nothing about the build was failing.
+
 - **`bundleRelease` could not build at all**, so the one artifact Google Play accepts did not exist.
   AGP refuses to shrink resources for an app bundle while per-ABI APK splits are configured and
   fails the build outright: *"Multiple shrunk-resources files found ... Please disable building
@@ -269,6 +465,30 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
 
 ### Fixed - playback
 
+- **Playback comes back the moment the network does, instead of up to ten seconds later.** An
+  outage put the player into a slow retry loop that woke on a timer, so a channel could stay black
+  for ten seconds after Wi-Fi was already working — which reads as the app being broken rather than
+  the network having been. It now waits on whichever comes first, the network announcing itself or
+  the timer. The timer stays as the backstop for outages that end without an event Android reports:
+  a router that came back on the same network, a captive portal finally letting traffic through.
+
+- **Pressing Home left the channel playing from a stopped app, with nothing to stop it with.** This
+  app deliberately has no background playback — no `MediaSessionService`, no foreground service
+  behind the local player, because a live-TV stream is not meant to outlive the screen showing it.
+  But nothing ever paused it either. Leaving the player any way other than picture-in-picture —
+  Home, Recent Apps, an app switch, the screen locking, and on anything below Android 12 the swipe
+  home that would otherwise enter PiP — left an IPTV stream running: several megabits a minute, a
+  partial wake lock and a Wi-Fi lock held by `WAKE_MODE_NETWORK`, audio out of the speaker, and no
+  notification anywhere to stop it. Reopening the app was the only way out. The same bug also reads
+  as "playback randomly stops in the background", because a cached process is one the system may
+  kill at any moment.
+
+  Playback now stops when the app stops being visible and starts again when it comes back — but
+  only if this is what stopped it, so a channel the user paused stays paused, and locking the screen
+  for a moment is invisible. Picture-in-picture and casting are both left alone: the PiP window is
+  on screen and being watched, and a cast is owned by the receiver, with `CastProxyService` keeping
+  it alive precisely so that putting the phone away does not interrupt the TV.
+
 - **Losing the network made the player walk the playlist.** Four failed attempts, mark the channel
   dead, skip to the next, repeat - roughly one channel every three seconds, each with its own
   decoder and audio-focus request. Measured on a Mi A2 during a 70-second Wi-Fi outage: about
@@ -288,6 +508,56 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   switches from four to **zero**. `DeadChannelPolicyTest` covers the decision.
 
 ### Fixed - casting
+
+- **The same TV could appear two or three times in the DLNA device sheet.** Discovery asks three
+  search targets, twice each, and deduplicated the replies by `LOCATION` — the URL of the
+  description document. One device is free to answer each query with a different one (`/desc.xml`
+  here, `/description.xml` there, a host name in one and a literal address in the next), and every
+  one of them fetches the same description and yields the same renderer. Entries are now collapsed
+  by the control URL the app actually sends SOAP to. Not by name: two rows sharing a name can
+  genuinely be two renderers — a receiver with two zones, two identical speakers — and hiding one
+  would be the worse failure.
+
+- **A dismissed device sheet went on searching for four seconds, holding a thread nobody was
+  waiting for.** Cancelling a coroutine does not interrupt a thread parked in
+  `DatagramSocket.receive`, so every closed sheet kept an IO thread, a UDP socket and a multicast
+  lock until its window ran out. `Dispatchers.IO` runs 64 threads; opening and closing the sheet
+  repeatedly could take all of them, and what starves is everything else — the playlist load, the
+  EPG parse, the icon fetches, the cast proxy. The receive loop now polls in short slices and stops
+  when the search is abandoned, and the send spacing yields instead of sleeping.
+
+- **A renderer's control responses are no longer read into memory unbounded.** A `GetVolume` result
+  and a SOAP fault are small fixed documents, but they arrive from a device on the LAN that nobody
+  here wrote, and `ResponseBody.string()` reads to the end of the stream. These were the last two
+  unbounded network reads in the app; everything else has had a cap for a while.
+
+- **A DLNA cast survived losing the network it was being served over — on screen only.** A DLNA cast
+  is not a link to a service, it is an address: the TV was handed `http://<this phone>:<port>/…` and
+  fetches from it directly. Wi-Fi handing over to mobile data, a router restart giving out a new
+  lease, joining another network — each of them leaves the TV holding a URL that points at nothing.
+  Unlike Chromecast, DLNA has no channel back to report that, so the only way out of "connected" was
+  the user pressing Stop. Until then the app went on offering a Stop button and a volume slider for
+  a TV that had been staring at a dead stream for however long.
+
+  A session now watches the address it is served from and ends when that address goes. Ending is the
+  honest outcome and the only available one: re-pointing the renderer needs it to still be
+  reachable, which on mobile data it is not.
+
+- **Reopening the app after it was killed while casting left it convinced nothing was casting.** A
+  cast session lives in Play Services, not in this app, and outlives the app being killed in the
+  background — but `SessionManager` reports *transitions*, and a listener registered after a session
+  is already up hears nothing until that session ends. So the rebuilt app believed it was not
+  casting while a receiver was still connected: the restored channel started playing out of the
+  phone's own speaker, because the local player is only held back while `isCasting`, and the Cast
+  button — which reads the framework directly — said the opposite of the rest of the screen.
+
+  The session is now adopted at startup if one is already connected. The same gap did not need a
+  process death to reach: resolving the Cast framework is deliberately off the main thread, and the
+  Cast button can start a session in that window, before the listener exists.
+
+  Registering the receiver-status callback now unregisters first. It runs for a session starting,
+  for a session resuming — which can happen more than once for one session — and now for adoption;
+  `RemoteMediaClient` keeps a list rather than a set, so every status update was being handled twice.
 
 - **Disconnecting one remote target while the other was still playing started the phone playing too.**
   Chromecast and a DLNA renderer are connected and dropped independently, and both resume paths in
@@ -434,6 +704,61 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   the actionable response, choosing a simplified source, already is.
 
 ### Fixed - storage
+
+- **A playlist imported from a file stopped working after the app was closed, and taking it out of
+  the switcher crashed.** Picking a file grants access for as long as the task lives; the saved
+  source outlives the task by design, since its URI goes into the sources list and is reloaded on a
+  later launch. Nothing ever asked to keep that access, so the reload could only fail — and it
+  failed with `SecurityException`, which is not an `IOException` and so left the loader uncaught,
+  inside a coroutine with no handler above it. That is a crash, not an error message.
+
+  Access is now made persistent when the file is picked, and the loader catches everything. The
+  second half matters more than the first: what sits on the other side of `ContentResolver` is
+  somebody else's app — Google Drive, Dropbox, an OEM file manager — and it is under no obligation
+  to fail in a way this one anticipated. Naming the exception types known about at the time is how
+  the crash shipped in the first place.
+
+- **The Settings cache screen reported 0 B for playlists and its Clear button deleted nothing.** It
+  named `playlist_snapshot.bin`, the single file from before multi-playlist support. Every snapshot
+  written since is `playlist_snapshot_<source>.bin`, one per saved playlist — so on every install
+  created since that change, the row read as empty while several megabytes sat beside it,
+  unreachable from the only screen that offers to remove them. `AtomicFile`'s `.bak` copies were
+  missing from the total for the same reason, which could hide half of it again.
+
+- **An older build can no longer wipe the playlist list of a newer one.** `PlaylistSourceCodec`
+  reads a format it does not know as an empty list, which is right for a corrupt file and wrong for
+  a newer one: after a release rollback, the first playlist added would have overwritten every entry
+  the older build could not read, and re-upgrading would have found them gone rather than waiting.
+  The source list is the one file in the app whose loss is permanent — a cache is re-fetched, but
+  there is nowhere else to get someone's playlists from. Writing is now refused when the file on
+  disk is from a newer format. `FORMAT_VERSION` is still 1, so nothing reaches this yet; the moment
+  it can is the moment the version is bumped, which is exactly when nobody is thinking about the
+  build being rolled back to.
+
+- **Upgrading off the single-playlist format could lose the playlist if the app died mid-migration.**
+  The migration copied the old snapshot to its new per-source file and then deleted the old file
+  itself — before the caller had written the source list that names the copy. A process death
+  between the two left the sources list empty and the old file gone, so the next launch found
+  nothing to migrate and the playlist was simply absent, while its bytes sat in a file nothing
+  referenced.
+
+  The window is small and the timing is the worst possible: it is the first launch after an update,
+  which is when the app is doing the most work and Android is most willing to kill it. Retiring the
+  old file is now a separate step the caller takes *after* the commit lands, so an interrupted
+  migration is just a migration that runs again. Five tests cover it, two of which fail if the
+  delete moves back.
+
+- **Cancelling a cache read or write was reported as the cache failing.** `EpgRepository`
+  (`restoreSnapshot`, `persist`) and `PlaylistRepository.persistIfLoaded` guard their disk work with
+  `catch (Exception)` so a corrupt snapshot falls back to a fresh download instead of taking startup
+  down. `CancellationException` is an `Exception`, and the work being guarded suspends - restoring a
+  v1 EPG snapshot re-parses the document, which took 53 seconds on a real device - so anything that
+  ended the scope during that window arrived at the caller as an ordinary "there was no snapshot".
+  The coroutine then carried on inside a cancelled scope, and the log blamed a healthy snapshot for
+  a failure that never happened. Cancellation is now rethrown ahead of the generic catch, which is
+  the rule `DlnaSessionRepository.discoverDevices` already stated for the same reason. The
+  regression test cancels a restore only once `XmlTvParser` is genuinely on a thread's stack, so it
+  tests that window rather than whatever a timer happened to hit.
 
 - **Half a gigabyte of orphaned EPG downloads.** Every path through `EpgDownloader`/`EpgRepository`
   deletes its own temp file, but none of that runs when the *process* is killed mid-download or

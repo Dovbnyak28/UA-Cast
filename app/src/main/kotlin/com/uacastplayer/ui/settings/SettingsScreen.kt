@@ -73,6 +73,8 @@ import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.guidedtour.GuidedTourSectionState
+import com.uacastplayer.premium.PremiumAvailability
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.premium.PremiumContent
 import com.uacastplayer.update.UpdateCheckOutcome
@@ -81,6 +83,9 @@ import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.components.SetPinDialog
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.raisedSurface
+import com.uacastplayer.premium.Feature
+import com.uacastplayer.ui.premium.LocalFeatureGate
+import com.uacastplayer.ui.premium.PremiumBadge
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.BodyRegular
@@ -138,12 +143,16 @@ fun SettingsScreen(
     remuxEffectiveness: RemuxEffectivenessCounts,
     updateSection: UpdateSectionState,
     premiumSection: PremiumSectionState,
+    guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // One lookup for the whole screen: four of its sections offer something that is sold.
+        val gate = LocalFeatureGate.current
+
         if (backupImportSummary != null) {
             BackupImportSummaryBanner(summary = backupImportSummary, onDismiss = onDismissBackupImportSummary)
         }
@@ -178,7 +187,9 @@ fun SettingsScreen(
                 EpgTruncatedRow()
             }
             if (suggestedEpgUrl != null) {
-                EpgSuggestionRow(onUseSuggestedEpgUrl)
+                // The five built-in guides stay free; what is sold is following the URL the
+                // *playlist* advertised, which is the only source here that is not on the list.
+                EpgSuggestionRow(gate.guard(Feature.CUSTOM_EPG_SOURCE, onUseSuggestedEpgUrl))
             }
             BatteryOptimizationRow(onOpenBatteryOptimizationHint)
         }
@@ -210,10 +221,18 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            // The *first* playlist is never gated - an IPTV player with no playlist is not a
+            // reduced app, it is a blank one, and nobody buys a blank one. What is sold is keeping
+            // more than one, so the gate only applies once there is something to add to.
+            val hasAPlaylistAlready = playlistState.hasChannels
             PlaylistActionRow(
                 label = stringResource(R.string.home_add_playlist_button),
                 icon = AppIcons.Plus,
-                onClick = onOpenAddPlaylist,
+                onClick = if (hasAPlaylistAlready) {
+                    gate.guard(Feature.MULTI_PLAYLIST, onOpenAddPlaylist)
+                } else {
+                    onOpenAddPlaylist
+                },
                 modifier = Modifier.padding(top = 12.dp),
             )
             if (hiddenGroupKeys.isNotEmpty()) {
@@ -291,7 +310,7 @@ fun SettingsScreen(
             IconSourcesSection(
                 customSources = settingsState.customIconSources,
                 addError = settingsState.iconSourceAddError,
-                onAddSource = onAddIconSource,
+                onAddSource = { url -> gate.guard(Feature.CUSTOM_ICON_SOURCES) { onAddIconSource(url) }() },
                 onRemoveSource = onRemoveIconSource,
                 onDismissError = onDismissIconSourceError,
             )
@@ -304,7 +323,13 @@ fun SettingsScreen(
             CacheRow(R.string.cache_coil_label, settingsState.cacheSizes.coilCacheBytes) { onClearCache(CacheKind.COIL) }
         }
 
-        SettingsSection(title = stringResource(R.string.settings_section_data), icon = AppIcons.Upload) {
+        SettingsSection(
+            title = stringResource(R.string.settings_section_data),
+            icon = AppIcons.Upload,
+            // The badge is on the section, not on each button: export and import are one capability
+            // bought once, and two locks on two halves of it would read as two purchases.
+            locked = gate.isLocked(Feature.BACKUP),
+        ) {
             Text(
                 text = stringResource(R.string.settings_data_hint),
                 style = Caption,
@@ -314,39 +339,46 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // Guarded rather than disabled. A greyed-out button says "this is broken"; a button
+                // that answers with what it costs says what is actually true, and is the only way
+                // the user finds out the feature exists at all.
                 SecondaryButton(
                     text = stringResource(R.string.settings_data_export),
-                    onClick = onExportBackup,
+                    onClick = gate.guard(Feature.BACKUP, onExportBackup),
                     modifier = Modifier.weight(1f),
                 )
                 SecondaryButton(
                     text = stringResource(R.string.settings_data_import),
-                    onClick = onImportBackup,
+                    onClick = gate.guard(Feature.BACKUP, onImportBackup),
                     modifier = Modifier.weight(1f),
                 )
             }
         }
 
-        SettingsSection(title = stringResource(R.string.settings_section_premium), icon = AppIcons.Lock) {
-            PremiumContent(section = premiumSection, nowMillis = System.currentTimeMillis())
-
-            // Debug builds only: DeveloperMode.states is empty in a release build because the class
-            // that fills it lives in src/debug and is not compiled into that variant at all.
-            if (premiumSection.developerStates.isNotEmpty()) {
-                LabeledRow(stringResource(R.string.settings_developer_license), AppIcons.Lock) {
-                    for (state in premiumSection.developerStates) {
-                        SettingsChip(
-                            label = state,
-                            isSelected = false,
-                            onClick = { premiumSection.onDeveloperStateSelected(state) },
-                        )
-                    }
-                }
-            }
-        }
+        PremiumSettingsSection(premiumSection)
 
         SettingsSection(title = stringResource(R.string.settings_section_updates), icon = AppIcons.Refresh) {
             UpdateCheckRow(updateSection)
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_section_tutorial), icon = AppIcons.HelpCircle) {
+            Text(
+                text = stringResource(
+                    if (guidedTourSection.hasSeenTour) {
+                        R.string.settings_tutorial_hint_seen
+                    } else {
+                        R.string.settings_tutorial_hint_unseen
+                    },
+                ),
+                style = BodyRegular,
+                color = UaTheme.palette.labelSecondary,
+            )
+            LinkRow(
+                label = stringResource(R.string.settings_tutorial_label),
+                buttonLabel = stringResource(R.string.settings_tutorial_button),
+                onClick = guidedTourSection.onStartTour,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
 
         SettingsSection(title = stringResource(R.string.settings_help), icon = AppIcons.HelpCircle) {
@@ -380,6 +412,40 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
             RoutingEffectivenessBlock(remuxEffectiveness, modifier = Modifier.padding(top = 16.dp))
+        }
+    }
+}
+
+/**
+ * The premium section, hidden until there is a store behind it - see [PremiumAvailability].
+ *
+ * `FakeBillingProvider` reports, truthfully, that this build has nothing for sale, so every price
+ * is absent and the upgrade this section offers leads nowhere. The debug developer menu keeps the
+ * section reachable in a debug build, which is where the license states are exercised; a release
+ * build has neither branch, and R8 removes both.
+ *
+ * Its own composable rather than an `if` inline, so [SettingsScreen] stays under detekt's
+ * complexity ceiling - that screen is a long list of sections and every conditional one costs it.
+ */
+@Composable
+private fun PremiumSettingsSection(premiumSection: PremiumSectionState) {
+    val hasDeveloperMenu = premiumSection.developerStates.isNotEmpty()
+    if (!PremiumAvailability.STORE_IS_LIVE && !hasDeveloperMenu) return
+
+    SettingsSection(title = stringResource(R.string.settings_section_premium), icon = AppIcons.Lock) {
+        if (PremiumAvailability.STORE_IS_LIVE) {
+            PremiumContent(section = premiumSection, nowMillis = System.currentTimeMillis())
+        }
+        if (hasDeveloperMenu) {
+            LabeledRow(stringResource(R.string.settings_developer_license), AppIcons.Lock) {
+                for (state in premiumSection.developerStates) {
+                    SettingsChip(
+                        label = state,
+                        isSelected = false,
+                        onClick = { premiumSection.onDeveloperStateSelected(state) },
+                    )
+                }
+            }
         }
     }
 }
@@ -573,6 +639,9 @@ private fun UpdateCheckRow(section: UpdateSectionState) {
 private fun SettingsSection(
     title: String,
     icon: ImageVector,
+    /** Puts a [PremiumBadge] beside the title. Defaults to false so a section that sells nothing
+     * needs to say nothing. */
+    locked: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -592,6 +661,7 @@ private fun SettingsSection(
                 color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(start = 10.dp).weight(1f),
             )
+            if (locked) PremiumBadge()
         }
         Column(modifier = Modifier.padding(top = 16.dp)) { content() }
     }
@@ -682,10 +752,14 @@ private fun ParentalControlSection(
     val pinScope = rememberCoroutineScope()
     if (!parentalControlPinSet) {
         var showSetPin by rememberSaveable { mutableStateOf(false) }
+        // Only setting one up is gated. Everything below this branch - changing the PIN, unlocking
+        // a channel, turning the whole thing off - runs for a user who already has one, whatever
+        // their license says afterwards. A paywall that appears between a parent and a lock they
+        // already configured is not a paywall, it is a hostage.
         PlaylistActionRow(
             label = stringResource(R.string.parental_control_set_up),
             icon = AppIcons.Lock,
-            onClick = { showSetPin = true },
+            onClick = LocalFeatureGate.current.guard(Feature.PARENTAL_CONTROL) { showSetPin = true },
         )
         if (showSetPin) {
             SetPinDialog(

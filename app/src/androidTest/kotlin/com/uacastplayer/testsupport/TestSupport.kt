@@ -30,19 +30,21 @@ fun appViewModelOf(activity: MainActivity): AppViewModel = ViewModelProvider(act
  * lifecycle tests are actually about. Re-selecting the current language (rather than a different
  * one) avoids MainActivity's language-change `recreate()`.
  *
- * All three of MainActivity's gates have to be cleared here, in the order it checks them: language
- * picker, then [com.uacastplayer.ui.TermsScreen], then
- * [com.uacastplayer.ui.onboarding.OnboardingScreen]. Missing the last one does not fail loudly - the
- * app simply sits on the onboarding pager, and every later `onNodeWithText` in the test fails with
- * "could not find any node", which reads like a broken assertion rather than a gate that was never
- * passed. That is exactly what happened when the onboarding step was introduced after this helper
- * was written: it kept its name, stopped doing what the name says, and took five instrumented tests
- * down with it unnoticed, because these do not run in CI. */
+ * Both of MainActivity's gates are cleared here, in the order it checks them: language picker, then
+ * [com.uacastplayer.ui.legal.TermsScreen]. The guided tour is not a gate - it draws *over* the app
+ * rather than in front of it - but it is dismissed anyway, because an overlay that consumes every
+ * touch would make every later `performClick` in these tests hit a scrim.
+ *
+ * The name is kept from when there was a third gate (a three-card onboarding pager, since removed).
+ * Missing that one did not fail loudly - the app simply sat on the pager and every later
+ * `onNodeWithText` failed with "could not find any node", which reads like a broken assertion
+ * rather than a gate that was never passed. It took five instrumented tests down unnoticed, because
+ * these do not run against this helper in CI. */
 fun skipOnboarding(activity: MainActivity) {
     val viewModel = appViewModelOf(activity)
     viewModel.selectLanguage(viewModel.uiState.value.language)
     viewModel.acceptTerms()
-    viewModel.completeOnboarding()
+    viewModel.guidedTourSkip()
 }
 
 /**

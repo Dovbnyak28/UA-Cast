@@ -15,6 +15,7 @@ import com.uacastplayer.log.AppLog
 import java.io.InputStream
 import java.io.PushbackInputStream
 import java.util.zip.GZIPInputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -79,6 +80,12 @@ class EpgRepository(context: Context) {
                 is DecodedEpgSnapshot.Parsed -> EpgOutcome.Loaded(snapshot.data)
                 is DecodedEpgSnapshot.Document -> EpgOutcome.Loaded(upgradeFromDocument(snapshot))
             }
+        } catch (e: CancellationException) {
+            // Not a failure and not this catch's business: the upgrade below suspends for as long
+            // as a real feed takes to parse, so the scope ending mid-restore used to arrive here
+            // and be reported as an absent snapshot, leaving the caller running inside a cancelled
+            // scope. Same rule as DlnaSessionRepository.discoverDevices.
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Failed to read cached EPG snapshot: ${e.javaClass.simpleName}" }
             null
@@ -110,6 +117,8 @@ class EpgRepository(context: Context) {
     private suspend fun persist(sourceFingerprint: String, data: EpgData) {
         try {
             snapshotStore.save(sourceFingerprint, System.currentTimeMillis(), data)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Failed to persist EPG snapshot: ${e.javaClass.simpleName}" }
         }

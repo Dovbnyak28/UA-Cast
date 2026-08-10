@@ -1,8 +1,15 @@
 package com.uacastplayer.ui.premium
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
 import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseTier
@@ -11,6 +18,7 @@ import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.experimental.categories.Category
@@ -86,6 +94,36 @@ class UpgradeBannerTest {
     fun lifetimeIsNeverNagged() {
         show(License(LicenseTier.LIFETIME, expiresAtMillis = null, source = "lifetime"))
         composeRule.onNodeWithTag(UiTestTags.UPGRADE_BANNER).assertDoesNotExist()
+    }
+
+    /**
+     * The banner is placed inline on Home, above the dashboard, with spacing of its own - so an
+     * invisible banner that still measured as a gap would put dead space at the top of the first
+     * screen of the app for everyone who is never shown it, which is almost everyone.
+     *
+     * Asserted by measuring rather than reasoned about: the host applies its padding to the banner's
+     * own modifier, and whether `AnimatedVisibility` emits a node while hidden is an implementation
+     * detail of Compose, not a promise.
+     */
+    @Test
+    fun anInvisibleBannerTakesNoSpaceAtAll() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Column(modifier = Modifier.testTag("host")) {
+                    Box(modifier = Modifier.size(40.dp).testTag("spacer"))
+                    UpgradeBanner(
+                        section = sectionFor(License.FREE),
+                        nowMillis = now,
+                        onSeePremium = {},
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+        }
+
+        val host = composeRule.onNodeWithTag("host").fetchSemanticsNode().size.height
+        val spacer = composeRule.onNodeWithTag("spacer").fetchSemanticsNode().size.height
+        assertEquals("the 12dp of host padding must not survive the banner being hidden", spacer, host)
     }
 
     /** Rounded up: "0 days left" on a trial that still has hours in it is a lie in the direction

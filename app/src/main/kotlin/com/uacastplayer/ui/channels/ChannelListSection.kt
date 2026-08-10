@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.guidedtour.GuidedTourKeys
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.ListDensity
 import com.uacastplayer.epg.CurrentNextProgrammes
@@ -142,7 +144,13 @@ internal fun SingleGroupChannelList(
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
             colors = uaTextFieldColors(),
-            modifier = Modifier.fillMaxWidth().padding(top = GapM),
+            // Same tour key as the groups screen's own search field. The two are never composed
+            // together - this one exists only inside an opened group - so whichever the user is
+            // looking at is the one the tour highlights.
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = GapM)
+                .guidedTourTarget(GuidedTourKeys.CHANNEL_SEARCH),
         )
 
         if (filteredChannels.isEmpty()) {

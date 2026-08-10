@@ -1,6 +1,7 @@
 package com.uacastplayer.premium
 
 import com.uacastplayer.premium.billing.BillingProduct
+import com.uacastplayer.premium.billing.PurchaseResult
 
 /**
  * Everything the premium UI needs, bundled the way [com.uacastplayer.update.UpdateSectionState] is:
@@ -11,6 +12,14 @@ import com.uacastplayer.premium.billing.BillingProduct
  * @param products what the store offers, priced by the store. Empty when there is no store to ask -
  *   which is the truthful state until this app is published, and the reason the screen has a line
  *   saying so rather than an empty list and a buy button that does nothing.
+ * @param lastOutcome how the most recent purchase or restore ended, or null when nothing has been
+ *   attempted since the last one was read. Money is the one place in this app where silence is not
+ *   an acceptable answer: a card that was declined, a store that could not be reached, and an
+ *   account that simply owns nothing all look identical to a user who is told nothing, and the only
+ *   thing left to try is tapping the button again.
+ *   It is cleared when the next attempt starts rather than on a timer or on being drawn: a message
+ *   that vanishes while being read is the same as no message, and a countdown would have to be
+ *   longer than anyone waits before tapping again.
  * @param developerStates license states the debug build can be forced into; empty in a release
  *   build, where the code that would fill them is not compiled (see [DeveloperMode]).
  */
@@ -19,6 +28,7 @@ data class PremiumSectionState(
     val products: List<BillingProduct>,
     val onPurchase: (BillingProduct) -> Unit,
     val onRestore: () -> Unit,
+    val lastOutcome: PurchaseResult? = null,
     val developerStates: List<String> = emptyList(),
     val onDeveloperStateSelected: (String) -> Unit = {},
 ) {

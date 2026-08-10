@@ -36,6 +36,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.guidedtour.GuidedTourKeys
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.epg.ProgrammeProgress
@@ -50,6 +52,7 @@ import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.IconHeader
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
+import com.uacastplayer.ui.premium.LocalPremiumNotice
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
@@ -142,6 +145,11 @@ fun HomeScreen(
             modifier = Modifier.padding(top = 2.dp),
         )
 
+        // Draws nothing at all unless a trial is in its last days or has just ended - see
+        // UpgradeBanner, which owns that rule. Placed above the dashboard because it is news about
+        // the app the user is looking at, and below the title because it is not what Home is for.
+        LocalPremiumNotice.current(Modifier.padding(top = 12.dp))
+
         if (playlistState.hasChannels) {
             PlaylistDashboardCard(
                 playlistState = playlistState,
@@ -196,7 +204,12 @@ fun HomeScreen(
                     title = stringResource(R.string.home_empty_message),
                     subtitle = stringResource(R.string.home_empty_subtitle),
                 )
-                Button(onClick = onOpenAddPlaylist, modifier = Modifier.padding(top = GapM)) {
+                Button(
+                    onClick = onOpenAddPlaylist,
+                    modifier = Modifier
+                        .padding(top = GapM)
+                        .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD),
+                ) {
                     Text(stringResource(R.string.home_add_playlist_button))
                 }
             }
@@ -248,6 +261,11 @@ private fun PlaylistDashboardCard(
                 shadow = true,
             )
             .clickable(onClick = onClick)
+            // The tour's "add a playlist" target for a user who already has one: this card is what
+            // opens the source sheet, and adding another is what that sheet is for. The empty-state
+            // button below registers the same name - the two branches are mutually exclusive, so
+            // only one of them is ever live.
+            .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD)
             .padding(CardPadding),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

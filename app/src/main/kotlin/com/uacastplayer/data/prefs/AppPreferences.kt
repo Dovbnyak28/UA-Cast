@@ -6,6 +6,7 @@ import androidx.core.content.edit
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.i18n.LanguageResolver
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.guidedtour.GuidedTourStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.premium.License
@@ -18,7 +19,11 @@ import com.uacastplayer.update.UpdateCheckStorage
  * Values here are all tiny scalars; there is no need for the AtomicFile/versioned-snapshot
  * machinery used by the playlist/EPG/favorites caches.
  */
-class AppPreferences(context: Context) : ParentalControlPinStorage, UpdateCheckStorage, LicenseStorage {
+class AppPreferences(context: Context) :
+    ParentalControlPinStorage,
+    UpdateCheckStorage,
+    LicenseStorage,
+    GuidedTourStorage {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -126,12 +131,20 @@ class AppPreferences(context: Context) : ParentalControlPinStorage, UpdateCheckS
         get() = prefs.getBoolean(KEY_ACCEPTED_TERMS, false)
         set(value) = prefs.edit { putBoolean(KEY_ACCEPTED_TERMS, value) }
 
-    /** Gates the one-time [com.uacastplayer.ui.onboarding.OnboardingScreen], shown right after
-     * [hasAcceptedTerms] on first launch - set whether the user skips or completes it, either way
-     * it never shows again on its own. */
-    var hasSeenOnboarding: Boolean
-        get() = prefs.getBoolean(KEY_SEEN_ONBOARDING, false)
-        set(value) = prefs.edit { putBoolean(KEY_SEEN_ONBOARDING, value) }
+    /** Set when the guided tour is finished *or* skipped - see
+     * [com.uacastplayer.app.GuidedTourController]. Read together with [guidedTourVersion], which is
+     * what lets a later edition of the tour offer itself once to someone who already saw the old
+     * one. */
+    override var guidedTourCompleted: Boolean
+        get() = prefs.getBoolean(KEY_GUIDED_TOUR_COMPLETED, false)
+        set(value) = prefs.edit { putBoolean(KEY_GUIDED_TOUR_COMPLETED, value) }
+
+    /** 0 on a device that has never seen the tour, and on every device that predates the feature -
+     * both of which should be offered it, which is exactly what 0 means to
+     * [com.uacastplayer.guidedtour.GuidedTourAvailability]. */
+    override var guidedTourVersion: Int
+        get() = prefs.getInt(KEY_GUIDED_TOUR_VERSION, 0)
+        set(value) = prefs.edit { putInt(KEY_GUIDED_TOUR_VERSION, value) }
 
     /** Legacy single-playlist label, only still read once during
      * `PlaylistRepository.migrateLegacySnapshotIfNeeded` - display names now live per-source in
@@ -226,6 +239,17 @@ class AppPreferences(context: Context) : ParentalControlPinStorage, UpdateCheckS
             }
         }
 
+    /** Set once, the first time a store answers with a non-empty catalogue, and never cleared -
+     * see [LicenseStorage.storeHasEverOfferedProducts] for why it is remembered rather than asked. */
+    override var storeHasEverOfferedProducts: Boolean
+        get() = prefs.getBoolean(KEY_STORE_HAS_OFFERED, false)
+        set(value) = prefs.edit { putBoolean(KEY_STORE_HAS_OFFERED, value) }
+
+    /** See [LicenseStorage.clockHighWaterMark] - the newest time this app has ever seen. */
+    override var clockHighWaterMark: Long
+        get() = prefs.getLong(KEY_CLOCK_HIGH_WATER_MARK, 0L)
+        set(value) = prefs.edit { putLong(KEY_CLOCK_HIGH_WATER_MARK, value) }
+
     private companion object {
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
@@ -246,7 +270,11 @@ class AppPreferences(context: Context) : ParentalControlPinStorage, UpdateCheckS
         const val KEY_SEEN_BATTERY_HINT = "seen_battery_optimization_hint"
         const val KEY_SEEN_ICON_TIER_HINT = "seen_icon_tier_hint"
         const val KEY_ACCEPTED_TERMS = "accepted_terms"
-        const val KEY_SEEN_ONBOARDING = "seen_onboarding"
+        // "seen_onboarding" was the three-card walkthrough the guided tour replaced. Deliberately
+        // not migrated into guided_tour_completed: someone who saw those three cards has not seen
+        // the tour, and offering it to them once is the point of removing them.
+        const val KEY_GUIDED_TOUR_COMPLETED = "guided_tour_completed"
+        const val KEY_GUIDED_TOUR_VERSION = "guided_tour_version"
         const val KEY_PLAYLIST_DISPLAY_NAME = "playlist_display_name"
         const val KEY_ACTIVE_PLAYLIST_SOURCE_ID = "active_playlist_source_id"
         const val KEY_LAST_WATCHED_CHANNEL = "last_watched_channel_key"
@@ -258,5 +286,7 @@ class AppPreferences(context: Context) : ParentalControlPinStorage, UpdateCheckS
         const val KEY_LICENSE_TIER = "license_tier"
         const val KEY_LICENSE_EXPIRY = "license_expires_at"
         const val KEY_LICENSE_SOURCE = "license_source"
+        const val KEY_STORE_HAS_OFFERED = "store_has_offered_products"
+        const val KEY_CLOCK_HIGH_WATER_MARK = "clock_high_water_mark"
     }
 }

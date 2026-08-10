@@ -1,6 +1,10 @@
 package com.uacastplayer.dlna
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import com.uacastplayer.cast.CastProxyService
 import com.uacastplayer.cast.CastProxyTarget
 import com.uacastplayer.core.net.AppHttp
@@ -48,16 +52,21 @@ private const val PROXY_READ_TIMEOUT_SECONDS = 15L
 /**
  * App-wide singleton (same lifetime rationale as [com.uacastplayer.cast.CastSessionRepository]:
  * a cast connection must survive navigating away from and back to the player) for DLNA/UPnP
- * casting. Deliberately independent of the Chromecast repository - the two are mutually exclusive
- * cast targets in this MVP, so there is no shared state between them, only a shared [ProxyServer]
- * *mechanism* (each repository owns its own instance).
+ * casting. Deliberately independent of the Chromecast repository - there is no shared state between
+ * them, only a shared [ProxyServer] *mechanism* (each repository owns its own instance).
+ *
+ * Independent is not the same as exclusive. Both were measured connected at once, each feeding its
+ * own renderer through its own proxy, and neither disturbed the other. What is absent is
+ * coordination: see `player/LocalPlaybackPolicy.shouldResumeAfterDisconnect`, which has to know
+ * about both targets because disconnecting one used to resume the phone underneath the other.
  *
  * Reuses the app's local HLS proxy exactly the way Chromecast does
  * ([com.uacastplayer.cast.CastSessionRepository.startProxyAndLoad]): start it, register the
  * channel's playlist url, hand the resulting local url to the renderer instead of the origin url.
  * This is deliberate, not incidental - it sidesteps the same geo/TLS/header issues Chromecast has,
  * and keeps one proxy implementation instead of two. See `docs/DLNA.md` for what this MVP does
- * and does not do (no seek/position sync, no volume, no codec gating).
+ * and does not do (no seek/position sync, no codec gating). Volume is supported, through the
+ * renderer's separate RenderingControl service - see [setVolume].
  */
 class DlnaSessionRepository private constructor(context: Context) {
 
@@ -96,6 +105,9 @@ class DlnaSessionRepository private constructor(context: Context) {
     // Shares the connection pool and dispatcher with soapHttpClient (newBuilder does), so the
     // second client costs nothing beyond its own timeout settings.
     private val avTransportClient = AvTransportClient(soapHttpClient, setUriHttpClient)
+    // Shares soapHttpClient's connection pool and timeouts: volume is a small, fast action against
+    // the same host the transport actions already talk to.
+    private val renderingControlClient = RenderingControlClient(soapHttpClient)
     private val ssdpDiscovery = SsdpDiscovery(appContext, discoveryHttpClient)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -126,8 +138,59 @@ class DlnaSessionRepository private constructor(context: Context) {
      */
     private val connectGeneration = AtomicLong(0)
 
+    /** The [connectGeneration] idea applied to volume - see [setVolume] for why it is needed. */
+    private val volumeGeneration = AtomicLong(0)
+
     private val _state = MutableStateFlow(DlnaConnectionState())
     val state: StateFlow<DlnaConnectionState> = _state.asStateFlow()
+
+    /** The address baked into the URL the renderer is fetching from - see [DlnaNetworkChangePolicy]
+     * for why a session is only as durable as this. Written on connect, cleared on [stop]. */
+    @Volatile private var sessionHost: String? = null
+
+    /** Unregisters [watchForNetworkChange]'s callback; held only while a session is up. */
+    private var networkWatch: AutoCloseable? = null
+
+    /**
+     * Ends the session when this phone stops being reachable at the address the renderer is using.
+     *
+     * DLNA has no way to tell the app that its stream died - see [DlnaNetworkChangePolicy] - so
+     * without this the app kept claiming to cast to a TV that had been staring at a dead URL since
+     * the moment Wi-Fi handed over to mobile data. Ending it is the honest outcome and the only one
+     * available: re-pointing the renderer at the new address needs it to still be reachable, which
+     * on mobile data it is not, and on a new Wi-Fi it may not be either.
+     *
+     * Registered against ANY network rather than Wi-Fi alone, because the event worth catching is
+     * often the *loss* of Wi-Fi to a mobile connection that is perfectly healthy - a Wi-Fi-only
+     * request would simply stop reporting and never fire.
+     */
+    private fun watchForNetworkChange() {
+        networkWatch?.close()
+        val connectivityManager =
+            appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = checkSessionStillServable()
+            override fun onLost(network: Network) = checkSessionStillServable()
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
+                checkSessionStillServable()
+        }
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        runCatching { connectivityManager.registerNetworkCallback(request, callback) }
+            .onSuccess { networkWatch = AutoCloseable { connectivityManager.unregisterNetworkCallback(callback) } }
+            .onFailure { e -> AppLog.w(TAG) { "Cannot watch the network for this session: ${e.javaClass.simpleName}" } }
+    }
+
+    private fun checkSessionStillServable() {
+        if (_state.value.connectedDevice == null) return
+        val current = LocalNetworkAddress.currentIpv4Address(appContext)
+        if (DlnaNetworkChangePolicy.sessionSurvives(sessionHost, current)) return
+        AppLog.d(TAG) { "The address this session was served from is gone; ending it" }
+        // On the main thread deliberately: stop() touches _state and connectJob, and a
+        // NetworkCallback arrives on a binder thread.
+        scope.launch { stop() }
+    }
 
     /** A last-resort net under [SsdpDiscovery]'s own per-stage catches - discovery failing must
      * leave the sheet with an empty list, never propagate. Cancellation is NOT a failure and is
@@ -157,16 +220,28 @@ class DlnaSessionRepository private constructor(context: Context) {
             val connected = withContext(Dispatchers.IO) {
                 connectBlocking(device, streamUrl, title, isRepoint, generation)
             }
+            // Read after the session is up rather than at discovery: a renderer answers
+            // RenderingControl whether or not it is playing, but reading it here means the number
+            // shown is the one in force for this session, and one failed read costs the slider
+            // rather than the cast.
+            val volume = if (connected && device.renderingControlUrl != null) {
+                withContext(Dispatchers.IO) { renderingControlClient.getVolume(device.renderingControlUrl) }
+            } else {
+                null
+            }
             _state.value = when {
-                connected -> DlnaConnectionState(connectedDevice = device)
+                connected -> DlnaConnectionState(connectedDevice = device, volume = volume)
                 // A re-point that failed leaves the renderer where it was - still connected, still
                 // playing the previous channel. Dropping to disconnected here would be a worse lie
                 // than the stale channel name: the user would lose the Stop button for a cast that
                 // is demonstrably still running, and the proxy feeding it is deliberately still up
                 // (see connectBlocking).
-                isRepoint -> DlnaConnectionState(connectedDevice = device)
+                isRepoint -> DlnaConnectionState(connectedDevice = device, volume = _state.value.volume)
                 else -> DlnaConnectionState()
             }
+            // Started once there is something to watch over, and only then: a callback registered
+            // for a connect that failed would outlive it with no session to end.
+            if (_state.value.connectedDevice != null) watchForNetworkChange()
         }
     }
 
@@ -183,6 +258,41 @@ class DlnaSessionRepository private constructor(context: Context) {
     fun setActiveChannel(streamUrl: String, title: String) {
         val device = _state.value.connectedDevice ?: return
         startSession(device, streamUrl, title, isRepoint = true)
+    }
+
+    /**
+     * Sets the renderer's volume, in two phases: the requested value is published immediately, then
+     * replaced by what the renderer actually reports.
+     *
+     * Publishing straight away is what lets the slider be a plain function of this state with no
+     * local copy of its own. Without it the thumb had to either snap back to the old volume for the
+     * length of a LAN round trip, or hold a value of its own that a refused action would leave
+     * standing as a lie.
+     *
+     * The read-back is what makes the optimism safe. A renderer whose real scale is smaller than
+     * [VolumeRange.MAX] clamps or refuses a value above it, and the correction lands within the
+     * round trip - visibly, on a control the user is still looking at. A refused action reverts to
+     * the value that was in force before, because nothing changed on the TV. A set the renderer
+     * accepted but whose read-back failed keeps the requested value: it is the best evidence there
+     * is, and reverting would show a volume the TV demonstrably is not at.
+     */
+    fun setVolume(volume: Int) {
+        val url = _state.value.connectedDevice?.renderingControlUrl ?: return
+        val previous = _state.value.volume
+        val requested = VolumeRange.clamp(volume)
+        val generation = volumeGeneration.incrementAndGet()
+        _state.update { it.copy(volume = requested) }
+        scope.launch {
+            val accepted = withContext(Dispatchers.IO) { renderingControlClient.setVolume(url, requested) }
+            val reported = if (accepted) withContext(Dispatchers.IO) { renderingControlClient.getVolume(url) } else null
+            // Two guards on one write. Still connected: a stop() that landed while this was in
+            // flight must not resurrect a volume for a session that is over. Still current: dragging
+            // the slider twice in quick succession leaves two round trips racing, and the older
+            // one's answer describes a volume the user has already moved past.
+            if (_state.value.connectedDevice != null && generation == volumeGeneration.get()) {
+                _state.update { it.copy(volume = reported ?: if (accepted) requested else previous) }
+            }
+        }
     }
 
     private fun connectBlocking(
@@ -209,6 +319,7 @@ class DlnaSessionRepository private constructor(context: Context) {
         // be fetching the previous url - the contract ProxyServer.start's own doc spells out.
         val token = sessionToken ?: UUID.randomUUID().toString().also { sessionToken = it }
         proxyServer.ensureStarted(sessionToken = token, host = host)
+        sessionHost = host
         val localUrl = proxyServer.buildLocalUrl(proxyServer.registerPlaylist(streamUrl))
 
         // Always stop first, and ignore whether it worked. The AVTransport state table only
@@ -277,6 +388,9 @@ class DlnaSessionRepository private constructor(context: Context) {
         connectJob?.cancel()
         connectJob = null
         sessionToken = null
+        sessionHost = null
+        networkWatch?.close()
+        networkWatch = null
         proxyServer.stop()
         CastProxyService.stop(appContext)
         scope.launch {

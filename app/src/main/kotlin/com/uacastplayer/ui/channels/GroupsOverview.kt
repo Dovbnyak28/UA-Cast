@@ -1,10 +1,8 @@
 package com.uacastplayer.ui.channels
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,13 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.guidedtour.GuidedTourKeys
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.ChannelSearch
 import com.uacastplayer.playlist.ChannelSearchOutcome
@@ -68,6 +68,7 @@ import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.raisedSurface
+import com.uacastplayer.ui.theme.sunkenSurface
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -160,7 +161,10 @@ internal fun GroupsOverviewGrid(
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
             colors = uaTextFieldColors(),
-            modifier = Modifier.fillMaxWidth().padding(top = GapM),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = GapM)
+                .guidedTourTarget(GuidedTourKeys.CHANNEL_SEARCH),
         )
 
         // Read the delegate once into a local: `when` cannot smart-cast a delegated property, and
@@ -233,56 +237,74 @@ internal fun GroupsOverviewGrid(
 
 private val GroupBadgeSize = 44.dp
 
+/** Inset into [GroupBadgeSize], so the mark sits in the plate rather than filling it. */
+private val GroupLogoSize = 24.dp
+
+/** One pixel at mdpi - the whole engraving. More reads as two glyphs, less as none. */
+private val EngraveOffset = 1.dp
+
 /**
- * A group card's badge is decided by the group's *category*, never by what happens to be in the
- * playlist or the icon cache.
+ * The quality of a group, when its name states one - never its category.
  *
- * It used to be a collage of up to 4 channel logos from the group, drawn only from files already on
- * disk. Two things were wrong with that. The obvious one: the same group rendered differently on two
- * launches, because the collage was a picture of the cache rather than of the group - and with a
- * large playlist the cache is a moving target. The worse one: a group whose first channels have no
- * cached logo fell through to the badge below, so on one screen some cards carried four tiny
- * mismatched provider logos and others carried the curated illustration, with nothing telling the
- * user why. A category badge is the same on every launch, on every playlist, for every user.
+ * Matched on the label rather than on [ChannelGroup.Known], because quality is not a category: a
+ * provider's "Sport FHD" is a sports group that happens to be high definition, and the label is
+ * what the user reads.
  */
-private sealed class GroupBadge {
-    data class Artwork(@DrawableRes val drawableRes: Int) : GroupBadge()
-    data class Label(val text: String) : GroupBadge()
-}
-
-// Curated, category-specific artwork - one per ChannelGroup.Known key - takes priority over the
-// generic TV artwork so real playlist categories (movies/sports/kids/...) read at a glance instead
-// of all looking identical. Custom/Ungrouped groups fall through to the generic TV artwork (see
-// groupBadge's else branch); only quality-only groups (4K/HD) get a text label instead.
-private fun knownGroupArtwork(key: String): Int? = when (key) {
-    ChannelGroup.KEY_MOVIES -> R.drawable.group_icon_movies
-    ChannelGroup.KEY_SERIES -> R.drawable.group_icon_series
-    ChannelGroup.KEY_NEWS -> R.drawable.group_icon_news
-    ChannelGroup.KEY_SPORTS -> R.drawable.group_icon_sports
-    ChannelGroup.KEY_KIDS -> R.drawable.group_icon_kids
-    ChannelGroup.KEY_MUSIC -> R.drawable.group_icon_music
-    ChannelGroup.KEY_DOCUMENTARY -> R.drawable.group_icon_documentary
-    ChannelGroup.KEY_ENTERTAINMENT -> R.drawable.group_icon_entertainment
-    ChannelGroup.KEY_SCIENCE -> R.drawable.group_icon_science
-    ChannelGroup.KEY_RELIGION -> R.drawable.group_icon_religion
-    ChannelGroup.KEY_REGIONAL -> R.drawable.group_icon_generic_tv
-    else -> null
-}
-
-private fun groupBadge(group: ChannelGroup, label: String): GroupBadge {
+private fun groupQualityBadge(label: String): String? {
     val upper = label.uppercase()
-    val artwork = (group as? ChannelGroup.Known)?.let { knownGroupArtwork(it.key) }
     return when {
-        artwork != null -> GroupBadge.Artwork(artwork)
-        upper.contains("ДИТ") || upper.contains("KIDS") || upper.contains("ДЕТ") ->
-            GroupBadge.Artwork(R.drawable.group_icon_kids)
-        upper.contains("4K") -> GroupBadge.Label("4K")
-        upper.contains("HD") -> GroupBadge.Label("HD")
-        // Custom/ungrouped playlist categories with no illustrated match (e.g. a provider's own
-        // "Other"/regional bucket) still get the generic TV artwork instead of the old thin Tv
-        // glyph, so no card on this screen is left looking unfinished next to the illustrated ones.
-        else -> GroupBadge.Artwork(R.drawable.group_icon_generic_tv)
+        upper.contains("4K") -> "4K"
+        upper.contains("HD") -> "HD"
+        else -> null
     }
+}
+
+/**
+ * The app's own mark, engraved into the card.
+ *
+ * Two illustration schemes came before this and both were removed for the same reason: a *picture*
+ * on a group card claims to say something about that group, and neither could. The first was a
+ * collage of up to 4 channel logos pulled from whatever happened to be in the icon cache, so the
+ * same group rendered differently on two launches. The second was a set of curated per-category
+ * illustrations, which at least stayed still - but the category is already stated, in words,
+ * directly beneath, so the picture repeated the title in a form carrying less information than the
+ * title did.
+ *
+ * This one makes no claim at all, which is the point: it is the same neutral mark on every card, so
+ * it reads as the card's material rather than as a statement about the group. Recessed rather than
+ * raised for the same reason - [Modifier.sunkenSurface] makes the plate recede, and a mark that
+ * recedes with it cannot compete with the group's name for attention.
+ *
+ * The engraving is the glyph drawn three times, and the order is what makes it read as cut rather
+ * than printed: [UaPalette.void] one step *up* is the shadow the upper wall of a groove casts,
+ * [UaPalette.edgeHighlightStrong] one step *down* is light catching its lower lip, and the body
+ * over both is what the eye actually resolves as the mark.
+ *
+ * The body deliberately is **not** the darkest color available. Drawn in [UaPalette.void] on a
+ * surface only slightly lighter than it, the first version of this was very nearly invisible on the
+ * device - technically an engraving, practically an empty plate. [UaPalette.labelSecondary] keeps
+ * it a foreground rather than a hole, and the two offset copies are what put it below the surface.
+ */
+@Composable
+private fun EngravedAppMark() {
+    Icon(
+        imageVector = AppIcons.CastToTv,
+        contentDescription = null,
+        tint = UaTheme.palette.void,
+        modifier = Modifier.size(GroupLogoSize).offset(y = -EngraveOffset),
+    )
+    Icon(
+        imageVector = AppIcons.CastToTv,
+        contentDescription = null,
+        tint = UaTheme.palette.edgeHighlightStrong,
+        modifier = Modifier.size(GroupLogoSize).offset(y = EngraveOffset),
+    )
+    Icon(
+        imageVector = AppIcons.CastToTv,
+        contentDescription = null,
+        tint = UaTheme.palette.labelSecondary,
+        modifier = Modifier.size(GroupLogoSize),
+    )
 }
 
 @Composable
@@ -315,24 +337,24 @@ private fun GroupCard(
             )
             .padding(16.dp),
     ) {
+        // One plate on every card, so a quality group and a plain one are the same height and the
+        // grid's rows stay level.
         Box(
             modifier = Modifier
                 .size(GroupBadgeSize)
-                .raisedSurface(RoundedCornerShape(RadiusItem), UaTheme.palette.surface2, shadow = false),
+                .sunkenSurface(RoundedCornerShape(RadiusItem), UaTheme.palette.surface2),
             contentAlignment = Alignment.Center,
         ) {
-            when (val badge = groupBadge(grouped.group, groupLabel(grouped.group))) {
-                is GroupBadge.Artwork -> Image(
-                    painter = painterResource(badge.drawableRes),
-                    contentDescription = null,
-                    modifier = Modifier.size(GroupBadgeSize),
-                )
-                is GroupBadge.Label -> Text(
-                    text = badge.text,
+            val quality = groupQualityBadge(groupLabel(grouped.group))
+            if (quality != null) {
+                Text(
+                    text = quality,
                     style = Caption,
                     color = UaTheme.palette.accentText,
                     fontWeight = FontWeight.Bold,
                 )
+            } else {
+                EngravedAppMark()
             }
         }
         Box(

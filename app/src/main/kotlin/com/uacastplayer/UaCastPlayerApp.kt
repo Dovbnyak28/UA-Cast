@@ -1,7 +1,9 @@
 package com.uacastplayer
 
 import android.app.Application
+import android.os.Build
 import android.os.StrictMode
+import com.uacastplayer.log.CrashLog
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -30,6 +32,14 @@ open class UaCastPlayerApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        // First thing after super: a crash during the rest of this method is exactly the kind that
+        // is hardest to diagnose without a record, and installing the handler is one file
+        // reference and no work.
+        CrashLog.install(
+            filesDir = filesDir,
+            appVersionName = BuildConfig.VERSION_NAME,
+            deviceDescription = "${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})",
+        )
         // Debug-only: flags a Closeable (Response body, InputStream, etc.) that got garbage
         // collected without ever being close()'d, logged with the allocation stack trace so the
         // leak site is identifiable - not just penaltyDeath, since a false positive here would crash

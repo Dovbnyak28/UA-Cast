@@ -22,6 +22,13 @@ object FeaturePolicy {
      */
     private val FREE_FEATURES: Set<Feature> = setOf(
         Feature.CHROMECAST,
+        // Free because [Feature.CHROMECAST] is. Remuxing is not a capability anyone would buy - it
+        // is the fallback that makes casting work when a receiver cannot play a stream directly,
+        // and it engages by itself, deep in the cast path, with no user action to put a paywall in
+        // front of. Selling it would have meant a free user's casting quietly failing on some
+        // channels and working on others, with nothing on screen connecting that to a price. It
+        // was listed as sold and gated nowhere, which is how that nearly shipped.
+        Feature.RAW_TS_REMUX,
         Feature.PIP,
         Feature.THEMES,
     )

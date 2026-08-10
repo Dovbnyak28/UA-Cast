@@ -8,7 +8,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.language.LanguagePickerScreen
-import com.uacastplayer.ui.onboarding.OnboardingScreen
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 import org.junit.Rule
@@ -58,22 +57,10 @@ class StateRestorationTest {
         composeRule.onNodeWithText("Продовжити").assertIsEnabled()
     }
 
-    @Test
-    fun onboarding_keepsItsPlaceInTheWalkthrough() {
-        val restorationTester = StateRestorationTester(composeRule)
-        restorationTester.setContent {
-            UaCastTheme(AppTheme.CINEMA) { OnboardingScreen(onFinished = {}) }
-        }
-
-        // Two taps of "Далі" reach the last of the three steps, where the button changes its label.
-        composeRule.onNodeWithText("Далі").performClick()
-        composeRule.onNodeWithText("Далі").performClick()
-        composeRule.onNodeWithText("Додати плейлист").assertIsEnabled()
-
-        restorationTester.emulateSavedInstanceStateRestore()
-
-        // A reset would put "Далі" back, i.e. drop the user onto step 1 of a walkthrough they had
-        // already finished.
-        composeRule.onNodeWithText("Додати плейлист").assertIsEnabled()
-    }
+    // The onboarding walkthrough this file used to cover here is gone, replaced by the guided tour.
+    // There is deliberately no equivalent test: the tour's position is not composition state at
+    // all - it lives in `app/GuidedTourController`, held by AppViewModel, so a configuration change
+    // cannot lose it and there is nothing for StateRestorationTester to exercise. Process death
+    // does end the tour, and that is the intended behaviour: the completion flag was never written,
+    // so the next launch offers it again from the welcome card rather than resuming mid-step.
 }

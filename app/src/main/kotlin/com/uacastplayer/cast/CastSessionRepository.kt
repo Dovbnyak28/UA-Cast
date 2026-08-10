@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.android.gms.cast.MediaStatus
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
+import com.google.android.gms.cast.framework.SessionManager
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.uacastplayer.core.net.AppHttp
@@ -386,6 +387,7 @@ class CastSessionRepository private constructor(context: Context) {
                 .addOnSuccessListener { context ->
                     castContext = context
                     context.sessionManager.addSessionManagerListener(sessionManagerListener, CastSession::class.java)
+                    adoptSessionAlreadyRunning(context.sessionManager)
                 }
                 .addOnFailureListener { e ->
                     AppLog.w(TAG) { "Cast context unavailable: ${e.javaClass.simpleName}" }
@@ -393,6 +395,39 @@ class CastSessionRepository private constructor(context: Context) {
         } catch (e: Exception) {
             AppLog.w(TAG) { "Cast context unavailable: ${e.javaClass.simpleName}" }
         }
+    }
+
+    /**
+     * Picks up a session that was already connected before this repository was listening.
+     *
+     * [SessionManager] reports transitions, not state: a listener registered after a session is up
+     * hears nothing until that session ends. Two ordinary situations land there.
+     *
+     * The first is process death. A cast session lives in Play Services, not in this app, and
+     * survives the app being killed in the background - so reopening the app builds a repository
+     * that believes nothing is casting while a receiver is still connected. Everything downstream
+     * follows that belief: `LocalPlaybackPolicy` only holds the local player back while
+     * `isCasting`, so the restored channel starts playing out of the phone's speaker into a room
+     * where the TV is also connected, and the Cast button - which reads the framework directly -
+     * contradicts the rest of the UI.
+     *
+     * The second needs no process death at all, and this file already describes it: resolving the
+     * shared [CastContext] is deliberately off the main thread, and "if the Cast button is composed
+     * before this settles, `CastButtonFactory` initializes the same shared instance itself". A
+     * session started in that window connects before the line above runs.
+     *
+     * Guarded on [currentSession] rather than adopting unconditionally, because adoption is not
+     * free: it mints a fresh proxy token and starts playback, both of which would be wrong for a
+     * session this repository is already driving.
+     */
+    private fun adoptSessionAlreadyRunning(sessionManager: SessionManager) {
+        if (currentSession != null) return
+        sessionManager.currentCastSession
+            ?.takeIf { it.isConnected }
+            ?.let { session ->
+                AppLog.d(TAG) { "Adopting a cast session that was already connected" }
+                onSessionActive(session)
+            }
     }
 
     /**
@@ -448,6 +483,11 @@ class CastSessionRepository private constructor(context: Context) {
         currentSession = session
         currentReceiverId = session.castDevice?.deviceId
         proxySessionToken = UUID.randomUUID().toString()
+        // Unregister first: this method runs for onSessionStarted, for onSessionResumed - which can
+        // fire more than once for the same session across a suspension - and now for adoption at
+        // startup. RemoteMediaClient keeps a list, not a set, so registering twice means every
+        // receiver status update is handled twice.
+        session.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
         session.remoteMediaClient?.registerCallback(remoteMediaClientCallback)
         startProxyEagerly()
         // Covers starting a session from the player while a channel is already open, not just

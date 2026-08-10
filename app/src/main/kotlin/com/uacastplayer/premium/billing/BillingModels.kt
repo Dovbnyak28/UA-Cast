@@ -41,6 +41,16 @@ sealed interface PurchaseResult {
     data class Success(val purchase: PurchaseRecord) : PurchaseResult
     data object Cancelled : PurchaseResult
     data object AlreadyOwned : PurchaseResult
+
+    /**
+     * A restore that reached the store and found nothing to restore.
+     *
+     * Separate from [Unavailable] because the two need opposite messages and only one of them is a
+     * problem: "you have not bought this on this account" is an answer, and telling that user the
+     * store could not be reached sends them to check their connection over and over.
+     */
+    data object NothingToRestore : PurchaseResult
+
     data object Unavailable : PurchaseResult
     data class Failed(val reason: String?) : PurchaseResult
 }

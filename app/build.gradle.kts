@@ -90,6 +90,13 @@ android {
                     ?: (project.findProperty("UACAST_KEY_ALIAS") as String?)
                 keyPassword = System.getenv("UACAST_KEY_PASSWORD")
                     ?: (project.findProperty("UACAST_KEY_PASSWORD") as String?)
+                // v2 alone is what AGP defaults to here, and it is enough to install. v3 is what
+                // makes signing-key rotation possible at all on Android 9+ - without it the key
+                // created for the first release is the only key this app can ever be updated with,
+                // permanently. Adding it later works, but only from that release forward, so the
+                // one moment it is free is before anything has shipped. v1 stays off: it is only
+                // needed below API 24, and minSdk is 24.
+                enableV3Signing = true
             }
         }
     }
@@ -181,11 +188,23 @@ kotlin {
 // which one to serve an upgrading device. Multiplying the base code by ten and adding a per-ABI
 // digit keeps ordering intact within an ABI and, since the offsets ascend with how "capable" the
 // ABI is, makes a 64-bit device prefer the 64-bit APK when it could install either.
-// The universal APK carries no ABI filter and so keeps the plain base code, below all of them.
-private val abiVersionCodeOffsets = mapOf(
+//
+// **The universal APK has to be the highest of the four, not the lowest.** It used to keep the
+// plain base code, which put it below every per-ABI APK of the same release - and a versionCode
+// that goes down is not an update, it is an install Android refuses outright ("App not installed").
+// So anyone who took the arm64 APK of 0.9.0 (code 92) could never move to the universal APK of any
+// release until the base itself passed 9.3, and could not be updated from Play either, since a
+// bundle carries no ABI filter and would land on the same plain base code. Universal is the build
+// that runs everywhere, so it is the one every other install must be able to move *to*; the
+// direction it cannot go - universal to per-ABI - costs nothing, because there is no device the
+// universal APK fails to serve.
+private val abiVersionCodeOffsets = mapOf<String?, Int>(
     "armeabi-v7a" to 1,
     "arm64-v8a" to 2,
     "x86_64" to 3,
+    // No ABI filter: the universal APK, and every artifact of a bundle build, where the splits
+    // block turns itself off entirely.
+    null to 4,
 )
 
 androidComponents {
@@ -252,6 +271,8 @@ dependencies {
     // of release entirely (debugImplementation). See block 1.0 of the leak-fix plan - this is what
     // makes a leaked PlayerViewModel/ExoPlayer visible the day it appears instead of via an OOM.
     debugImplementation(libs.leakcanary.android)
+
+    implementation(libs.play.billing)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

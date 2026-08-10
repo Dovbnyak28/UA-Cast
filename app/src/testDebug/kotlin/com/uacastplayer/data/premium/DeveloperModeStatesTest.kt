@@ -30,7 +30,11 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class DeveloperModeStatesTest {
 
-    private class FakeStorage(override var storedLicense: License? = null) : LicenseStorage
+    private class FakeStorage(
+        override var storedLicense: License? = null,
+        override var storeHasEverOfferedProducts: Boolean = false,
+        override var clockHighWaterMark: Long = 0L,
+    ) : LicenseStorage
 
     private val scope = CoroutineScope(UnconfinedTestDispatcher())
 

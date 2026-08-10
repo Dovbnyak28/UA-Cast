@@ -13,6 +13,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -78,7 +81,7 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
             val locations = withContext(Dispatchers.IO) { collectLocations() }
             val devices = coroutineScope {
                 locations.map { location -> async(Dispatchers.IO) { fetchDevice(location) } }.awaitAll()
-            }.filterNotNull()
+            }.filterNotNull().distinctRenderers()
             // The other half of the empty-sheet diagnosis: locations that answered but yielded no
             // usable renderer are the normal ssdp:all result (routers, printers, speakers), so this
             // pair of numbers says whether the LAN is silent or simply has nothing to cast to.
@@ -94,7 +97,7 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
      * no narrower type that covers all of that here - the same block spans socket setup, send, and
      * receive. */
     @Suppress("TooGenericExceptionCaught")
-    private fun collectLocations(): List<String> {
+    private suspend fun collectLocations(): List<String> {
         val locations = LinkedHashSet<String>()
         try {
             DatagramSocket().use { socket ->
@@ -117,7 +120,7 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
      * that fails on one datagram must not abandon the rest: a network can refuse the multicast
      * momentarily and still answer the next one. */
     @Suppress("TooGenericExceptionCaught")
-    private fun sendSearchRequests(socket: DatagramSocket) {
+    private suspend fun sendSearchRequests(socket: DatagramSocket) {
         val address = InetAddress.getByName(SSDP_ADDRESS)
         val payloads = SsdpSearchRequests.payloads(
             address = SSDP_ADDRESS,
@@ -134,18 +137,31 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
             } catch (e: Exception) {
                 AppLog.w(TAG) { "M-SEARCH send failed: ${e.javaClass.simpleName}" }
             }
-            Thread.sleep(SEND_SPACING_MILLIS)
+            // delay, not Thread.sleep: this is the first of two places a dismissed sheet has to be
+            // able to stop the search - see receiveResponsesUntilDeadline for the other.
+            delay(SEND_SPACING_MILLIS)
         }
         AppLog.d(TAG) { "M-SEARCH sent: $sent of ${payloads.size} datagram(s)" }
     }
 
-    private fun receiveResponsesUntilDeadline(
+    /**
+     * Blocks on the socket in [RECEIVE_POLL_TIMEOUT_MILLIS] slices rather than for the whole
+     * window, which is what makes the search abandonable.
+     *
+     * Cancelling a coroutine does not interrupt a thread parked in `DatagramSocket.receive`, so
+     * without the `isActive` check every dismissed sheet still held an IO thread, a UDP socket and
+     * a multicast lock for the full [DISCOVERY_WINDOW_SECONDS]. Opening and closing the sheet
+     * repeatedly stacked those up: `Dispatchers.IO` runs 64 threads, and searches that nobody was
+     * waiting for any more could take all of them - starving the playlist load, the EPG parse, the
+     * icon fetches and the cast proxy, none of which have anything to do with DLNA.
+     */
+    private suspend fun receiveResponsesUntilDeadline(
         socket: DatagramSocket,
         deadline: Long,
         locations: MutableSet<String>,
     ) {
         val buffer = ByteArray(RECEIVE_BUFFER_BYTES)
-        while (System.currentTimeMillis() < deadline) {
+        while (currentCoroutineContext().isActive && System.currentTimeMillis() < deadline) {
             try {
                 val packet = DatagramPacket(buffer, buffer.size)
                 socket.receive(packet)

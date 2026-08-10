@@ -22,6 +22,10 @@ data class DiagnosticsSnapshot(
     val maxMemoryBytes: Long,
     val logEntries: List<LogEntry>,
     val remuxEffectiveness: RemuxEffectivenessCounts,
+    /** The last crash this device recorded, or null if it has never had one - see
+     * [com.uacastplayer.log.CrashLog]. Placed at the top of the report when present, because a
+     * report that contains one is almost always being sent *about* it. */
+    val lastCrash: String? = null,
 )
 
 /** Formats a [DiagnosticsSnapshot] into the plain-text report shared from HelpScreen's "Send
@@ -46,6 +50,12 @@ object DiagnosticsReportBuilder {
             "Memory: ${snapshot.usedMemoryBytes.toMb()}MB used / " +
                 "${snapshot.totalMemoryBytes.toMb()}MB total / ${snapshot.maxMemoryBytes.toMb()}MB max",
         )
+        snapshot.lastCrash?.let { crash ->
+            appendLine()
+            appendLine("--- Last recorded crash ---")
+            appendLine(crash.trimEnd())
+            appendLine("--- End of crash ---")
+        }
         appendLine()
         appendLine("Routing effectiveness (attempted/reached PLAYING/failed):")
         val r = snapshot.remuxEffectiveness

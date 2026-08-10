@@ -268,16 +268,6 @@
     <string name="terms_gate_footer">Debes aceptar estos términos para usar la app.</string>
     <string name="terms_accept_button">Aceptar y continuar</string>
     <string name="terms_decline_button">Rechazar y salir</string>
-    <string name="onboarding_step1_title">Bienvenido a UA Cast</string>
-    <string name="onboarding_step1_body">UA Cast es un reproductor para TUS PROPIAS suscripciones - la app no proporciona, vende ni incluye ningún canal o contenido. Añades una lista de reproducción de un proveedor que ya usas, y la app la reproduce.</string>
-    <string name="onboarding_step2_title">¿Qué es una lista de reproducción?</string>
-    <string name="onboarding_step2_body">Una lista de reproducción es un listado de canales de tu proveedor: un enlace M3U, o un inicio de sesión Xtream Codes (servidor, usuario y contraseña). La añadirás desde la pestaña Canales cuando quieras.</string>
-    <string name="onboarding_step3_title">Mira en la pantalla grande</string>
-    <string name="onboarding_step3_body">Toca el icono de transmisión mientras se reproduce un canal para enviarlo a un Chromecast o Google TV en la misma red Wi-Fi. Si un flujo no se puede reproducir directamente en el receptor, UA Cast reintenta automáticamente a través de un relé local en tu teléfono.</string>
-    <string name="onboarding_skip_button">Omitir</string>
-    <string name="onboarding_next_button">Siguiente</string>
-    <string name="onboarding_get_started_button">Añadir lista de reproducción</string>
-    <string name="onboarding_step_indicator">Paso %1$d de %2$d</string>
 
     <!-- Player -->
     <string name="player_live_indicator">LIVE</string>
@@ -368,6 +358,40 @@
     <string name="dlna_sheet_searching">Buscando dispositivos…</string>
     <string name="dlna_sheet_no_devices">No se encontraron dispositivos</string>
     <string name="dlna_stop_casting">Detener</string>
+    <!-- Guided tour -->
+    <string name="guided_tour_welcome_title">Te damos la bienvenida a UA Cast IPTV</string>
+    <string name="guided_tour_welcome_body">Un vistazo rápido a lo que puede hacer la aplicación.</string>
+    <string name="guided_tour_start">Empezar</string>
+    <string name="guided_tour_skip">Omitir</string>
+    <string name="guided_tour_back">Atrás</string>
+    <string name="guided_tour_next">Siguiente</string>
+    <string name="guided_tour_progress">%1$d / %2$d</string>
+    <string name="guided_tour_done_title">¡Listo!</string>
+    <string name="guided_tour_done_body">Ya conoces lo esencial de UA Cast IPTV.</string>
+    <string name="guided_tour_finish">Empezar a usar la aplicación</string>
+    <string name="guided_tour_playlist_title">Añade una lista</string>
+    <string name="guided_tour_playlist_body">Los canales vienen de la lista que tú aportas: un archivo M3U o una URL de tu proveedor. Aquí se añade y aquí se cambia entre varias.</string>
+    <string name="guided_tour_channels_title">Encuentra un canal</string>
+    <string name="guided_tour_channels_body">Los canales se agrupan como los nombra tu lista. La búsqueda mira en todos los grupos a la vez, así que no hace falta saber en cuál está un canal.</string>
+    <string name="guided_tour_player_title">Ver</string>
+    <string name="guided_tour_player_body">Toca un canal para empezar. El reproductor se abre como una barra abajo; tócala para pantalla completa y usa las flechas o desliza para cambiar de canal.</string>
+    <string name="guided_tour_favorites_title">Guarda los que ves</string>
+    <string name="guided_tour_favorites_body">Los canales que marques con la estrella aparecen aquí, en su propia pestaña. La estrella está junto a cada canal de la lista: Favoritos es una lista corta y reordenable en lugar de una larga.</string>
+    <string name="guided_tour_epg_title">Guía de programación</string>
+    <string name="guided_tour_epg_body">Si tu lista incluye guía, cada canal muestra qué hay ahora y después. Mantén pulsado un canal y elige «Guía» para ver la programación completa.</string>
+    <string name="guided_tour_cast_title">Transmitir a un televisor</string>
+    <string name="guided_tour_cast_body">Este botón envía la imagen a un Chromecast. Los televisores sin él (Samsung, LG, Sony) se alcanzan por DLNA desde el reproductor.</string>
+    <string name="guided_tour_settings_title">Ajustes</string>
+    <string name="guided_tour_settings_body">Idioma y tema, tamaño del búfer, iconos de canales, control parental, copia de seguridad y actualizaciones. El tutorial también vive aquí, por si quieres repetirlo.</string>
+
+    <string name="settings_section_tutorial">Tutorial</string>
+    <string name="settings_tutorial_label">Recorrido guiado</string>
+    <string name="settings_tutorial_button">Mostrar</string>
+    <string name="settings_tutorial_hint_unseen">Un repaso breve de las funciones principales.</string>
+    <string name="settings_tutorial_hint_seen">Ya has hecho el recorrido. Puedes repetirlo cuando quieras.</string>
+
+    <string name="dlna_volume">Volumen del televisor</string>
+    <string name="dlna_volume_value">%1$d%%</string>
 
     <string name="update_banner_title">Hay una nueva versión disponible</string>
     <string name="update_banner_message">La versión %1$s está lista para descargar.</string>
@@ -394,6 +418,10 @@
     <string name="premium_unlock_later">Ahora no</string>
     <string name="premium_restore">Restaurar compras</string>
     <string name="premium_no_store">Todavía no hay nada que comprar: la aplicación no está publicada en ninguna tienda. Durante la prueba, Premium está abierto para todos.</string>
+    <string name="premium_restore_nothing">No hay nada que restaurar en esta cuenta de Google.</string>
+    <string name="premium_already_owned">Ya lo tienes. Toca «Restaurar compras».</string>
+    <string name="premium_store_unreachable">No se pudo contactar con Google Play. Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="premium_purchase_failed">La compra no se completó. No se ha cobrado nada.</string>
     <string name="premium_upgrade_trial">Tu prueba termina en %1$d días.</string>
     <string name="premium_upgrade_lapsed">Tu Premium ha terminado. Las funciones Premium están bloqueadas.</string>
     <string name="feature_dlna">Enviar a un televisor por DLNA</string>
@@ -403,6 +431,5 @@
     <string name="feature_xtream">Cuentas Xtream</string>
     <string name="feature_custom_epg">Tu propia fuente de guía de TV</string>
     <string name="feature_custom_icons">Tus propias fuentes de logotipos</string>
-    <string name="feature_raw_ts_remux">Retransmitir emisiones que el televisor no reproduce</string>
     <string name="settings_developer_license">Desarrollador: estado de licencia</string>
 </resources>

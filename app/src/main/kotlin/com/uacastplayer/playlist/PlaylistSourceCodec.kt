@@ -30,6 +30,25 @@ object PlaylistSourceCodec {
         out.flush()
     }
 
+    /**
+     * Whether [input] was written by a build newer than this one.
+     *
+     * Worth asking separately from [decode], because the two unreadable cases need opposite
+     * handling and [decode] cannot express that. A corrupt or truncated file is worth nothing and
+     * overwriting it loses nothing; a file from a *newer* format holds every saved playlist of
+     * someone who has just rolled back a release, and overwriting that with this build's format
+     * would destroy them permanently - re-upgrading afterwards would find the older file.
+     *
+     * `FORMAT_VERSION` is 1 today, so nothing reaches this yet. It is here because the moment it
+     * can happen is the moment the version is bumped, which is exactly when nobody is thinking
+     * about the build that will be rolled back to.
+     */
+    fun isFromANewerFormat(input: InputStream): Boolean = try {
+        DataInputStream(input).readInt() > FORMAT_VERSION
+    } catch (_: IOException) {
+        false
+    }
+
     fun decode(input: InputStream): List<PlaylistSource> {
         return try {
             val in_ = DataInputStream(input)

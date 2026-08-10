@@ -12,7 +12,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.language.LanguagePickerScreen
-import com.uacastplayer.ui.onboarding.OnboardingScreen
+import com.uacastplayer.guidedtour.GuidedTourPhase
+import com.uacastplayer.guidedtour.GuidedTourState
+import com.uacastplayer.guidedtour.GuidedTourSteps
+import com.uacastplayer.ui.guidedtour.GuidedTourOverlay
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 import org.junit.Assert.assertTrue
@@ -85,10 +88,41 @@ class FontScaleLayoutTest(private val fontScale: Float) {
         assertFullyOnScreen("Продовжити")
     }
 
+    /**
+     * The guided tour's step card is the densest row of controls in the app - Skip, Back and Next
+     * side by side - and it replaced the onboarding walkthrough this test used to cover. At 2.0x on
+     * a 4.5" viewport that row is the first thing that would push its primary action off the edge.
+     */
     @Test
-    fun onboarding_primaryButtonStaysOnScreen() {
-        setContentAtScale { OnboardingScreen(onFinished = {}) }
+    fun guidedTour_nextButtonStaysOnScreen() {
+        setContentAtScale {
+            GuidedTourOverlay(
+                state = GuidedTourState(
+                    phase = GuidedTourPhase.STEPS,
+                    stepIndex = 0,
+                    steps = GuidedTourSteps.DEFAULT,
+                ),
+                onNext = {},
+                onBack = {},
+                onSkip = {},
+                onComplete = {},
+            )
+        }
         assertFullyOnScreen("Далі")
+    }
+
+    @Test
+    fun guidedTour_welcomeStartButtonStaysOnScreen() {
+        setContentAtScale {
+            GuidedTourOverlay(
+                state = GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = GuidedTourSteps.DEFAULT),
+                onNext = {},
+                onBack = {},
+                onSkip = {},
+                onComplete = {},
+            )
+        }
+        assertFullyOnScreen("Почати")
     }
 
     companion object {

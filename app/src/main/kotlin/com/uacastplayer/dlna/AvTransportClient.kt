@@ -1,13 +1,11 @@
 package com.uacastplayer.dlna
 
 import com.uacastplayer.log.AppLog
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val TAG = "AvTransportClient"
-private val SOAP_MEDIA_TYPE = "text/xml; charset=\"utf-8\"".toMediaType()
 
 /**
  * Sends the three AVTransport SOAP actions a live-TV DLNA cast needs. [httpClient] should be
@@ -68,9 +66,6 @@ class AvTransportClient(
         val request = Request.Builder()
             .url(controlUrl)
             .addHeader("SOAPACTION", AvTransportSoapBuilder.soapAction(action))
-            // Some renderers reject a SOAP POST that does not announce a user agent, and the DLNA
-            // convention is to identify the OS and the DLNA doc version. Sent on every action so a
-            // renderer that gates on it does not fail only on some of them.
             .addHeader("User-Agent", DLNA_USER_AGENT)
             .post(envelope.toRequestBody(SOAP_MEDIA_TYPE))
             .build()
@@ -84,7 +79,9 @@ class AvTransportClient(
                 // another controller holds the transport. Reading the body is safe - a UPnP fault is
                 // a small fixed document.
                 if (response.isSuccessful) return@use SoapOutcome.OK
-                val fault = response.body?.let { UpnpFault.parse(it.string()) }
+                // peekBody, not body.string(): the fault is a small document, but it comes from a
+                // device on the LAN that nobody here wrote - see MAX_SOAP_RESPONSE_BYTES.
+                val fault = UpnpFault.parse(response.peekBody(MAX_SOAP_RESPONSE_BYTES).string())
                 AppLog.w(TAG) { "SOAP $action refused: HTTP ${response.code}${fault?.let { " $it" }.orEmpty()}" }
                 if (fault?.isTransitionNotAvailable == true) SoapOutcome.TRANSITIONING else SoapOutcome.FAILED
             }
@@ -99,8 +96,6 @@ class AvTransportClient(
     }
 
     private companion object {
-        const val DLNA_USER_AGENT = "Android/11 UPnP/1.0 DLNADOC/1.50 UACastPlayer"
-
         // A Samsung UE40KU6000 switching between two live HLS channels refused Play three times
         // over about 2.4s before accepting it. The budget here is deliberately well past that
         // rather than just over it: the measurement is one TV on an idle network, and the cost of
