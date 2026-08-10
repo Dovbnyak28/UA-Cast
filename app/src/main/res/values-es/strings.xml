@@ -206,6 +206,8 @@
     <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía y toca cualquier canal para verlo. El botón Cast reproduce en un Chromecast o Google TV; el botón contiguo alcanza televisores que usan DLNA. Si un flujo no se reproduce directamente en el receptor, la aplicación lo reintenta a través de un relevo local en tu teléfono.</string>
     <string name="settings_open_help">Ayuda detallada</string>
     <string name="settings_open_terms">Términos de uso</string>
+    <string name="settings_send_diagnostics">Enviar un registro de actividad al desarrollador</string>
+    <string name="settings_send_button">Enviar</string>
     <string name="settings_diagnostics_routing_label">Efectividad de enrutamiento (solo local, este dispositivo)</string>
     <string name="settings_diagnostics_route_direct">Directo</string>
     <string name="settings_diagnostics_route_remux">Remux</string>
@@ -241,7 +243,7 @@
     <string name="help_cast_errors_body">El teléfono y el receptor no decodifican los mismos formatos. «el video … no es compatible» o «el audio … no es compatible» nombra el formato que rechazó tu dispositivo: lo habitual son el audio AC-3 y el vídeo MPEG-2 o HEVC. La aplicación no puede convertirlos: retransmite el flujo, no lo recodifica. Busca el mismo canal en otra calidad, que a menudo lleva otro audio. «No se pudo transmitir este canal» sin nombrar un formato significa que el receptor lo rechazó por otro motivo. «La retransmisión de respaldo no está disponible en esta red» significa que la Wi-Fi no dio al teléfono una dirección IPv4 y el relevo no puede funcionar. En todos estos casos el canal sigue reproduciéndose en el teléfono.</string>
     <string name="help_send_diagnostics_button">Enviar diagnóstico</string>
     <string name="diagnostics_preview_title">Informe de diagnóstico</string>
-    <string name="diagnostics_preview_body_hint">Este informe contiene datos técnicos del dispositivo y un registro de actividad reciente. Revísalo a continuación antes de elegir una app para enviarlo - nada se envía automáticamente.</string>
+    <string name="diagnostics_preview_body_hint">El informe contiene datos técnicos del dispositivo y un registro de actividad reciente: sin listas, sin credenciales, sin direcciones. Léelo abajo; se abre en tu aplicación de correo dirigido al desarrollador, y no se envía nada hasta que pulses enviar allí.</string>
     <string name="diagnostics_preview_send">Enviar</string>
     <string name="diagnostics_preview_cancel">Cancelar</string>
     <string name="diagnostics_share_chooser_title">Enviar informe de diagnóstico mediante</string>

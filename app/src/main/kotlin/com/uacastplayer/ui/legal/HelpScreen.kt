@@ -1,7 +1,8 @@
 package com.uacastplayer.ui.legal
+import com.uacastplayer.ui.diagnostics.DiagnosticsPreviewDialog
+import com.uacastplayer.ui.diagnostics.sendDiagnostics
 import com.uacastplayer.ui.theme.UaTheme
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -151,45 +152,9 @@ fun HelpScreen(
             onCancel = { diagnosticsReport = null },
             onSend = {
                 diagnosticsReport = null
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, report)
-                }
-                context.startActivity(Intent.createChooser(intent, chooserTitle))
+                sendDiagnostics(context, report, chooserTitle)
             },
         )
     }
 }
 
-/** Lets the user see exactly what "Send diagnostics" is about to share before any share sheet
- * opens - nothing is ever sent automatically. */
-@Composable
-private fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.diagnostics_preview_title)) },
-        text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.diagnostics_preview_body_hint),
-                    style = BodyText,
-                    color = UaTheme.palette.labelSecondary,
-                )
-                Box(
-                    modifier = Modifier
-                        .padding(top = GapM)
-                        .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Text(text = report, style = BodyText, color = UaTheme.palette.labelPrimary)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onSend) { Text(stringResource(R.string.diagnostics_preview_send)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.diagnostics_preview_cancel)) }
-        },
-    )
-}

@@ -52,6 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import com.uacastplayer.BuildConfig
+import androidx.compose.ui.platform.LocalContext
+import com.uacastplayer.ui.diagnostics.DiagnosticsPreviewDialog
+import com.uacastplayer.ui.diagnostics.sendDiagnostics
 import com.uacastplayer.R
 import com.uacastplayer.backup.BackupImportSummary
 import com.uacastplayer.core.i18n.AppLanguage
@@ -140,6 +143,10 @@ fun SettingsScreen(
     onDismissIconSourceError: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
+    /** Builds the report the "send diagnostics" row previews. A function rather than a value: it
+     * snapshots the log buffer and the crash record at the moment the user asks, not at whatever
+     * moment this screen last recomposed. */
+    onBuildDiagnosticsReport: () -> String,
     remuxEffectiveness: RemuxEffectivenessCounts,
     updateSection: UpdateSectionState,
     premiumSection: PremiumSectionState,
@@ -411,8 +418,47 @@ fun SettingsScreen(
                 onClick = onOpenTerms,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            SendDiagnosticsRow(
+                onBuildReport = onBuildDiagnosticsReport,
+                modifier = Modifier.padding(top = 8.dp),
+            )
             RoutingEffectivenessBlock(remuxEffectiveness, modifier = Modifier.padding(top = 16.dp))
         }
+    }
+}
+
+/**
+ * "Send diagnostics", beside Help because that is where somebody goes when something is wrong.
+ *
+ * The report is built on tap and shown in full before any mail app opens (see
+ * [DiagnosticsPreviewDialog]). Nothing leaves the phone until the user presses send in their own
+ * mail app, and the app itself opens no connection to anywhere - which is what lets it keep saying
+ * it uploads nothing.
+ */
+@Composable
+private fun SendDiagnosticsRow(onBuildReport: () -> String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var report by remember { mutableStateOf<String?>(null) }
+    // Read through stringResource rather than off the Context: only this is tied to the
+    // composition, so the in-app language switch re-reads it.
+    val chooserTitle = stringResource(R.string.diagnostics_share_chooser_title)
+
+    LinkRow(
+        label = stringResource(R.string.settings_send_diagnostics),
+        buttonLabel = stringResource(R.string.settings_send_button),
+        onClick = { report = onBuildReport() },
+        modifier = modifier,
+    )
+
+    report?.let { built ->
+        DiagnosticsPreviewDialog(
+            report = built,
+            onCancel = { report = null },
+            onSend = {
+                report = null
+                sendDiagnostics(context, built, chooserTitle)
+            },
+        )
     }
 }
 

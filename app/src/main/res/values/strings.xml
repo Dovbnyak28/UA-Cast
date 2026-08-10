@@ -204,6 +204,8 @@
     <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. The Cast button plays on a Chromecast or Google TV; the button beside it reaches TVs that use DLNA instead. If a stream cannot play on the receiver directly, the app retries through a local relay on your phone.</string>
     <string name="settings_open_help">Detailed help</string>
     <string name="settings_open_terms">Terms of Use</string>
+    <string name="settings_send_diagnostics">Send an activity log to the developer</string>
+    <string name="settings_send_button">Send</string>
     <string name="settings_diagnostics_routing_label">Routing effectiveness (local only, this device)</string>
     <string name="settings_diagnostics_route_direct">Direct</string>
     <string name="settings_diagnostics_route_remux">Remux</string>
@@ -241,7 +243,7 @@
     <string name="help_cast_errors_body">The phone and the receiver do not decode the same formats. «… video isn\'t supported» or «… audio isn\'t supported» names the format your device refused - AC-3 audio and MPEG-2 or HEVC video are the usual ones. The app cannot convert them: it relays the stream, it does not re-encode it. Look for the same channel in another quality, which often carries different audio. «Couldn\'t cast this channel» with no format named means the receiver rejected the stream for some other reason. «Backup streaming isn\'t available on this network» means the Wi-Fi gave your phone no IPv4 address, so the relay cannot run. In every one of these cases the channel keeps playing on the phone.</string>
     <string name="help_send_diagnostics_button">Send diagnostics</string>
     <string name="diagnostics_preview_title">Diagnostics report</string>
-    <string name="diagnostics_preview_body_hint">This report contains technical device data and a recent activity log. Review it below before choosing an app to send it with - nothing is sent automatically.</string>
+    <string name="diagnostics_preview_body_hint">This report contains technical device data and a recent activity log — no playlists, no logins, no addresses. Read it below; it opens in your mail app addressed to the developer, and nothing is sent until you press send there.</string>
     <string name="diagnostics_preview_send">Send</string>
     <string name="diagnostics_preview_cancel">Cancel</string>
     <string name="diagnostics_share_chooser_title">Send diagnostics report via</string>
