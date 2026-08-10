@@ -152,4 +152,32 @@ class DeviceDescriptionParserTest {
     fun `resolveControlUrl returns null for an unparsable url`() {
         assertNull(DeviceDescriptionParser.resolveControlUrl("not a url", "also not a url"))
     }
+
+    @Test
+    fun theRenderingControlUrlIsExtractedAndResolvedLikeTheTransportOne() {
+        val device = parse(SAMSUNG_DEVICE_DESCRIPTION, "http://192.168.0.42:9197/dmr")
+
+        assertEquals(
+            "http://192.168.0.42:9197/upnp/control/RenderingControl1",
+            device?.renderingControlUrl,
+        )
+    }
+
+    /**
+     * A renderer that plays but exposes no RenderingControl is still a usable target: it costs the
+     * volume slider and nothing else. Dropping it would remove a working TV from the list over a
+     * service the cast itself never needs.
+     */
+    @Test
+    fun aRendererWithoutRenderingControlIsStillUsable() {
+        val noVolume = SAMSUNG_DEVICE_DESCRIPTION.replace(
+            "urn:schemas-upnp-org:service:RenderingControl:1",
+            "urn:schemas-upnp-org:service:ConnectionManager:1",
+        )
+
+        val device = parse(noVolume, "http://192.168.0.42:9197/dmr")
+
+        assertEquals("http://192.168.0.42:9197/upnp/control/AVTransport1", device?.controlUrl)
+        assertNull(device?.renderingControlUrl)
+    }
 }

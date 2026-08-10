@@ -3,6 +3,7 @@ package com.uacastplayer.ui.player
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -11,6 +12,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import com.uacastplayer.ui.components.openTransform
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import com.uacastplayer.epg.EpgUiState
@@ -91,6 +95,35 @@ fun PlayerHost(
         }
     }
 
+    // Registered here rather than in PlayerScreen because the mini bar is a player too: collapsing
+    // to it and then pressing Home is the same stream from the same ExoPlayer, and an observer that
+    // only existed on the full screen would miss it. This composable is the one that is mounted
+    // whenever anything is playing at all.
+    //
+    // ON_STOP, not ON_PAUSE: a picture-in-picture window leaves the activity paused but visible,
+    // and pausing the video the user is watching in it would be the opposite of the point. See
+    // BackgroundPlaybackPolicy for what happens without this.
+    //
+    // A rotation also goes through ON_STOP, on its way to destroying and rebuilding the Activity -
+    // the same reason releasePlayback() above is guarded. Without the same guard here, every
+    // rotation would pause and then resume the stream, which on a live channel is a visible stall
+    // rather than a no-op.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP ->
+                    if (context.findActivity()?.isChangingConfigurations != true) {
+                        viewModel.onEnterBackground(context.isInPictureInPicture())
+                    }
+                Lifecycle.Event.ON_START -> viewModel.onReturnToForeground()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Box(modifier = modifier) {
         if (collapsed) {
             val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
@@ -127,3 +160,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
+/** Below API 26 there is no picture-in-picture to be in, and the property does not exist. */
+private fun Context.isInPictureInPicture(): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && findActivity()?.isInPictureInPictureMode == true

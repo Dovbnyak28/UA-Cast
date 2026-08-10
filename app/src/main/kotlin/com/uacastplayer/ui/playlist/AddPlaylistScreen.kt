@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.premium.Feature
 import com.uacastplayer.playlist.XtreamUrlBuilder
+import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.raisedSurface
@@ -65,6 +67,7 @@ fun AddPlaylistScreen(
     var sourceType by rememberSaveable { mutableStateOf(PlaylistSourceType.URL) }
     var name by rememberSaveable { mutableStateOf(playlistState.displayName.orEmpty()) }
     var url by rememberSaveable { mutableStateOf("") }
+    val gate = LocalFeatureGate.current
     var xtreamServer by rememberSaveable { mutableStateOf("") }
     var xtreamUsername by rememberSaveable { mutableStateOf("") }
     var xtreamPassword by rememberSaveable { mutableStateOf("") }
@@ -132,7 +135,17 @@ fun AddPlaylistScreen(
                 stringResource(R.string.add_playlist_type_xtream),
             ),
             selectedIndex = sourceType.ordinal,
-            onSelected = { sourceType = PlaylistSourceType.entries[it] },
+            onSelected = { index ->
+                val chosen = PlaylistSourceType.entries[index]
+                // Refused here rather than at the load button: a paywall that waits until after the
+                // server, username and password have been typed in has taken the user's time first
+                // and told them the price second.
+                if (chosen == PlaylistSourceType.XTREAM) {
+                    gate.guard(Feature.XTREAM) { sourceType = chosen }()
+                } else {
+                    sourceType = chosen
+                }
+            },
             modifier = Modifier.padding(top = GapM),
         )
 

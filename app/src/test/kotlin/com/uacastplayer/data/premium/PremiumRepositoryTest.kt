@@ -43,17 +43,25 @@ class PremiumRepositoryTest {
         scope.cancel()
     }
 
-    private class FakeStorage(override var storedLicense: License? = null) : LicenseStorage
+    private class FakeStorage(
+        override var storedLicense: License? = null,
+        override var storeHasEverOfferedProducts: Boolean = false,
+        override var clockHighWaterMark: Long = 0L,
+    ) : LicenseStorage
 
-    private class StubProvider : BillingProvider {
+    private class StubProvider(private val catalogue: List<BillingProduct> = emptyList()) : BillingProvider {
         val connectionFlow = MutableStateFlow(BillingConnectionState.DISCONNECTED)
         val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
         var acknowledged = mutableListOf<PurchaseRecord>()
+        var catalogueQueries = 0
 
         override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
         override val purchases: StateFlow<Set<PurchaseRecord>> = purchasesFlow.asStateFlow()
         override suspend fun connect() = Unit
-        override suspend fun products(): List<BillingProduct> = emptyList()
+        override suspend fun products(): List<BillingProduct> {
+            catalogueQueries++
+            return catalogue
+        }
         override suspend fun purchase(product: BillingProduct, launchContext: Any?) = PurchaseResult.Unavailable
         override suspend fun restore() = PurchaseResult.Unavailable
         override suspend fun acknowledge(purchase: PurchaseRecord) {
@@ -226,6 +234,126 @@ class PremiumRepositoryTest {
 
         assertFalse(repository.entitlements.value.unlocked.contains(Feature.DLNA))
         assertTrue(repository.entitlements.value.hasLapsed)
+    }
+
+    private fun catalogue() = listOf(
+        BillingProduct("premium_monthly", LicenseTier.MONTHLY, "Monthly", "$1.99"),
+    )
+
+    /**
+     * The release-day failure this latch exists for.
+     *
+     * A product id Play Console does not have is not an error: the query succeeds and comes back
+     * without it. So a build flipped live one day early, or with one id spelled differently, is a
+     * connected store that sells nothing - and every gate hanging off it would be a lock with no
+     * key. The repository has to notice, without anything opening the premium screen first.
+     */
+    @Test
+    fun aConnectedStoreWithAnEmptyCatalogueIsNotAllowedToSell() = runTest {
+        val storage = FakeStorage(License.FREE)
+        val provider = StubProvider(catalogue = emptyList())
+        val repository = PremiumRepository(provider, storage, scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+
+        assertFalse(repository.storeCanSell.value)
+        assertFalse(storage.storeHasEverOfferedProducts)
+        assertTrue("the catalogue must be asked for without a screen doing it", provider.catalogueQueries > 0)
+    }
+
+    @Test
+    fun aStoreThatOffersAPriceMayThenSell() = runTest {
+        val storage = FakeStorage(License.FREE)
+        val provider = StubProvider(catalogue = catalogue())
+        val repository = PremiumRepository(provider, storage, scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+
+        assertTrue(repository.storeCanSell.value)
+        assertTrue("it has to survive the next launch", storage.storeHasEverOfferedProducts)
+    }
+
+    /** Offline is not a licence to give the app away. Once the till has been seen open, it stays
+     * open - which is the whole reason the flag is stored rather than re-asked. */
+    @Test
+    fun aDeviceThatHasSeenPricesBeforeStaysSellableWithNoStoreAtAll() = runTest {
+        val storage = FakeStorage(License.FREE, storeHasEverOfferedProducts = true)
+        val provider = StubProvider(catalogue = emptyList())
+        val repository = PremiumRepository(provider, storage, scope) { now }
+
+        repository.loadInitial()
+
+        assertTrue(repository.storeCanSell.value)
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        assertTrue("an empty answer must not close a till that was already open", repository.storeCanSell.value)
+        assertEquals("nothing left to find out: do not ask again", 0, provider.catalogueQueries)
+    }
+
+    /** The catalogue is queried to answer one question, and the answer does not change. Re-asking
+     * it on every purchase update would be a network call per store event, forever. */
+    @Test
+    fun theCatalogueIsAskedAboutOnlyUntilItAnswers() = runTest {
+        val provider = StubProvider(catalogue = catalogue())
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = setOf(purchase(LicenseTier.MONTHLY, expires = now + 1000, id = "monthly"))
+        provider.purchasesFlow.value = emptySet()
+
+        assertEquals(1, provider.catalogueQueries)
+    }
+
+    /**
+     * The repository half of the same rule: an install older than the trial, with its storage
+     * emptied, is not a first launch however empty the storage looks.
+     */
+    @Test
+    fun clearingDataOnAnOldInstallDoesNotHandOutAnotherTrial() = runTest {
+        val storage = FakeStorage(storedLicense = null)
+        val installedLongAgo = now - License.TRIAL_DURATION_MILLIS - 1
+        val repository = PremiumRepository(StubProvider(), storage, scope, { installedLongAgo }) { now }
+
+        repository.loadInitial()
+
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        assertFalse(repository.entitlements.value.unlocked.contains(Feature.DLNA))
+        assertNotNull("the decision has to be recorded, not retaken every launch", storage.storedLicense)
+    }
+
+    /** And a genuine first launch is unaffected by the same check. */
+    @Test
+    fun aTrulyNewInstallStillGetsItsTrial() = runTest {
+        val storage = FakeStorage(storedLicense = null)
+        val repository = PremiumRepository(StubProvider(), storage, scope, { now }) { now }
+
+        repository.loadInitial()
+
+        assertEquals(LicenseTier.TRIAL, repository.entitlements.value.license.tier)
+    }
+
+    /**
+     * Winding the device clock back must not revive a trial that has ended. The repository records
+     * the newest time it has seen and judges expiry against that, so the second launch is resolved
+     * at the time of the first rather than at whatever the settings screen now claims.
+     */
+    @Test
+    fun windingTheClockBackDoesNotReviveALapsedTrial() = runTest {
+        val storage = FakeStorage(storedLicense = License.trialStartingAt(now))
+        var clock = now + License.TRIAL_DURATION_MILLIS + 1
+
+        val afterItLapsed = PremiumRepository(StubProvider(), storage, scope, { now }) { clock }
+        afterItLapsed.loadInitial()
+        assertTrue("the trial has to have lapsed first", afterItLapsed.entitlements.value.hasLapsed)
+
+        clock = now - 30 * 24 * 60 * 60 * 1000L
+        val afterWindingBack = PremiumRepository(StubProvider(), storage, scope, { now }) { clock }
+        afterWindingBack.loadInitial()
+
+        assertTrue("a clock that went backwards is not evidence", afterWindingBack.entitlements.value.hasLapsed)
+        assertFalse(afterWindingBack.entitlements.value.unlocked.contains(Feature.DLNA))
     }
 
     @Test

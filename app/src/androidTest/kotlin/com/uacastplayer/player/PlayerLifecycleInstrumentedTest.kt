@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -35,8 +36,8 @@ import org.junit.runner.RunWith
  * a second ExoPlayer - while the first was still alive. [PlayerViewModel.liveInstanceCountForTest]
  * is the same counter that guards this in production; these tests just assert it never exceeds 1.
  *
- * Not run in CI (no emulator there) - see android-ci.yml, which only compiles this module via
- * :app:assembleDebugAndroidTest.
+ * Compiled by the fast CI job and actually run by its `instrumented` job on an emulator, the
+ * same way scripts/run-instrumented-tests.sh runs them by hand - see android-ci.yml.
  */
 @RunWith(AndroidJUnit4::class)
 class PlayerLifecycleInstrumentedTest {
@@ -88,6 +89,78 @@ class PlayerLifecycleInstrumentedTest {
             backButton().performClick() // close (Event.Close)
             composeTestRule.waitForIdle()
         }
+    }
+
+    private fun playerViewModel(): PlayerViewModel {
+        var vm: PlayerViewModel? = null
+        composeTestRule.activityRule.scenario.onActivity { vm = ViewModelProvider(it)[PlayerViewModel::class.java] }
+        return checkNotNull(vm)
+    }
+
+    private fun isPlaying(): Boolean {
+        var playing = false
+        composeTestRule.activityRule.scenario.onActivity { playing = playerViewModel().player.isPlaying }
+        return playing
+    }
+
+    /**
+     * Leaving the app stops local playback, and coming back starts it again.
+     *
+     * This is the wiring half of [BackgroundPlaybackPolicy] - the policy's own tests say what the
+     * answer should be, and only this says that anything is asking. Without the observer in
+     * [com.uacastplayer.ui.player.PlayerHost] the policy is a correct function nobody calls, which
+     * is exactly the state the app shipped in: Home left an IPTV stream running from a stopped
+     * activity, holding a wake lock, with no notification to stop it.
+     *
+     * `moveToState(CREATED)` is what the framework does for Home, Recent Apps, an app switch and a
+     * screen lock alike - all four arrive as ON_STOP.
+     */
+    @Test
+    fun leavingAndReturningPausesAndResumesPlayback() {
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeTestRule.waitForIdle()
+        assertTrue("playback must not continue from a stopped activity", !isPlaying())
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+    }
+
+    /**
+     * A rotation must not be mistaken for leaving the app.
+     *
+     * It reaches ON_STOP on its way to rebuilding the Activity, so a background-pause that did not
+     * exclude it would stall a live channel every time the phone turned - the same reason
+     * `releasePlayback()` is guarded on `isChangingConfigurations`. Asserted by never observing a
+     * paused player across the recreate, not merely by checking the end state, which would be
+     * identical either way.
+     */
+    @Test
+    fun rotatingDoesNotPausePlayback() {
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+
+        assertTrue("a rotation is not the app leaving the screen", isPlaying())
+    }
+
+    /** And the other half of the rule: a channel the user paused themselves stays paused. Getting
+     * this wrong would be worse than the bug, because it would fire on every return to the app
+     * rather than only on backgrounding. */
+    @Test
+    fun aChannelPausedByTheUserIsNotResumedOnReturn() {
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+        composeTestRule.activityRule.scenario.onActivity { playerViewModel().player.pause() }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        assertTrue("returning to the app must not undo the user's pause", !isPlaying())
     }
 
     /** Scenario 2: mini <-> fullscreen, 10 times, via the system back gesture (collapses) and a

@@ -13,6 +13,7 @@ import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.playlist.ChannelGrouper
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -53,6 +54,10 @@ class PlaylistRepository(context: Context) {
     }
 
     suspend fun loadFromFile(uri: Uri): PlaylistOutcome {
+        // Asked for on every load, not only the first: taking a grant already held is a no-op, and
+        // this is the one place every path to a file playlist goes through - the initial pick, a
+        // source switch, and a reload from the saved list. See PlaylistFileLoader.rememberAccess.
+        fileLoader.rememberAccess(uri)
         val sourceId = Fingerprint.of(uri.toString())
         val outcome = toOutcome(fileLoader.load(uri), sourceId, sourceUrl = null)
         persistIfLoaded(sourceId, outcome)
@@ -90,16 +95,23 @@ class PlaylistRepository(context: Context) {
     /**
      * One-time upgrade path: before multi-playlist support there was exactly one snapshot file
      * (see [LegacyPlaylistSnapshotFile]) and no source list at all. Called only when [loadSources]
-     * comes back empty - adopts that single snapshot as the first saved source, migrates its bytes
-     * to the new per-source file, and deletes the legacy file so this never runs again. Returns
-     * null when there was nothing to migrate (fresh install).
+     * comes back empty - adopts that single snapshot as the first saved source and copies its bytes
+     * to the new per-source file. Returns null when there was nothing to migrate (fresh install).
+     *
+     * **It does not delete the old file**, and that is the whole point of splitting this in two.
+     * The migration is not finished when the bytes are copied; it is finished when the source list
+     * naming them is on disk, and that write belongs to the caller. Deleting here meant a process
+     * death in between - a low-memory kill during the first launch after an update, which is
+     * exactly when the app is doing the most work - left the sources list empty and the legacy file
+     * gone, so the next launch found nothing to migrate and the playlist was lost while its bytes
+     * sat in an orphaned file nothing referenced. The caller calls [discardLegacySnapshot] once the
+     * commit it is part of has actually landed.
      */
     suspend fun migrateLegacySnapshotIfNeeded(): PlaylistSource? {
         val legacy = LegacyPlaylistSnapshotFile.read(appContext) ?: return null
         val id = legacy.sourceFingerprint.ifBlank { Fingerprint.of(legacy.sourceUrl.orEmpty()) }
         val type = if (legacy.sourceUrl != null) PlaylistSourceType.URL else PlaylistSourceType.FILE
         PlaylistSnapshotStore(appContext, id).save(legacy)
-        LegacyPlaylistSnapshotFile.delete(appContext)
         return PlaylistSource(
             id = id,
             type = type,
@@ -107,6 +119,15 @@ class PlaylistRepository(context: Context) {
             displayName = null,
             addedAtEpochMillis = legacy.savedAtEpochMillis,
         )
+    }
+
+    /**
+     * Retires the pre-multi-playlist snapshot file, after the source list that replaces it has been
+     * written. Safe to call when there is nothing there - a re-run of a migration that already
+     * completed simply finds no file.
+     */
+    suspend fun discardLegacySnapshot() {
+        LegacyPlaylistSnapshotFile.delete(appContext)
     }
 
     // Best-effort cache write: the playlist this session already loaded is usable either way, so
@@ -124,6 +145,10 @@ class PlaylistRepository(context: Context) {
         )
         try {
             PlaylistSnapshotStore(appContext, sourceId).save(snapshot)
+        } catch (e: CancellationException) {
+            // The save suspends, so a scope ending here would otherwise be swallowed as a failed
+            // cache write and the caller would carry on inside a cancelled scope.
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Failed to persist playlist snapshot: ${e.javaClass.simpleName}" }
         }

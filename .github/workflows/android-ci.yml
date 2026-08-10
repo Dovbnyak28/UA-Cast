@@ -107,6 +107,13 @@ jobs:
       - name: Premium layer dependency-direction check
         run: bash scripts/check-premium-purity.sh
 
+      # What the premium screen advertises and what the app actually withholds live in different
+      # files, and nothing else makes them agree. A sold feature with no gate is worse than a bug:
+      # it costs a sale and tells the user something untrue, on the screen asking to be trusted
+      # with money - and it produces no error anywhere.
+      - name: Sold features are gated check
+        run: bash scripts/check-sold-features-are-gated.sh
+
       # Compile-only here; the instrumented job below actually runs them on an emulator. Kept in
       # this job so a compile break is reported in seconds by the fast gate rather than after the
       # emulator has finished booting.
@@ -115,6 +122,12 @@ jobs:
 
       - name: Assemble release (unsigned)
         run: ./gradlew :app:assembleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+
+      # Reads the versionCodes back out of what was just built. An install cannot move to a lower
+      # versionCode, so if the universal APK ever drops below a per-ABI one again, everyone holding
+      # that per-ABI build is stranded on it permanently - and nothing about the build fails.
+      - name: Version code ordering check
+        run: scripts/check-version-code-ordering.sh
 
       # The artifact Google Play actually accepts, and until it was first run by hand it did not
       # build at all: AGP refuses to shrink resources for a bundle while per-ABI APK splits are

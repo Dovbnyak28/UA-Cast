@@ -13,14 +13,19 @@ import com.uacastplayer.app.IconController
 import com.uacastplayer.app.ParentalControlController
 import com.uacastplayer.app.PlaylistController
 import com.uacastplayer.app.SettingsController
+import com.uacastplayer.app.GuidedTourController
 import com.uacastplayer.app.UpdateController
+import com.uacastplayer.guidedtour.GuidedTourState
 import com.uacastplayer.data.premium.FakeBillingProvider
 import com.uacastplayer.data.premium.PremiumRepository
 import com.uacastplayer.data.update.UpdateRepository
 import com.uacastplayer.premium.DeveloperMode
 import com.uacastplayer.premium.Entitlements
+import com.uacastplayer.data.premium.PlayBillingProvider
+import com.uacastplayer.premium.PremiumAvailability
 import com.uacastplayer.premium.FeatureManager
 import com.uacastplayer.premium.billing.BillingProduct
+import com.uacastplayer.premium.billing.PurchaseResult
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupFavorite
@@ -56,6 +61,7 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.log.CrashLog
 import com.uacastplayer.log.LogBuffer
 import com.uacastplayer.performance.DevicePerformanceClassifier
 import com.uacastplayer.performance.DeviceTier
@@ -80,7 +86,6 @@ data class AppUiState(
     val appTheme: AppTheme = AppTheme.DEFAULT,
     val needsLanguagePicker: Boolean = true,
     val needsTermsAcceptance: Boolean = true,
-    val needsOnboarding: Boolean = true,
 )
 
 /**
@@ -146,24 +151,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     val updateState: StateFlow<UpdateUiState> = updateController.state
 
+    private val guidedTourController = GuidedTourController(storage = preferences)
+    val guidedTourState: StateFlow<GuidedTourState> = guidedTourController.state
+    val hasSeenGuidedTour: StateFlow<Boolean> = guidedTourController.hasSeenTour
+
     /**
      * Premium access. There is no `PremiumController` beside the other controllers on purpose:
      * [PremiumRepository] already is one - it owns the state, the scope and the side effects - and a
      * class that only forwarded to it would be ceremony rather than structure.
      *
-     * The provider is the one line that changes on the day Google Play Billing is turned on. Until
-     * then [FakeBillingProvider] reports, truthfully, that there is no store: nothing is for sale
-     * yet.
+     * **Which provider is chosen is decided by one constant.** With [PremiumAvailability.STORE_IS_LIVE]
+     * false, [FakeBillingProvider] reports - truthfully - that this build has no store behind it:
+     * no prices, nothing owned, and (see [FeatureManager]) nothing withheld either. Flipping that
+     * constant to true is what turns real purchases on, and by then everything below it already
+     * exists: [PlayBillingProvider] is a full Google Play implementation, not a stub. It does not on
+     * its own turn the locks on, though - Play still has to answer with a catalogue first.
+     *
+     * It is a `const`, so R8 folds this branch: a release build with the store off does not carry
+     * the billing client's code paths at all, and one with it on does not carry the fake.
      */
     private val premiumRepository = PremiumRepository(
-        provider = FakeBillingProvider(),
+        provider = if (PremiumAvailability.STORE_IS_LIVE) {
+            PlayBillingProvider(application, viewModelScope)
+        } else {
+            FakeBillingProvider()
+        },
         storage = preferences,
         scope = viewModelScope,
+        installTime = ::firstInstallTimeMillis,
     )
     val entitlements: StateFlow<Entitlements> = premiumRepository.entitlements
 
-    /** The only way anything in this app asks whether a feature is available. */
-    val featureManager = FeatureManager(entitlements)
+    /**
+     * When this app was first installed, or null if the platform will not say.
+     *
+     * Read here rather than inside the premium layer because that layer imports nothing from
+     * Android - see `scripts/check-premium-purity.sh`, which fails the build over exactly this
+     * import. The value survives Clear data and is reset only by a real uninstall, which is what
+     * makes it worth asking for at all.
+     */
+    private fun firstInstallTimeMillis(): Long? = runCatching {
+        val application = getApplication<Application>()
+        application.packageManager.getPackageInfo(application.packageName, 0).firstInstallTime
+    }.getOrNull()
+
+    /** The only way anything in this app asks whether a feature is available. It is given the
+     * store's own answer to "is there anything to sell", so that a catalogue Play does not recognise
+     * cannot lock features nobody is able to buy - see [FeatureManager]. */
+    val featureManager = FeatureManager(entitlements) { premiumRepository.storeCanSell.value }
 
     private val _premiumProducts = MutableStateFlow<List<BillingProduct>>(emptyList())
 
@@ -238,7 +273,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             appTheme = preferences.appTheme,
             needsLanguagePicker = !preferences.hasChosenLanguage,
             needsTermsAcceptance = !preferences.hasAcceptedTerms,
-            needsOnboarding = !preferences.hasSeenOnboarding,
         )
     )
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -296,18 +330,65 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Clears the one-shot result line under the Settings button once it has been read. */
     fun clearUpdateCheckOutcome() = updateController.clearLastOutcome()
 
+    /** Opens the guided tour on first launch, and once more after an update that ships a newer
+     * edition of it. Called from the UI rather than this class's `init` so it happens *after* the
+     * language/terms gates, not behind them - see `MainActivity`. */
+    fun offerGuidedTourOnLaunch() = guidedTourController.offerOnLaunch()
+
+    /** Settings -> Tutorial. Ignores the "already seen" gate; the user asked. */
+    fun startGuidedTour() = guidedTourController.startFromSettings()
+
+    fun guidedTourNext() = guidedTourController.next()
+
+    fun guidedTourBack() = guidedTourController.back()
+
+    fun guidedTourSkip() = guidedTourController.skip()
+
+    fun guidedTourComplete() = guidedTourController.complete()
+
     /** Re-reads what the store offers. Called when a premium surface opens rather than at startup:
      * an app that never shows the premium screen should not talk to a store at all. */
     fun refreshPremiumProducts() {
         viewModelScope.launch { _premiumProducts.value = premiumRepository.products() }
     }
 
+    private val _lastPurchaseOutcome = MutableStateFlow<PurchaseResult?>(null)
+
+    /**
+     * How the last purchase or restore ended, until a screen has shown it.
+     *
+     * Kept rather than discarded because there is nowhere else for it to go: a purchase is answered
+     * by Play through a client-wide listener, long after the tap, and possibly after the sheet that
+     * started it has been dismissed. Without this, a declined card and a successful one are the same
+     * event from the user's side - nothing happens - and the only move left is to tap buy again.
+     *
+     * [PurchaseResult.Success] is deliberately not held: the entitlement flow has already changed by
+     * then, so the screen redraws itself as unlocked, which says it better than a message would.
+     */
+    val lastPurchaseOutcome: StateFlow<PurchaseResult?> = _lastPurchaseOutcome.asStateFlow()
+
     fun purchasePremium(product: BillingProduct, launchContext: Any?) {
-        viewModelScope.launch { premiumRepository.purchase(product.id, launchContext) }
+        _lastPurchaseOutcome.value = null
+        viewModelScope.launch { report(premiumRepository.purchase(product.id, launchContext)) }
     }
 
     fun restorePremiumPurchases() {
-        viewModelScope.launch { premiumRepository.restore() }
+        _lastPurchaseOutcome.value = null
+        viewModelScope.launch { report(premiumRepository.restore()) }
+    }
+
+    /**
+     * Two outcomes are deliberately not reported.
+     *
+     * Cancelling is a decision: the user closed Play's sheet and knows exactly what happened, and an
+     * app that answers that with a message is scolding them for not buying. Success needs no message
+     * either - the entitlement flow has already moved, so every lock on screen has just opened,
+     * which is a better answer than a line of text saying it did.
+     */
+    private fun report(result: PurchaseResult) {
+        _lastPurchaseOutcome.value = result.takeUnless {
+            it is PurchaseResult.Cancelled || it is PurchaseResult.Success
+        }
     }
 
     /** License states the developer menu can force this build into - empty in a release build, where
@@ -346,9 +427,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 maxMemoryBytes = runtime.maxMemory(),
                 logEntries = LogBuffer.snapshot(),
                 remuxEffectiveness = remuxEffectivenessStore.snapshot(),
+                lastCrash = CrashLog.read(),
             ),
         )
     }
+
+    /** True when a crash was recorded and has not been read away yet - Settings shows a row only
+     * then, so a user who has never crashed is never told about a feature for crashes. */
+    fun hasRecordedCrash(): Boolean = CrashLog.read() != null
+
+    /** Drops the recorded crash. Offered next to the report so a user who has sent it (or simply
+     * does not want it sitting there) can get rid of it without clearing app data. */
+    fun clearRecordedCrash() = CrashLog.clear()
 
     /** Read-only routing stats for Settings -> Diagnostics - see [RemuxEffectivenessStore]. */
     fun remuxEffectivenessSnapshot(): RemuxEffectivenessCounts = remuxEffectivenessStore.snapshot()
@@ -367,12 +457,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun acceptTerms() {
         preferences.hasAcceptedTerms = true
         _uiState.value = _uiState.value.copy(needsTermsAcceptance = false)
-    }
-
-    /** Skipping and completing both end onboarding the same way - see [OnboardingScreen]. */
-    fun completeOnboarding() {
-        preferences.hasSeenOnboarding = true
-        _uiState.value = _uiState.value.copy(needsOnboarding = false)
     }
 
     fun setPlaylistDisplayName(name: String) = playlistController.setPlaylistDisplayName(name)
@@ -557,11 +641,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearCache(kind: CacheKind) {
         val filesDir = getApplication<Application>().filesDir
-        val file = when (kind) {
-            CacheKind.PLAYLIST -> File(filesDir, CachePaths.PLAYLIST_SNAPSHOT)
-            CacheKind.EPG -> File(filesDir, CachePaths.EPG_SNAPSHOT)
-            CacheKind.ICONS -> File(filesDir, CachePaths.ICON_CACHE_DIR)
-            CacheKind.COIL -> File(filesDir, CachePaths.COIL_CACHE_DIR)
+        // A list, because the playlist cache is not one file: there is a snapshot per saved source
+        // (see CachePaths.playlistSnapshots). Reading only the pre-multi-playlist name meant this
+        // button deleted nothing on every install created since.
+        val files = when (kind) {
+            CacheKind.PLAYLIST -> CachePaths.playlistSnapshots(filesDir)
+            CacheKind.EPG -> listOf(File(filesDir, CachePaths.EPG_SNAPSHOT))
+            CacheKind.ICONS -> listOf(File(filesDir, CachePaths.ICON_CACHE_DIR))
+            CacheKind.COIL -> listOf(File(filesDir, CachePaths.COIL_CACHE_DIR))
         }
         // Signalled here (synchronously, before launching) so a prefetch tick that's about to
         // start doesn't slip in between this call and the delete below.
@@ -570,7 +657,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // Cancellation is cooperative, not instant - this waits for the prefetch coroutine to
             // actually unwind so it can't still be mid-write into the directory this deletes.
             if (kind == CacheKind.ICONS) iconController.awaitPrefetchStopped()
-            withContext(Dispatchers.IO) { CacheSizeUtils.clear(file) }
+            withContext(Dispatchers.IO) { CacheSizeUtils.clear(files) }
             // The deleted files are exactly what resolveChannelIcon's in-memory cache may still be
             // holding onto (positive results pointing at now-gone files, or negative results that
             // should be retried once the icon cache is empty) - drop it so the next resolve
@@ -585,7 +672,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val filesDir = getApplication<Application>().filesDir
             val sizes = withContext(Dispatchers.IO) {
                 CacheSizes(
-                    playlistBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.PLAYLIST_SNAPSHOT)),
+                    playlistBytes = CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(filesDir)),
                     epgBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.EPG_SNAPSHOT)),
                     iconCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.ICON_CACHE_DIR)),
                     coilCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.COIL_CACHE_DIR)),

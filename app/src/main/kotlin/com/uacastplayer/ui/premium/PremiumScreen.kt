@@ -17,6 +17,7 @@ import com.uacastplayer.R
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.premium.billing.BillingProduct
+import com.uacastplayer.premium.billing.PurchaseResult
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyRegular
@@ -82,8 +83,36 @@ fun PremiumContent(
                 onClick = section.onRestore,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
+
+            outcomeLine(section.lastOutcome)?.let { message ->
+                Text(
+                    text = message,
+                    style = Caption,
+                    color = UaTheme.palette.labelSecondary,
+                )
+            }
         }
     }
+}
+
+/**
+ * What to say about the last attempt, or null when there is nothing to say.
+ *
+ * The three cases that reach here need three different answers, and the common failure of a paid
+ * flow is answering all of them with one. "Nothing to restore" is not a problem and must not send
+ * the user off to check their connection; "the store cannot be reached" is a problem they can do
+ * something about; "already owned" means the app should already be unlocked and is the one worth
+ * repeating a restore for.
+ */
+@Composable
+private fun outcomeLine(outcome: PurchaseResult?): String? = when (outcome) {
+    null, PurchaseResult.Cancelled, is PurchaseResult.Success -> null
+    PurchaseResult.NothingToRestore -> stringResource(R.string.premium_restore_nothing)
+    PurchaseResult.AlreadyOwned -> stringResource(R.string.premium_already_owned)
+    PurchaseResult.Unavailable -> stringResource(R.string.premium_store_unreachable)
+    // Play's own debug message can name the account or the product, so it is not shown - it is
+    // already in the log for a diagnostics report, and the user needs the next step, not the cause.
+    is PurchaseResult.Failed -> stringResource(R.string.premium_purchase_failed)
 }
 
 @Composable

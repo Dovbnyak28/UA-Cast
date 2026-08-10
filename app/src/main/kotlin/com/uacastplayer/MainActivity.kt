@@ -36,6 +36,9 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.i18n.withAppLocale
+import com.uacastplayer.core.nav.BottomDestination
+import com.uacastplayer.guidedtour.GuidedTourSectionState
+import com.uacastplayer.ui.guidedtour.GuidedTourHost
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
 import java.time.LocalDate
@@ -52,13 +55,16 @@ import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.legal.HelpScreen
 import com.uacastplayer.ui.legal.TermsScreen
-import com.uacastplayer.ui.onboarding.OnboardingScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.permissions.NotificationPermissionGate
 import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.player.PlayerEnrichmentState
 import com.uacastplayer.ui.player.PlayerFavoriteActions
 import com.uacastplayer.ui.player.PlayerHost
+import androidx.compose.runtime.CompositionLocalProvider
+import com.uacastplayer.ui.premium.LocalFeatureGate
+import com.uacastplayer.ui.premium.LocalPremiumNotice
+import com.uacastplayer.ui.premium.rememberFeatureGate
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.GlassTabBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
@@ -122,11 +128,6 @@ class MainActivity : FragmentActivity() {
             // composable below actually consumes them (see ScaffoldZone/PlayerZone/BatteryHintZone),
             // so e.g. an icon-prefetch progress tick no longer has anything to do with the player.
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-            // Set true only by OnboardingScreen's final step, so MainAppContent knows to open
-            // AddPlaylist immediately - "Skip" (any step) and system back both leave this false,
-            // going straight into the ordinary app instead. Never reset once true; MainAppContent
-            // reads it exactly once, on its own first composition.
-            var openAddPlaylistAfterOnboarding by remember { mutableStateOf(false) }
 
             LaunchedEffect(uiState.language) {
                 val previous = activeLanguage
@@ -144,18 +145,17 @@ class MainActivity : FragmentActivity() {
                     uiState.needsTermsAcceptance ->
                         TermsScreen(onAccept = viewModel::acceptTerms, onDecline = { finish() })
 
-                    uiState.needsOnboarding ->
-                        OnboardingScreen(onFinished = { openAddPlaylist ->
-                            openAddPlaylistAfterOnboarding = openAddPlaylist
-                            viewModel.completeOnboarding()
-                        })
-
+                    // No walkthrough gate here any more. The three static cards that used to sit
+                    // between Terms and the app were a second explanation of what the guided tour
+                    // explains by pointing at the real thing - and back to back they were four
+                    // screens of reading before the first useful tap. The tour opens itself on
+                    // first launch instead (see MainAppContent), over the app, where the buttons
+                    // it describes actually are.
                     else -> MainAppContent(
                         viewModel = viewModel,
                         currentLanguage = uiState.language,
                         currentAppTheme = uiState.appTheme,
                         onFinish = { finish() },
-                        startWithAddPlaylist = openAddPlaylistAfterOnboarding,
                     )
                 }
             }
@@ -176,7 +176,6 @@ private fun MainAppContent(
     currentLanguage: AppLanguage,
     currentAppTheme: AppTheme,
     onFinish: () -> Unit,
-    startWithAddPlaylist: Boolean = false,
 ) {
     val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
 
@@ -226,7 +225,12 @@ private fun MainAppContent(
     }
     var showHelp by remember { mutableStateOf(false) }
     var showTerms by remember { mutableStateOf(false) }
-    var showAddPlaylist by remember { mutableStateOf(startWithAddPlaylist) }
+    var showAddPlaylist by remember { mutableStateOf(false) }
+    val guidedTourState by viewModel.guidedTourState.collectAsStateWithLifecycle()
+
+    // Offered here rather than from AppViewModel's init, so it happens *after* the language and
+    // terms gates rather than behind them.
+    LaunchedEffect(Unit) { viewModel.offerGuidedTourOnLaunch() }
     // Incremented (never reset) each time a playlist load finishes from AddPlaylistScreen, so
     // RootScaffold's LaunchedEffect(token) fires again even if the value happened to repeat - it's
     // a one-shot "switch to Channels" signal, not a persisted tab selection.
@@ -277,10 +281,67 @@ private fun MainAppContent(
         }
     }
 
+    // Wraps everything, including the player and the dialogs: the tour is drawn over the app, and
+    // the app is what it is pointing at. Placed here rather than inside ScaffoldZone so a target
+    // registered anywhere - the top bar's cast button, a channel row's star - reaches the same
+    // registry.
+    GuidedTourHost(
+        state = guidedTourState,
+        onNext = viewModel::guidedTourNext,
+        onBack = viewModel::guidedTourBack,
+        onSkip = viewModel::guidedTourSkip,
+        onComplete = viewModel::guidedTourComplete,
+    ) {
+    val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
+    val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
+    // The store's purchase flow needs an Activity to show its own UI over; findActivity() is
+    // this project's existing way of reaching one from a composable.
+    val activity = LocalContext.current.findActivity()
+
+    // Asked for when a premium surface is about to be shown rather than at startup: an app whose
+    // user never opens the premium screen should not be talking to a store at all.
+    LaunchedEffect(Unit) { viewModel.refreshPremiumProducts() }
+
+    // remember, not a plain construction: this holder carries a Set and lambdas, so Compose treats
+    // it as unstable and compares it by identity. Built fresh on every pass it is never equal to the
+    // previous one, and since ScaffoldZone recomposes whenever any of its flows emits - the EPG
+    // clock ticks twice a minute on its own - that would stop SettingsScreen from ever skipping.
+    // Keyed on the values it actually derives from.
+    //
+    // Built here rather than inside ScaffoldZone because two things need it now: the Settings
+    // section, and the gate below, which is provided above every screen.
+    val premiumOutcome by viewModel.lastPurchaseOutcome.collectAsStateWithLifecycle()
+    val premiumSection = remember(entitlements, premiumProducts, activity, premiumOutcome) {
+        PremiumSectionState(
+            entitlements = entitlements,
+            products = premiumProducts,
+            onPurchase = { product -> viewModel.purchasePremium(product, activity) },
+            onRestore = viewModel::restorePremiumPurchases,
+            lastOutcome = premiumOutcome,
+            // Fixed for the lifetime of the process: filled in by the debug Application before any
+            // composition runs, and empty forever in a release build.
+            developerStates = viewModel.developerLicenseStates,
+            onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
+        )
+    }
+
+    // Provided here, above every screen, for the reason FeatureGate's own doc gives: an offer point
+    // exists in Settings, in the playlist screens and in the cast sheet, and passing this down would
+    // add two parameters to each of the signatures in between. Its surfaces are drawn as the last
+    // sibling in the Box below, so the paywall lands over whatever refused the tap.
+    val premiumUi = rememberFeatureGate(
+        featureManager = viewModel.featureManager,
+        section = premiumSection,
+    )
+    CompositionLocalProvider(
+        LocalFeatureGate provides premiumUi.gate,
+        LocalPremiumNotice provides premiumUi.notice,
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
         ScaffoldZone(
             viewModel = viewModel,
             playlistState = playlistState,
+            guidedTourDestination = guidedTourState.currentStep?.destination,
             currentLanguage = currentLanguage,
             currentAppTheme = currentAppTheme,
             onExitApp = onFinish,
@@ -303,6 +364,7 @@ private fun MainAppContent(
             exportBackupFile = { exportBackupFile.launch("ua-cast-backup-${LocalDate.now()}.json") },
             importBackupFile = { importBackupFile.launch(arrayOf("application/json", "*/*")) },
             requireParentalControlUnlock = requireParentalControlUnlock,
+            premiumSection = premiumSection,
         )
 
         // A single stable PlayerHost call site, always composed whenever a channel is loaded
@@ -320,6 +382,12 @@ private fun MainAppContent(
         )
 
         BatteryHintZone(viewModel = viewModel)
+
+        // Last, so the unlock dialog and the premium sheet sit over the screen that raised them -
+        // including over the player, which is itself an overlay.
+        premiumUi.overlays()
+    }
+    }
     }
 }
 
@@ -411,6 +479,8 @@ private fun ScaffoldZone(
     exportBackupFile: () -> Unit,
     importBackupFile: () -> Unit,
     requireParentalControlUnlock: (() -> Unit) -> Unit,
+    premiumSection: PremiumSectionState,
+    guidedTourDestination: BottomDestination?,
 ) {
     val playlistSources by viewModel.playlistSources.collectAsStateWithLifecycle()
     val activePlaylistSourceId by viewModel.activePlaylistSourceId.collectAsStateWithLifecycle()
@@ -429,32 +499,11 @@ private fun ScaffoldZone(
     val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()
     val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
-    val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
-    val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
-    // The store's purchase flow needs an Activity to show its own UI over; findActivity() is
-    // this project's existing way of reaching one from a composable.
-    val activity = LocalContext.current.findActivity()
-
-    // Asked for when a premium surface is about to be shown rather than at startup: an app whose
-    // user never opens the premium screen should not be talking to a store at all.
-    LaunchedEffect(Unit) { viewModel.refreshPremiumProducts() }
-
-    // remember, not a plain construction: this holder carries a Set and lambdas, so Compose treats
-    // it as unstable and compares it by identity. Built fresh on every pass it is never equal to
-    // the previous one, and since ScaffoldZone recomposes whenever any of the fifteen flows above
-    // emits - the EPG clock ticks twice a minute on its own - that would stop SettingsScreen from
-    // ever skipping. Keyed on the values it actually derives from.
-    val premiumSection = remember(entitlements, premiumProducts, activity) {
-        PremiumSectionState(
-            entitlements = entitlements,
-            products = premiumProducts,
-            onPurchase = { product -> viewModel.purchasePremium(product, activity) },
-            onRestore = viewModel::restorePremiumPurchases,
-            // Fixed for the lifetime of the process: filled in by the debug Application before any
-            // composition runs, and empty forever in a release build.
-            developerStates = viewModel.developerLicenseStates,
-            onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
-        )
+    // Same reason as premiumSection - this reaches SettingsScreen, and a fresh instance on
+    // every pass would stop it skipping.
+    val hasSeenGuidedTour by viewModel.hasSeenGuidedTour.collectAsStateWithLifecycle()
+    val guidedTourSection = remember(hasSeenGuidedTour) {
+        GuidedTourSectionState(hasSeenTour = hasSeenGuidedTour, onStartTour = viewModel::startGuidedTour)
     }
 
     // LocalUriHandler rather than a raw ACTION_VIEW intent: it needs no queries entry in the
@@ -599,6 +648,8 @@ private fun ScaffoldZone(
             remuxEffectiveness = remuxEffectiveness,
             updateSection = updateSection,
             premiumSection = premiumSection,
+            guidedTourSection = guidedTourSection,
+            guidedTourDestination = guidedTourDestination,
         )
     }
 }

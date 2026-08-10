@@ -19,7 +19,27 @@ class FeaturePolicyTest {
     fun anUnpaidInstallGetsAWorkingPlayerIncludingChromecast() {
         val free = FeaturePolicy.featuresFor(LicenseTier.FREE)
 
-        assertEquals(setOf(Feature.CHROMECAST, Feature.PIP, Feature.THEMES), free)
+        assertEquals(
+            setOf(Feature.CHROMECAST, Feature.RAW_TS_REMUX, Feature.PIP, Feature.THEMES),
+            free,
+        )
+    }
+
+    /**
+     * Casting is free, so the thing that makes casting *work* has to be free with it.
+     *
+     * Remuxing is the fallback for a receiver that cannot play a stream directly. It engages by
+     * itself, deep in the cast path, with no user action to put a paywall in front of - so selling
+     * it would not have produced a paywall at all, only a free user whose casting silently failed
+     * on some channels and worked on others. It was listed as sold and gated nowhere, which is the
+     * shape that nearly shipped; `scripts/check-sold-features-are-gated.sh` is what now refuses it.
+     */
+    @Test
+    fun theFallbackThatMakesFreeCastingWorkIsFreeToo() {
+        val free = FeaturePolicy.featuresFor(LicenseTier.FREE)
+
+        assertTrue(Feature.CHROMECAST in free)
+        assertTrue("a free feature that only half works is not a free feature", Feature.RAW_TS_REMUX in free)
     }
 
     @Test
@@ -33,7 +53,6 @@ class FeaturePolicyTest {
         assertFalse(Feature.XTREAM in free)
         assertFalse(Feature.CUSTOM_EPG_SOURCE in free)
         assertFalse(Feature.CUSTOM_ICON_SOURCES in free)
-        assertFalse(Feature.RAW_TS_REMUX in free)
     }
 
     /** A trial that hides what is being sold does not sell it. */

@@ -86,8 +86,9 @@ this runbook:
    came from, so it is not offered an "update" back to itself.
 
 The check never downloads or installs anything: the banner and the Settings row open the release
-page in a browser. Note that until a signing key exists (see below), an update cannot install over
-an existing install anyway - Android refuses an APK signed with a different key.
+page in a browser. Every release APK must therefore be signed with the *same* key as the one it is
+replacing - Android refuses an APK signed with a different one, and the user sees an install
+failure rather than an update.
 
 ### Which digit moves
 
@@ -114,9 +115,11 @@ The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; 
 1. **The app has run on hardware nobody here chose.** Every device it has been verified on - one
    Xiaomi phone, one Samsung UE40KU6000, one Chromecast 4th gen - belongs to its author. A first
    report from a stranger's TV is worth more than another 100 tests.
-2. **A signing key exists and is backed up.** Right now every release APK is unsigned
-   (`app-release-unsigned`). An installed app whose key is later lost can never be updated -
-   deciding this *after* people have installed 1.0.0 is deciding it too late.
+2. ~~**A signing key exists and is backed up.**~~ Done (2026-08-08). Release builds are signed from
+   a PKCS#12 keystore held outside the repository, with its path, alias and passwords supplied by
+   four `UACAST_*` properties in `~/.gradle/gradle.properties` - never in the project. Losing that
+   file means the app can never be updated again, so its backup is the release process, not a step
+   in it.
 3. **The instrumented tests cover more than the launch path.** They now genuinely run - on an
    emulator in CI's `instrumented` job, and by hand through `scripts/run-instrumented-tests.sh`
    (last: `OK (6 tests)` on a Mi A2). But six tests over app launch, the player's lifecycle and the
@@ -130,8 +133,8 @@ code.
 
 **Current status: successfully run once (2026-07-30), on a Pixel 10 Pro emulator (API 37,
 x86_64)** - `app/src/main/baseline-prof.txt` now leads with 24,973 lines of real per-method entries
-from that run (1,667 `com.uacastplayer` methods covering the language picker -> Terms -> onboarding
--> Home flow), followed by the previous hand-authored wildcard block as a safety net for what that
+from that run (1,667 `com.uacastplayer` methods covering the language picker -> Terms -> first-run
+walkthrough -> Home flow), followed by the previous hand-authored wildcard block as a safety net for what that
 scripted flow doesn't reach (see below - mainly playback/media3).
 
 ```bash
@@ -175,7 +178,7 @@ adb pull "/storage/emulated/0/Android/media/com.uacastplayer.baselineprofile/Bas
 
 Running the instrumentation directly like this skips Gradle's uninstall-on-completion behavior, so
 the output file is still on the device afterward to pull. The pulled file only covers what the
-generator's scripted UI flow actually reached (language picker/Terms/onboarding/Home) - it contains
+generator's scripted UI flow actually reached (language picker/Terms/guided tour/Home) - it contains
 almost no `androidx/media3` or `com.uacastplayer.player` entries, since the generator never opens a
 channel. Append the previous wildcard block (`HSPLcom/uacastplayer/**->**(**)**` +
 `HSPLandroidx/media3/exoplayer/**->**(**)**`/`common/**`) to the end rather than replacing it
@@ -221,3 +224,68 @@ whatever language the connected device's system locale resolves to - text matchi
 script device-dependent. Tree order happens to disambiguate every gate correctly instead (see the
 generator's own doc comment) - if a gate screen's layout order ever changes, the generator's click
 targets need to move with it.
+
+## Turning premium on
+
+The premium layer is complete in code and off by one constant. `PremiumAvailability.STORE_IS_LIVE`
+is `false`, so `AppViewModel` builds `FakeBillingProvider` instead of `PlayBillingProvider` and
+`FeatureManager` refuses to lock anything at all. Flipping it is one line, but the order matters,
+and doing it first is the way to ship an app that has taken features away and cannot sell them
+back.
+
+### 1. Create the products in Play Console, spelled exactly
+
+`com.uacastplayer.premium.billing.PremiumProducts` is the whole catalogue, and Play has no concept
+of a typo here: an id the console does not know is simply **absent from an otherwise successful
+response**. Nothing is logged, nothing fails, the price never appears and the buy button does
+nothing.
+
+| Id | Where in Console | Type |
+| --- | --- | --- |
+| `premium_monthly` | Monetise → Subscriptions | subscription, monthly base plan |
+| `premium_yearly` | Monetise → Subscriptions | subscription, yearly base plan |
+| `premium_lifetime` | Monetise → In-app products | one-time purchase |
+
+`premium_lifetime` must **not** be created as a subscription. Subscriptions and one-time purchases
+are separate catalogues in Play, queried separately and owned separately, so it would be asked for
+in the wrong one and never found. `PremiumProductsTest` holds all of this still from the app's
+side; only the console can confirm the other half.
+
+Each subscription needs an active base plan with a price in at least one country, and each product
+needs to be **activated** - a draft product is not returned to the app.
+
+### 2. Get a build onto a track
+
+Products are not queryable until a build containing the `com.android.vending.BILLING` permission
+has been published on some track (internal testing is enough) and processed. Testing purchases
+without being charged also requires the accounts to be added under **Setup → License testing**;
+licence testers see "(test)" prices and are not billed.
+
+### 3. Only then flip the constant
+
+```kotlin
+// app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt
+const val STORE_IS_LIVE = true
+```
+
+It is a `const val` deliberately: R8 folds the branch, so a build with it off carries no billing
+code path and a build with it on carries no fake. Verified by unzipping
+`app/build/outputs/apk/release/app-universal-release.apk` and reading `classes.dex` - with the flag
+off, `premium_monthly` is not in the APK at all; with it on, the product ids, the billing client
+and `ProxyBillingActivity` all survive minification, and `com.android.vending.BILLING` is in the
+merged release manifest.
+
+`FeatureManagerTest.aBuildWithNothingToSellUnlocksEverything` asserts the flag is still `false`, so
+flipping it turns that test red. That is the reminder to read it, not a failure - it describes the
+pre-store build and must be updated in the same commit.
+
+### What happens if step 1 or 2 was missed anyway
+
+Nothing locks. `PremiumRepository` asks the store for its catalogue once it connects - on its own,
+without waiting for anyone to open the premium screen - and if the answer is empty, `storeCanSell`
+stays false and `FeatureManager` keeps every gate open. The rule is `mayWithhold`: *only a build
+that can also grant is allowed to withhold*, and a store with an empty catalogue cannot grant.
+
+The flag latches once a real price has been seen, and is persisted
+(`LicenseStorage.storeHasEverOfferedProducts`). It has to be, or the first offline launch would
+hand the app out for free.

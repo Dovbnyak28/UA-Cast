@@ -96,6 +96,12 @@ class PlaylistController(
                     sources = listOf(migrated.copy(displayName = preferences.playlistDisplayName))
                     playlistRepository.saveSources(sources)
                     setActivePlaylistSourceId(migrated.id)
+                    // Only now, and deliberately last: until the source list naming the migrated
+                    // snapshot is on disk, the legacy file is the only record that the playlist
+                    // exists. Dying between the two used to lose it (see
+                    // PlaylistRepository.migrateLegacySnapshotIfNeeded); dying after this line
+                    // loses nothing, because everything it pointed at has already been written.
+                    playlistRepository.discardLegacySnapshot()
                 }
             }
             _playlistSources.value = sources

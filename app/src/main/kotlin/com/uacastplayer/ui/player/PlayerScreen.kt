@@ -605,6 +605,7 @@ fun PlayerScreen(
             // would hide the only feedback that the tap did anything.
             onDeviceSelected = viewModel::connectDlna,
             onStopCasting = viewModel::stopDlna,
+            onVolumeChange = viewModel::setDlnaVolume,
         )
     }
 

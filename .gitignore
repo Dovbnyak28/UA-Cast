@@ -15,6 +15,11 @@ app/debug/
 baselineprofile/build/
 *.jks
 *.keystore
+# The release keystore as it actually sits in this working tree: a PKCS#12 store with no file
+# extension, which the two patterns above therefore do not match. Committing it would publish the
+# key that signs every update - and a published upload key cannot be un-published, only reset with
+# Google's help. Named explicitly rather than trusting a glob.
+/a-cast-player-release
 *.apk
 *.aab
 !gradle/wrapper/gradle-wrapper.jar

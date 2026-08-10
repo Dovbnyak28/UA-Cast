@@ -24,7 +24,6 @@ object PremiumLabels {
         Feature.XTREAM,
         Feature.CUSTOM_EPG_SOURCE,
         Feature.CUSTOM_ICON_SOURCES,
-        Feature.RAW_TS_REMUX,
     )
 
     /** Null for anything not in [SOLD] - a caller with one of those has nothing to show a user. */
@@ -37,7 +36,6 @@ object PremiumLabels {
         Feature.XTREAM -> R.string.feature_xtream
         Feature.CUSTOM_EPG_SOURCE -> R.string.feature_custom_epg
         Feature.CUSTOM_ICON_SOURCES -> R.string.feature_custom_icons
-        Feature.RAW_TS_REMUX -> R.string.feature_raw_ts_remux
         else -> null
     }
 }

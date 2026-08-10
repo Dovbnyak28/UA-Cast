@@ -5,6 +5,7 @@ import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseStorage
 import com.uacastplayer.premium.LicenseTier
+import com.uacastplayer.premium.TrialEligibilityPolicy
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProvider
 import com.uacastplayer.premium.billing.PurchaseRecord
@@ -38,38 +39,85 @@ class PremiumRepository(
     private var provider: BillingProvider,
     private val storage: LicenseStorage,
     private val scope: CoroutineScope,
-    private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * When this install was first put on the device - the one fact clearing app data does not
+     * erase - or null where it cannot be read. See [TrialEligibilityPolicy.deservesTrial].
+     *
+     * Declared before [systemClock] on purpose: every existing caller passes the clock as a
+     * trailing lambda, and a new last parameter would have silently taken that binding.
+     */
+    private val installTime: () -> Long? = { null },
+    private val systemClock: () -> Long = System::currentTimeMillis,
 ) {
+
+    /**
+     * The clock every entitlement decision in this class is judged against: the system clock,
+     * except that it never goes backwards.
+     *
+     * Reading it records it, which is what makes the mark advance. See
+     * [TrialEligibilityPolicy.clampToHighWaterMark] for why an app that sells time has to do this,
+     * and for what it deliberately does not defend against.
+     */
+    private fun now(): Long {
+        val clamped = TrialEligibilityPolicy.clampToHighWaterMark(systemClock(), storage.clockHighWaterMark)
+        if (clamped > storage.clockHighWaterMark) storage.clockHighWaterMark = clamped
+        return clamped
+    }
     private val _entitlements = MutableStateFlow(Entitlements.FREE)
     val entitlements: StateFlow<Entitlements> = _entitlements.asStateFlow()
 
     private val _connection = MutableStateFlow(BillingConnectionState.DISCONNECTED)
     val connection: StateFlow<BillingConnectionState> = _connection.asStateFlow()
 
+    /**
+     * Whether this device has ever been shown something it could actually buy.
+     *
+     * The gates hang off this, not off the connection state - see `FeatureManager.isUnlocked`. An
+     * app that withholds features it has never offered a price for is indistinguishable, from the
+     * user's side, from one that is simply broken, and the ways to arrive there do not announce
+     * themselves: a product still in draft, an id spelled differently in the console, a release
+     * flipped live before the track it is attached to went out. Each of those is answered by Play
+     * with a perfectly successful, perfectly empty response.
+     *
+     * Latched, and persisted, because it must not follow the network. Once the till has been seen
+     * open it stays open, or an offline launch would hand the app out for free.
+     */
+    private val _storeCanSell = MutableStateFlow(storage.storeHasEverOfferedProducts)
+    val storeCanSell: StateFlow<Boolean> = _storeCanSell.asStateFlow()
+
     /** Cancelled and replaced when the store is swapped, so the old provider stops being listened
      * to - otherwise two providers would race to set the license. */
     private var observeJob: Job? = null
 
     /**
-     * Reads the stored license, granting the first-launch trial if there has never been one, and
-     * then starts listening to the store.
+     * Reads the stored license, granting the first-launch trial if this install has never had one,
+     * and then starts listening to the store.
      *
-     * The trial is granted exactly once, because "never held a license" is recorded the moment it is
-     * granted. An expired trial stays stored rather than being cleared - clearing it would hand the
-     * same device a fresh 14 days on the next launch, forever.
+     * "Never had one" used to mean "storage is empty", and Android hands the user a button that
+     * produces exactly that - Clear data - so the fortnight restarted for anyone willing to spend
+     * three taps on it. [TrialEligibilityPolicy.deservesTrial] adds the one fact clearing data does
+     * not touch: how old the install itself is. An expired trial still stays stored rather than
+     * being cleared, for the same reason as before.
      */
     fun loadInitial() {
         val stored = storage.storedLicense
-        val license = if (stored == null) {
-            License.trialStartingAt(now()).also {
-                storage.storedLicense = it
-                AppLog.d(TAG) { "first launch: granted a trial" }
-            }
-        } else {
-            stored
-        }
+        val license = stored ?: grantTrialIfDeserved()
         publish(license)
         observeProvider()
+    }
+
+    private fun grantTrialIfDeserved(): License {
+        if (!TrialEligibilityPolicy.deservesTrial(installTime(), now())) {
+            // Not a first launch - an install older than the trial, with its storage emptied. The
+            // free tier is what it gets, and it is recorded so this is decided once rather than on
+            // every launch from here on.
+            AppLog.d(TAG) { "storage was cleared on an install older than the trial: no new trial" }
+            return License.FREE.also { storage.storedLicense = it }
+        }
+        return License.trialStartingAt(now()).also {
+            storage.storedLicense = it
+            AppLog.d(TAG) { "first launch: granted a trial" }
+        }
     }
 
     /**
@@ -91,9 +139,30 @@ class PremiumRepository(
                     // Only a *connected* store is allowed to speak about what is owned. An empty set
                     // from a store that is not connected is the absence of an answer, not the answer
                     // "you own nothing" - acting on it would revoke a paid feature offline.
-                    if (state == BillingConnectionState.CONNECTED) applyPurchases(purchases)
+                    if (state == BillingConnectionState.CONNECTED) {
+                        noteWhetherAnythingIsForSale()
+                        applyPurchases(purchases)
+                    }
                 }
         }
+    }
+
+    /**
+     * Asks the store, once, whether it has anything to sell - not on behalf of any screen, but so
+     * that the gates have an answer before a user meets one.
+     *
+     * Deliberately not left to the premium screen to discover. Someone who never opens that screen
+     * still runs into the locks, and a check that only happens when the paywall is opened would let
+     * a mis-configured catalogue take features away from everyone who never went looking for it.
+     */
+    private suspend fun noteWhetherAnythingIsForSale() {
+        if (_storeCanSell.value) return
+        if (provider.products().isEmpty()) {
+            AppLog.d(TAG) { "store is connected but sells nothing: gates stay open" }
+            return
+        }
+        storage.storeHasEverOfferedProducts = true
+        _storeCanSell.value = true
     }
 
     private fun applyPurchases(purchases: Set<PurchaseRecord>) {

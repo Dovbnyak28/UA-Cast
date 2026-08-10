@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -47,6 +48,9 @@ import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
+import com.uacastplayer.guidedtour.GuidedTourKeys
+import com.uacastplayer.guidedtour.GuidedTourSectionState
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
@@ -145,7 +149,9 @@ fun RootScaffold(
     remuxEffectiveness: RemuxEffectivenessCounts,
     updateSection: UpdateSectionState,
     premiumSection: PremiumSectionState,
+    guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
+    guidedTourDestination: BottomDestination? = null,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
     val stateHolder = rememberSaveableStateHolder()
@@ -153,6 +159,16 @@ fun RootScaffold(
     LaunchedEffect(focusChannelsToken) {
         if (focusChannelsToken > 0) {
             navState = NavBackStackReducer.reduce(navState, BottomNavEvent.Select(BottomDestination.CHANNELS)).state
+        }
+    }
+
+    // The guided tour asking to be on a particular tab, through the same reducer a tap goes through
+    // rather than a second way of changing tabs - so the back stack the user is left with when the
+    // tour ends is one this app could have produced on its own. Null for a step that does not care
+    // where it is shown, and for all of ordinary use.
+    LaunchedEffect(guidedTourDestination) {
+        if (guidedTourDestination != null && guidedTourDestination != navState.current) {
+            navState = NavBackStackReducer.reduce(navState, BottomNavEvent.Select(guidedTourDestination)).state
         }
     }
 
@@ -180,6 +196,7 @@ fun RootScaffold(
                         label = stringResource(destination.labelRes()),
                         icon = destination.icon(),
                         selected = destination == navState.current,
+                        tourKey = destination.tourKey(),
                         onClick = {
                             navState = NavBackStackReducer.reduce(
                                 navState,
@@ -304,6 +321,7 @@ fun RootScaffold(
                     remuxEffectiveness = remuxEffectiveness,
                     updateSection = updateSection,
                     premiumSection = premiumSection,
+                    guidedTourSection = guidedTourSection,
                     playlistState = playlistState,
                     onOpenAddPlaylist = onOpenAddPlaylist,
                     hiddenGroupKeys = hiddenGroupKeys,
@@ -385,7 +403,12 @@ internal fun RootTopBar(
                     )
                 }
             }
-            trailing()
+            // Boxed only so the tour has something to measure: the cast button itself comes from
+            // CastButtonFactory and is a slot here, so this is the one place that can name it
+            // without the top bar knowing what is inside.
+            Box(modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON)) {
+                trailing()
+            }
         }
     }
 }
@@ -395,6 +418,14 @@ private fun BottomDestination.labelRes(): Int = when (this) {
     BottomDestination.CHANNELS -> R.string.nav_channels
     BottomDestination.FAVORITES -> R.string.nav_favorites
     BottomDestination.SETTINGS -> R.string.nav_settings
+}
+
+/** Two tabs are tour targets; the other steps point at things inside a screen rather than at the
+ * tab that reaches it. Null elsewhere rather than a key nothing uses. */
+private fun BottomDestination.tourKey(): String? = when (this) {
+    BottomDestination.FAVORITES -> GuidedTourKeys.FAVORITE_BUTTON
+    BottomDestination.SETTINGS -> GuidedTourKeys.SETTINGS_BUTTON
+    else -> null
 }
 
 private fun BottomDestination.icon() = when (this) {

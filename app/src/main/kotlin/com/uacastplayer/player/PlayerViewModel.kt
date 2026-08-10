@@ -3,7 +3,9 @@ package com.uacastplayer.player
 import android.app.Application
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.app.PendingIntent
 import android.content.Intent
 import android.util.Log
@@ -50,6 +52,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 /**
@@ -285,6 +290,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun stopDlna() = dlnaRepository.stop()
 
+    /** Volume on the connected renderer. A no-op when nothing is connected or the renderer has no
+     * RenderingControl service, which is why the sheet can call it without checking. */
+    fun setDlnaVolume(volume: Int) = dlnaRepository.setVolume(volume)
+
     private fun handleCastSideEffect(effect: CastSideEffect) {
         when (effect) {
             // stop(), not pause(): a paused live stream keeps its upstream connection (and often
@@ -494,7 +503,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             retryState = RetryState()
             retryJob?.cancel()
             retryJob = viewModelScope.launch {
-                delay(DeadChannelPolicy.NO_NETWORK_RETRY_MILLIS)
+                // Whichever comes first: the network announcing itself, or the timer. The callback
+                // is what makes recovery feel immediate - polling alone meant up to ten seconds of
+                // a black screen after Wi-Fi was already back, which reads as the app being broken
+                // rather than the network having been. The timer stays as the backstop, for the
+                // outage that ends without an event this app is told about at all: a router that
+                // came back on the same network, a captive portal finally letting traffic through.
+                awaitNetworkOrTimeout(DeadChannelPolicy.NO_NETWORK_RETRY_MILLIS)
                 exoPlayer.prepare()
             }
             return
@@ -521,6 +536,39 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * working Wi-Fi connection and reaches nothing, which is exactly the case that would otherwise
      * be mistaken for every channel being broken at once.
      */
+    /**
+     * Suspends until a network with internet access becomes available, or [timeoutMillis] passes.
+     *
+     * Registered per wait rather than held for the ViewModel's life: this is the only moment the
+     * answer matters, and a callback alive the rest of the time would be woken by every Wi-Fi
+     * handover on the device for nothing.
+     */
+    private suspend fun awaitNetworkOrTimeout(timeoutMillis: Long) {
+        val connectivityManager = getApplication<Application>()
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return delay(timeoutMillis)
+
+        val available = CompletableDeferred<Unit>()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                available.complete(Unit)
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        // A device that refuses the registration is not a device that should stop retrying: the
+        // wait then simply runs out its timeout, which is exactly how this behaved before.
+        val registered = runCatching { connectivityManager.registerNetworkCallback(request, callback) }.isSuccess
+        try {
+            withTimeoutOrNull(timeoutMillis) { if (registered) available.await() else awaitCancellation() }
+        } finally {
+            // Covers all three ways out - the network arrived, the timer won, or the player was
+            // closed mid-wait. A callback left registered outlives the ViewModel that owns it.
+            if (registered) runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        }
+    }
+
     private fun hasNetwork(): Boolean {
         val connectivityManager = getApplication<Application>()
             .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -756,7 +804,37 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * idle closed player costs almost nothing; the ExoPlayer and MediaSession instances themselves
      * are kept for the next open. [onCleared] (on Activity destroy) is what releases the instances.
      */
+    /** True only between a pause this app made because the screen went away and the resume that
+     * undoes it - see [BackgroundPlaybackPolicy.shouldResumeOnStart]. */
+    private var pausedForBackground = false
+
+    /** The app is no longer on screen. See [BackgroundPlaybackPolicy] for what this is preventing. */
+    fun onEnterBackground(isInPictureInPicture: Boolean) {
+        val shouldPause = BackgroundPlaybackPolicy.shouldPauseOnStop(
+            isCasting = _uiState.value.isCasting,
+            isPlaying = exoPlayer.isPlaying,
+            isInPictureInPicture = isInPictureInPicture,
+        )
+        if (!shouldPause) return
+        pausedForBackground = true
+        exoPlayer.pause()
+    }
+
+    /** The app is visible again. Resumes only what [onEnterBackground] stopped, so a channel the
+     * user paused themselves stays paused. */
+    fun onReturnToForeground() {
+        val shouldResume = BackgroundPlaybackPolicy.shouldResumeOnStart(
+            pausedByPolicy = pausedForBackground,
+            isCasting = _uiState.value.isCasting,
+        )
+        // Cleared either way: the pause it records has been answered for, and carrying it forward
+        // would resume a later, unrelated backgrounding that the user had paused through.
+        pausedForBackground = false
+        if (shouldResume) exoPlayer.play()
+    }
+
     fun releasePlayback() {
+        pausedForBackground = false
         pendingSwitchJob?.cancel()
         retryJob?.cancel()
         stallRecoveryJob?.cancel()

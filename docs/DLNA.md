@@ -185,14 +185,45 @@ changed nothing anywhere: the TV kept the old channel and the phone played nothi
 - **No renderer position/state tracking.** The app never polls `GetPositionInfo` or
   `GetTransportInfo`. There is no seek-on-the-TV and no progress bar synced back from the
   renderer - once `Play` succeeds, the app simply shows "connected" until the user hits stop.
-- **No volume control.** `SetVolume`/`GetVolume` are not implemented; volume is whatever the TV's
-  own remote sets it to.
+- **DLNA and Chromecast are mutually exclusive.** `DlnaSessionRepository` and
+  `CastSessionRepository` are independent singletons with no shared state (each owns its own
+  `ProxyServer` instance); there is no handling for both being "connected" at once, and no attempt
+  to hand a session off between them.
+
+  *Measured, and only half true.* On a Mi A2 both connected at the same time - a Chromecast and a
+  Samsung set playing the same channel, each through its own proxy - and neither disturbed the
+  other. What is genuinely absent is *coordination*: nothing prevents it, nothing presents it as one
+  session, and `LocalPlaybackPolicy.shouldResumeAfterDisconnect` had to be taught about both targets
+  precisely because disconnecting one used to resume the phone underneath the other.
 - **Codec compatibility is not gated.** `cast/CastCompatibilityPolicy.kt` producing Chromecast
   codec verdicts is intentionally *not* consulted here. Real DLNA/UPnP TVs are generally far more
   codec-permissive than a Chromecast Default Receiver (MPEG-2, MP2, AC-3, HEVC are usually fine),
   so gating the DLNA path on Chromecast's verdicts would reject streams a real TV can play just
   fine. The DLNA path always sends the stream and lets the renderer decide.
-- **DLNA and Chromecast are mutually exclusive.** `DlnaSessionRepository` and
-  `CastSessionRepository` are independent singletons with no shared state (each owns its own
-  `ProxyServer` instance); there is no handling for both being "connected" at once, and no attempt
-  to hand a session off between them.
+
+## Volume
+
+Implemented, through `RenderingControl` - a *separate* UPnP service from `AVTransport`, with its own
+control URL (`DlnaDevice.renderingControlUrl`, resolved by `DeviceDescriptionParser` alongside the
+transport one) and its own `SOAPACTION` namespace. Sending a volume action to the transport endpoint
+gets a fault, which is why `RenderingControlClient` exists rather than two more methods on
+`AvTransportClient`.
+
+Three decisions worth knowing:
+
+- **The scale is assumed to be 0-100**, not fetched. UPnP publishes each renderer's real range in
+  its service description, and reading it would be a second HTTP round trip on connect for one
+  number. 0-100 is what the overwhelming majority of renderers use, the Samsung set included. On a
+  renderer with a smaller range, a value above its maximum is refused or clamped *by the renderer* -
+  and the read-back below is what makes that visible instead of silent.
+- **Optimistic, then true.** `DlnaSessionRepository.setVolume` publishes the requested value
+  immediately so the slider has no local copy of its own, then replaces it with what `GetVolume`
+  reports. A refused action reverts to the value that was in force before. A `volumeGeneration`
+  counter drops the answer to a superseded request, the same way `connectGeneration` does for
+  connects.
+- **Unknown is not zero.** `volume = null` (no `RenderingControl` service, or a failed read) renders
+  as *no volume control at all*. A slider sitting at zero would say the TV is muted, and the user
+  would act on it.
+
+Only the release of a drag is sent - a `SetVolume` per pixel is a SOAP round trip per frame against
+a renderer that answers them one at a time.

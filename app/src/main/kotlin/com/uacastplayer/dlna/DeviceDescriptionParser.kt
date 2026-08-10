@@ -12,6 +12,7 @@ import org.xml.sax.XMLReader
 import org.xml.sax.helpers.DefaultHandler
 
 private const val AV_TRANSPORT_SERVICE_TYPE_PREFIX = "urn:schemas-upnp-org:service:avtransport:"
+private const val RENDERING_CONTROL_SERVICE_TYPE_PREFIX = "urn:schemas-upnp-org:service:renderingcontrol:"
 private const val MAX_TEXT_LENGTH = 4 * 1024
 
 /**
@@ -82,6 +83,7 @@ private class DeviceDescriptionHandler : DefaultHandler() {
     private var friendlyName: String? = null
     private var avTransportControlUrl: String? = null
 
+    private var renderingControlUrl: String? = null
     private var insideService = false
     private var pendingServiceType: String? = null
     private var pendingControlUrl: String? = null
@@ -126,6 +128,9 @@ private class DeviceDescriptionHandler : DefaultHandler() {
                 if (avTransportControlUrl == null && isAvTransport(pendingServiceType)) {
                     avTransportControlUrl = pendingControlUrl
                 }
+                if (renderingControlUrl == null && isRenderingControl(pendingServiceType)) {
+                    renderingControlUrl = pendingControlUrl
+                }
                 insideService = false
                 pendingServiceType = null
                 pendingControlUrl = null
@@ -141,8 +146,16 @@ private class DeviceDescriptionHandler : DefaultHandler() {
         val name = friendlyName?.ifBlank { null }
         val rawControlUrl = avTransportControlUrl?.ifBlank { null }
         val resolvedControlUrl = rawControlUrl?.let { DeviceDescriptionParser.resolveControlUrl(locationUrl, it) }
+        // RenderingControl is optional: a renderer that plays but exposes no volume service is a
+        // perfectly usable target, so a missing one costs the volume slider and nothing else.
+        val resolvedVolumeUrl = renderingControlUrl?.ifBlank { null }
+            ?.let { DeviceDescriptionParser.resolveControlUrl(locationUrl, it) }
         return if (name != null && resolvedControlUrl != null) {
-            DlnaDevice(friendlyName = name, controlUrl = resolvedControlUrl)
+            DlnaDevice(
+                friendlyName = name,
+                controlUrl = resolvedControlUrl,
+                renderingControlUrl = resolvedVolumeUrl,
+            )
         } else {
             null
         }
@@ -150,6 +163,9 @@ private class DeviceDescriptionHandler : DefaultHandler() {
 
     private fun isAvTransport(serviceType: String?): Boolean =
         serviceType?.lowercase()?.startsWith(AV_TRANSPORT_SERVICE_TYPE_PREFIX) == true
+
+    private fun isRenderingControl(serviceType: String?): Boolean =
+        serviceType?.lowercase()?.startsWith(RENDERING_CONTROL_SERVICE_TYPE_PREFIX) == true
 
     private fun localNameOf(qName: String): String = qName.substringAfterLast(':')
 }

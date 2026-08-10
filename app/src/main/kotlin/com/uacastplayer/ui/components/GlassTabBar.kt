@@ -37,6 +37,7 @@ import com.uacastplayer.ui.theme.DurPress
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GlassTabBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.ui.theme.PressScaleIcon
 import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.raisedSurface
@@ -46,6 +47,9 @@ data class TabBarItem(
     val icon: ImageVector,
     val selected: Boolean,
     val onClick: () -> Unit,
+    /** Registers this tab as a guided-tour target under the given name; null for tabs the tour
+     * never points at, which is most of them. See [com.uacastplayer.guidedtour.GuidedTourKeys]. */
+    val tourKey: String? = null,
 )
 
 /** §5.10 - bottom navigation chrome: floating rounded glass bar with a highlight pill on the selected tab. */
@@ -79,6 +83,7 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
     )
     Column(
         modifier = modifier
+            .then(item.tourKey?.let { Modifier.guidedTourTarget(it) } ?: Modifier)
             .scale(scale)
             .selectable(
                 selected = item.selected,
