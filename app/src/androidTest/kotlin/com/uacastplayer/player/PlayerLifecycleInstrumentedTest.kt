@@ -91,16 +91,25 @@ class PlayerLifecycleInstrumentedTest {
         }
     }
 
-    private fun playerViewModel(): PlayerViewModel {
-        var vm: PlayerViewModel? = null
-        composeTestRule.activityRule.scenario.onActivity { vm = ViewModelProvider(it)[PlayerViewModel::class.java] }
-        return checkNotNull(vm)
-    }
-
-    private fun isPlaying(): Boolean {
-        var playing = false
-        composeTestRule.activityRule.scenario.onActivity { playing = playerViewModel().player.isPlaying }
-        return playing
+    /**
+     * Whether the player intends to play, which is what [BackgroundPlaybackPolicy] acts on.
+     *
+     * Deliberately not `isPlaying`. [FakeOriginServer] serves a sentence of ASCII where a transport
+     * stream should be - enough for a data source to connect to, and nothing a decoder will ever
+     * render - so `isPlaying` is false throughout this suite no matter what the app does. Asserting
+     * on it made these tests unpassable by construction, and because the first one wedged the
+     * process it took the rest of the class down with it. `playWhenReady` is the flag pause() and
+     * play() move, so it is both the honest signal here and the one production reads.
+     *
+     * One `onActivity` per read, never nested: it posts to the main thread and blocks until it
+     * returns, so calling it from inside another one deadlocks - which is precisely what happened.
+     */
+    private fun wantsToPlay(): Boolean {
+        var wants = false
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            wants = ViewModelProvider(activity)[PlayerViewModel::class.java].player.playWhenReady
+        }
+        return wants
     }
 
     /**
@@ -117,15 +126,15 @@ class PlayerLifecycleInstrumentedTest {
      */
     @Test
     fun leavingAndReturningPausesAndResumesPlayback() {
-        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
 
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         composeTestRule.waitForIdle()
-        assertTrue("playback must not continue from a stopped activity", !isPlaying())
+        assertTrue("playback must not continue from a stopped activity", !wantsToPlay())
 
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         composeTestRule.waitForIdle()
-        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
     }
 
     /**
@@ -139,12 +148,12 @@ class PlayerLifecycleInstrumentedTest {
      */
     @Test
     fun rotatingDoesNotPausePlayback() {
-        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
 
         composeTestRule.activityRule.scenario.recreate()
         composeTestRule.waitForIdle()
 
-        assertTrue("a rotation is not the app leaving the screen", isPlaying())
+        assertTrue("a rotation is not the app leaving the screen", wantsToPlay())
     }
 
     /** And the other half of the rule: a channel the user paused themselves stays paused. Getting
@@ -152,15 +161,17 @@ class PlayerLifecycleInstrumentedTest {
      * rather than only on backgrounding. */
     @Test
     fun aChannelPausedByTheUserIsNotResumedOnReturn() {
-        composeTestRule.waitUntil(timeoutMillis = 10_000) { isPlaying() }
-        composeTestRule.activityRule.scenario.onActivity { playerViewModel().player.pause() }
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            ViewModelProvider(activity)[PlayerViewModel::class.java].player.pause()
+        }
         composeTestRule.waitForIdle()
 
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         composeTestRule.waitForIdle()
 
-        assertTrue("returning to the app must not undo the user's pause", !isPlaying())
+        assertTrue("returning to the app must not undo the user's pause", !wantsToPlay())
     }
 
     /** Scenario 2: mini <-> fullscreen, 10 times, via the system back gesture (collapses) and a
