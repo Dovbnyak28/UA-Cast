@@ -127,7 +127,7 @@ jobs:
       # versionCode, so if the universal APK ever drops below a per-ABI one again, everyone holding
       # that per-ABI build is stranded on it permanently - and nothing about the build fails.
       - name: Version code ordering check
-        run: scripts/check-version-code-ordering.sh
+        run: bash scripts/check-version-code-ordering.sh
 
       # The artifact Google Play actually accepts, and until it was first run by hand it did not
       # build at all: AGP refuses to shrink resources for a bundle while per-ABI APK splits are
