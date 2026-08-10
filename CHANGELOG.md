@@ -531,6 +531,29 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   here wrote, and `ResponseBody.string()` reads to the end of the stream. These were the last two
   unbounded network reads in the app; everything else has had a cap for a while.
 
+- **A playlist nobody named was called by its own SHA-256.** Naming is optional when a playlist is
+  added, and the fallback was the source id — a hash of the location, which the home screen printed
+  as "6368ffd4" in its largest type under the words "Active playlist". The source switcher had the
+  same gap and showed the raw `content://` URI. A name is now derived from where the playlist came
+  from — host and file for a URL, the server for Xtream — with the query string dropped, because a
+  `get.php` URL carries a username and password and a label sits on a screen people show to a room.
+  A picked file is named after the file, asked of the document provider while the grant is still
+  current; anything still unnamed says "playlist from a file".
+
+  Found on a real phone, on the author's own playlist. The screenshot fixture had passed no name at
+  all, so the golden recorded the fallback of the day and pinned it in place as if it were design.
+
+- **The emailed diagnostics report carried three lines of log.** `LogBuffer` only ever held what
+  this app logged through `AppLog`, in memory, for one process — so a report sent after restarting
+  the app said almost nothing, and even a full one said nothing about media3, the Cast SDK or
+  OkHttp, which is where playback actually fails. The report now goes as an attachment carrying the
+  process's own logcat: 10KB rather than three lines, measured on the device.
+
+  Every line of it is sanitized first, and that matters more here than in `AppLog`: these lines come
+  from libraries that know nothing about the rule, and media3 logs stream URLs — which for an Xtream
+  playlist are the user's credentials. Verified on the phone: no raw URL survives, only redaction
+  markers.
+
 - **A DLNA cast survived losing the network it was being served over — on screen only.** A DLNA cast
   is not a link to a service, it is an address: the TV was handed `http://<this phone>:<port>/…` and
   fetches from it directly. Wi-Fi handing over to mobile data, a router restart giving out a new
