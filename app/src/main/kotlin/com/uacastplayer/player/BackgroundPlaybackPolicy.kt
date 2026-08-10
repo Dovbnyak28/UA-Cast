@@ -34,9 +34,17 @@ object BackgroundPlaybackPolicy {
      *   then putting the phone away is the normal way to use a cast.
      * - **Already paused.** Nothing to do, and saying otherwise would make [shouldResumeOnStart]
      *   resume something the user had deliberately stopped.
+     *
+     * [wantsToPlay] is `playWhenReady`, not `isPlaying`, and the difference is a real hole rather
+     * than a nicety. `isPlaying` is false while a stream is still buffering - which for live TV on a
+     * poor connection is a large share of the time, and is exactly when leaving the app is most
+     * tempting. Reading it would have let a player that was mid-buffer keep downloading from a
+     * stopped activity, holding the same wake lock, which is the bug this policy exists to close.
+     * `playWhenReady` is the intent: it is true from the moment the app decides to play until
+     * something decides otherwise.
      */
-    fun shouldPauseOnStop(isCasting: Boolean, isPlaying: Boolean, isInPictureInPicture: Boolean): Boolean =
-        isPlaying && !isCasting && !isInPictureInPicture
+    fun shouldPauseOnStop(isCasting: Boolean, wantsToPlay: Boolean, isInPictureInPicture: Boolean): Boolean =
+        wantsToPlay && !isCasting && !isInPictureInPicture
 
     /**
      * Whether to start again as the app becomes visible - true only when *this* policy is what

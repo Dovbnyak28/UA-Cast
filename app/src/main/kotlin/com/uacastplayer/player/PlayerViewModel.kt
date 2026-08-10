@@ -812,7 +812,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun onEnterBackground(isInPictureInPicture: Boolean) {
         val shouldPause = BackgroundPlaybackPolicy.shouldPauseOnStop(
             isCasting = _uiState.value.isCasting,
-            isPlaying = exoPlayer.isPlaying,
+            // playWhenReady, not isPlaying - see the policy: a stream that is still buffering is not
+            // "playing", and would otherwise have gone on downloading from a stopped activity.
+            wantsToPlay = exoPlayer.playWhenReady,
             isInPictureInPicture = isInPictureInPicture,
         )
         if (!shouldPause) return

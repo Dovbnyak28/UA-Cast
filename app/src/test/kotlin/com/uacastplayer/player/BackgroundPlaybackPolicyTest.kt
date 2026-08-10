@@ -15,9 +15,9 @@ class BackgroundPlaybackPolicyTest {
 
     private fun onStop(
         casting: Boolean = false,
-        playing: Boolean = true,
+        wantsToPlay: Boolean = true,
         pip: Boolean = false,
-    ) = BackgroundPlaybackPolicy.shouldPauseOnStop(casting, playing, pip)
+    ) = BackgroundPlaybackPolicy.shouldPauseOnStop(casting, wantsToPlay, pip)
 
     /**
      * The regression this policy exists for: Home, Recent Apps, app switching, screen lock - every
@@ -52,16 +52,16 @@ class BackgroundPlaybackPolicyTest {
     fun castingIsNotInterruptedByLeavingTheApp() {
         assertFalse("Chromecast", onStop(casting = true))
         assertFalse("DLNA", onStop(casting = true))
-        assertFalse("casting while the phone reports it is playing", onStop(casting = true, playing = true))
+        assertFalse("casting while the phone reports it is playing", onStop(casting = true, wantsToPlay = true))
     }
 
     /** Already paused - by the user, by an incoming call, by audio focus lost to another app.
      * There is nothing to stop, and claiming otherwise would make the app resume it later. */
     @Test
     fun somethingAlreadyPausedIsLeftAlone() {
-        assertFalse("user pressed pause", onStop(playing = false))
-        assertFalse("paused for an incoming call", onStop(playing = false))
-        assertFalse("buffering or errored, not playing", onStop(playing = false))
+        assertFalse("user pressed pause", onStop(wantsToPlay = false))
+        assertFalse("paused for an incoming call", onStop(wantsToPlay = false))
+        assertFalse("errored, with nothing to play", onStop(wantsToPlay = false))
     }
 
     /**
@@ -83,6 +83,19 @@ class BackgroundPlaybackPolicyTest {
     @Test
     fun nothingResumesLocallyWhileCasting() {
         assertFalse(BackgroundPlaybackPolicy.shouldResumeOnStart(pausedByPolicy = true, isCasting = true))
+    }
+
+    /**
+     * The case that reads as "not playing" and must still be stopped.
+     *
+     * `isPlaying` is false while a live stream buffers - on a poor connection, most of the time, and
+     * exactly when putting the phone away is most tempting. Reading it here would have left a
+     * mid-buffer player downloading from a stopped activity on the same wake lock, which is the
+     * whole bug. The question is intent, so the input is `playWhenReady`.
+     */
+    @Test
+    fun aStreamStillBufferingIsStoppedToo() {
+        assertTrue(onStop(wantsToPlay = true))
     }
 
     /** Pausing and resuming have to be exact opposites for the states that round-trip, or the app
