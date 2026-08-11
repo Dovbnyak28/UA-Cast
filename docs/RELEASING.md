@@ -148,10 +148,30 @@ It builds a throwaway `nonMinifiedRelease` variant of `:app` (applicationId `com
 `connectedNonMinifiedReleaseAndroidTest`, which should overwrite `app/src/main/baseline-prof.txt`
 with the result on success.
 
-**Earlier attempt** (Xiaomi Mi A2, Android 11 / API 30, rooted with Magisk): hung 25+ minutes with
-no crash/ANR/dialog after `ProfileInstaller: Installing profile for
-com.uacastplayer.baselineprofile` - a known category of `BaselineProfileRule` flakiness on
-non-stock-AOSP/modified-ROM devices. Killed via `./gradlew --stop`; never produced a profile.
+**The Mi A2 cannot do this at all, and it is not flakiness.** Android 11 / API 30, LineageOS,
+rooted with Magisk. Run without a rooted adb session it fails in seconds and says why:
+
+    java.lang.IllegalArgumentException: Baseline Profile collection requires API 33+, or a
+    rooted device running API 28 or higher and rooted adb session (via `adb root`).
+
+`adb root` does succeed on this ROM - adbd comes back as uid 0. The run then gets further, logs
+`ProfileInstaller: Installing profile`, sits for nine minutes, and fails with:
+
+    java.lang.ExceptionInInitializerError
+    Caused by: java.lang.IllegalStateException: UiAutomation not connected, UiAutomation@…[id=-1]
+
+which is UiAutomator refusing to attach to an instrumentation whose adbd is running as root. So the
+two requirements exclude each other here: without `adb root` the collection refuses to start, with
+it the automation driving the app cannot connect. This is what the previous note recorded as "hung
+25+ minutes with no crash" - the same dead end, seen before the timeout was waited out.
+
+Two side effects worth knowing: `adb root` also brings adbd up on TCP/IP, so `adb devices` starts
+showing the phone twice and every later command needs `-s` or an `adb disconnect`; and `adb unroot`
+puts it back.
+
+**So: use an API 33+ device or emulator, where no root is involved at all.** Below API 33 this needs
+a device whose adb can be rooted *and* whose UiAutomation survives it, which a Magisk-rooted user
+build is not.
 
 **What worked**: a Pixel 10 Pro emulator (`emulator -avd Pixel_10_Pro`, AVD image
 `google_apis_playstore_ps16k`/android-37.1) doesn't hang, but hits a *different*, environment-specific
