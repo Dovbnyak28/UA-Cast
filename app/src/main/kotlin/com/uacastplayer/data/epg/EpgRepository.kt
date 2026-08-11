@@ -7,6 +7,7 @@ import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.epg.DecodedEpgSnapshot
 import com.uacastplayer.epg.EpgData
 import com.uacastplayer.epg.EpgIndex
+import com.uacastplayer.epg.EpgRetentionPolicy
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgTruncation
 import com.uacastplayer.epg.XmlTvParseResult
@@ -14,6 +15,7 @@ import com.uacastplayer.epg.XmlTvParser
 import com.uacastplayer.log.AppLog
 import java.io.InputStream
 import java.io.PushbackInputStream
+import java.time.ZoneId
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -132,7 +134,10 @@ class EpgRepository(context: Context) {
         val read = pushback.read(magic)
         if (read > 0) pushback.unread(magic, 0, read)
         val stream = if (read == 2 && GzipSniffer.isGzip(magic)) GZIPInputStream(pushback) else pushback
-        return stream.use(XmlTvParser::parse)
+        // Everything that finished before today began is dropped as it streams past, rather than
+        // being held and then counted against the cap - see EpgRetentionPolicy for the measurement.
+        val keepFrom = EpgRetentionPolicy.keepFrom(System.currentTimeMillis(), ZoneId.systemDefault())
+        return stream.use { XmlTvParser.parse(it, keepFrom) }
     }
 
     private fun buildEpgData(parsed: XmlTvParseResult): EpgData {

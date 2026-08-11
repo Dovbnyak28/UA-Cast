@@ -26,7 +26,22 @@ data class XmlTvParseResult(
 object XmlTvParser {
 
     const val MAX_CHANNELS = 25_000
-    const val MAX_PROGRAMMES = 250_000
+
+    /**
+     * The ceiling on retained programmes, after [EpgRetentionPolicy] has dropped the ones that
+     * already finished.
+     *
+     * 250,000 was not enough and the shortfall was not small: the shipped feed carries 793,417
+     * programmes, so two thirds of every guide was cut - and cut in document order, which meant
+     * whole channels at the end of the file had no listings at all rather than everyone losing the
+     * far future. That is what the Settings warning about an incomplete guide was reporting.
+     *
+     * Measured on that feed, dropping finished programmes leaves 346,837. This number is that,
+     * rounded up for headroom: enough that the cap stops being reached by an ordinary guide, while
+     * still bounding a malicious or broken feed. It costs about 20% more memory than the 250,000
+     * arbitrary programmes held before, and every one of them is now a programme somebody can see.
+     */
+    const val MAX_PROGRAMMES = 400_000
 
     /**
      * Caps a single `<display-name>` or `<title>`. These are the only text this parser keeps now
@@ -36,7 +51,12 @@ object XmlTvParser {
      */
     const val MAX_TEXT_LENGTH = 512
 
-    fun parse(input: InputStream): XmlTvParseResult {
+    /**
+     * @param keepFromMillis drops programmes that had already finished by this instant - see
+     *   [EpgRetentionPolicy], which is what a caller with a clock should use to compute it. The
+     *   default of 0 keeps the whole feed, which is what a caller without one wants.
+     */
+    fun parse(input: InputStream, keepFromMillis: Long = 0L): XmlTvParseResult {
         val factory = SAXParserFactory.newInstance()
         trySetFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true)
 
@@ -45,7 +65,7 @@ object XmlTvParser {
         trySetFeature(reader, "http://xml.org/sax/features/external-parameter-entities", false)
         reader.entityResolver = EntityResolver { _, _ -> InputSource(StringReader("")) }
 
-        val handler = XmlTvHandler()
+        val handler = XmlTvHandler(keepFromMillis)
         reader.contentHandler = handler
         reader.parse(InputSource(input))
         return handler.result()
@@ -68,7 +88,7 @@ object XmlTvParser {
     }
 }
 
-private class XmlTvHandler : DefaultHandler() {
+private class XmlTvHandler(private val keepFromMillis: Long) : DefaultHandler() {
 
     private val channels = mutableListOf<EpgChannel>()
     private val programmes = mutableListOf<EpgProgramme>()
@@ -83,6 +103,14 @@ private class XmlTvHandler : DefaultHandler() {
     private var currentProgrammeStart: Long? = null
     private var currentProgrammeStop: Long? = null
     private var currentProgrammeTitle: StringBuilder? = null
+
+    /**
+     * Set for a programme that finished before [keepFromMillis], to drop it without building
+     * anything for it first. Decided in `startElement` rather than at the end so the `<title>` of a
+     * programme nobody will see is never accumulated into a String at all - on the shipped feed
+     * that is 388,863 Strings not built per download, which is most of the parse.
+     */
+    private var skippingProgramme = false
 
     private var textTarget: StringBuilder? = null
 
@@ -109,8 +137,13 @@ private class XmlTvHandler : DefaultHandler() {
                 currentProgrammeStart = attributes.getValue("start")?.let(XmlTvTimeParser::parse)
                 currentProgrammeStop = attributes.getValue("stop")?.let(XmlTvTimeParser::parse)
                 currentProgrammeTitle = null
+                // A feed with no stop time gets judged on its start: EpgProgramme falls back to the
+                // start for its stop too, so the two agree about when this programme ended.
+                val effectiveStop = currentProgrammeStop ?: currentProgrammeStart
+                skippingProgramme = effectiveStop != null &&
+                    !EpgRetentionPolicy.isWorthKeeping(effectiveStop, keepFromMillis)
             }
-            "title" -> if (currentProgrammeChannelId != null) {
+            "title" -> if (currentProgrammeChannelId != null && !skippingProgramme) {
                 textTarget = StringBuilder()
                 currentProgrammeTitle = textTarget
             }
@@ -159,7 +192,11 @@ private class XmlTvHandler : DefaultHandler() {
             "programme" -> {
                 val channelId = currentProgrammeChannelId
                 val start = currentProgrammeStart
-                if (channelId != null && start != null) {
+                // A programme dropped for being over is not truncation and must not raise
+                // `programmeLimitExceeded`: nothing was lost that a viewer could have watched, and
+                // telling them their guide is incomplete because yesterday is missing would be a
+                // warning they can neither act on nor turn off.
+                if (channelId != null && start != null && !skippingProgramme) {
                     if (programmes.size < XmlTvParser.MAX_PROGRAMMES) {
                         programmes += EpgProgramme(
                             channelId = channelId,
@@ -175,6 +212,7 @@ private class XmlTvHandler : DefaultHandler() {
                 currentProgrammeStart = null
                 currentProgrammeStop = null
                 currentProgrammeTitle = null
+                skippingProgramme = false
             }
         }
     }

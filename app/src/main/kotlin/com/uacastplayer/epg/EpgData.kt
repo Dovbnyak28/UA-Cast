@@ -20,6 +20,11 @@ data class EpgData(
  * channel, so hitting the cap does not thin the guide out evenly, it leaves the *last* channels in
  * the file with no programmes at all. A real 500-channel Ukrainian feed hits `MAX_PROGRAMMES`
  * exactly, and the app said nothing about it anywhere - not in the UI, not even in a log line.
+ *
+ * Since [EpgRetentionPolicy] began dropping finished programmes as they stream past, this should be
+ * rare rather than routine: the shipped feed went from 793,417 programmes (two thirds of them cut)
+ * to 346,837, comfortably inside the cap. The flag stays because a feed can still be larger than
+ * any number chosen here, and the day one is, the user deserves to be told which part is missing.
  */
 data class EpgTruncation(
     val channelsDropped: Boolean,
