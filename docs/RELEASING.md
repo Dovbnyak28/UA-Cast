@@ -122,9 +122,10 @@ The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; 
    in it.
 3. **The instrumented tests cover more than the launch path.** They now genuinely run - on an
    emulator in CI's `instrumented` job, and by hand through `scripts/run-instrumented-tests.sh`
-   (last: `OK (6 tests)` on a Mi A2). But six tests over app launch, the player's lifecycle and the
-   empty-playlist state is not coverage of this app: the whole Cast/DLNA/proxy path is still held
-   up by unit tests over pure policy objects plus one person trying it on one phone.
+   (last: `OK (9 tests)` on a Mi A2, 2026-08-11 - including the three that pin background pause,
+   rotation and the user's own pause). But nine tests over app launch, the player's lifecycle and
+   the empty-playlist state is not coverage of this app: the whole Cast/DLNA/proxy path is still
+   held up by unit tests over pure policy objects plus one person trying it on one phone.
 
 None of the three is a code change, which is exactly why none of them gets closer by writing more
 code.
