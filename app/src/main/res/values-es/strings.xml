@@ -422,6 +422,8 @@
     <string name="premium_unlock_later">Ahora no</string>
     <string name="premium_restore">Restaurar compras</string>
     <string name="premium_no_store">Todavía no hay nada que comprar: la aplicación no está publicada en ninguna tienda. Durante la prueba, Premium está abierto para todos.</string>
+    <string name="premium_no_play_on_device">Este dispositivo no tiene Google Play, así que aquí no hay nada que comprar: todas las funciones Premium están abiertas. Es deliberado, no un descuido.</string>
+    <string name="premium_store_offers_nothing">Google Play no ofrece nada ahora mismo. Mientras siga así, las funciones Premium permanecen abiertas.</string>
     <string name="premium_restore_nothing">No hay nada que restaurar en esta cuenta de Google.</string>
     <string name="premium_already_owned">Ya lo tienes. Toca «Restaurar compras».</string>
     <string name="premium_store_unreachable">No se pudo contactar con Google Play. Comprueba tu conexión e inténtalo de nuevo.</string>

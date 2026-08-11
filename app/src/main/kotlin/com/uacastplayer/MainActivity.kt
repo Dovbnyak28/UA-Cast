@@ -311,13 +311,15 @@ private fun MainAppContent(
     // Built here rather than inside ScaffoldZone because two things need it now: the Settings
     // section, and the gate below, which is provided above every screen.
     val premiumOutcome by viewModel.lastPurchaseOutcome.collectAsStateWithLifecycle()
-    val premiumSection = remember(entitlements, premiumProducts, activity, premiumOutcome) {
+    val premiumConnection by viewModel.premiumConnection.collectAsStateWithLifecycle()
+    val premiumSection = remember(entitlements, premiumProducts, activity, premiumOutcome, premiumConnection) {
         PremiumSectionState(
             entitlements = entitlements,
             products = premiumProducts,
             onPurchase = { product -> viewModel.purchasePremium(product, activity) },
             onRestore = viewModel::restorePremiumPurchases,
             lastOutcome = premiumOutcome,
+            connection = premiumConnection,
             // Fixed for the lifetime of the process: filled in by the debug Application before any
             // composition runs, and empty forever in a release build.
             developerStates = viewModel.developerLicenseStates,

@@ -422,6 +422,8 @@
     <string name="premium_unlock_later">Not now</string>
     <string name="premium_restore">Restore purchases</string>
     <string name="premium_no_store">There is nothing to buy yet — this app is not published in a store. Premium is unlocked for everyone during the trial.</string>
+    <string name="premium_no_play_on_device">There is no Google Play on this device, so there is nothing to buy here — every premium feature is open. That is deliberate, not an oversight.</string>
+    <string name="premium_store_offers_nothing">Google Play has nothing to offer right now. Premium features stay open until it does.</string>
     <string name="premium_restore_nothing">Nothing to restore on this Google account.</string>
     <string name="premium_already_owned">You already own this. Tap “Restore purchases”.</string>
     <string name="premium_store_unreachable">Could not reach Google Play. Check your connection and try again.</string>

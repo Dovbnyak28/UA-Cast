@@ -1,5 +1,6 @@
 package com.uacastplayer.premium
 
+import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
 
@@ -29,6 +30,9 @@ data class PremiumSectionState(
     val onPurchase: (BillingProduct) -> Unit,
     val onRestore: () -> Unit,
     val lastOutcome: PurchaseResult? = null,
+    /** Whether a store can be reached at all, which is what tells "nothing published yet" apart
+     * from "this device has no Google Play" when [products] is empty - see [StoreAbsence]. */
+    val connection: BillingConnectionState = BillingConnectionState.DISCONNECTED,
     val developerStates: List<String> = emptyList(),
     val onDeveloperStateSelected: (String) -> Unit = {},
 ) {

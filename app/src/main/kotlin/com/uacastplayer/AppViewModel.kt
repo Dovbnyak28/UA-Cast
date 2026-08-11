@@ -24,6 +24,7 @@ import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.data.premium.PlayBillingProvider
 import com.uacastplayer.premium.PremiumAvailability
 import com.uacastplayer.premium.FeatureManager
+import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
 import com.uacastplayer.update.UpdateUiState
@@ -181,6 +182,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         installTime = ::firstInstallTimeMillis,
     )
     val entitlements: StateFlow<Entitlements> = premiumRepository.entitlements
+
+    /** Whether a store can be reached, which is what lets the premium screen tell "not published
+     * yet" apart from "this device has no Google Play" - see [com.uacastplayer.premium.StoreAbsence]. */
+    val premiumConnection: StateFlow<BillingConnectionState> = premiumRepository.connection
 
     /**
      * When this app was first installed, or null if the platform will not say.

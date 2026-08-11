@@ -16,6 +16,9 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.premium.PremiumSectionState
+import androidx.annotation.StringRes
+import com.uacastplayer.premium.PremiumAvailability
+import com.uacastplayer.premium.StoreAbsence
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
 import com.uacastplayer.ui.components.SecondaryButton
@@ -68,7 +71,7 @@ fun PremiumContent(
             // store to ask, tapping it could only ever do nothing, and a button that does nothing is
             // the defect - not the missing message explaining why it did nothing.
             Text(
-                text = stringResource(R.string.premium_no_store),
+                text = stringResource(noStoreMessage(section)),
                 style = Caption,
                 color = UaTheme.palette.labelSecondary,
                 modifier = Modifier.padding(top = 4.dp),
@@ -114,6 +117,20 @@ private fun outcomeLine(outcome: PurchaseResult?): String? = when (outcome) {
     // already in the log for a diagnostics report, and the user needs the next step, not the cause.
     is PurchaseResult.Failed -> stringResource(R.string.premium_purchase_failed)
 }
+
+/**
+ * The reason there is nothing to buy, in the reader's terms.
+ *
+ * One sentence used to cover all of them, and it said the app was unpublished - which becomes a
+ * falsehood the day it is published, told to the people least able to argue with it.
+ */
+@StringRes
+private fun noStoreMessage(section: PremiumSectionState): Int =
+    when (StoreAbsence.of(PremiumAvailability.STORE_IS_LIVE, section.connection, hasProducts = false)) {
+        StoreAbsence.DEVICE_HAS_NO_STORE -> R.string.premium_no_play_on_device
+        StoreAbsence.STORE_OFFERS_NOTHING -> R.string.premium_store_offers_nothing
+        else -> R.string.premium_no_store
+    }
 
 @Composable
 private fun statusLine(section: PremiumSectionState, nowMillis: Long): String {

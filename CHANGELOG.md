@@ -183,6 +183,20 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
     cancellation would never have been noticed and a purchase made on another device never picked
     up until the app was restarted.
 
+  **A device with no Google Play keeps every premium feature, and now says so.** An Android TV box
+  without GMS, a de-Googled phone, a sideloaded copy on hardware Play never shipped to: none of them
+  can buy anything, so none of them is withheld anything. That was already true and was silent,
+  which made it read as a loophole rather than a decision. For an IPTV player these are not fringe
+  devices — the manifest carries leanback entries and `PlayBillingProvider` names the case in as
+  many words — so the alternative, closing the gates after a grace period, would have taken features
+  from the one audience proven unable to pay for them.
+
+  It also fixes a sentence that was about to become false. With nothing to buy, the premium screen
+  said "this app is not published in a store" — true today, and a lie the day it is published, told
+  to exactly those users. There are three reasons a catalogue can be empty and they now get three
+  answers: no store in this build, no store on this device, or a store that answered with nothing —
+  the last being a console that is not ready, which somebody can actually fix.
+
   **A stored licence now carries a tag that says this app wrote it.** Editing
   `uacast_prefs.xml` on a rooted phone - `license_tier=LIFETIME`, no expiry - used to be the whole
   attack. The licence and its HMAC are one value now, keyed from the Android Keystore where the key

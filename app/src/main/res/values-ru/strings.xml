@@ -429,6 +429,8 @@
     <string name="premium_unlock_later">Не сейчас</string>
     <string name="premium_restore">Восстановить покупки</string>
     <string name="premium_no_store">Покупать пока нечего — приложение не опубликовано в магазине. На время пробного периода Premium открыт всем.</string>
+    <string name="premium_no_play_on_device">На этом устройстве нет Google Play, поэтому покупать тут нечего — все функции Premium открыты. Это намеренно, а не недосмотр.</string>
+    <string name="premium_store_offers_nothing">Google Play сейчас ничего не предлагает. Пока так — функции Premium остаются открытыми.</string>
     <string name="premium_restore_nothing">На этом аккаунте Google нечего восстанавливать.</string>
     <string name="premium_already_owned">Это уже куплено. Нажмите «Восстановить покупки».</string>
     <string name="premium_store_unreachable">Не удалось связаться с Google Play. Проверьте соединение и попробуйте снова.</string>
