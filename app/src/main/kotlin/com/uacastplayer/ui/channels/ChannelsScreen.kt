@@ -312,6 +312,7 @@ private fun ErrorState(error: PlaylistError) {
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
+        PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
     }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(message, style = BodyText, color = MaterialTheme.colorScheme.error)

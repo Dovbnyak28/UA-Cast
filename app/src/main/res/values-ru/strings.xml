@@ -109,6 +109,7 @@
     <string name="playlist_error_size_limit">Плейлист превышает лимит 8 МБ — это примерно 45 000 каналов. Попросите у провайдера список поменьше или разделённый по категориям.</string>
     <string name="playlist_error_http">Ошибка сервера (код %1$d)</string>
     <string name="playlist_error_network">Ошибка сети, попробуйте снова</string>
+    <string name="playlist_error_empty">В этом файле нет каналов. Проверьте, что это действительно плейлист M3U, а не другой файл.</string>
 
     <!-- Channel group names -->
     <string name="group_ungrouped">Без группы</string>

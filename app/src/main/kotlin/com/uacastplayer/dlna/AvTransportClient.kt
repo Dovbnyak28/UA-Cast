@@ -82,8 +82,8 @@ class AvTransportClient(
                 // peekBody, not body.string(): the fault is a small document, but it comes from a
                 // device on the LAN that nobody here wrote - see MAX_SOAP_RESPONSE_BYTES.
                 val fault = UpnpFault.parse(response.peekBody(MAX_SOAP_RESPONSE_BYTES).string())
-                AppLog.w(TAG) { "SOAP $action refused: HTTP ${response.code}${fault?.let { " $it" }.orEmpty()}" }
-                if (fault?.isTransitionNotAvailable == true) SoapOutcome.TRANSITIONING else SoapOutcome.FAILED
+                AppLog.w(TAG) { "SOAP $action refused: HTTP ${response.code} $fault" }
+                if (fault.isTransitionNotAvailable) SoapOutcome.TRANSITIONING else SoapOutcome.FAILED
             }
         } catch (e: Exception) {
             // The control URL is deliberately not interpolated. LogSanitizer would redact it to a

@@ -4,6 +4,17 @@ sealed class PlaylistError {
     data object SizeLimitExceeded : PlaylistError()
     data class Http(val code: Int) : PlaylistError()
     data object Network : PlaylistError()
+
+    /**
+     * The source was read and held no channels.
+     *
+     * Distinct from every other case here because nothing failed: a zero-byte file, a JPEG picked
+     * by mistake, an M3U whose every line was skipped. It used to resolve to an ordinary success
+     * with an empty list, which the app renders as the same screen a user with no playlist at all
+     * sees - so the answer to "I added my playlist and nothing happened" was a blank screen and no
+     * sentence anywhere saying the file had nothing in it.
+     */
+    data object Empty : PlaylistError()
 }
 
 data class PlaylistUiState(

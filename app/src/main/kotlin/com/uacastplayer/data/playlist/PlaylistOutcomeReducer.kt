@@ -20,6 +20,11 @@ object PlaylistOutcomeReducer {
         fromCache: Boolean,
         displayName: String?,
     ): PlaylistUiState = when (outcome) {
+        // Read successfully, and empty. Kept apart from the Loaded branch below rather than folded
+        // into it: everything downstream treats "no groups" as "no playlist yet", which is the
+        // right answer for a fresh install and the wrong one for a file the user just chose.
+        is PlaylistOutcome.Loaded if outcome.groups.all { it.channels.isEmpty() } ->
+            current.copy(isLoading = false, error = PlaylistError.Empty)
         is PlaylistOutcome.Loaded -> PlaylistUiState(
             groups = outcome.groups,
             isLoading = false,

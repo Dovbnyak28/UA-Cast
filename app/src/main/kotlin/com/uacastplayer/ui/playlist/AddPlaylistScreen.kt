@@ -340,6 +340,7 @@ private fun statusMessage(
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
+        PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
     }
     // A load that finished, reported no error, and produced nothing. Without this branch the
     // status fell through to "ready to load" - the exact words shown *before* the button was pressed,
