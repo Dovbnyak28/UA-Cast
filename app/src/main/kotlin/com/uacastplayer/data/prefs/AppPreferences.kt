@@ -9,10 +9,15 @@ import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.guidedtour.GuidedTourStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.core.security.LicenseIntegrity
+import com.uacastplayer.core.security.LicenseRecordCodec
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseStorage
 import com.uacastplayer.premium.LicenseTier
 import com.uacastplayer.update.UpdateCheckStorage
+
+private const val TAG = "AppPreferences"
 
 /**
  * Small, synchronous wrapper around the app's single general-settings [SharedPreferences] file.
@@ -217,27 +222,78 @@ class AppPreferences(context: Context) :
      * more generous than a valid one.
      */
     override var storedLicense: License?
-        get() {
-            val storedTier = prefs.getString(KEY_LICENSE_TIER, null) ?: return null
-            val tier = LicenseTier.entries.firstOrNull { it.name == storedTier } ?: LicenseTier.FREE
-            val expiry = if (prefs.contains(KEY_LICENSE_EXPIRY)) prefs.getLong(KEY_LICENSE_EXPIRY, 0L) else null
-            return License(tier, expiry, prefs.getString(KEY_LICENSE_SOURCE, null))
-        }
-        set(value) = prefs.edit {
+        get() = readTaggedLicense() ?: adoptLegacyLicense()
+        set(value) {
             if (value == null) {
-                remove(KEY_LICENSE_TIER)
-                remove(KEY_LICENSE_EXPIRY)
-                remove(KEY_LICENSE_SOURCE)
-            } else {
-                putString(KEY_LICENSE_TIER, value.tier.name)
-                putString(KEY_LICENSE_SOURCE, value.source)
-                if (value.expiresAtMillis == null) {
-                    remove(KEY_LICENSE_EXPIRY)
-                } else {
-                    putLong(KEY_LICENSE_EXPIRY, value.expiresAtMillis)
-                }
+                prefs.edit { remove(KEY_LICENSE_RECORD); removeLegacyLicenseKeys() }
+                return
+            }
+            val payload = LicenseRecordCodec.payload(value.tier.name, value.expiresAtMillis, value.source)
+            val mac = LicenseIntegrity.sign(payload)
+            prefs.edit {
+                // A device that cannot tag stores the payload with an empty tag rather than nothing:
+                // the licence is what the user paid for, and a Keystore that will not co-operate is
+                // not a reason to forget it. readTaggedLicense treats that case as unverifiable
+                // rather than as forged.
+                putString(KEY_LICENSE_RECORD, LicenseRecordCodec.encode(payload, mac.orEmpty()))
+                removeLegacyLicenseKeys()
             }
         }
+
+    /**
+     * The licence, if the record on disk is one this app wrote.
+     *
+     * A record whose tag does not match is not repaired and not reported - it resolves to
+     * [License.FREE], the same answer an unrecognised tier already gets. Silence is deliberate: the
+     * person who edited the file is the only one who would read a message about it, and the honest
+     * outcome for the app is simply not to believe it.
+     */
+    private fun readTaggedLicense(): License? =
+        prefs.getString(KEY_LICENSE_RECORD, null)?.let(::licenseFrom)
+
+    /**
+     * One record, believed or not.
+     *
+     * The three ways it can fail to be this app's - not a record at all, too few fields, a tag that
+     * does not match - are one decision rather than three, because they have one answer. An empty
+     * tag is not a failure: it means the device could not produce one when the record was written
+     * (see the setter), and verifying against a Keystore that has since started working would
+     * revoke a licence nobody touched.
+     */
+    private fun licenseFrom(stored: String): License {
+        val decoded = LicenseRecordCodec.decode(stored)
+        val fields = decoded?.first?.split('|').orEmpty()
+        val ours = decoded != null &&
+            fields.size >= LICENSE_FIELD_COUNT &&
+            (decoded.second.isEmpty() || LicenseIntegrity.verify(decoded.first, decoded.second))
+        if (!ours) {
+            AppLog.w(TAG) { "The stored licence is not one this app wrote; treating it as free" }
+            return License.FREE
+        }
+        val tier = LicenseTier.entries.firstOrNull { it.name == fields[0] } ?: LicenseTier.FREE
+        return License(tier, fields[1].toLongOrNull(), fields[2].takeIf { it != "-" })
+    }
+
+    /**
+     * A licence written before records were tagged, adopted once and rewritten as one.
+     *
+     * The alternative - refusing anything untagged - would drop every existing paying install to
+     * the free tier on the launch after an update, which is a far worse bug than the tampering this
+     * is meant to make expensive. After this runs once there is no untagged form left to fall back
+     * to, so removing a tag from then on removes the licence with it.
+     */
+    private fun adoptLegacyLicense(): License? {
+        val storedTier = prefs.getString(KEY_LICENSE_TIER, null) ?: return null
+        val tier = LicenseTier.entries.firstOrNull { it.name == storedTier } ?: LicenseTier.FREE
+        val expiry = if (prefs.contains(KEY_LICENSE_EXPIRY)) prefs.getLong(KEY_LICENSE_EXPIRY, 0L) else null
+        return License(tier, expiry, prefs.getString(KEY_LICENSE_SOURCE, null)).also { storedLicense = it }
+    }
+
+    private fun SharedPreferences.Editor.removeLegacyLicenseKeys() {
+        remove(KEY_LICENSE_TIER)
+        remove(KEY_LICENSE_EXPIRY)
+        remove(KEY_LICENSE_SOURCE)
+    }
 
     /** Set once, the first time a store answers with a non-empty catalogue, and never cleared -
      * see [LicenseStorage.storeHasEverOfferedProducts] for why it is remembered rather than asked. */
@@ -286,6 +342,8 @@ class AppPreferences(context: Context) :
         const val KEY_LICENSE_TIER = "license_tier"
         const val KEY_LICENSE_EXPIRY = "license_expires_at"
         const val KEY_LICENSE_SOURCE = "license_source"
+        const val KEY_LICENSE_RECORD = "license_record"
+        const val LICENSE_FIELD_COUNT = 3
         const val KEY_STORE_HAS_OFFERED = "store_has_offered_products"
         const val KEY_CLOCK_HIGH_WATER_MARK = "clock_high_water_mark"
     }

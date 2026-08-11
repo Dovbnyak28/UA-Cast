@@ -183,6 +183,22 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
     cancellation would never have been noticed and a purchase made on another device never picked
     up until the app was restarted.
 
+  **A stored licence now carries a tag that says this app wrote it.** Editing
+  `uacast_prefs.xml` on a rooted phone - `license_tier=LIFETIME`, no expiry - used to be the whole
+  attack. The licence and its HMAC are one value now, keyed from the Android Keystore where the key
+  cannot be read out, so the file can still be changed but not re-tagged, and a record that does not
+  verify resolves to the free tier exactly as an unrecognised tier already did. One value rather
+  than two on purpose: a tag stored beside the licence is defeated by deleting the tag.
+
+  A licence written before this exists is adopted once and rewritten with a tag, so nobody who has
+  paid loses anything on the update. A device whose Keystore will not co-operate stores the record
+  untagged and is believed - refusing there would revoke a licence over an OEM's crypto rather than
+  over any tampering.
+
+  It does not end the argument, and is not meant to: the same root that edits the file can patch the
+  check out of the APK. It removes the version that needs no tools. Verified on a Mi A2: a legacy
+  trial survived the update and was re-tagged, and a record forged to LIFETIME was refused.
+
   **A feature that was being sold and gated nowhere is no longer sold.** `RAW_TS_REMUX` — relaying a
   stream a receiver cannot play directly — was listed on the premium screen, with a name and a lock
   badge, while every free user had it. Gating it would have been the wrong fix: Chromecast is free,
