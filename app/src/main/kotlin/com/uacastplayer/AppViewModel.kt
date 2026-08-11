@@ -1,6 +1,9 @@
 package com.uacastplayer
 
 import android.app.Application
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -416,6 +419,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
      * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without
      * touching anything that isn't already read elsewhere in this ViewModel. */
+    /** Taken once, at construction, so the report can say how long the app had been running - which
+     * is what tells a reader whether the log below could contain the moment being reported. */
+    private val processStartedAtMillis = android.os.SystemClock.elapsedRealtime()
+
+    /**
+     * Wi-Fi, mobile or nothing, and whether the system calls it metered.
+     *
+     * Buffering reports are unanswerable without it and it needs no permission beyond the
+     * ACCESS_NETWORK_STATE this app already holds. Deliberately only the *kind* of network - no
+     * SSID, no carrier, no address, none of which would help and all of which identify a place.
+     */
+    private fun describeNetwork(): String {
+        val manager = getApplication<Application>()
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val capabilities = manager?.activeNetwork?.let(manager::getNetworkCapabilities)
+            ?: return if (manager == null) "?" else "none"
+        val kind = when {
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "other"
+        }
+        val metered = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        val validated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return "$kind${if (metered) ", metered" else ""}${if (validated) "" else ", not validated"}"
+    }
+
+    /**
+     * On the UsableSpace suppression. Lint suggests `StorageManager.getAllocatableBytes`, which
+     * counts space the system *could* free by clearing other apps' caches. That is the right number
+     * when deciding whether a write will fit; it is the wrong one here. This line exists to answer
+     * "why did my playlist not save", and the honest answer is how much the app can write right
+     * now - a figure that includes reclaimable cache would report plenty of room on a phone that
+     * has none.
+     */
+    @Suppress("UsableSpace")
     fun buildDiagnosticsReport(): String {
         val runtime = Runtime.getRuntime()
         return DiagnosticsReportBuilder.build(
@@ -433,6 +472,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 logEntries = LogBuffer.snapshot(),
                 remuxEffectiveness = remuxEffectivenessStore.snapshot(),
                 lastCrash = CrashLog.read(),
+                generatedAtMillis = System.currentTimeMillis(),
+                uptimeMillis = android.os.SystemClock.elapsedRealtime() - processStartedAtMillis,
+                language = uiState.value.language.code,
+                channelCount = playlistState.value.groups.sumOf { it.channels.size },
+                groupCount = playlistState.value.groups.size,
+                epgChannelCount = epgState.value.data?.index?.channels?.size,
+                epgProgrammeCount = epgState.value.data?.programmesByChannelId?.values?.sumOf { it.size },
+                epgTruncated = epgState.value.data?.truncation?.any == true,
+                epgSource = epgState.value.customUrl?.let { "custom" } ?: epgState.value.selectedSource.id,
+                network = describeNetwork(),
+                freeStorageBytes = getApplication<Application>().filesDir.usableSpace,
+                casting = castState.value.isSessionConnected,
             ),
         )
     }
