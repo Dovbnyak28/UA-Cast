@@ -26,6 +26,8 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.UaTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "DiagnosticsSend"
 
@@ -84,10 +86,20 @@ private fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Inte
  * such a user can still get the report out through whatever they do have, and the failure that
  * remains after that is one nothing can fix: no app on the device can send anything.
  */
-fun sendDiagnostics(context: Context, report: String, chooserTitle: String) {
+suspend fun sendDiagnostics(context: Context, report: String, chooserTitle: String) {
     // Written first, because whether there is a file decides which intent is used. A device that
     // will not give up its log still sends the summary, which is how this worked before.
-    val attachment = DiagnosticsArchive.write(context, report)
+    //
+    // Off the main thread, and it has to be: this creates a directory, lists and deletes the
+    // previous reports, spawns `logcat` as a subprocess, reads and sanitizes its whole output and
+    // writes about half a megabyte - and it used to do all of it inside an onClick. Measured on a
+    // Mi A2, the subprocess alone took 330ms for 5,166 lines, before any of the rest; the sanitize
+    // pass over a real 4,046-line field log is 4ms, so the cost is the process and the I/O, not the
+    // filtering. Three to six hundred milliseconds of frozen UI, on the one button a user presses
+    // when they already think the app is broken.
+    //
+    // Everything after this line stays on the main thread, which is where startActivity belongs.
+    val attachment = withContext(Dispatchers.IO) { DiagnosticsArchive.write(context, report) }
     if (attachment != null) {
         val withLog = Intent.createChooser(diagnosticsEmailIntentWithLog(report, attachment), chooserTitle)
         runCatching { context.startActivity(withLog) }

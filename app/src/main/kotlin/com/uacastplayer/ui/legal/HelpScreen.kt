@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.raisedSurface
+import kotlinx.coroutines.launch
 
 /**
  * Static, "lite" Q&A-style help: what the app's main pieces are and how they relate, for a user who
@@ -147,12 +149,15 @@ fun HelpScreen(
         // re-reads it. Pulling it off LocalContext hands back whatever locale that Context was
         // created with, which is what Compose's own lint flags here.
         val chooserTitle = stringResource(R.string.diagnostics_share_chooser_title)
+        // See sendDiagnostics: writing the attachment is process-spawning file work, not something
+        // to run inside a click handler.
+        val diagnosticsScope = rememberCoroutineScope()
         DiagnosticsPreviewDialog(
             report = report,
             onCancel = { diagnosticsReport = null },
             onSend = {
                 diagnosticsReport = null
-                sendDiagnostics(context, report, chooserTitle)
+                diagnosticsScope.launch { sendDiagnostics(context, report, chooserTitle) }
             },
         )
     }

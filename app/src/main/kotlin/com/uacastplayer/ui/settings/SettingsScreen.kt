@@ -443,6 +443,10 @@ fun SettingsScreen(
 private fun SendDiagnosticsRow(onBuildReport: () -> String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var report by remember { mutableStateOf<String?>(null) }
+    // Writing the attachment spawns `logcat` and moves half a megabyte, so the send is launched
+    // rather than run inside onSend - see sendDiagnostics. Bound to this composition, so leaving
+    // the screen mid-write cancels it rather than leaking the work.
+    val diagnosticsScope = rememberCoroutineScope()
     // Read through stringResource rather than off the Context: only this is tied to the
     // composition, so the in-app language switch re-reads it.
     val chooserTitle = stringResource(R.string.diagnostics_share_chooser_title)
@@ -460,7 +464,7 @@ private fun SendDiagnosticsRow(onBuildReport: () -> String, modifier: Modifier =
             onCancel = { report = null },
             onSend = {
                 report = null
-                sendDiagnostics(context, built, chooserTitle)
+                diagnosticsScope.launch { sendDiagnostics(context, built, chooserTitle) }
             },
         )
     }
