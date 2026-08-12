@@ -16,6 +16,10 @@ import android.os.Process
  * Nothing here can see another app's output, and asking for `READ_LOGS` - which could - is exactly
  * the permission this app should never hold.
  *
+ * Known vendor spam is dropped before the line budget is applied - see [LogcatNoisePolicy], where
+ * the measurement is, and which explains why a filter is worth having at all when the device's own
+ * ring buffer is the thing that overflowed.
+ *
  * **Every line goes through [LogSanitizer] before it is returned**, and that is not a formality
  * here as it is in [AppLog]. `AppLog` sanitizes at the one door into its own buffer; this reads
  * lines written by libraries that know nothing about that rule, and media3 logs stream URLs -
@@ -42,14 +46,27 @@ object LogcatReader {
         val process = ProcessBuilder("logcat", "-d", "-v", "time", "--pid=${Process.myPid()}")
             .redirectErrorStream(true)
             .start()
+        var noiseDropped = 0
         val lines = process.inputStream.bufferedReader().use { reader ->
-            reader.lineSequence().map(LogSanitizer::sanitize).toList()
+            reader.lineSequence()
+                // Before the budget, not after: dropping these afterwards would leave the same 23
+                // seconds of log, just shorter. See LogcatNoisePolicy for what was measured.
+                .filterNot { line ->
+                    val noise = LogcatNoisePolicy.isNoise(line)
+                    if (noise) noiseDropped++
+                    noise
+                }
+                .map(LogSanitizer::sanitize)
+                .toList()
         }
         process.destroy()
-        lines.takeLast(MAX_LINES)
+        val body = lines.takeLast(MAX_LINES)
             .joinToString("\n")
             .takeLast(MAX_CHARS)
             .ifBlank { null }
+        // Said at the top, before anything is read: a reader who finds a gap must be able to tell
+        // "the app removed this" from "the device never recorded it". Only the second is a problem.
+        body?.let { if (noiseDropped == 0) it else "($noiseDropped lines of device noise omitted)\n$it" }
     } catch (e: Exception) {
         AppLog.w("LogcatReader") { "Cannot read this process's log: ${e.javaClass.simpleName}" }
         null

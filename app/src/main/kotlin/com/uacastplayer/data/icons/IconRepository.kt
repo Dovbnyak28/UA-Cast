@@ -12,6 +12,7 @@ import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.log.RepeatedNoteFilter
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -43,6 +44,9 @@ class IconRepository(context: Context) {
     private val customSourceStore = CustomIconSourceStore(appContext)
     private val memoryCache = LruCache<String, CachedIcon>(MEMORY_CACHE_SIZE)
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
+
+    /** Keeps [castArtworkUrl]'s verdict from being written down once a second - see the call site. */
+    private val castArtworkNotes = RepeatedNoteFilter()
 
     // customSourceStore.getBaseUrls() re-reads SharedPreferences AND re-parses a JSON array on
     // every call, and the resolve path below needs it once per channel - i.e. once per list row
@@ -138,8 +142,13 @@ class IconRepository(context: Context) {
         // cache-only CDN guess is *this policy* declining a URL the phone may well be displaying
         // from disk right now - see CastArtworkPolicy's last paragraph. Never the url itself: this
         // ends up in a shared diagnostics report.
+        // Only when the answer changes. This is called on every cast metadata build - about once a
+        // second while a channel is playing - and a channel with no logo answers identically every
+        // time, so writing it each time filled the whole diagnostics buffer with one sentence. See
+        // RepeatedNoteFilter for the report where that was measured.
         if (url == null) {
-            AppLog.d(TAG) { "cast artwork: none, candidates=${candidates.size} (fetchable=0)" }
+            val note = "cast artwork: none, candidates=${candidates.size} (fetchable=0)"
+            if (castArtworkNotes.isWorthLogging(note)) AppLog.d(TAG) { note }
         }
         return url
     }
