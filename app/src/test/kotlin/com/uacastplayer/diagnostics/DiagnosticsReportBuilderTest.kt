@@ -175,6 +175,13 @@ class DiagnosticsReportBuilderTest {
      * that never mentioned casting, and they were read as broken counters. They were not: that
      * phone had simply never cast anything. Both halves are fixed here - the heading names what is
      * being counted, and "never" is said in words.
+     *
+     * The words themselves then had to be narrowed. "Nothing has been cast from this device" is a
+     * claim about casting; these counters know only about Chromecast, because
+     * `DlnaSessionRepository` builds its proxy without the route callback that feeds them. Two later
+     * field reports showed the proxy serving a TV for the whole capture with this line underneath
+     * saying nothing had ever been cast, so both the heading and the sentence now say Chromecast,
+     * and the report says outright that DLNA is not counted.
      */
     @Test
     fun `a device that has never cast says so instead of printing nine zeros`() {
@@ -182,9 +189,19 @@ class DiagnosticsReportBuilderTest {
             sampleSnapshot().copy(remuxEffectiveness = RemuxEffectivenessCounts()),
         )
 
-        assertTrue("the heading names casting", report.contains("Cast routing effectiveness"))
-        assertTrue("and the reason is in words", report.contains("nothing has been cast from this device"))
+        assertTrue("the heading names what is counted", report.contains("Chromecast routing effectiveness"))
+        assertTrue("and the reason is in words", report.contains("no Chromecast route attempted on this device"))
+        assertTrue("and says what it does not cover", report.contains("says nothing about DLNA"))
         assertFalse("with no row of zeros to misread", report.contains("Direct: 0/0/0"))
+    }
+
+    /** The narrowing must not turn into a caveat printed under real numbers: a device that has cast
+     * gets its three rows, and nothing about DLNA. */
+    @Test
+    fun `the DLNA caveat appears only when there is nothing else to say`() {
+        val report = DiagnosticsReportBuilder.build(sampleSnapshot())
+
+        assertFalse(report.contains("says nothing about DLNA"))
     }
 
     @Test
@@ -194,6 +211,6 @@ class DiagnosticsReportBuilderTest {
         assertTrue(report.contains("Direct: 0/0/0"))
         assertTrue(report.contains("Proxy+remux: 4/3/1"))
         assertTrue(report.contains("Proxy rewrite: 0/0/0"))
-        assertFalse(report.contains("nothing has been cast"))
+        assertFalse(report.contains("no Chromecast route attempted"))
     }
 }

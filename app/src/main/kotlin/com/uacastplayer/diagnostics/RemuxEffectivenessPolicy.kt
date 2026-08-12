@@ -29,13 +29,23 @@ object RemuxEffectivenessPolicy {
         }
 
     /**
-     * True when no route has ever been attempted on this device, i.e. nothing has ever been cast.
+     * True when no **Chromecast** route has ever been attempted on this device.
      *
      * These counters are written from exactly one place - [com.uacastplayer.cast.CastSessionRepository] -
      * so they say nothing at all about watching a channel on the phone itself. Every device that has
      * only ever played locally reports nine zeros, which is indistinguishable from counters that are
      * broken, and the first field report this app received was read that way for exactly that reason.
      * "Never cast" is a fact worth stating in words; nine zeros are not.
+     *
+     * Chromecast, and only Chromecast, and this used to say "nothing has ever been cast" - which is
+     * a wider claim than the counters can support. [com.uacastplayer.dlna.DlnaSessionRepository]
+     * builds its own [com.uacastplayer.data.cast.ProxyServer] without the `onRouteAttempted`
+     * callback that feeds these, so a DLNA session moves nothing here however long it runs. Two
+     * field reports show the shape: the local proxy serving a segment every ten seconds for the
+     * whole capture, the Chromecast path explicitly idle ("warm-up cached ... no cast session
+     * exists"), and this line underneath claiming the device had never cast anything. Casting to a
+     * TV all evening and being told you never cast is the same misreading the paragraph above was
+     * written to prevent, from the other side.
      */
     fun isUntouched(counts: RemuxEffectivenessCounts): Boolean = counts == RemuxEffectivenessCounts()
 }

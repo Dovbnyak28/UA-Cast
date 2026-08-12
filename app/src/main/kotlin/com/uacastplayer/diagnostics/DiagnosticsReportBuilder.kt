@@ -127,16 +127,22 @@ object DiagnosticsReportBuilder {
      * sentence instead of nine zeros.
      *
      * Both halves of this were misread in the first field report this app received. "Routing
-     * effectiveness" does not say *what* is being routed, and these counters cover casting only
+     * effectiveness" does not say *what* is being routed, and these counters cover Chromecast only
      * (see [RemuxEffectivenessPolicy.isUntouched]) - a phone used to watch television on its own
-     * screen contributes nothing to them, however much television it watched. A reader who does not
-     * know that sees three lines of zeros under a heading about effectiveness and concludes the
-     * counters are broken, which is the one thing the zeros do not mean.
+     * screen contributes nothing to them, however much television it watched, and neither does a
+     * DLNA session, which has no route recording at all. A reader who does not know that sees three
+     * lines of zeros under a heading about effectiveness and concludes the counters are broken,
+     * which is the one thing the zeros do not mean.
+     *
+     * The heading and the empty case both say Chromecast now. They used to say "cast", and two
+     * field reports arrived with the proxy visibly serving a TV throughout and this line underneath
+     * saying the device had never cast anything.
      */
     private fun StringBuilder.appendRoutingEffectiveness(counts: RemuxEffectivenessCounts) {
-        appendLine("Cast routing effectiveness (attempted/reached PLAYING/failed):")
+        appendLine("Chromecast routing effectiveness (attempted/reached PLAYING/failed):")
         if (RemuxEffectivenessPolicy.isUntouched(counts)) {
-            appendLine("  nothing has been cast from this device - counters untouched, not broken")
+            appendLine("  no Chromecast route attempted on this device - counters untouched, not broken")
+            appendLine("  (this says nothing about DLNA, which is not counted here)")
             return
         }
         appendLine("  Direct: ${counts.directAttempted}/${counts.directPlaying}/${counts.directFailed}")
