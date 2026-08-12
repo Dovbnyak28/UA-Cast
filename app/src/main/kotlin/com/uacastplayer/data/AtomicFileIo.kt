@@ -2,6 +2,7 @@ package com.uacastplayer.data
 
 import androidx.core.util.AtomicFile
 import com.uacastplayer.log.AppLog
+import java.io.IOException
 import java.io.OutputStream
 
 /**
@@ -17,11 +18,23 @@ import java.io.OutputStream
  * next launch - the right price where the alternative is taking the app down.
  *
  * The catch is broad on purpose: [AtomicFile] requires `failWrite()` after *any* mid-write failure
- * to release its temp file, not just after an [java.io.IOException].
+ * to release its temp file, not just after an [IOException].
+ *
+ * [AtomicFile.startWrite] is guarded separately, and it has to be: it opens the file, so it is the
+ * step a full disk fails at first, and it throws [IOException] of its own accord when it cannot
+ * create the file or the directory holding it. Being the first line, it sat *outside* the `try`
+ * below - so the one failure this whole function exists to survive was the one it did not catch,
+ * and every store listed above still took the app down through it. There is no temp file to
+ * release on this path: `startWrite` cleans up after itself before throwing.
  */
 @Suppress("TooGenericExceptionCaught")
 internal inline fun AtomicFile.writeSafely(tag: String, what: String, write: (OutputStream) -> Unit): Boolean {
-    val stream = startWrite()
+    val stream = try {
+        startWrite()
+    } catch (e: IOException) {
+        AppLog.w(tag) { "$what could not be opened for writing: ${e.javaClass.simpleName}" }
+        return false
+    }
     return try {
         write(stream)
         finishWrite(stream)
