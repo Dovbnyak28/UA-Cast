@@ -38,6 +38,19 @@ object ProgrammeLookup {
 
         val current = programmes[currentIndex]
         val next = programmes.getOrNull(currentIndex + 1)
+        // Past the end of a channel's listings there is no current programme - the mirror of the
+        // "before the first" case above, which was handled while this was not. The search always
+        // returns the last programme once `now` is past it, and nothing later ever changes that
+        // answer, so the row kept showing a finished programme with a live dot and a full progress
+        // bar. Only reachable for the LAST programme: any other one ends when its successor starts.
+        //
+        // `stopMillis > startMillis` guards the feeds that give no stop time at all, where
+        // EpgProgramme falls back to the start (see its KDoc). Zero declared length is not evidence
+        // that a programme is over, and reading it that way would blank the badge on such a feed
+        // for every channel at once.
+        if (next == null && current.stopMillis > current.startMillis && nowMillis >= current.stopMillis) {
+            return CurrentNextProgrammes(current = null, next = null, effectiveStopMillis = null)
+        }
         val effectiveStop = next?.startMillis ?: current.stopMillis
         return CurrentNextProgrammes(current, next, effectiveStop)
     }
