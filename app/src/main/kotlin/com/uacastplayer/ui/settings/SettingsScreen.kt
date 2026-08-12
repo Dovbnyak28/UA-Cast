@@ -100,7 +100,9 @@ import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.Title
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -443,9 +445,10 @@ fun SettingsScreen(
 private fun SendDiagnosticsRow(onBuildReport: () -> String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var report by remember { mutableStateOf<String?>(null) }
-    // Writing the attachment spawns `logcat` and moves half a megabyte, so the send is launched
-    // rather than run inside onSend - see sendDiagnostics. Bound to this composition, so leaving
-    // the screen mid-write cancels it rather than leaking the work.
+    // Both halves of this flow are launched rather than run inside their click handler: building
+    // the report touches the filesystem, and writing the attachment spawns `logcat` and moves half
+    // a megabyte. Bound to this composition, so leaving the screen mid-way cancels the work rather
+    // than leaking it.
     val diagnosticsScope = rememberCoroutineScope()
     // Read through stringResource rather than off the Context: only this is tied to the
     // composition, so the in-app language switch re-reads it.
@@ -454,7 +457,14 @@ private fun SendDiagnosticsRow(onBuildReport: () -> String, modifier: Modifier =
     LinkRow(
         label = stringResource(R.string.settings_send_diagnostics),
         buttonLabel = stringResource(R.string.settings_send_button),
-        onClick = { report = onBuildReport() },
+        // Off the main thread, like the send that follows it. Building the report reads the crash
+        // file and the filesystem's free space, and walks every programme in the guide to count
+        // them - on the report device that is 189,512 of them. The frame it used to run in, plus
+        // the dialog it opens, measured 1031-1110ms with 60-63 dropped frames on a Mi A2, twice, in
+        // the field. See DiagnosticsPreviewDialog for the other half.
+        onClick = {
+            diagnosticsScope.launch { report = withContext(Dispatchers.IO) { onBuildReport() } }
+        },
         modifier = modifier,
     )
 

@@ -5,17 +5,17 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
@@ -23,6 +23,7 @@ import com.uacastplayer.R
 import com.uacastplayer.diagnostics.DiagnosticsArchive
 import com.uacastplayer.diagnostics.DiagnosticsEmail
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.UaTheme
@@ -121,11 +122,25 @@ suspend fun sendDiagnostics(context: Context, report: String, chooserTitle: Stri
     }
 }
 
-/** Lets the user see exactly what "Send diagnostics" is about to send before any mail app opens -
+/**
+ * Lets the user see exactly what "Send diagnostics" is about to send before any mail app opens -
  * nothing is ever sent automatically, and this is the screen that makes that true rather than
- * merely stated. */
+ * merely stated.
+ *
+ * A [LazyColumn] over the report's lines rather than the whole report in one [Text], and the
+ * difference is a second of the user's time. A `verticalScroll` around a single `Text` has to lay
+ * out every line before it can draw the first, and this report is not small: the two field reports
+ * that exposed this were **520 lines, about 48KB**, the log ring alone being 500 of them. Both
+ * carried the proof of what that costs in their own attached logcat - `Davey! duration=1110ms` and
+ * `Skipped 63 frames` on a Mi A2, timestamped to the moment this dialog opened, twice, on two
+ * separate days. A lazy list lays out the twenty lines that are on screen.
+ *
+ * The whole report is still what gets sent; only the drawing is bounded.
+ */
 @Composable
 fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () -> Unit) {
+    // Split once per report, not once per recomposition - the dialog recomposes on every scroll.
+    val lines = remember(report) { report.lines() }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.diagnostics_preview_title)) },
@@ -136,13 +151,17 @@ fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () ->
                     style = BodyText,
                     color = UaTheme.palette.labelSecondary,
                 )
-                Box(
+                LazyColumn(
                     modifier = Modifier
                         .padding(top = GapM)
                         .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .testTag(UiTestTags.DIAGNOSTICS_PREVIEW_BODY),
                 ) {
-                    Text(text = report, style = BodyText, color = UaTheme.palette.labelPrimary)
+                    // Keyed by position: a report has repeated lines (blank ones especially), so
+                    // the line itself is not a unique key and using it would collapse them.
+                    items(count = lines.size) { index ->
+                        Text(text = lines[index], style = BodyText, color = UaTheme.palette.labelPrimary)
+                    }
                 }
             }
         },

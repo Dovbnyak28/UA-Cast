@@ -45,7 +45,9 @@ import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.raisedSurface
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Static, "lite" Q&A-style help: what the app's main pieces are and how they relate, for a user who
@@ -60,6 +62,9 @@ fun HelpScreen(
 ) {
     val context = LocalContext.current
     var diagnosticsReport by remember { mutableStateOf<String?>(null) }
+    // Hoisted out of the dialog block below, because building the report needs it too - see the
+    // button's onClick. Bound to this composition, so leaving Help mid-build cancels the work.
+    val diagnosticsScope = rememberCoroutineScope()
 
     // "How things work" first, in the order a new user meets them, then the three
     // troubleshooting entries, then where the data lives. The DLNA entry sits directly under the
@@ -136,7 +141,13 @@ fun HelpScreen(
         }
 
         OutlinedButton(
-            onClick = { diagnosticsReport = onBuildDiagnosticsReport() },
+            // Off the main thread: the report reads the crash file and the filesystem's free space,
+            // and walks the whole guide to count its programmes. See SettingsScreen's copy of this.
+            onClick = {
+                diagnosticsScope.launch {
+                    diagnosticsReport = withContext(Dispatchers.IO) { onBuildDiagnosticsReport() }
+                }
+            },
             modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
         ) {
             Text(stringResource(R.string.help_send_diagnostics_button))
@@ -149,9 +160,6 @@ fun HelpScreen(
         // re-reads it. Pulling it off LocalContext hands back whatever locale that Context was
         // created with, which is what Compose's own lint flags here.
         val chooserTitle = stringResource(R.string.diagnostics_share_chooser_title)
-        // See sendDiagnostics: writing the attachment is process-spawning file work, not something
-        // to run inside a click handler.
-        val diagnosticsScope = rememberCoroutineScope()
         DiagnosticsPreviewDialog(
             report = report,
             onCancel = { diagnosticsReport = null },
