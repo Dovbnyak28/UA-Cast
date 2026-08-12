@@ -11,6 +11,7 @@ import com.uacastplayer.proxy.M3u8Rewriter
 import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.PlaylistDetector
 import com.uacastplayer.proxy.PlaylistUnwrapPolicy
+import com.uacastplayer.proxy.ProxyServeRollup
 import com.uacastplayer.proxy.RawTsRemuxActivation
 import com.uacastplayer.proxy.RemuxHandoffPolicy
 import java.io.IOException
@@ -28,6 +29,9 @@ private const val PLAYLIST_SNIFF_BYTES = 16L
 private const val TS_PROBE_BYTES = 128L * 1024
 private const val HTTP_BAD_GATEWAY = 502
 private const val HTTP_SERVICE_UNAVAILABLE = 503
+private const val HTTP_OK = 200
+private const val HTTP_LAST_SUCCESS = 299
+private val HTTP_OK_RANGE = HTTP_OK..HTTP_LAST_SUCCESS
 
 /** How an upstream response is to be served, decided from the response itself rather than from
  * the resource's registered type - see `decideRoute`. */
@@ -52,11 +56,19 @@ class ProxyServer(
      * [fetchAndServeUpstreamResource]. Callers own de-duplication (see
      * `RemuxEffectivenessStore.recordProxyRouteAttemptOnce`) since a non-remuxed resource has no
      * "already decided" shortcut and is reclassified on every manifest poll. */
+    /** Injected so the serve rollup's windows can be driven by a test rather than by the clock -
+     * the same seam [com.uacastplayer.app.UpdateController] uses. Declared before
+     * [onRouteAttempted] so that stays the trailing parameter its call site passes as a lambda. */
+    private val now: () -> Long = System::currentTimeMillis,
     private val onRouteAttempted: (resourceId: String, route: CastRouteKind) -> Unit = { _, _ -> },
 ) {
 
     private val resourceRegistry = ProxyResourceRegistry(httpClient)
     private val httpServer = ProxyHttpServer(onRequest = ::serveRequest)
+
+    /** Why the two busiest lines in this file are counted rather than written - see
+     * [ProxyServeRollup]. */
+    private val serveRollup = ProxyServeRollup()
 
     // Written from the main thread (start/ensureStarted, reached from CastSessionRepository on
     // Dispatchers.Main.immediate) and read from ProxyHttpServer's pool threads - isSessionToken,
@@ -113,6 +125,9 @@ class ProxyServer(
     fun stop() {
         httpServer.stop()
         resourceRegistry.clearAll()
+        // Before the counters go quiet, not after: the window a session ends in is the one a reader
+        // wants most, and without this it would be the one window that never got written down.
+        serveRollup.flush(now())?.let { summary -> AppLog.d(TAG) { summary.sentence() } }
     }
 
     /** Called once the new channel's load is confirmed to have succeeded on the receiver (see
@@ -480,7 +495,16 @@ class ProxyServer(
         // The remux path logs every playlist poll and segment; this one logged nothing at all, so an
         // ordinary HLS cast - the common case - left no trace of whether the receiver ever fetched
         // anything. A field capture of a failing cast was unreadable for exactly that reason.
-        AppLog.d(TAG) { "Rewritten playlist served: $rewrittenCount urls rewritten, ${rewritten.length}B" }
+        //
+        // It is now rolled up rather than written per poll - see [ProxyServeRollup] for the two
+        // reports where this one sentence, every four seconds, had emptied the log of everything
+        // else. A playlist that rewrote nothing keeps its own line: the receiver is being handed a
+        // manifest with no urls it can fetch, which is a failure, not traffic.
+        if (rewrittenCount == 0) {
+            AppLog.d(TAG) { "Rewritten playlist served: nothing to rewrite, ${rewritten.length}B" }
+        } else {
+            serveRollup.playlistServed(now())?.let { summary -> AppLog.d(TAG) { summary.sentence() } }
+        }
         writePlaylistText(rewritten, method, output)
     }
 
@@ -509,15 +533,50 @@ class ProxyServer(
         // the playlist? - unanswerable from a field capture, and two of them were lost to it.
         // The finally is what makes a receiver that hangs up mid-segment distinguishable from one
         // that never asked: a partial byte count is the evidence for the first.
+        //
+        // Which is exactly why the healthy case is now a rollup and the rest is not (see
+        // [ProxyServeRollup]). A segment that arrived whole tells nobody anything on its own, and
+        // there are six a minute of them; a transfer cut short, or one that delivered no bytes at
+        // all, is the evidence, and keeps its own line naming its own resource. A non-2xx already
+        // has its WARN above and is not counted as traffic that worked.
         val copied = LongArray(1)
+        var completed = false
         try {
             if (method == "GET") {
                 response.body?.byteStream()?.use { copyCounting(it, output, copied) }
             }
             output.flush()
+            completed = true
         } finally {
-            AppLog.d(TAG) { "Passthrough served: ${response.code}, ${copied[0]}B of resource $resourceId" }
+            recordPassthrough(resourceId, response.code, copied[0], completed, expectedBody = method == "GET")
         }
+    }
+
+    /**
+     * One served passthrough: either evidence, or one more tick of a rate.
+     *
+     * A [code] outside 2xx has already been reported above with its own resource id, so it is not
+     * repeated here and not counted as traffic that worked. What is left is a transfer that ran to
+     * the end - rolled up - and two shapes that are worth a line each however often they happen: a
+     * copy that threw partway (the receiver hung up, and the partial byte count is the measure of
+     * how far it got) and a GET that completed with nothing in it.
+     */
+    private fun recordPassthrough(
+        resourceId: String,
+        code: Int,
+        bytes: Long,
+        completed: Boolean,
+        expectedBody: Boolean,
+    ) {
+        if (code !in HTTP_OK_RANGE) return
+        val cutShort = !completed
+        val empty = expectedBody && bytes == 0L
+        if (cutShort || empty) {
+            val why = if (cutShort) "cut short" else "no bytes"
+            AppLog.d(TAG) { "Passthrough served: $code, ${bytes}B of resource $resourceId ($why)" }
+            return
+        }
+        serveRollup.segmentServed(bytes, now())?.let { summary -> AppLog.d(TAG) { summary.sentence() } }
     }
 
     /**
