@@ -2,6 +2,7 @@ package com.uacastplayer.data.playlist
 
 import android.content.Context
 import android.net.Uri
+import com.uacastplayer.core.i18n.currentAppLanguage
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.log.AppLog
@@ -13,6 +14,7 @@ import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.playlist.ChannelGrouper
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -43,6 +45,13 @@ class PlaylistRepository(context: Context) {
     private val urlLoader = PlaylistUrlLoader(httpClient)
     private val fileLoader = PlaylistFileLoader(appContext)
     private val sourceStore = PlaylistSourceStore(appContext)
+
+    /**
+     * The alphabet the group list is ordered by - the language the user chose in this app, not the
+     * device's. Read per call rather than cached: changing the language rebuilds the playlist, and
+     * a value captured at construction would keep the old alphabet until the process restarted.
+     */
+    private fun groupingLocale(): Locale = appContext.currentAppLanguage().toLocale()
 
     /** [extraEpgUrls] lets an Xtream-built URL (see XtreamUrlBuilder) contribute its synthesized
      * xmltv.php address even when the M3U's own #EXTM3U header doesn't advertise one. */
@@ -79,7 +88,7 @@ class PlaylistRepository(context: Context) {
         } ?: return null
         return withContext(Dispatchers.Default) {
             PlaylistOutcome.Loaded(
-                groups = ChannelGrouper.group(snapshot.channels),
+                groups = ChannelGrouper.group(snapshot.channels, groupingLocale()),
                 skippedLineCount = snapshot.skippedLineCount,
                 sourceFingerprint = snapshot.sourceFingerprint,
                 sourceUrl = snapshot.sourceUrl,
@@ -173,7 +182,7 @@ class PlaylistRepository(context: Context) {
         is PlaylistLoadResult.Success -> withContext(Dispatchers.Default) {
             val parsed = M3uParser.parse(result.text)
             PlaylistOutcome.Loaded(
-                groups = ChannelGrouper.group(parsed.channels),
+                groups = ChannelGrouper.group(parsed.channels, groupingLocale()),
                 skippedLineCount = parsed.skippedLineCount,
                 sourceFingerprint = sourceFingerprint,
                 sourceUrl = sourceUrl,

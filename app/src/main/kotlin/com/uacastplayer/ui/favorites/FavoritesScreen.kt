@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -38,6 +39,7 @@ import com.uacastplayer.R
 import com.uacastplayer.data.prefs.FavoritesSortOrder
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
+import com.uacastplayer.core.i18n.currentAppLanguage
 import com.uacastplayer.favorites.FavoritesSorter
 import com.uacastplayer.favorites.ReorderPolicy
 import com.uacastplayer.playlist.M3uChannel
@@ -104,8 +106,12 @@ fun FavoritesScreen(
     val playlistIndexByKey = remember(playlistChannels) {
         playlistChannels.withIndex().associate { (index, channel) -> FavoriteKey.of(channel) to index }
     }
-    val sortedFavorites = remember(favorites, sortOrder, playlistIndexByKey) {
-        FavoritesSorter.sort(favorites, sortOrder) { playlistIndexByKey[it.key] }
+    // The language chosen in this app, not the device's - see AppLanguage.toLocale for why those
+    // differ here. Keyed into the remember so switching language re-sorts rather than keeping the
+    // previous alphabet until something else invalidates this.
+    val sortLocale = LocalContext.current.currentAppLanguage().toLocale()
+    val sortedFavorites = remember(favorites, sortOrder, playlistIndexByKey, sortLocale) {
+        FavoritesSorter.sort(favorites, sortOrder, sortLocale) { playlistIndexByKey[it.key] }
     }
     // A local snapshot list the drag gesture mutates live for immediate visual feedback; only
     // re-seeded when the upstream order actually changes (not on every recomposition), so an
