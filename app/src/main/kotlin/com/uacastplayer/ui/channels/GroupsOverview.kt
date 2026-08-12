@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -81,6 +82,15 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun GroupsOverviewGrid(
     groups: List<GroupedChannels>,
+    /**
+     * Hoisted into [com.uacastplayer.ui.channels.ChannelsScreen] rather than remembered here.
+     *
+     * Opening a group swaps this whole grid out for the single-group list, so a state remembered
+     * inside it is discarded the moment a group is opened and starts again at the top when the user
+     * comes back - which, with a few dozen groups, means hunting for the folder they were just in
+     * after every channel they watch. Held above the switch, the position outlives the excursion.
+     */
+    gridState: LazyGridState,
     layout: ChannelLayout,
     onLayoutChange: (ChannelLayout) -> Unit,
     onGroupClick: (GroupedChannels) -> Unit,
@@ -173,6 +183,7 @@ internal fun GroupsOverviewGrid(
         when (val outcome = searchOutcome) {
             null -> LazyVerticalGrid(
                 columns = gridCells,
+                state = gridState,
                 modifier = Modifier.fillMaxSize().padding(top = GapM),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),

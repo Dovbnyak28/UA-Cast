@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -87,6 +89,10 @@ fun ChannelsScreen(
     // itself). Storing the group's stable key (not the GroupedChannels/ChannelGroup value) keeps
     // this Saveable and lets the open group re-resolve against a reloaded playlist.
     var openGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Lives here, above the overview/single-group switch below, so that opening a group does not
+    // take the overview's scroll position with it - see GroupsOverviewGrid's `gridState`.
+    val overviewGridState = rememberLazyGridState()
     val openGroup = remember(playlistState.groups, openGroupKey) {
         openGroupKey?.let { key -> playlistState.groups.firstOrNull { groupDisplayKey(it.group) == key } }
     }
@@ -129,6 +135,7 @@ fun ChannelsScreen(
                 ChannelsContent(
                     playlistState = playlistState,
                     openGroup = openGroup,
+                    overviewGridState = overviewGridState,
                     epgState = epgState,
                     iconRefreshKey = iconRefreshKey,
                     resolveIcon = resolveIcon,
@@ -153,6 +160,7 @@ fun ChannelsScreen(
             ChannelsContent(
                 playlistState = playlistState,
                 openGroup = openGroup,
+                overviewGridState = overviewGridState,
                 epgState = epgState,
                 iconRefreshKey = iconRefreshKey,
                 resolveIcon = resolveIcon,
@@ -229,6 +237,7 @@ private fun rememberChannelOpener(
 private fun ChannelsContent(
     playlistState: PlaylistUiState,
     openGroup: GroupedChannels?,
+    overviewGridState: LazyGridState,
     epgState: EpgUiState,
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
@@ -258,6 +267,7 @@ private fun ChannelsContent(
                 if (group == null) {
                     GroupsOverviewGrid(
                         groups = playlistState.groups,
+                        gridState = overviewGridState,
                         layout = layout,
                         onLayoutChange = onChannelLayoutSelected,
                         onGroupClick = onOpenGroup,

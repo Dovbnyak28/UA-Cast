@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -89,6 +90,7 @@ class GroupsOverviewScreenshotTest {
                 ) {
                     GroupsOverviewGrid(
                         groups = sampleGroups(),
+                        gridState = rememberLazyGridState(),
                         layout = ChannelLayout.GRID,
                         onLayoutChange = {},
                         onGroupClick = {},
