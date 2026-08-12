@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.settings
+import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.background
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
@@ -60,6 +62,7 @@ import com.uacastplayer.backup.BackupImportSummary
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.prefs.BufferSize
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
+import com.uacastplayer.diagnostics.RemuxEffectivenessPolicy
 import com.uacastplayer.data.prefs.ChannelLayout
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
@@ -411,6 +414,7 @@ fun SettingsScreen(
                 buttonLabel = stringResource(R.string.settings_open_button),
                 onClick = onOpenHelp,
                 modifier = Modifier.padding(top = 16.dp),
+                buttonTag = UiTestTags.SETTINGS_OPEN_HELP_BUTTON,
             )
             LinkRow(
                 label = stringResource(R.string.settings_open_terms),
@@ -499,7 +503,10 @@ private fun PremiumSettingsSection(premiumSection: PremiumSectionState) {
 private data class RouteLine(val labelRes: Int, val attempted: Int, val played: Int, val failed: Int)
 
 /** Read-only, view-only local stats (see [RemuxEffectivenessStore]) - not sent anywhere, just a
- * "does the remux investment actually help" fact base for future work. */
+ * "does the remux investment actually help" fact base for future work.
+ *
+ * Counts casting only, and says so when there has been none: three rows of zeros read as a broken
+ * feature rather than an unused one - see [RemuxEffectivenessPolicy.isUntouched]. */
 @Composable
 private fun RoutingEffectivenessBlock(counts: RemuxEffectivenessCounts, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
@@ -508,6 +515,15 @@ private fun RoutingEffectivenessBlock(counts: RemuxEffectivenessCounts, modifier
             style = CaptionSemibold,
             color = UaTheme.palette.labelSecondary,
         )
+        if (RemuxEffectivenessPolicy.isUntouched(counts)) {
+            Text(
+                text = stringResource(R.string.settings_diagnostics_route_never_cast),
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            return@Column
+        }
         val lines = listOf(
             RouteLine(
                 R.string.settings_diagnostics_route_direct,
@@ -546,7 +562,14 @@ private fun RoutingEffectivenessBlock(counts: RemuxEffectivenessCounts, modifier
 }
 
 @Composable
-private fun LinkRow(label: String, buttonLabel: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun LinkRow(
+    label: String,
+    buttonLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Only set where a test has to click this exact button - see [UiTestTags]. */
+    buttonTag: String? = null,
+) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -557,7 +580,11 @@ private fun LinkRow(label: String, buttonLabel: String, onClick: () -> Unit, mod
             color = UaTheme.palette.labelPrimary,
             modifier = Modifier.weight(1f),
         )
-        SecondaryButton(text = buttonLabel, onClick = onClick)
+        SecondaryButton(
+            text = buttonLabel,
+            onClick = onClick,
+            modifier = if (buttonTag == null) Modifier else Modifier.testTag(buttonTag),
+        )
     }
 }
 

@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +74,11 @@ import com.uacastplayer.ui.theme.UaCastTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** Key for the one entry in `ScaffoldZone`'s [rememberSaveableStateHolder] - see its `else`
+ * branch. There is deliberately only ever one: the Help/Terms/AddPlaylist screens are transient and
+ * keep nothing, so only the tab scaffold underneath them has state worth holding on to. */
+private const val ROOT_SCAFFOLD_STATE_KEY = "root-scaffold"
 
 private data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
 
@@ -554,6 +560,10 @@ private fun ScaffoldZone(
     // still never actually refreshing reactively.
     val remuxEffectiveness = remember(castState) { viewModel.remuxEffectivenessSnapshot() }
 
+    // Declared above the branch below, so that showing Help, Terms or the add-playlist screen does
+    // not take the whole tab scaffold's state with it - see the doc on the `else` branch.
+    val overlayStateHolder = rememberSaveableStateHolder()
+
     when {
         showHelp -> {
             BackHandler { onCloseHelp() }
@@ -578,84 +588,96 @@ private fun ScaffoldZone(
             )
         }
 
-        // Stays mounted (including while the fullscreen player covers it as an opaque overlay
-        // below, in PlayerZone) rather than being replaced by an "expanded" branch - RootScaffold
-        // owns its own bottom-tab selection as local state, which would otherwise reset to Home
-        // every time the player expands/collapses, since that state doesn't survive this
-        // composable leaving and re-entering composition.
-        else -> RootScaffold(
-            modifier = Modifier.fillMaxSize(),
-            currentLanguage = currentLanguage,
-            onLanguageSelected = viewModel::selectLanguage,
-            currentAppTheme = currentAppTheme,
-            onAppThemeSelected = viewModel::selectAppTheme,
-            onExitApp = onExitApp,
-            playlistState = playlistState,
-            onOpenAddPlaylist = onOpenAddPlaylist,
-            onRefreshPlaylist = viewModel::refreshPlaylist,
-            playlistSources = playlistSources,
-            activePlaylistSourceId = activePlaylistSourceId,
-            onSwitchPlaylistSource = viewModel::switchPlaylistSource,
-            onRemovePlaylistSource = { viewModel.removePlaylistSource(it.id) },
-            pinnedGroupKeys = pinnedGroupKeys,
-            hiddenGroupKeys = hiddenGroupKeys,
-            onPinGroup = viewModel::pinGroup,
-            onHideGroup = viewModel::hideGroup,
-            onRestoreGroup = viewModel::clearGroupOverride,
-            isChannelLocked = isChannelLocked,
-            onLockChannel = viewModel::lockChannel,
-            onUnlockChannel = { channel ->
-                requireParentalControlUnlock { viewModel.unlockChannelPermanently(channel) }
-            },
-            lockedChannelKeys = lockedChannelKeys,
-            parentalControlPinSet = parentalControlPinSet,
-            // A lambda, not a method reference: Kotlin will not adapt `::suspendFun` to a
-            // `suspend (String) -> Boolean` parameter type.
-            onSetParentalControlPin = { pin -> viewModel.setParentalControlPin(pin) },
-            onResetParentalControl = viewModel::resetParentalControl,
-            requireParentalControlUnlock = requireParentalControlUnlock,
-            focusChannelsToken = focusChannelsToken,
-            onChannelSelected = onChannelSelected,
-            epgState = epgState,
-            onEpgSourceSelected = viewModel::selectEpgSource,
-            onUseSuggestedEpgUrl = viewModel::useSuggestedEpgUrl,
-            iconPrefetchState = iconPrefetchState,
-            onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
-            resolveIcon = viewModel::resolveChannelIcon,
-            castState = castState,
-            settingsState = settingsState,
-            onIconDisplayModeSelected = viewModel::setIconDisplayMode,
-            onDismissIconTierBanner = viewModel::dismissIconTierBanner,
-            onListDensitySelected = viewModel::setListDensity,
-            onChannelLayoutSelected = viewModel::setChannelLayout,
-            onBufferSizeSelected = viewModel::setBufferSize,
-            onFavoritesSortOrderSelected = viewModel::setFavoritesSortOrder,
-            onWrapAroundChanged = viewModel::setWrapAroundEnabled,
-            onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
-            onClearCache = viewModel::clearCache,
-            onExportBackup = exportBackupFile,
-            onImportBackup = importBackupFile,
-            backupImportSummary = backupImportSummary,
-            onDismissBackupImportSummary = viewModel::dismissBackupImportSummary,
-            favorites = favorites,
-            lastWatchedChannelKey = lastWatchedChannelKey,
-            isFavorite = isFavorite,
-            onToggleFavorite = viewModel::toggleFavorite,
-            onRemoveFavorite = viewModel::removeFavorite,
-            onReorderFavorites = viewModel::reorderFavorites,
-            onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
-            onAddIconSource = viewModel::addCustomIconSource,
-            onRemoveIconSource = viewModel::removeCustomIconSource,
-            onDismissIconSourceError = viewModel::dismissIconSourceError,
-            onOpenHelp = onOpenHelp,
-            onOpenTerms = onOpenTerms,
-            onBuildDiagnosticsReport = onBuildDiagnosticsReport,
-            remuxEffectiveness = remuxEffectiveness,
-            updateSection = updateSection,
-            premiumSection = premiumSection,
-            guidedTourSection = guidedTourSection,
-            guidedTourDestination = guidedTourDestination,
-        )
+        /**
+         * Wrapped in a [SaveableStateProvider] because the three branches above genuinely do
+         * replace it, and everything the user had set up inside went with it: the selected tab
+         * (back to Home), the opened group, the group grid's scroll position, both search boxes.
+         * Opening Help from Settings and pressing back landed on Home; adding a playlist from the
+         * Channels tab and pressing back did the same, from a list the user had scrolled.
+         *
+         * `rememberSaveable` state only outlives a composable that leaves composition if something
+         * holds it, and until now nothing did. The holder keeps this whole subtree's saved state -
+         * including [RootScaffold]'s own per-tab holder, which is itself a `rememberSaveable` - so
+         * one key restores the tab and everything that tab had on screen.
+         *
+         * The player is a different case and stays as it was: it never unmounts this at all (see
+         * PlayerZone, drawn as a later sibling), so there is nothing to restore.
+         */
+        else -> overlayStateHolder.SaveableStateProvider(ROOT_SCAFFOLD_STATE_KEY) {
+            RootScaffold(
+                modifier = Modifier.fillMaxSize(),
+                currentLanguage = currentLanguage,
+                onLanguageSelected = viewModel::selectLanguage,
+                currentAppTheme = currentAppTheme,
+                onAppThemeSelected = viewModel::selectAppTheme,
+                onExitApp = onExitApp,
+                playlistState = playlistState,
+                onOpenAddPlaylist = onOpenAddPlaylist,
+                onRefreshPlaylist = viewModel::refreshPlaylist,
+                playlistSources = playlistSources,
+                activePlaylistSourceId = activePlaylistSourceId,
+                onSwitchPlaylistSource = viewModel::switchPlaylistSource,
+                onRemovePlaylistSource = { viewModel.removePlaylistSource(it.id) },
+                pinnedGroupKeys = pinnedGroupKeys,
+                hiddenGroupKeys = hiddenGroupKeys,
+                onPinGroup = viewModel::pinGroup,
+                onHideGroup = viewModel::hideGroup,
+                onRestoreGroup = viewModel::clearGroupOverride,
+                isChannelLocked = isChannelLocked,
+                onLockChannel = viewModel::lockChannel,
+                onUnlockChannel = { channel ->
+                    requireParentalControlUnlock { viewModel.unlockChannelPermanently(channel) }
+                },
+                lockedChannelKeys = lockedChannelKeys,
+                parentalControlPinSet = parentalControlPinSet,
+                // A lambda, not a method reference: Kotlin will not adapt `::suspendFun` to a
+                // `suspend (String) -> Boolean` parameter type.
+                onSetParentalControlPin = { pin -> viewModel.setParentalControlPin(pin) },
+                onResetParentalControl = viewModel::resetParentalControl,
+                requireParentalControlUnlock = requireParentalControlUnlock,
+                focusChannelsToken = focusChannelsToken,
+                onChannelSelected = onChannelSelected,
+                epgState = epgState,
+                onEpgSourceSelected = viewModel::selectEpgSource,
+                onUseSuggestedEpgUrl = viewModel::useSuggestedEpgUrl,
+                iconPrefetchState = iconPrefetchState,
+                onIconWifiOnlyChanged = viewModel::setIconWifiOnly,
+                resolveIcon = viewModel::resolveChannelIcon,
+                castState = castState,
+                settingsState = settingsState,
+                onIconDisplayModeSelected = viewModel::setIconDisplayMode,
+                onDismissIconTierBanner = viewModel::dismissIconTierBanner,
+                onListDensitySelected = viewModel::setListDensity,
+                onChannelLayoutSelected = viewModel::setChannelLayout,
+                onBufferSizeSelected = viewModel::setBufferSize,
+                onFavoritesSortOrderSelected = viewModel::setFavoritesSortOrder,
+                onWrapAroundChanged = viewModel::setWrapAroundEnabled,
+                onAutoSkipChanged = viewModel::setAutoSkipDeadEnabled,
+                onClearCache = viewModel::clearCache,
+                onExportBackup = exportBackupFile,
+                onImportBackup = importBackupFile,
+                backupImportSummary = backupImportSummary,
+                onDismissBackupImportSummary = viewModel::dismissBackupImportSummary,
+                favorites = favorites,
+                lastWatchedChannelKey = lastWatchedChannelKey,
+                isFavorite = isFavorite,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onRemoveFavorite = viewModel::removeFavorite,
+                onReorderFavorites = viewModel::reorderFavorites,
+                onOpenBatteryOptimizationHint = viewModel::reopenBatteryOptimizationHint,
+                onAddIconSource = viewModel::addCustomIconSource,
+                onRemoveIconSource = viewModel::removeCustomIconSource,
+                onDismissIconSourceError = viewModel::dismissIconSourceError,
+                onOpenHelp = onOpenHelp,
+                onOpenTerms = onOpenTerms,
+                onBuildDiagnosticsReport = onBuildDiagnosticsReport,
+                remuxEffectiveness = remuxEffectiveness,
+                updateSection = updateSection,
+                premiumSection = premiumSection,
+                guidedTourSection = guidedTourSection,
+                guidedTourDestination = guidedTourDestination,
+            )
+        }
     }
 }
 

@@ -23,4 +23,16 @@ object UiTestTags {
     /** The upgrade banner's outer bounds - the one premium surface that can appear unasked, so a
      * test needs to assert both that it shows when it should and that it stays away otherwise. */
     const val UPGRADE_BANNER = "upgrade_banner"
+
+    /**
+     * The Settings row that opens the Help screen - specifically its button, which is what gets
+     * clicked. See `OverlayReturnInstrumentedTest`.
+     *
+     * Tagged because there is no way to point at it otherwise. Its own label is the generic,
+     * localised "Open", shared with the Terms row beside it; and the row's `Row` carries no
+     * semantics modifier, so it emits no node of its own - every button on the Settings screen is a
+     * direct sibling of every other, eighty of them, which defeats matching by what stands next to
+     * it. Position in that list would work until somebody adds a row above.
+     */
+    const val SETTINGS_OPEN_HELP_BUTTON = "settings_open_help_button"
 }
