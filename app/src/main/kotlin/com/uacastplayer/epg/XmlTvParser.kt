@@ -40,6 +40,13 @@ object XmlTvParser {
      * rounded up for headroom: enough that the cap stops being reached by an ordinary guide, while
      * still bounding a malicious or broken feed. It costs about 20% more memory than the 250,000
      * arbitrary programmes held before, and every one of them is now a programme somebody can see.
+     *
+     * **It is now a backstop rather than an operating limit, and deliberately left where it is.**
+     * That 346,837 was the whole eight-day window; [EpgRetentionPolicy] since grew a far end, and
+     * three days of the same feed is roughly 130,000. A field report is what showed the difference
+     * matters - a guide of 4052 channels stopped here exactly, and this cap truncates in document
+     * order, so the channels at the end of the file got nothing rather than everyone getting less.
+     * Lowering it to match the new window would only move that cliff back within reach.
      */
     const val MAX_PROGRAMMES = 400_000
 
@@ -55,8 +62,16 @@ object XmlTvParser {
      * @param keepFromMillis drops programmes that had already finished by this instant - see
      *   [EpgRetentionPolicy], which is what a caller with a clock should use to compute it. The
      *   default of 0 keeps the whole feed, which is what a caller without one wants.
+     * @param keepUntilMillis drops programmes that start at or after it. Feeds carry about eight
+     *   days and this app can display one; the rest was spending [MAX_PROGRAMMES] on television no
+     *   screen here can reach - see [EpgRetentionPolicy.keepUntil]. Defaults to no far end, for the
+     *   same clockless caller.
      */
-    fun parse(input: InputStream, keepFromMillis: Long = 0L): XmlTvParseResult {
+    fun parse(
+        input: InputStream,
+        keepFromMillis: Long = 0L,
+        keepUntilMillis: Long = Long.MAX_VALUE,
+    ): XmlTvParseResult {
         val factory = SAXParserFactory.newInstance()
         trySetFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true)
 
@@ -65,7 +80,7 @@ object XmlTvParser {
         trySetFeature(reader, "http://xml.org/sax/features/external-parameter-entities", false)
         reader.entityResolver = EntityResolver { _, _ -> InputSource(StringReader("")) }
 
-        val handler = XmlTvHandler(keepFromMillis)
+        val handler = XmlTvHandler(keepFromMillis, keepUntilMillis)
         reader.contentHandler = handler
         reader.parse(InputSource(input))
         return handler.result()
@@ -88,7 +103,10 @@ object XmlTvParser {
     }
 }
 
-private class XmlTvHandler(private val keepFromMillis: Long) : DefaultHandler() {
+private class XmlTvHandler(
+    private val keepFromMillis: Long,
+    private val keepUntilMillis: Long,
+) : DefaultHandler() {
 
     private val channels = mutableListOf<EpgChannel>()
     private val programmes = mutableListOf<EpgProgramme>()
@@ -140,8 +158,14 @@ private class XmlTvHandler(private val keepFromMillis: Long) : DefaultHandler() 
                 // A feed with no stop time gets judged on its start: EpgProgramme falls back to the
                 // start for its stop too, so the two agree about when this programme ended.
                 val effectiveStop = currentProgrammeStop ?: currentProgrammeStart
-                skippingProgramme = effectiveStop != null &&
-                    !EpgRetentionPolicy.isWorthKeeping(effectiveStop, keepFromMillis)
+                val start = currentProgrammeStart
+                skippingProgramme = effectiveStop != null && start != null &&
+                    !EpgRetentionPolicy.isWorthKeeping(
+                        startMillis = start,
+                        stopMillis = effectiveStop,
+                        keepFromMillis = keepFromMillis,
+                        keepUntilMillis = keepUntilMillis,
+                    )
             }
             "title" -> if (currentProgrammeChannelId != null && !skippingProgramme) {
                 textTarget = StringBuilder()
@@ -192,9 +216,10 @@ private class XmlTvHandler(private val keepFromMillis: Long) : DefaultHandler() 
             "programme" -> {
                 val channelId = currentProgrammeChannelId
                 val start = currentProgrammeStart
-                // A programme dropped for being over is not truncation and must not raise
-                // `programmeLimitExceeded`: nothing was lost that a viewer could have watched, and
-                // telling them their guide is incomplete because yesterday is missing would be a
+                // A programme dropped for being outside the retention window is not truncation
+                // and must not raise `programmeLimitExceeded`: nothing was lost that a viewer could
+                // have watched - yesterday is gone, and next week was never reachable from any
+                // screen - and telling them their guide is incomplete on that basis would be a
                 // warning they can neither act on nor turn off.
                 if (channelId != null && start != null && !skippingProgramme) {
                     if (programmes.size < XmlTvParser.MAX_PROGRAMMES) {

@@ -50,6 +50,11 @@ data class DiagnosticsSnapshot(
     val epgTruncated: Boolean = false,
     val epgSource: String = "?",
 
+    /** Why the guide is absent, when it is - see [com.uacastplayer.data.epg.EpgFailureReason].
+     * "not loaded" on its own is a symptom; the reader of this report needs the cause, and cannot
+     * ask for it. */
+    val epgFailure: String? = null,
+
     /** Wi-Fi, mobile, or nothing - and whether the system considers it metered. Buffering reports
      * are unanswerable without it, and it costs no permission to read. */
     val network: String = "?",
@@ -106,11 +111,7 @@ object DiagnosticsReportBuilder {
             appendLine("--- End of crash ---")
         }
         appendLine()
-        appendLine("Routing effectiveness (attempted/reached PLAYING/failed):")
-        val r = snapshot.remuxEffectiveness
-        appendLine("  Direct: ${r.directAttempted}/${r.directPlaying}/${r.directFailed}")
-        appendLine("  Proxy+remux: ${r.remuxAttempted}/${r.remuxPlaying}/${r.remuxFailed}")
-        appendLine("  Proxy rewrite: ${r.proxyRewriteAttempted}/${r.proxyRewritePlaying}/${r.proxyRewriteFailed}")
+        appendRoutingEffectiveness(snapshot.remuxEffectiveness)
         appendLine()
         appendLine("Recent log entries (${snapshot.logEntries.size}), newest last:")
         snapshot.logEntries.forEach { entry ->
@@ -121,13 +122,49 @@ object DiagnosticsReportBuilder {
         }
     }
 
+    /**
+     * The three Cast delivery routes and how each fared - and, when none has ever been tried, that
+     * sentence instead of nine zeros.
+     *
+     * Both halves of this were misread in the first field report this app received. "Routing
+     * effectiveness" does not say *what* is being routed, and these counters cover casting only
+     * (see [RemuxEffectivenessPolicy.isUntouched]) - a phone used to watch television on its own
+     * screen contributes nothing to them, however much television it watched. A reader who does not
+     * know that sees three lines of zeros under a heading about effectiveness and concludes the
+     * counters are broken, which is the one thing the zeros do not mean.
+     */
+    private fun StringBuilder.appendRoutingEffectiveness(counts: RemuxEffectivenessCounts) {
+        appendLine("Cast routing effectiveness (attempted/reached PLAYING/failed):")
+        if (RemuxEffectivenessPolicy.isUntouched(counts)) {
+            appendLine("  nothing has been cast from this device - counters untouched, not broken")
+            return
+        }
+        appendLine("  Direct: ${counts.directAttempted}/${counts.directPlaying}/${counts.directFailed}")
+        appendLine("  Proxy+remux: ${counts.remuxAttempted}/${counts.remuxPlaying}/${counts.remuxFailed}")
+        appendLine(
+            "  Proxy rewrite: ${counts.proxyRewriteAttempted}/" +
+                "${counts.proxyRewritePlaying}/${counts.proxyRewriteFailed}",
+        )
+    }
+
     /** Loaded or not, how much of it, and whether it was cut short - see
      * [com.uacastplayer.epg.EpgTruncation]. */
     private fun epgLine(snapshot: DiagnosticsSnapshot): String {
-        val channels = snapshot.epgChannelCount ?: return "not loaded (source ${snapshot.epgSource})"
+        val channels = snapshot.epgChannelCount ?: return notLoadedLine(snapshot)
         val truncation = if (snapshot.epgTruncated) " - TRUNCATED, the guide is incomplete" else ""
         return "$channels channels, ${snapshot.epgProgrammeCount} programmes " +
             "(source ${snapshot.epgSource})$truncation"
+    }
+
+    /**
+     * A guide that is absent because it failed says so; one that is absent because nothing has been
+     * tried yet stays as it was. The difference matters to whoever reads this: "not loaded" alone
+     * had them guessing between a dead server, a wrong address and a feed too large, and a
+     * diagnostics report exists precisely so nobody has to guess.
+     */
+    private fun notLoadedLine(snapshot: DiagnosticsSnapshot): String {
+        val base = "not loaded (source ${snapshot.epgSource})"
+        return snapshot.epgFailure?.let { "$base - $it" } ?: base
     }
 
     private fun Long.asTimestamp(): String =

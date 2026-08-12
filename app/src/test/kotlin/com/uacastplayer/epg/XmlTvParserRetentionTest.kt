@@ -38,8 +38,8 @@ class XmlTvParserRetentionTest {
         </tv>
     """.trimIndent()
 
-    private fun parse(xml: String, keepFrom: Long): XmlTvParseResult =
-        XmlTvParser.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)), keepFrom)
+    private fun parse(xml: String, keepFrom: Long, keepUntil: Long = Long.MAX_VALUE): XmlTvParseResult =
+        XmlTvParser.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)), keepFrom, keepUntil)
 
     @Test
     fun yesterdayIsDroppedAndTodayIsKeptWhole() {
@@ -93,5 +93,54 @@ class XmlTvParserRetentionTest {
         """.trimIndent()
         val keepFrom = EpgRetentionPolicy.keepFrom(millis(day = 11, hour = 14), kyiv)
         assertEquals(listOf("Tonight"), parse(xml, keepFrom).programmes.map { it.title })
+    }
+
+    /**
+     * The far end of the window, and the report that produced it: a 311-channel playlist whose
+     * guide carried 4052 channels and stopped dead on [XmlTvParser.MAX_PROGRAMMES], leaving the
+     * channels at the end of the file with nothing. Dropping the past had not been enough, because
+     * nothing dropped the far future - feeds carry about eight days, and every screen in this app
+     * shows one.
+     */
+    @Test
+    fun nextWeekIsDroppedTheSameWayLastNightIs() {
+        val xml = """
+            <tv>
+              <channel id="one"><display-name>One</display-name></channel>
+              <programme channel="one" start="${stamp(11, 21)}" stop="${stamp(11, 22)}">
+                <title>Tonight</title>
+              </programme>
+              <programme channel="one" start="${stamp(13, 21)}" stop="${stamp(13, 22)}">
+                <title>The day after tomorrow</title>
+              </programme>
+              <programme channel="one" start="${stamp(18, 21)}" stop="${stamp(18, 22)}">
+                <title>Next week</title>
+              </programme>
+            </tv>
+        """.trimIndent()
+        val now = millis(day = 11, hour = 14)
+
+        val result = parse(
+            xml,
+            keepFrom = EpgRetentionPolicy.keepFrom(now, kyiv),
+            keepUntil = EpgRetentionPolicy.keepUntil(now, kyiv),
+        )
+
+        assertEquals(listOf("Tonight", "The day after tomorrow"), result.programmes.map { it.title })
+    }
+
+    /** Same reasoning as dropping the past: nothing a viewer could have reached was lost, so this
+     * must not raise the flag that puts "your guide is incomplete" in front of them. */
+    @Test
+    fun droppingTheFarFutureIsNotReportedAsAnIncompleteGuideEither() {
+        val now = millis(day = 11, hour = 14)
+
+        val result = parse(
+            feed,
+            keepFrom = EpgRetentionPolicy.keepFrom(now, kyiv),
+            keepUntil = EpgRetentionPolicy.keepUntil(now, kyiv),
+        )
+
+        assertFalse(result.programmeLimitExceeded)
     }
 }

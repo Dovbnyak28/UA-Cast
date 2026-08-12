@@ -215,11 +215,12 @@
     <string name="settings_open_terms">Умови використання</string>
     <string name="settings_send_diagnostics">Надіслати журнал роботи розробнику</string>
     <string name="settings_send_button">Надіслати</string>
-    <string name="settings_diagnostics_routing_label">Ефективність маршрутизації (лише локально, на цьому пристрої)</string>
+    <string name="settings_diagnostics_routing_label">Ефективність трансляції (залишається на цьому пристрої)</string>
     <string name="settings_diagnostics_route_direct">Напряму</string>
     <string name="settings_diagnostics_route_remux">Ремукс</string>
     <string name="settings_diagnostics_route_rewrite">Проксі-переписування</string>
     <string name="settings_diagnostics_route_line">%1$s: спроб %2$d, відтворено %3$d, невдало %4$d</string>
+    <string name="settings_diagnostics_route_never_cast">З цього пристрою ще нічого не транслювали.</string>
     <string name="settings_open_button">Відкрити</string>
 
     <!-- Help screen -->

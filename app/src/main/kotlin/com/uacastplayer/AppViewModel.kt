@@ -61,6 +61,7 @@ import com.uacastplayer.diagnostics.DiagnosticsSnapshot
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.epg.EpgWorkloadPolicy
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
@@ -126,7 +127,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         playlistRepository = playlistRepository,
         scope = viewModelScope,
         onLoaded = { channels, groups, epgUrls, fromCache ->
-            recomputeDeviceTierDefaults()
+            recomputeDeviceTierDefaults(channels)
             iconController.triggerPrefetch(
                 channels,
                 settingsState.value.iconDisplayMode,
@@ -224,8 +225,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         preferences = preferences,
         epgRepository = epgRepository,
         scope = viewModelScope,
+        isUnmeteredNetwork = ::isUnmeteredNetwork,
         onLoaded = {
-            recomputeDeviceTierDefaults()
+            recomputeDeviceTierDefaults(loadedPlaylistChannels())
             refreshCacheSizes()
             // The initial prefetch (triggered right after the playlist loads - see
             // PlaylistController's onLoaded above) fires before EPG data exists for a fresh load,
@@ -430,6 +432,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * ACCESS_NETWORK_STATE this app already holds. Deliberately only the *kind* of network - no
      * SSID, no carrier, no address, none of which would help and all of which identify a place.
      */
+    /**
+     * Whether the active network is one the app may spend a guide download on - see
+     * [com.uacastplayer.epg.EpgRefreshPolicy]. Unknown counts as metered: guessing wrong in the
+     * other direction spends somebody's mobile data on 50MB they did not ask for.
+     */
+    private fun isUnmeteredNetwork(): Boolean {
+        val manager = getApplication<Application>()
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val capabilities = manager?.activeNetwork?.let(manager::getNetworkCapabilities)
+        return capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+    }
+
     private fun describeNetwork(): String {
         val manager = getApplication<Application>()
             .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -481,6 +495,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 epgProgrammeCount = epgState.value.data?.programmesByChannelId?.values?.sumOf { it.size },
                 epgTruncated = epgState.value.data?.truncation?.any == true,
                 epgSource = epgState.value.customUrl?.let { "custom" } ?: epgState.value.selectedSource.id,
+                epgFailure = epgState.value.lastFailure,
                 network = describeNetwork(),
                 freeStorageBytes = getApplication<Application>().filesDir.usableSpace,
                 casting = castState.value.isSessionConnected,
@@ -613,14 +628,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setListDensity(density: ListDensity) = settingsController.setListDensity(density)
 
-    private fun recomputeDeviceTierDefaults() {
+    /**
+     * @param playlistChannels the channels the tier should be judged against. Passed in by the
+     *   playlist's own `onLoaded` because [playlistState] has not been updated with the new groups
+     *   yet at that moment (the same ordering [prefetchContext] documents); the EPG's `onLoaded`
+     *   fires later and reads them from the state, which by then is settled. Before a playlist
+     *   exists this is empty, the guide counts as nothing, and no downgrade is applied - which is
+     *   correct: an empty playlist is not a heavy one.
+     */
+    private fun recomputeDeviceTierDefaults(playlistChannels: List<M3uChannel>) {
         val effectiveTier = DevicePerformanceClassifier.adjustForContentSize(
             baseDeviceTier,
             playlistController.channelCount,
-            epgController.programmeCount,
+            // The guide for THIS playlist, not the feed's total - see EpgWorkloadPolicy for the
+            // field report where the difference was 311 channels against 4052.
+            EpgWorkloadPolicy.programmesFor(epgState.value.data, playlistChannels),
         )
         settingsController.recomputeDeviceTierDefaults(effectiveTier)
     }
+
+    private fun loadedPlaylistChannels(): List<M3uChannel> =
+        playlistState.value.groups.flatMap { it.channels }
 
     fun setChannelLayout(layout: ChannelLayout) = settingsController.setChannelLayout(layout)
 

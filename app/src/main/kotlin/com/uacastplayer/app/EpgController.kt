@@ -1,11 +1,15 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.data.epg.EpgFailureReason
 import com.uacastplayer.data.epg.EpgOutcome
 import com.uacastplayer.data.epg.EpgRepository
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.epg.EpgRefreshPolicy
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgSourceAutoDetect
 import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.log.AppLog
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +20,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val EPG_TICK_MILLIS = 30_000L
+private const val TAG = "EpgController"
 
 /**
  * Owns the active EPG source/data - moved out of [com.uacastplayer.AppViewModel] as a move-only
@@ -30,14 +35,14 @@ class EpgController(
     private val epgRepository: EpgRepository,
     private val scope: CoroutineScope,
     private val onLoaded: () -> Unit,
+    /** Whether the current network is one this app may spend ~50MB on - see [EpgRefreshPolicy].
+     * A lambda rather than a ConnectivityManager so this class stays free of Android. */
+    private val isUnmeteredNetwork: () -> Boolean = { false },
 ) {
     private val _epgState = MutableStateFlow(
         EpgUiState(selectedSource = preferences.epgSource, customUrl = preferences.customEpgUrl)
     )
     val epgState: StateFlow<EpgUiState> = _epgState.asStateFlow()
-
-    var programmeCount: Int = 0
-        private set
 
     /** Restores the cached snapshot at startup, or does an initial fetch if there isn't one -
      * called once from AppViewModel.init. */
@@ -49,7 +54,8 @@ class EpgController(
             epgRepository.deleteStaleDownloads()
             val restored = epgRepository.restoreSnapshot()
             if (restored != null) {
-                applyEpgOutcome(restored)
+                applyEpgOutcome(restored.outcome)
+                refreshIfFromAnEarlierDay(restored.savedAtMillis)
             } else {
                 // No cached snapshot (fresh install, or cache was cleared) - without this, the
                 // configured source is never fetched until the user manually reopens Settings and
@@ -63,6 +69,35 @@ class EpgController(
                 }
                 applyEpgOutcome(outcome)
             }
+        }
+    }
+
+    /**
+     * Re-downloads a guide that was cached on an earlier day, behind the restored one.
+     *
+     * Deliberately after the snapshot has already been applied, and without touching `isLoading`:
+     * the user has a usable guide from the first frame and this replaces it quietly if it arrives.
+     * A failed refresh is logged and otherwise ignored - it must not set `hasError`, because the
+     * guide on screen is real and telling somebody it is broken would be false.
+     */
+    private suspend fun refreshIfFromAnEarlierDay(savedAtMillis: Long) {
+        val shouldRefresh = EpgRefreshPolicy.shouldRefresh(
+            savedAtMillis = savedAtMillis,
+            nowMillis = System.currentTimeMillis(),
+            zoneId = ZoneId.systemDefault(),
+            isUnmetered = isUnmeteredNetwork(),
+        )
+        if (!shouldRefresh) return
+        val customUrl = preferences.customEpgUrl
+        val outcome = if (customUrl != null) {
+            epgRepository.loadFromUrl(customUrl)
+        } else {
+            epgRepository.loadFromSource(preferences.epgSource)
+        }
+        if (outcome is EpgOutcome.Loaded) {
+            applyEpgOutcome(outcome)
+        } else {
+            AppLog.w(TAG) { "Keeping the cached guide: ${EpgFailureReason.of(outcome)}" }
         }
     }
 
@@ -118,14 +153,17 @@ class EpgController(
     }
 
     private fun applyEpgOutcome(outcome: EpgOutcome) {
+        // The outcome names the problem - an HTTP code, an exception class, a size refusal - and
+        // until now every one of them was flattened into `hasError = true` and never written down.
+        // See EpgFailureReason for the field report where that silence was met.
+        val failure = EpgFailureReason.of(outcome)
+        if (failure != null) AppLog.w(TAG) { "EPG did not load: $failure" }
         _epgState.update { current ->
             when (outcome) {
-                is EpgOutcome.Loaded -> current.copy(data = outcome.data, isLoading = false, hasError = false)
-                else -> current.copy(isLoading = false, hasError = true)
+                is EpgOutcome.Loaded ->
+                    current.copy(data = outcome.data, isLoading = false, hasError = false, lastFailure = null)
+                else -> current.copy(isLoading = false, hasError = true, lastFailure = failure)
             }
-        }
-        if (outcome is EpgOutcome.Loaded) {
-            programmeCount = outcome.data.programmesByChannelId.values.sumOf { it.size }
         }
         onLoaded()
     }

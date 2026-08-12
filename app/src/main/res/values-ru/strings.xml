@@ -215,11 +215,12 @@
     <string name="settings_open_terms">Условия использования</string>
     <string name="settings_send_diagnostics">Отправить журнал работы разработчику</string>
     <string name="settings_send_button">Отправить</string>
-    <string name="settings_diagnostics_routing_label">Эффективность маршрутизации (только локально, на этом устройстве)</string>
+    <string name="settings_diagnostics_routing_label">Эффективность трансляции (остаётся на этом устройстве)</string>
     <string name="settings_diagnostics_route_direct">Напрямую</string>
     <string name="settings_diagnostics_route_remux">Ремукс</string>
     <string name="settings_diagnostics_route_rewrite">Прокси-переписывание</string>
     <string name="settings_diagnostics_route_line">%1$s: попыток %2$d, воспроизведено %3$d, неудачно %4$d</string>
+    <string name="settings_diagnostics_route_never_cast">С этого устройства ещё ничего не транслировали.</string>
     <string name="settings_open_button">Открыть</string>
 
     <!-- Help screen -->

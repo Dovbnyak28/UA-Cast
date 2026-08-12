@@ -69,6 +69,35 @@ class DiagnosticsReportBuilderTest {
         assertTrue(report.contains("EPG: not loaded"))
     }
 
+    /**
+     * A real report came back reading `EPG: not loaded (source custom)` and nothing anywhere - not
+     * in the report, not in the log below it - could say why. The outcome had known: an HTTP code,
+     * an exception class, a size refusal. See [com.uacastplayer.data.epg.EpgFailureReason].
+     */
+    @Test
+    fun `a guide that failed says why, not just that it is missing`() {
+        val report = DiagnosticsReportBuilder.build(
+            sampleSnapshot().copy(
+                epgChannelCount = null,
+                epgSource = "custom",
+                epgFailure = "the server answered HTTP 404",
+            ),
+        )
+
+        assertTrue(report, report.contains("EPG: not loaded (source custom) - the server answered HTTP 404"))
+    }
+
+    /** Nothing tried yet is not a failure, and must not be dressed as one. */
+    @Test
+    fun `a guide that simply has not loaded yet gains no invented reason`() {
+        val report = DiagnosticsReportBuilder.build(
+            sampleSnapshot().copy(epgChannelCount = null, epgSource = "custom", epgFailure = null),
+        )
+
+        assertTrue(report, report.contains("EPG: not loaded (source custom)"))
+        assertFalse(report, report.contains("not loaded (source custom) -"))
+    }
+
     /** Scale answers "the app is slow" more often than the log does. */
     @Test
     fun `the size of the playlist is stated`() {
@@ -139,5 +168,32 @@ class DiagnosticsReportBuilderTest {
         // The heading now says which end is newest - a reader should not have to guess whether a
         // log runs forwards or backwards.
         assertTrue(report.contains("Recent log entries (0), newest last:"))
+    }
+
+    /**
+     * The first field report this app ever received carried three rows of zeros under a heading
+     * that never mentioned casting, and they were read as broken counters. They were not: that
+     * phone had simply never cast anything. Both halves are fixed here - the heading names what is
+     * being counted, and "never" is said in words.
+     */
+    @Test
+    fun `a device that has never cast says so instead of printing nine zeros`() {
+        val report = DiagnosticsReportBuilder.build(
+            sampleSnapshot().copy(remuxEffectiveness = RemuxEffectivenessCounts()),
+        )
+
+        assertTrue("the heading names casting", report.contains("Cast routing effectiveness"))
+        assertTrue("and the reason is in words", report.contains("nothing has been cast from this device"))
+        assertFalse("with no row of zeros to misread", report.contains("Direct: 0/0/0"))
+    }
+
+    @Test
+    fun `a device that has cast still gets every route counted`() {
+        val report = DiagnosticsReportBuilder.build(sampleSnapshot())
+
+        assertTrue(report.contains("Direct: 0/0/0"))
+        assertTrue(report.contains("Proxy+remux: 4/3/1"))
+        assertTrue(report.contains("Proxy rewrite: 0/0/0"))
+        assertFalse(report.contains("nothing has been cast"))
     }
 }

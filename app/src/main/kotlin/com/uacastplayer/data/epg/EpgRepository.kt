@@ -25,8 +25,17 @@ sealed class EpgOutcome {
     data class Loaded(val data: EpgData) : EpgOutcome()
     data object SizeLimitExceeded : EpgOutcome()
     data class HttpError(val code: Int) : EpgOutcome()
-    data class ReadError(val message: String?) : EpgOutcome()
+    /** @param cause an exception class name, never a message - see [EpgDownloadResult.ReadError]. */
+    data class ReadError(val cause: String?) : EpgOutcome()
 }
+
+/**
+ * A guide read back from disk, with the day it was written.
+ *
+ * The timestamp is the point: it was already in every snapshot's header and nothing read it, which
+ * is how the cached guide came to have no expiry at all. See [EpgRefreshPolicy].
+ */
+data class RestoredEpg(val outcome: EpgOutcome, val savedAtMillis: Long)
 
 private const val TAG = "EpgRepository"
 
@@ -58,7 +67,7 @@ class EpgRepository(context: Context) {
             }
             EpgDownloadResult.SizeLimitExceeded -> EpgOutcome.SizeLimitExceeded
             is EpgDownloadResult.HttpError -> EpgOutcome.HttpError(result.code)
-            is EpgDownloadResult.ReadError -> EpgOutcome.ReadError(result.message)
+            is EpgDownloadResult.ReadError -> EpgOutcome.ReadError(result.cause)
         }
     }
 
@@ -75,13 +84,14 @@ class EpgRepository(context: Context) {
     // A corrupt/truncated cached snapshot (any parse failure, not one specific type) should just
     // fall back to null - the caller re-fetches live - not crash startup over stale disk state.
     @Suppress("TooGenericExceptionCaught")
-    suspend fun restoreSnapshot(): EpgOutcome? {
+    suspend fun restoreSnapshot(): RestoredEpg? {
         val snapshot = snapshotStore.open() ?: return null
         return try {
-            when (snapshot) {
-                is DecodedEpgSnapshot.Parsed -> EpgOutcome.Loaded(snapshot.data)
-                is DecodedEpgSnapshot.Document -> EpgOutcome.Loaded(upgradeFromDocument(snapshot))
+            val data = when (snapshot) {
+                is DecodedEpgSnapshot.Parsed -> snapshot.data
+                is DecodedEpgSnapshot.Document -> upgradeFromDocument(snapshot)
             }
+            RestoredEpg(EpgOutcome.Loaded(data), snapshot.header.savedAtEpochMillis)
         } catch (e: CancellationException) {
             // Not a failure and not this catch's business: the upgrade below suspends for as long
             // as a real feed takes to parse, so the scope ending mid-restore used to arrive here
@@ -134,10 +144,14 @@ class EpgRepository(context: Context) {
         val read = pushback.read(magic)
         if (read > 0) pushback.unread(magic, 0, read)
         val stream = if (read == 2 && GzipSniffer.isGzip(magic)) GZIPInputStream(pushback) else pushback
-        // Everything that finished before today began is dropped as it streams past, rather than
-        // being held and then counted against the cap - see EpgRetentionPolicy for the measurement.
-        val keepFrom = EpgRetentionPolicy.keepFrom(System.currentTimeMillis(), ZoneId.systemDefault())
-        return stream.use { XmlTvParser.parse(it, keepFrom) }
+        // Both ends of the retention window are applied as the document streams past, rather than
+        // held and then counted against the cap - see EpgRetentionPolicy for both measurements.
+        // Read once, so a parse that runs across midnight cannot use two different days.
+        val now = System.currentTimeMillis()
+        val zone = ZoneId.systemDefault()
+        val keepFrom = EpgRetentionPolicy.keepFrom(now, zone)
+        val keepUntil = EpgRetentionPolicy.keepUntil(now, zone)
+        return stream.use { XmlTvParser.parse(it, keepFrom, keepUntil) }
     }
 
     private fun buildEpgData(parsed: XmlTvParseResult): EpgData {

@@ -210,11 +210,12 @@
     <string name="settings_open_terms">Términos de uso</string>
     <string name="settings_send_diagnostics">Enviar un registro de actividad al desarrollador</string>
     <string name="settings_send_button">Enviar</string>
-    <string name="settings_diagnostics_routing_label">Efectividad de enrutamiento (solo local, este dispositivo)</string>
+    <string name="settings_diagnostics_routing_label">Efectividad de la transmisión (no sale de este dispositivo)</string>
     <string name="settings_diagnostics_route_direct">Directo</string>
     <string name="settings_diagnostics_route_remux">Remux</string>
     <string name="settings_diagnostics_route_rewrite">Reescritura proxy</string>
     <string name="settings_diagnostics_route_line">%1$s: %2$d intentos, %3$d reproducidos, %4$d fallidos</string>
+    <string name="settings_diagnostics_route_never_cast">Todavía no se ha transmitido nada desde este dispositivo.</string>
     <string name="settings_open_button">Abrir</string>
 
     <!-- Help screen -->

@@ -17,7 +17,16 @@ sealed class EpgDownloadResult {
     data class Success(val documentFile: File) : EpgDownloadResult()
     data object SizeLimitExceeded : EpgDownloadResult()
     data class HttpError(val code: Int) : EpgDownloadResult()
-    data class ReadError(val message: String?) : EpgDownloadResult()
+    /**
+     * @param cause the exception's *class name*, never its message. An OkHttp IOException's message
+     *   routinely carries the URL it failed on - and for an Xtream feed that URL has the user's
+     *   username and password in its query string. This value is shown in the diagnostics report a
+     *   user emails, so it is kept leak-proof by construction rather than by sanitizing afterwards.
+     *   It loses nothing that matters: UnknownHostException, SocketTimeoutException and
+     *   SSLHandshakeException are three different problems with three different answers, and the
+     *   class name is what tells them apart.
+     */
+    data class ReadError(val cause: String?) : EpgDownloadResult()
 }
 
 /**
@@ -103,7 +112,7 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
             throw e
         } catch (e: IOException) {
             tempFile?.delete()
-            EpgDownloadResult.ReadError(e.message)
+            EpgDownloadResult.ReadError(e.javaClass.simpleName)
         }
     }
 

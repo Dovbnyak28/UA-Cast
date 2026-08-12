@@ -27,4 +27,15 @@ object RemuxEffectivenessPolicy {
                 CastRouteOutcome.FAILED -> counts.copy(proxyRewriteFailed = counts.proxyRewriteFailed + 1)
             }
         }
+
+    /**
+     * True when no route has ever been attempted on this device, i.e. nothing has ever been cast.
+     *
+     * These counters are written from exactly one place - [com.uacastplayer.cast.CastSessionRepository] -
+     * so they say nothing at all about watching a channel on the phone itself. Every device that has
+     * only ever played locally reports nine zeros, which is indistinguishable from counters that are
+     * broken, and the first field report this app received was read that way for exactly that reason.
+     * "Never cast" is a fact worth stating in words; nine zeros are not.
+     */
+    fun isUntouched(counts: RemuxEffectivenessCounts): Boolean = counts == RemuxEffectivenessCounts()
 }

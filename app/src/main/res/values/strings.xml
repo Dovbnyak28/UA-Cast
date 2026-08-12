@@ -208,11 +208,12 @@
     <string name="settings_open_terms">Terms of Use</string>
     <string name="settings_send_diagnostics">Send an activity log to the developer</string>
     <string name="settings_send_button">Send</string>
-    <string name="settings_diagnostics_routing_label">Routing effectiveness (local only, this device)</string>
+    <string name="settings_diagnostics_routing_label">Cast routing effectiveness (stays on this device)</string>
     <string name="settings_diagnostics_route_direct">Direct</string>
     <string name="settings_diagnostics_route_remux">Remux</string>
     <string name="settings_diagnostics_route_rewrite">Proxy rewrite</string>
     <string name="settings_diagnostics_route_line">%1$s: %2$d attempted, %3$d played, %4$d failed</string>
+    <string name="settings_diagnostics_route_never_cast">Nothing has been cast from this device yet.</string>
     <!-- Generic "Open" action for LinkRow (Help/Terms) - distinct from settings_battery_optimization_button,
          which is specific to the battery optimization row and must not be reused elsewhere. -->
     <string name="settings_open_button">Open</string>

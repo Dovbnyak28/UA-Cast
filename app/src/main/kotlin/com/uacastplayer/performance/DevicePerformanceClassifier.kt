@@ -2,8 +2,12 @@ package com.uacastplayer.performance
 
 /**
  * Scores a device from RAM/cores/SDK level (0-6, two points each for a "good", one for "ok"),
- * then lets [adjustForContentSize] knock the result down a notch when the currently loaded
- * playlist/EPG is large enough that even solid hardware will feel it.
+ * then lets [adjustForContentSize] knock the result down by up to two tiers when the currently
+ * loaded playlist and guide are large enough that even solid hardware will feel it.
+ *
+ * "Up to two" is what the code has always done, and the sentence here used to say "a notch". On a
+ * three-tier scale two notches from anywhere is the floor, so it is worth being exact: content
+ * alone can make the hardware score irrelevant.
  */
 object DevicePerformanceClassifier {
 
@@ -28,6 +32,22 @@ object DevicePerformanceClassifier {
         return tierForScore(score)
     }
 
+    /**
+     * @param epgProgrammeCount programmes held **for channels in this playlist**, which is what
+     *   [com.uacastplayer.epg.EpgWorkloadPolicy] computes - not the feed's total.
+     *
+     *   The feed's total is what was passed here for a long time, and the two are not close. A
+     *   report from the field carried a playlist of 311 channels against a guide of 4052: the
+     *   number deciding that device's tier was 92% channels its owner did not have, it cleared the
+     *   heavier threshold on its own, and the phone was classified LOW_END on hardware that scores
+     *   MID_RANGE. LOW_END turns channel logos off outright (see [DeviceTierDefaults]), and both
+     *   devices that have sent reports show the icon mode written to the value the "enable icons"
+     *   banner writes - two owners, both shown placeholders, both undoing it by hand.
+     *
+     *   The thresholds below were always sized for this number. Three hundred channels over the
+     *   retained window is roughly 18,000 programmes, which is inside the smallest band - the
+     *   behaviour a 300-channel playlist should get.
+     */
     fun adjustForContentSize(tier: DeviceTier, playlistChannelCount: Int, epgProgrammeCount: Int): DeviceTier {
         val penalty = when {
             playlistChannelCount > 5000 || epgProgrammeCount > 100_000 -> 2
