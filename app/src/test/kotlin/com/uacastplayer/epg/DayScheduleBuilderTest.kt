@@ -2,6 +2,7 @@ package com.uacastplayer.epg
 
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -81,6 +82,45 @@ class DayScheduleBuilderTest {
 
         assertEquals(emptyList<EpgProgramme>(), schedule.past)
         assertNull(schedule.current)
+        assertEquals(emptyList<EpgProgramme>(), schedule.upcoming)
+    }
+
+    /**
+     * The clocks go back on the last Sunday of October, making that local day 25 hours long. A day
+     * end computed as "start + 24h" lands at 23:00 and takes the evening's last hour of listings
+     * with it - in Ukraine, prime time.
+     */
+    @Test
+    fun `on the 25-hour day the last hour of the evening is still today`() {
+        val kyiv = ZoneId.of("Europe/Kyiv")
+        val lateShow = programme(
+            "23:30 on the day the clocks go back",
+            startMillis = ZonedDateTime.of(2026, 10, 25, 23, 30, 0, 0, kyiv).toInstant().toEpochMilli(),
+            stopMillis = ZonedDateTime.of(2026, 10, 26, 0, 30, 0, 0, kyiv).toInstant().toEpochMilli(),
+        )
+        val nowMillis = ZonedDateTime.of(2026, 10, 25, 20, 0, 0, 0, kyiv).toInstant().toEpochMilli()
+
+        val schedule = DayScheduleBuilder.build(listOf(lateShow), nowMillis, kyiv)
+
+        assertEquals(listOf(lateShow), schedule.upcoming)
+    }
+
+    /**
+     * And forward on the last Sunday of March, making that day 23 hours long - where the same
+     * arithmetic overshoots instead, pulling the small hours of the *next* day into today's guide.
+     */
+    @Test
+    fun `on the 23-hour day tomorrow morning does not leak into today`() {
+        val kyiv = ZoneId.of("Europe/Kyiv")
+        val tomorrow = programme(
+            "00:30 the morning after the clocks go forward",
+            startMillis = ZonedDateTime.of(2026, 3, 30, 0, 30, 0, 0, kyiv).toInstant().toEpochMilli(),
+            stopMillis = ZonedDateTime.of(2026, 3, 30, 1, 30, 0, 0, kyiv).toInstant().toEpochMilli(),
+        )
+        val nowMillis = ZonedDateTime.of(2026, 3, 29, 20, 0, 0, 0, kyiv).toInstant().toEpochMilli()
+
+        val schedule = DayScheduleBuilder.build(listOf(tomorrow), nowMillis, kyiv)
+
         assertEquals(emptyList<EpgProgramme>(), schedule.upcoming)
     }
 

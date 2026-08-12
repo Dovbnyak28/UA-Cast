@@ -19,17 +19,16 @@ data class DaySchedule(
  */
 object DayScheduleBuilder {
 
-    private const val DAY_MILLIS = 24L * 60 * 60 * 1000
-
     /** [programmes] need not be sorted or pre-filtered to a single channel/day - both are done here. */
     fun build(programmes: List<EpgProgramme>, nowMillis: Long, zoneId: ZoneId): DaySchedule {
-        val dayStartMillis = Instant.ofEpochMilli(nowMillis)
-            .atZone(zoneId)
-            .toLocalDate()
-            .atStartOfDay(zoneId)
-            .toInstant()
-            .toEpochMilli()
-        val dayEndMillis = dayStartMillis + DAY_MILLIS
+        // Both ends come from the calendar. The end used to be `start + 24h`, which is only the
+        // same thing in a zone that never changes its clocks - and the tests all used UTC, which is
+        // one. In Europe/Kyiv the October Sunday is 25 hours long, so "start + 24h" fell at 23:00
+        // and silently dropped the last hour of that evening's listings; the March Sunday is 23
+        // hours long, so it overshot to 01:00 and pulled the next morning into today instead.
+        val today = Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate()
+        val dayStartMillis = today.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val dayEndMillis = today.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
 
         // A programme belongs to "today" if any part of its run overlaps today's window - this
         // deliberately keeps a programme that started yesterday and airs past midnight, and one
