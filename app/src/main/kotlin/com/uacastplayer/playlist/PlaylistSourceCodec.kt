@@ -1,5 +1,7 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.io.presizeFor
+import com.uacastplayer.core.io.readCountField
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
@@ -64,8 +66,11 @@ object PlaylistSourceCodec {
     }
 
     private fun decodeV1(input: DataInputStream): List<PlaylistSource> {
-        val count = input.readInt()
-        val sources = ArrayList<PlaylistSource>(count)
+        // Not bounded by PlaylistSourcePolicy.MAX_SOURCES: lowering that later would make this
+        // refuse a file it wrote itself, and the failure here costs the user every saved playlist
+        // rather than a refetch. Checked for sense, grown rather than sized.
+        val count = input.readCountField()
+        val sources = ArrayList<PlaylistSource>(presizeFor(count))
         repeat(count) {
             val id = input.readUTF()
             val type = runCatching { PlaylistSourceType.valueOf(input.readUTF()) }.getOrDefault(PlaylistSourceType.URL)

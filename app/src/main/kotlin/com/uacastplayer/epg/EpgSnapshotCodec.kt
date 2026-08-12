@@ -1,5 +1,7 @@
 package com.uacastplayer.epg
 
+import com.uacastplayer.core.io.presizeFor
+import com.uacastplayer.core.io.readCountField
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
@@ -110,21 +112,28 @@ object EpgSnapshotCodec {
             programmesDropped = input.readBoolean(),
         )
 
-        val channelCount = input.readInt()
+        val channelCount = input.readCountField(XmlTvParser.MAX_CHANNELS)
         val channels = ArrayList<EpgChannel>(channelCount)
         repeat(channelCount) {
             val id = input.readUTF()
-            val displayNameCount = input.readInt()
-            val displayNames = ArrayList<String>(displayNameCount)
+            // No domain limit exists for these - the parser keeps every <display-name> a channel
+            // carries - so this is checked for sense rather than against a ceiling, and the list is
+            // grown rather than sized from the file. A count that is merely huge then runs out of
+            // stream within a couple of reads, which the caller's EOFException catch turns into the
+            // refetch this is all for.
+            val displayNameCount = input.readCountField()
+            val displayNames = ArrayList<String>(presizeFor(displayNameCount))
             repeat(displayNameCount) { displayNames += input.readUTF() }
             channels += EpgChannel(id, displayNames, input.readNullableUTF())
         }
 
-        val groupCount = input.readInt()
+        // One group per channel id, so the channel ceiling bounds this too.
+        val groupCount = input.readCountField(XmlTvParser.MAX_CHANNELS)
         val programmesByChannelId = LinkedHashMap<String, List<EpgProgramme>>(groupCount)
         repeat(groupCount) {
             val channelId = input.readUTF()
-            val programmeCount = input.readInt()
+            // A single channel cannot hold more than the whole file's ceiling.
+            val programmeCount = input.readCountField(XmlTvParser.MAX_PROGRAMMES)
             val programmes = ArrayList<EpgProgramme>(programmeCount)
             repeat(programmeCount) {
                 programmes += EpgProgramme(
