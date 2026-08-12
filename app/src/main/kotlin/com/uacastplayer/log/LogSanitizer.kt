@@ -26,6 +26,30 @@ object LogSanitizer {
     private val PARAM_REGEX = Regex("""(?i)(username|password|token|auth)=[^&\s"'<>]*""")
     private val TOKEN_REGEX = Regex("""[A-Za-z0-9_+/=-]{$MIN_TOKEN_LENGTH,}""")
 
+    /**
+     * A run this long with no digit anywhere in it is a word, not a secret.
+     *
+     * Length alone was the whole test, and it ate this app's own diagnostics. Java class names are
+     * long: `BehindLiveWindowException` is 25 characters, so the line
+     * `"Recovering from BehindLiveWindowException"` - a hard-coded literal in
+     * [com.uacastplayer.player.PlayerViewModel] with nothing secret in it - reached a real user's
+     * report as `Recovering from <token:8f1bf9>`. So did every `e.javaClass.simpleName` this app
+     * logs deliberately in place of an exception message: `IllegalArgumentException` (24),
+     * `TransactionTooLargeException` (28), `ConcurrentModificationException` (31). The messages
+     * written specifically to be safe to share were the ones being destroyed, and long Logcat tags
+     * went with them.
+     *
+     * The requirement is a digit rather than "letters only" because a run's non-letter is usually
+     * the `/` in a Logcat tag or the `-` in an identifier, neither of which makes it a secret.
+     *
+     * What this gives up, stated plainly: a purely alphabetic secret of 24+ characters would now
+     * survive this net. It is a net, not the defence - a token in a URL is caught by [URL_REGEX], a
+     * credential in a query by [PARAM_REGEX], and the formats this app can actually leak (hex
+     * session ids, base64 tokens) contain digits with probability that rounds to certainty: a
+     * random 24-character base64 string has about a 1% chance of having none.
+     */
+    private fun looksLikeAWord(run: String): Boolean = run.none { it in '0'..'9' }
+
     fun sanitize(message: String): String {
         // Cheapest possible rejection for the overwhelmingly common case (a short, plain-text
         // message): no allocation, just three scans of the original reference.
@@ -46,19 +70,30 @@ object LogSanitizer {
         // least that long, which is rare outside genuine tokens/keys - the regex only runs when
         // there's real work for it to do.
         if (hasTokenRun(result)) {
-            result = TOKEN_REGEX.replace(result) { "<token:${shortMarker(it.value)}>" }
+            result = TOKEN_REGEX.replace(result) { match ->
+                if (looksLikeAWord(match.value)) match.value else "<token:${shortMarker(match.value)}>"
+            }
         }
         return result
     }
 
     /** No allocation - a single char-by-char scan for a run of [MIN_TOKEN_LENGTH]+ characters from
-     * [TOKEN_REGEX]'s own character class, so this can never say "no token" when the regex would
-     * actually find one. */
+     * [TOKEN_REGEX]'s own character class that also contains a digit, so this can never say "no
+     * token" when the replacement above would actually redact one. Runs the digit test here as
+     * well as in [looksLikeAWord] so that an ordinary sentence never reaches the regex at all -
+     * which was the point of this scan to begin with. */
     private fun hasTokenRun(s: String): Boolean {
         var run = 0
+        var digitInRun = false
         for (c in s) {
-            run = if (isTokenChar(c)) run + 1 else 0
-            if (run >= MIN_TOKEN_LENGTH) return true
+            if (isTokenChar(c)) {
+                run++
+                if (c in '0'..'9') digitInRun = true
+            } else {
+                run = 0
+                digitInRun = false
+            }
+            if (run >= MIN_TOKEN_LENGTH && digitInRun) return true
         }
         return false
     }

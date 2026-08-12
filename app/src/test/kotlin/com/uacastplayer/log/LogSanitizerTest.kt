@@ -105,10 +105,18 @@ class LogSanitizerTest {
         assertSame(message, result)
     }
 
+    /**
+     * The length boundary, measured on something that is actually a token.
+     *
+     * This used to be `"a".repeat(24)`, which is not a token - it is twenty-four letters, and
+     * asserting that it gets redacted was asserting the defect that ate `BehindLiveWindowException`
+     * out of a real user's report. The run now carries a digit, which is what separates a secret
+     * from a word; the 23-vs-24 boundary it was written to pin is unchanged and still tested.
+     */
     @Test
     fun `a run of exactly 23 token characters is left alone but 24 is redacted`() {
-        val justUnder = "prefix ${"a".repeat(23)} suffix"
-        val atThreshold = "prefix ${"a".repeat(24)} suffix"
+        val justUnder = "prefix 1${"a".repeat(22)} suffix"
+        val atThreshold = "prefix 1${"a".repeat(23)} suffix"
 
         assertSame(justUnder, LogSanitizer.sanitize(justUnder))
         assertTrue(LogSanitizer.sanitize(atThreshold).contains("<token:"))
@@ -176,5 +184,64 @@ class LogSanitizerTest {
 
         assertFalse("leaked password, got: $result", result.contains("hunter2"))
         assertTrue("expected a whole-url marker, got: $result", result.contains("<url:"))
+    }
+
+    /**
+     * Reproduced from a real diagnostics report, which carried the line
+     * `Recovering from <token:8f1bf9>` - and `8f1bf9` is this app's own marker for the string
+     * `BehindLiveWindowException`, a hard-coded literal in `PlayerViewModel` with nothing secret
+     * in it. Length alone made it a token: 25 characters of letters.
+     */
+    @Test
+    fun `a long class name is not a token`() {
+        val result = LogSanitizer.sanitize("Recovering from BehindLiveWindowException (attempt 1 in the last 60s)")
+
+        assertTrue("the name was eaten, got: $result", result.contains("BehindLiveWindowException"))
+    }
+
+    /**
+     * The same defect, and the one that costs the most: this app logs `e.javaClass.simpleName`
+     * rather than `e.message` all over, specifically so the result is safe to put in a report. The
+     * ones long enough to matter were the ones being redacted.
+     */
+    @Test
+    fun `the exception names this app deliberately logs survive`() {
+        val names = listOf(
+            "IllegalArgumentException",
+            "TransactionTooLargeException",
+            "ConcurrentModificationException",
+            "UnsupportedOperationException",
+        )
+
+        for (name in names) {
+            val result = LogSanitizer.sanitize("Favorites write failed: $name")
+            assertTrue("$name was eaten, got: $result", result.contains(name))
+        }
+    }
+
+    /** A Logcat tag is a word with a `/` in it, not a secret - `08-12 16:58:19.810 <token:158b95>`
+     * is what a full log looked like where the tag ran past 23 characters. */
+    @Test
+    fun `a long logcat tag survives`() {
+        val result = LogSanitizer.sanitize("08-12 16:58:19.810 I/NavigationEventDispatcher( 1692): dispatched")
+
+        assertTrue("the tag was eaten, got: $result", result.contains("I/NavigationEventDispatcher"))
+    }
+
+    /** The other half of the same rule: a digit anywhere in the run still makes it a token, which
+     * is every format this app could actually leak - hex ids, base64, signed payloads. */
+    @Test
+    fun `a token with digits in it is still redacted`() {
+        val secrets = listOf(
+            "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+            "eyJhbGciOiJIUzI1NiJ9aGVsbG8gd29ybGQ",
+            "session_9f3a2b81c7d64e05af12b3c4d5e6f708",
+        )
+
+        for (secret in secrets) {
+            val result = LogSanitizer.sanitize("proxy handoff for $secret")
+            assertFalse("leaked $secret, got: $result", result.contains(secret))
+            assertTrue("expected a token marker, got: $result", result.contains("<token:"))
+        }
     }
 }
