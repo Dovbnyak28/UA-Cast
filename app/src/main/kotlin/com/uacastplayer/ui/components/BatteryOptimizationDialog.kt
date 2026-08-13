@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.components
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.material3.AlertDialog
@@ -11,9 +12,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import com.uacastplayer.R
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.UaCastTheme
+
+private const val TAG = "BatteryOptimizationDialog"
 
 /**
  * One-time (see [com.uacastplayer.AppViewModel.showBatteryOptimizationHint]) explainer shown the
@@ -37,7 +41,19 @@ fun BatteryOptimizationDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
         text = { Text(stringResource(R.string.battery_hint_body)) },
         confirmButton = {
             TextButton(onClick = {
-                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                // ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS is documented, not guaranteed: a
+                // Settings app that does not export it resolves nothing, and startActivity on an
+                // unresolvable intent throws. This dialog appears on the first cast session, so
+                // unguarded it would crash the app in the middle of its main feature, over a hint
+                // nobody asked for. Same guard as sendDiagnostics and the release-page link.
+                try {
+                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                } catch (_: ActivityNotFoundException) {
+                    AppLog.w(TAG) { "no battery optimization settings screen on this device" }
+                }
+                // Retired either way. The hint is one-shot, and a device that cannot open the
+                // screen is precisely the one that must not be asked about it again on every
+                // single cast session.
                 onAllow()
             }) {
                 Text(stringResource(R.string.battery_hint_allow))
