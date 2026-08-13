@@ -857,8 +857,18 @@ private fun ParentalControlSection(
         return
     }
 
-    var showManageLocked by rememberSaveable { mutableStateOf(false) }
-    var showChangePin by rememberSaveable { mutableStateOf(false) }
+    // remember, not rememberSaveable, and the difference is the whole point. Both of these are
+    // opened only through requireParentalControlUnlock, and the flag recording that the PIN was
+    // entered - ParentalControlController.unlockedThisSession - is in-memory only, so a fresh
+    // process starts locked again. rememberSaveable survives a process death; that unlock does not,
+    // so the dialog would come back with its gate gone, and submitting it sets a new PIN without
+    // the old one ever being known. Nothing is lost by dropping it: MainActivity handles rotation
+    // through configChanges, and the configuration changes that do recreate the Activity keep the
+    // ViewModel - and the unlock - along with it.
+    var showManageLocked by remember { mutableStateOf(false) }
+    var showChangePin by remember { mutableStateOf(false) }
+    // Left saveable: the reset is not behind the unlock in the first place (see this function's
+    // doc), so restoring it grants nothing that closing it would have withheld.
     var showResetConfirm by rememberSaveable { mutableStateOf(false) }
 
     PlaylistActionRow(
