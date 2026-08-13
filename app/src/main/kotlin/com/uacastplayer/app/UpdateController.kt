@@ -1,6 +1,7 @@
 package com.uacastplayer.app
 
 import com.uacastplayer.update.AppVersion
+import com.uacastplayer.update.ReleaseLookup
 import com.uacastplayer.update.ReleaseSource
 import com.uacastplayer.update.UpdateCheckOutcome
 import com.uacastplayer.update.UpdateCheckSchedule
@@ -82,19 +83,20 @@ class UpdateController(
 
         _state.value = _state.value.copy(isChecking = true)
         scope.launch {
-            val release = releaseSource.fetchLatestRelease()
+            val lookup = releaseSource.fetchLatestRelease()
             // Recorded even when the request failed. Otherwise a device that is offline every time
             // the app opens would retry on every single launch, which is the one case where an
             // update check could become a battery and data cost worth noticing.
             storage.lastUpdateCheckAtMillis = now()
 
+            val release = (lookup as? ReleaseLookup.Found)?.release?.takeIf { it.version > installed }
             _state.value = when {
-                release == null -> _state.value.copy(
+                lookup is ReleaseLookup.Failed -> _state.value.copy(
                     isChecking = false,
                     lastOutcome = if (manual) UpdateCheckOutcome.FAILED else null,
                 )
 
-                release.version > installed -> _state.value.copy(
+                release != null -> _state.value.copy(
                     isChecking = false,
                     // A manual check overrides an earlier dismissal: asking "is there an update"
                     // and being told nothing because you once closed that banner would be a lie.
@@ -106,6 +108,10 @@ class UpdateController(
                     lastOutcome = if (manual) UpdateCheckOutcome.UPDATE_AVAILABLE else null,
                 )
 
+                // Everything left is "nothing newer exists": a release that is not ahead of this
+                // build, and a repository that has published none at all. The second one is not a
+                // failure - see ReleaseLookup.NonePublished - and telling a user to try again later
+                // about it would be advice that cannot come true.
                 else -> _state.value.copy(
                     isChecking = false,
                     availableRelease = null,

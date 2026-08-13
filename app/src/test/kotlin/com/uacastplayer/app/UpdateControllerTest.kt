@@ -2,6 +2,7 @@ package com.uacastplayer.app
 
 import com.uacastplayer.update.AppVersion
 import com.uacastplayer.update.GitHubRelease
+import com.uacastplayer.update.ReleaseLookup
 import com.uacastplayer.update.ReleaseSource
 import com.uacastplayer.update.UpdateCheckOutcome
 import com.uacastplayer.update.UpdateCheckSchedule
@@ -23,11 +24,11 @@ class UpdateControllerTest {
         override var dismissedUpdateTag: String? = null,
     ) : UpdateCheckStorage
 
-    private class FakeReleaseSource(var release: GitHubRelease?) : ReleaseSource {
+    private class FakeReleaseSource(var lookup: ReleaseLookup) : ReleaseSource {
         var calls = 0
-        override suspend fun fetchLatestRelease(): GitHubRelease? {
+        override suspend fun fetchLatestRelease(): ReleaseLookup {
             calls++
-            return release
+            return lookup
         }
     }
 
@@ -36,6 +37,8 @@ class UpdateControllerTest {
         tagName = tag,
         releaseUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/tag/$tag",
     )
+
+    private fun found(tag: String) = ReleaseLookup.Found(releaseOf(tag))
 
     private val now = 1_800_000_000_000L
 
@@ -54,7 +57,7 @@ class UpdateControllerTest {
 
     @Test
     fun aNewerReleaseBecomesTheBanner() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage()
         val controller = controller(this, source, storage)
 
@@ -67,7 +70,7 @@ class UpdateControllerTest {
 
     @Test
     fun theSameVersionIsNotAnUpdate() = runTest {
-        val source = FakeReleaseSource(releaseOf("v0.9.0"))
+        val source = FakeReleaseSource(found("v0.9.0"))
         val controller = controller(this, source, FakeStorage())
 
         controller.checkOnLaunch()
@@ -80,7 +83,7 @@ class UpdateControllerTest {
      * from - it must not be told to "update" back to what it already contains. */
     @Test
     fun aCiBuildIsNotOfferedTheReleaseItWasBuiltFrom() = runTest {
-        val source = FakeReleaseSource(releaseOf("v0.9.0"))
+        val source = FakeReleaseSource(found("v0.9.0"))
         val controller = controller(this, source, FakeStorage(), installed = "0.9.0.42")
 
         controller.checkOnLaunch()
@@ -91,7 +94,7 @@ class UpdateControllerTest {
 
     @Test
     fun theAutomaticCheckStaysQuietWithinTheWeek() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(lastUpdateCheckAtMillis = now - 1000)
         val controller = controller(this, source, storage)
 
@@ -104,7 +107,7 @@ class UpdateControllerTest {
 
     @Test
     fun theAutomaticCheckRunsOnceTheWeekHasPassed() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(lastUpdateCheckAtMillis = now - UpdateCheckSchedule.INTERVAL_MILLIS)
         val controller = controller(this, source, storage)
 
@@ -119,7 +122,7 @@ class UpdateControllerTest {
      * asking one on its own. */
     @Test
     fun theManualCheckIgnoresTheThrottle() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(lastUpdateCheckAtMillis = now - 1000)
         val controller = controller(this, source, storage)
 
@@ -133,24 +136,76 @@ class UpdateControllerTest {
     /** A failed check the app started by itself must leave no trace in the UI - nobody asked. */
     @Test
     fun anAutomaticFailureIsSilentWhileAManualOneIsReported() = runTest {
-        val silent = FakeReleaseSource(release = null)
+        val silent = FakeReleaseSource(ReleaseLookup.Failed)
         val silentController = controller(this, silent, FakeStorage())
         silentController.checkOnLaunch()
         testScheduler.advanceUntilIdle()
         assertNull(silentController.state.value.lastOutcome)
 
-        val loud = FakeReleaseSource(release = null)
+        val loud = FakeReleaseSource(ReleaseLookup.Failed)
         val loudController = controller(this, loud, FakeStorage())
         loudController.checkNow()
         testScheduler.advanceUntilIdle()
         assertEquals(UpdateCheckOutcome.FAILED, loudController.state.value.lastOutcome)
     }
 
+    /**
+     * A repository with no published release answers the question rather than failing to: nothing
+     * newer exists, so the installed build is the newest there is. This is the state every install
+     * is in until the first release is cut, and `docs/RELEASING.md` has always said so - reporting
+     * "could not check" here told the user to retry a condition retrying cannot change.
+     */
+    @Test
+    fun nothingPublishedYetIsUpToDateRatherThanAFailedCheck() = runTest {
+        val source = FakeReleaseSource(ReleaseLookup.NonePublished)
+        val controller = controller(this, source, FakeStorage())
+
+        controller.checkNow()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(UpdateCheckOutcome.UP_TO_DATE, controller.state.value.lastOutcome)
+        assertNull(controller.state.value.availableRelease)
+    }
+
+    /**
+     * The automatic path, which by design cannot tell the two behaviours apart: a silent check
+     * reports nothing whether it decided "failed" or "up to date", so this **does not** prove the
+     * fix - only the manual test above does. It is kept for what it does pin: the new case still
+     * raises no banner, and still records the timestamp the weekly throttle reads, which a future
+     * early return from `NonePublished` would quietly break.
+     */
+    @Test
+    fun nothingPublishedYetRaisesNoBannerOnLaunch() = runTest {
+        val source = FakeReleaseSource(ReleaseLookup.NonePublished)
+        val storage = FakeStorage()
+        val controller = controller(this, storage = storage, source = source)
+
+        controller.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(controller.state.value.availableRelease)
+        assertNull(controller.state.value.lastOutcome)
+        assertEquals(now, storage.lastUpdateCheckAtMillis)
+    }
+
+    /** A release that exists but cannot be read is still a failure, not "nothing published" -
+     * something is there and this build did not understand it, which is worth reporting. */
+    @Test
+    fun anUnreadableReleaseStaysAFailure() = runTest {
+        val source = FakeReleaseSource(ReleaseLookup.Failed)
+        val controller = controller(this, source, FakeStorage())
+
+        controller.checkNow()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(UpdateCheckOutcome.FAILED, controller.state.value.lastOutcome)
+    }
+
     /** Even a failure records the timestamp: a device that is offline on every launch must not
      * re-request on every launch. */
     @Test
     fun aFailedCheckStillCountsAgainstTheWeeklyThrottle() = runTest {
-        val source = FakeReleaseSource(release = null)
+        val source = FakeReleaseSource(ReleaseLookup.Failed)
         val storage = FakeStorage()
         val controller = controller(this, source, storage)
 
@@ -162,7 +217,7 @@ class UpdateControllerTest {
 
     @Test
     fun dismissingRemembersTheTagAndHidesTheBanner() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage()
         val controller = controller(this, source, storage)
 
@@ -176,7 +231,7 @@ class UpdateControllerTest {
 
     @Test
     fun aDismissedVersionDoesNotComeBackOnTheNextAutomaticCheck() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(dismissedUpdateTag = "v1.0.0")
         val controller = controller(this, source, storage)
 
@@ -190,7 +245,7 @@ class UpdateControllerTest {
      * boolean flag somebody would have to remember to reset. */
     @Test
     fun dismissingOneVersionDoesNotSilenceTheNext() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.1.0"))
+        val source = FakeReleaseSource(found("v1.1.0"))
         val storage = FakeStorage(dismissedUpdateTag = "v1.0.0")
         val controller = controller(this, source, storage)
 
@@ -204,7 +259,7 @@ class UpdateControllerTest {
      * once closed that banner would be a lie. */
     @Test
     fun theManualCheckShowsAVersionTheUserHadDismissed() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(dismissedUpdateTag = "v1.0.0")
         val controller = controller(this, source, storage)
 
@@ -217,7 +272,7 @@ class UpdateControllerTest {
     /** Six taps must not become six requests - the same class of defect as F17. */
     @Test
     fun tapsWhileACheckIsRunningAreIgnored() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val controller = controller(this, source, FakeStorage())
 
         repeat(6) { controller.checkNow() }
@@ -228,7 +283,7 @@ class UpdateControllerTest {
 
     @Test
     fun anUnparseableInstalledVersionFailsInsteadOfOfferingEveryRelease() = runTest {
-        val source = FakeReleaseSource(releaseOf("v1.0.0"))
+        val source = FakeReleaseSource(found("v1.0.0"))
         val controller = controller(this, source, FakeStorage(), installed = "not-a-version")
 
         controller.checkNow()
@@ -242,7 +297,7 @@ class UpdateControllerTest {
     @Test
     fun clearingTheOutcomeLeavesTheBannerAlone() = runTest {
         val release = releaseOf("v1.0.0")
-        val source = FakeReleaseSource(release)
+        val source = FakeReleaseSource(ReleaseLookup.Found(release))
         val controller = controller(this, source, FakeStorage())
 
         controller.checkNow()

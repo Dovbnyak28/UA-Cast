@@ -2,8 +2,9 @@ package com.uacastplayer.data.update
 
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.log.AppLog
-import com.uacastplayer.update.GitHubRelease
 import com.uacastplayer.update.GitHubReleaseParser
+import com.uacastplayer.update.ReleaseHttpStatus
+import com.uacastplayer.update.ReleaseLookup
 import com.uacastplayer.update.ReleaseSource
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -30,14 +31,14 @@ class UpdateRepository(
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
 
     /**
-     * Returns the newest published release, or null if that could not be established for any
-     * reason - offline, rate-limited, a 5xx, a draft, a tag that is not a version number.
+     * Returns the newest published release, or which kind of nothing came back.
      *
-     * One null for every failure is deliberate. Every caller does the same thing with it (says
-     * nothing, or reports "could not check"), so distinguishing the causes here would only produce
-     * a taxonomy nobody branches on. The cause is logged instead.
+     * The causes of *failure* are still not distinguished - offline, rate-limited and a 5xx all
+     * produce [ReleaseLookup.Failed], because every caller does the same thing with them and a
+     * taxonomy nobody branches on is not worth carrying. The cause is logged instead. "No release
+     * published" is not one of them; see [ReleaseLookup.NonePublished].
      */
-    override suspend fun fetchLatestRelease(): GitHubRelease? = withContext(Dispatchers.IO) {
+    override suspend fun fetchLatestRelease(): ReleaseLookup = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(releasesUrl)
             // GitHub's documented Accept header for the REST API; without it the response format is
@@ -48,22 +49,36 @@ class UpdateRepository(
 
         try {
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    AppLog.w(TAG) { "update check refused: HTTP ${response.code}" }
-                    return@withContext null
+                val settledByStatus = ReleaseHttpStatus.readStatus(response.code)
+                if (settledByStatus != null) {
+                    if (settledByStatus == ReleaseLookup.NonePublished) {
+                        // Not a warning: this is what a repository with no release yet looks like,
+                        // and it is the normal state of things before the first one is cut.
+                        AppLog.d(TAG) { "update check: no release published (HTTP ${response.code})" }
+                    } else {
+                        AppLog.w(TAG) { "update check refused: HTTP ${response.code}" }
+                    }
+                    return@withContext settledByStatus
                 }
                 // peekBody rather than body.string(): it stops at the cap instead of trusting a
                 // Content-Length that a response is under no obligation to tell the truth about.
                 val json = response.peekBody(MAX_BODY_BYTES).string()
-                GitHubReleaseParser.parse(json).also {
-                    if (it == null) AppLog.w(TAG) { "update check: response was not a usable release" }
+                val release = GitHubReleaseParser.parse(json)
+                if (release == null) {
+                    // A release exists but cannot be read - a draft that slipped through, or a tag
+                    // that is not a version. Not "nothing published": something is, and this build
+                    // failed to understand it.
+                    AppLog.w(TAG) { "update check: response was not a usable release" }
+                    ReleaseLookup.Failed
+                } else {
+                    ReleaseLookup.Found(release)
                 }
             }
         } catch (e: IOException) {
             // Offline, DNS failure, TLS failure, timeout - all ordinary, none worth a user-visible
             // error when the check was the app's own idea rather than the user's.
             AppLog.w(TAG) { "update check failed: ${e.javaClass.simpleName}" }
-            null
+            ReleaseLookup.Failed
         }
     }
 
