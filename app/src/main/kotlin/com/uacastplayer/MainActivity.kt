@@ -43,6 +43,7 @@ import com.uacastplayer.ui.guidedtour.GuidedTourHost
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
 import java.time.LocalDate
+import com.uacastplayer.parentalcontrol.PlayerChannelAccess
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import androidx.compose.ui.platform.LocalUriHandler
@@ -203,7 +204,18 @@ private fun MainAppContent(
         mutableStateOf<SavedPlayerRequest?>(null)
     }
     val openPlayerReal = { channels: List<M3uChannel>, startIndex: Int ->
-        playerRequest = PlayerRequest(channels, startIndex)
+        // Narrowed here, at the single funnel every screen's channel tap goes through, and after
+        // the PIN gate below has had its say - so by the time this runs, a session unlocked by a
+        // correct PIN hands the whole list over untouched. See PlayerChannelAccess: without this
+        // the lock was checked against the tapped channel only, and the player's own next/previous
+        // walked straight into locked channels with nothing asked.
+        val playable = PlayerChannelAccess.forSession(
+            channels = channels,
+            startIndex = startIndex,
+            isLocked = viewModel::isChannelLocked,
+            sessionUnlocked = viewModel.parentalControlUnlocked.value,
+        )
+        playerRequest = PlayerRequest(playable.channels, playable.startIndex)
         playerContainerState =
             PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Open)
     }
