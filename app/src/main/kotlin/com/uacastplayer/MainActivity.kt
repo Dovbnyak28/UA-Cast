@@ -212,7 +212,8 @@ private fun MainAppContent(
         val playable = PlayerChannelAccess.forSession(
             channels = channels,
             startIndex = startIndex,
-            isLocked = viewModel::isChannelLocked,
+            lockedKeys = viewModel.lockedChannelKeys.value,
+            keyOf = FavoriteKey::of,
             sessionUnlocked = viewModel.parentalControlUnlocked.value,
         )
         playerRequest = PlayerRequest(playable.channels, playable.startIndex)
@@ -288,7 +289,8 @@ private fun MainAppContent(
         // tap, so it is the one place the PIN gate can never have run.
         val mayRestore = index >= 0 && PlayerChannelAccess.mayRestoreAfterProcessDeath(
             channel = flatChannels[index],
-            isLocked = viewModel::isChannelLocked,
+            lockedKeys = viewModel.lockedChannelKeys.value,
+            keyOf = FavoriteKey::of,
             sessionUnlocked = viewModel.parentalControlUnlocked.value,
         )
         if (mayRestore) {

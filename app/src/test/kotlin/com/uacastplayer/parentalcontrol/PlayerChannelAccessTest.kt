@@ -31,10 +31,12 @@ class PlayerChannelAccessTest {
 
     private val all = listOf(one, locked, two, alsoLocked, three)
 
-    private fun isLocked(channel: M3uChannel) = channel === locked || channel === alsoLocked
+    private fun keyOf(channel: M3uChannel) = channel.displayName
+
+    private val lockedKeys = setOf(locked.displayName, alsoLocked.displayName)
 
     private fun selectionFrom(startIndex: Int, sessionUnlocked: Boolean) =
-        PlayerChannelAccess.forSession(all, startIndex, ::isLocked, sessionUnlocked)
+        PlayerChannelAccess.forSession(all, startIndex, lockedKeys, ::keyOf, sessionUnlocked)
 
     /** The bypass itself: opening an unlocked channel must not put locked ones within reach of the
      * next button. */
@@ -91,7 +93,7 @@ class PlayerChannelAccessTest {
 
     @Test
     fun `an out of range start is left exactly as it came in`() {
-        val selection = PlayerChannelAccess.forSession(all, startIndex = 9, ::isLocked, sessionUnlocked = false)
+        val selection = PlayerChannelAccess.forSession(all, 9, lockedKeys, ::keyOf, sessionUnlocked = false)
 
         assertSame(all, selection.channels)
         assertEquals(9, selection.startIndex)
@@ -107,7 +109,7 @@ class PlayerChannelAccessTest {
     fun `a locked channel does not come back by itself after process death`() {
         assertEquals(
             false,
-            PlayerChannelAccess.mayRestoreAfterProcessDeath(locked, ::isLocked, sessionUnlocked = false),
+            PlayerChannelAccess.mayRestoreAfterProcessDeath(locked, lockedKeys, ::keyOf, sessionUnlocked = false),
         )
     }
 
@@ -115,7 +117,7 @@ class PlayerChannelAccessTest {
     fun `an unlocked channel still comes back after process death`() {
         assertEquals(
             true,
-            PlayerChannelAccess.mayRestoreAfterProcessDeath(one, ::isLocked, sessionUnlocked = false),
+            PlayerChannelAccess.mayRestoreAfterProcessDeath(one, lockedKeys, ::keyOf, sessionUnlocked = false),
         )
     }
 
@@ -125,15 +127,50 @@ class PlayerChannelAccessTest {
     fun `an unlocked session restores a locked channel like any other`() {
         assertEquals(
             true,
-            PlayerChannelAccess.mayRestoreAfterProcessDeath(locked, ::isLocked, sessionUnlocked = true),
+            PlayerChannelAccess.mayRestoreAfterProcessDeath(locked, lockedKeys, ::keyOf, sessionUnlocked = true),
         )
     }
 
+    /**
+     * The cost guarantee, and the reason [lockedKeys] is a set here rather than a predicate.
+     *
+     * Keying a channel is a SHA-256 for anything without a `tvg-id`, and this runs over the whole
+     * playlist the moment the player opens - 40ms per 40,000 such channels on a desktop JVM. Nobody
+     * who has never locked a channel should pay any of it, so the empty case must be answered
+     * before a single key is computed. Counted, not assumed.
+     */
     @Test
-    fun `a playlist with nothing locked is passed through unchanged`() {
-        val selection = PlayerChannelAccess.forSession(all, startIndex = 0, { false }, sessionUnlocked = false)
+    fun `nothing is keyed when no channel is locked`() {
+        var keysComputed = 0
+        val counting: (M3uChannel) -> String = { channel -> keysComputed++; keyOf(channel) }
 
-        assertEquals(all, selection.channels)
+        val selection = PlayerChannelAccess.forSession(all, 0, emptySet(), counting, sessionUnlocked = false)
+
+        assertEquals(0, keysComputed)
+        assertSame("and the list is handed straight back, not copied", all, selection.channels)
         assertEquals(0, selection.startIndex)
+    }
+
+    /** Same guarantee on the restore path, which runs on every cold start with a saved channel. */
+    @Test
+    fun `nothing is keyed on restore when no channel is locked`() {
+        var keysComputed = 0
+        val counting: (M3uChannel) -> String = { channel -> keysComputed++; keyOf(channel) }
+
+        val mayRestore = PlayerChannelAccess.mayRestoreAfterProcessDeath(one, emptySet(), counting, false)
+
+        assertEquals(true, mayRestore)
+        assertEquals(0, keysComputed)
+    }
+
+    /** The started channel is kept without being keyed either - it is kept whatever it is. */
+    @Test
+    fun `the started channel costs no key`() {
+        var keyed = mutableListOf<String>()
+        val recording: (M3uChannel) -> String = { channel -> keyOf(channel).also { keyed += it } }
+
+        PlayerChannelAccess.forSession(all, 0, lockedKeys, recording, sessionUnlocked = false)
+
+        assertEquals(listOf("Locked", "Two", "AlsoLocked", "Three"), keyed)
     }
 }

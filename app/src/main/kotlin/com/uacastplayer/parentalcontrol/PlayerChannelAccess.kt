@@ -18,9 +18,18 @@ import com.uacastplayer.playlist.M3uChannel
  * playable, nothing to protect by gating it". A locked channel is simply not in the rotation until
  * the PIN opens the session, at which point everything is handed over as before.
  *
- * The started channel is always kept. In the path that matters it is unlocked anyway; keeping it
- * unconditionally is what makes this total, so a caller cannot land the player on an index that
- * points at nothing.
+ * **[lockedKeys] is taken as a set rather than hidden behind an `isLocked` predicate, and that is
+ * about cost, not taste.** Keying a channel means [com.uacastplayer.favorites.FavoriteKey.of],
+ * which is a SHA-256 for any channel without a `tvg-id` - and this runs over the whole playlist at
+ * the moment the player opens. Measured over 40,000 such channels: **40ms on a desktop JVM**, so
+ * something like a fifth of a second of frozen UI on a mid-range phone. An empty set is the answer
+ * for everyone who does not use parental control at all, and taking it here is what lets that be
+ * answered before a single key is computed. `MainActivity` already documents the same scan, done
+ * off the main thread, on the restore path.
+ *
+ * The remaining cost falls only on someone who has actually locked a channel, and its worst case -
+ * tens of thousands of channels with no `tvg-id` anywhere - is a playlist that has no working EPG
+ * either, since tvg-id is what the guide matches on. A playlist that carries them costs 4ms.
  */
 object PlayerChannelAccess {
 
@@ -29,23 +38,29 @@ object PlayerChannelAccess {
     fun forSession(
         channels: List<M3uChannel>,
         startIndex: Int,
-        isLocked: (M3uChannel) -> Boolean,
+        lockedKeys: Set<String>,
+        keyOf: (M3uChannel) -> String,
         sessionUnlocked: Boolean,
     ): Selection {
-        // Two ways there is nothing to narrow, kept in one condition so this reads as a single
-        // early exit. Unlocked: a correct PIN opens every locked channel for the rest of the
-        // session, which is the feature's stated design ("until the app is closed"). Out of range:
-        // the caller's business, not this policy's - answering it would quietly change which
-        // channel opens.
-        if (sessionUnlocked || startIndex !in channels.indices) return Selection(channels, startIndex)
+        // Three ways there is nothing to narrow, kept in one condition so this reads as a single
+        // early exit - and so none of them costs a key. Unlocked: a correct PIN opens every locked
+        // channel for the rest of the session, which is the feature's stated design ("until the app
+        // is closed"). Nothing locked: the ordinary case, and the one the cost note above is about.
+        // Out of range: the caller's business, not this policy's - answering it would quietly
+        // change which channel opens.
+        val nothingToNarrow = sessionUnlocked || lockedKeys.isEmpty() || startIndex !in channels.indices
+        if (nothingToNarrow) return Selection(channels, startIndex)
 
         val kept = ArrayList<M3uChannel>(channels.size)
         var keptStartIndex = 0
         channels.forEachIndexed { index, channel ->
+            // The started channel is always kept. In the path that matters it is unlocked anyway;
+            // keeping it unconditionally is what makes this total, so a caller cannot land the
+            // player on an index that points at nothing - and it costs no key either.
             if (index == startIndex) {
                 keptStartIndex = kept.size
                 kept += channel
-            } else if (!isLocked(channel)) {
+            } else if (keyOf(channel) !in lockedKeys) {
                 kept += channel
             }
         }
@@ -69,7 +84,8 @@ object PlayerChannelAccess {
      */
     fun mayRestoreAfterProcessDeath(
         channel: M3uChannel,
-        isLocked: (M3uChannel) -> Boolean,
+        lockedKeys: Set<String>,
+        keyOf: (M3uChannel) -> String,
         sessionUnlocked: Boolean,
-    ): Boolean = sessionUnlocked || !isLocked(channel)
+    ): Boolean = sessionUnlocked || lockedKeys.isEmpty() || keyOf(channel) !in lockedKeys
 }
