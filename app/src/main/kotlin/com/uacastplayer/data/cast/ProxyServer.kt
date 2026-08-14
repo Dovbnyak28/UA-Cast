@@ -51,15 +51,15 @@ private enum class UpstreamRoute { PLAYLIST, REMUX, PASSTHROUGH }
  */
 class ProxyServer(
     private val httpClient: OkHttpClient,
+    /** Injected so the serve rollup's windows can be driven by a test rather than by the clock -
+     * the same seam [com.uacastplayer.app.UpdateController] uses. Declared before
+     * [onRouteAttempted] so that stays the trailing parameter its call site passes as a lambda. */
+    private val now: () -> Long = System::currentTimeMillis,
     /** Fired once per top-level (channel) resource, the first time this server decides whether it
      * takes the raw-TS remux path or an ordinary rewritten-HLS passthrough - see
      * [fetchAndServeUpstreamResource]. Callers own de-duplication (see
      * `RemuxEffectivenessStore.recordProxyRouteAttemptOnce`) since a non-remuxed resource has no
      * "already decided" shortcut and is reclassified on every manifest poll. */
-    /** Injected so the serve rollup's windows can be driven by a test rather than by the clock -
-     * the same seam [com.uacastplayer.app.UpdateController] uses. Declared before
-     * [onRouteAttempted] so that stays the trailing parameter its call site passes as a lambda. */
-    private val now: () -> Long = System::currentTimeMillis,
     private val onRouteAttempted: (resourceId: String, route: CastRouteKind) -> Unit = { _, _ -> },
 ) {
 

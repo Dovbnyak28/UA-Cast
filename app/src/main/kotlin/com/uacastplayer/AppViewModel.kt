@@ -418,20 +418,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         premiumRepository.refresh()
     }
 
-    /** Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
-     * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without
-     * touching anything that isn't already read elsewhere in this ViewModel. */
     /** Taken once, at construction, so the report can say how long the app had been running - which
      * is what tells a reader whether the log below could contain the moment being reported. */
     private val processStartedAtMillis = android.os.SystemClock.elapsedRealtime()
 
-    /**
-     * Wi-Fi, mobile or nothing, and whether the system calls it metered.
-     *
-     * Buffering reports are unanswerable without it and it needs no permission beyond the
-     * ACCESS_NETWORK_STATE this app already holds. Deliberately only the *kind* of network - no
-     * SSID, no carrier, no address, none of which would help and all of which identify a place.
-     */
     /**
      * Whether the active network is one the app may spend a guide download on - see
      * [com.uacastplayer.epg.EpgRefreshPolicy]. Unknown counts as metered: guessing wrong in the
@@ -444,6 +434,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
     }
 
+    /**
+     * Wi-Fi, mobile or nothing, and whether the system calls it metered.
+     *
+     * Buffering reports are unanswerable without it and it needs no permission beyond the
+     * ACCESS_NETWORK_STATE this app already holds. Deliberately only the *kind* of network - no
+     * SSID, no carrier, no address, none of which would help and all of which identify a place.
+     */
     private fun describeNetwork(): String {
         val manager = getApplication<Application>()
             .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -461,6 +458,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
+     * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without
+     * touching anything that isn't already read elsewhere in this ViewModel.
+     *
      * On the UsableSpace suppression. Lint suggests `StorageManager.getAllocatableBytes`, which
      * counts space the system *could* free by clearing other apps' caches. That is the right number
      * when deciding whether a write will fit; it is the wrong one here. This line exists to answer
