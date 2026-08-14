@@ -74,7 +74,12 @@ fun DownloadStatusBanner(
     // Saveable, so a dismissal is not undone by an Activity recreation while the same download is
     // still running - the banner reappearing on its own reads as it having ignored the dismissal.
     var dismissed by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(iconPrefetchState.isRunning, epgState.isLoading) {
+    // Keyed on [isActive], not on the two flags behind it. Keyed on the flags, this re-ran whenever
+    // *either* changed while the other was still true - so with icons and the guide downloading
+    // together, which is the exact situation this banner describes, dismissing it and then having
+    // one of the two simply *finish* brought it straight back. A download ending is not a new
+    // download starting, and only the latter is meant to undo a dismissal.
+    LaunchedEffect(isActive) {
         if (isActive) {
             dismissed = false
         }
