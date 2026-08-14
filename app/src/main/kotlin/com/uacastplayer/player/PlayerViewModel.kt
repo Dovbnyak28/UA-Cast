@@ -672,11 +672,39 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** [attempt] picks light vs heavy via [StallRetryPolicy.recoveryKindFor] - light
+    /**
+     * [attempt] picks light vs heavy via [StallRetryPolicy.recoveryKindFor] - light
      * (seekToDefaultPosition + prepare) jumps back to the live edge without tearing down decoders;
      * heavy (stop/prepare/play, the old unconditional behavior) is reserved for when two light
-     * attempts in a row didn't help, since it costs a full re-buffer from zero. */
-    private fun performStallRecovery(attempt: Int) {
+     * attempts in a row didn't help, since it costs a full re-buffer from zero.
+     *
+     * Both of [sampleForStall]'s preconditions are re-checked here, not only before the wait. This
+     * runs up to thirty seconds after the stall that scheduled it (see [StallRetryPolicy]'s steady
+     * state), which is long enough for either of them to have stopped being true - and heavy
+     * recovery ends in `play()`, so acting on a stale one does not merely waste work, it starts
+     * playback nobody asked for.
+     *
+     * `playWhenReady` false means the player is not trying to play any more: the user paused, the
+     * app went to the background (see [onEnterBackground] and [BackgroundPlaybackPolicy]), or
+     * ExoPlayer gave up audio focus for a call. Without this check the app resumed a stream the
+     * user had just paused, and - after backgrounding - went on playing a live stream with the
+     * screen off, which is the precise thing that pause existed to prevent.
+     *
+     * [isRemoteCasting] means the local player deliberately stood down for a receiver (see
+     * [handleDlnaStateChange] and [LocalPlaybackPolicy]). `stop()` leaves `playWhenReady` true, so
+     * the check above does not cover this one: recovering here would put the same stream on the
+     * phone and the receiver at once - audible twice, with the phone taking the origin's one
+     * allowed connection and starving the receiver that was playing fine.
+     *
+     * Skipping costs nothing. If the stream is still stalled once playback is genuinely wanted
+     * again, the next [sampleForStall] tick schedules a fresh recovery.
+     */
+    @VisibleForTesting
+    internal fun performStallRecovery(attempt: Int) {
+        if (isRemoteCasting || !exoPlayer.playWhenReady) {
+            AppLog.d(TAG) { "Skipping stall recovery: playback is not wanted right now" }
+            return
+        }
         when (StallRetryPolicy.recoveryKindFor(attempt)) {
             StallRecoveryKind.LIGHT -> {
                 exoPlayer.seekToDefaultPosition()
