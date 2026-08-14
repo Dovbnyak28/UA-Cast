@@ -97,6 +97,38 @@ class PlayerChannelAccessTest {
         assertEquals(9, selection.startIndex)
     }
 
+    /**
+     * The other door, and the one no tap ever passes through: after the system reclaims the
+     * process, `unlockedThisSession` is gone by design and the saved player request reopened
+     * whatever was playing. Parent enters the PIN, watches a locked channel, the process dies -
+     * and the next person to open the app is watching it.
+     */
+    @Test
+    fun `a locked channel does not come back by itself after process death`() {
+        assertEquals(
+            false,
+            PlayerChannelAccess.mayRestoreAfterProcessDeath(locked, ::isLocked, sessionUnlocked = false),
+        )
+    }
+
+    @Test
+    fun `an unlocked channel still comes back after process death`() {
+        assertEquals(
+            true,
+            PlayerChannelAccess.mayRestoreAfterProcessDeath(one, ::isLocked, sessionUnlocked = false),
+        )
+    }
+
+    /** Only reachable when the PIN was entered *after* the restore, but the rule is the same one
+     * [PlayerChannelAccess.forSession] follows and they must not disagree. */
+    @Test
+    fun `an unlocked session restores a locked channel like any other`() {
+        assertEquals(
+            true,
+            PlayerChannelAccess.mayRestoreAfterProcessDeath(locked, ::isLocked, sessionUnlocked = true),
+        )
+    }
+
     @Test
     fun `a playlist with nothing locked is passed through unchanged`() {
         val selection = PlayerChannelAccess.forSession(all, startIndex = 0, { false }, sessionUnlocked = false)

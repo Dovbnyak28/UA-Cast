@@ -283,7 +283,15 @@ private fun MainAppContent(
             val flat = playlistState.groups.flatMap { it.channels }
             flat to flat.indexOfFirst { FavoriteKey.of(it) == saved.channelKey }
         }
-        if (index >= 0) {
+        // A locked channel must not come back on its own - see
+        // PlayerChannelAccess.mayRestoreAfterProcessDeath. This path reopens the player without a
+        // tap, so it is the one place the PIN gate can never have run.
+        val mayRestore = index >= 0 && PlayerChannelAccess.mayRestoreAfterProcessDeath(
+            channel = flatChannels[index],
+            isLocked = viewModel::isChannelLocked,
+            sessionUnlocked = viewModel.parentalControlUnlocked.value,
+        )
+        if (mayRestore) {
             // playerContainerState is itself rememberSaveable, so the Expanded/Collapsed layout the
             // user left it in normally survives process death on its own - this only needs to force
             // it open if that somehow didn't happen (fresh state).

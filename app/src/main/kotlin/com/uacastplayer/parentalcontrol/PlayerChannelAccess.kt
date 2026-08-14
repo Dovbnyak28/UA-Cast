@@ -51,4 +51,25 @@ object PlayerChannelAccess {
         }
         return Selection(kept, keptStartIndex)
     }
+
+    /**
+     * Whether the channel that was playing when the process died may come back by itself.
+     *
+     * [forSession] deliberately always keeps the channel the caller started on - a tap has already
+     * been through the PIN gate by then. A restore after process death has been through nothing:
+     * `unlockedThisSession` is in-memory only and a fresh process starts locked again, which the
+     * feature states as its design ("until the app is closed"). So the one path that reopens the
+     * player without a tap needs the stricter answer, or the sequence is simply: parent enters the
+     * PIN, watches a locked channel, the system reclaims the process - and the next person to open
+     * the app is watching it, with nothing asked.
+     *
+     * False means treat the saved marker exactly like a channel that has left the playlist: drop
+     * it and leave the player closed. Nothing is lost that a tap cannot recover, and that tap goes
+     * through the gate.
+     */
+    fun mayRestoreAfterProcessDeath(
+        channel: M3uChannel,
+        isLocked: (M3uChannel) -> Boolean,
+        sessionUnlocked: Boolean,
+    ): Boolean = sessionUnlocked || !isLocked(channel)
 }
