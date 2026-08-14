@@ -11,6 +11,7 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.log.AppLog
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,13 +45,36 @@ class EpgController(
     )
     val epgState: StateFlow<EpgUiState> = _epgState.asStateFlow()
 
+    /**
+     * The one guide load allowed to be in flight, for the same reason [PlaylistController] keeps
+     * one: every entry point here replaces the whole guide, so two of them racing means the one
+     * that happens to finish *last* wins - not the one the user picked last.
+     *
+     * It was worse here than it ever was for playlists, because a load also writes the cache. There
+     * is a single `epg_snapshot.bin` (see [com.uacastplayer.data.epg.EpgSnapshotStore]), so a slow
+     * source that lands after a fast one replaced it both swapped the guide on screen for one the
+     * user had already navigated away from and wrote it to disk, where it outlived the process:
+     * Settings said one source, the guide was another's, and a restart restored the wrong one.
+     *
+     * [startTicking] is deliberately not routed through here - it is a permanent loop, not a load.
+     */
+    private var loadJob: Job? = null
+
+    private fun launchLoad(block: suspend () -> Unit) {
+        loadJob?.cancel()
+        loadJob = scope.launch { block() }
+    }
+
     /** Restores the cached snapshot at startup, or does an initial fetch if there isn't one -
      * called once from AppViewModel.init. */
     fun loadInitial() {
-        scope.launch {
+        launchLoad {
             // Before anything else, and regardless of whether this run downloads at all: a process
             // killed mid-download or mid-parse leaves a full feed behind in filesDir, where nothing
             // reclaims it. See EpgRepository.deleteStaleDownloads.
+            // Safe to sit inside a cancellable job: EpgRepository.deleteStaleDownloads is one
+            // non-suspending sweep inside a single withContext, so cancellation can only be
+            // observed on the way out - after the sweep has already run.
             epgRepository.deleteStaleDownloads()
             val restored = epgRepository.restoreSnapshot()
             if (restored != null) {
@@ -119,7 +143,7 @@ class EpgController(
         _epgState.update {
             it.copy(selectedSource = source, customUrl = null, suggestedUrl = null, isLoading = true, hasError = false)
         }
-        scope.launch {
+        launchLoad {
             applyEpgOutcome(epgRepository.loadFromSource(source))
         }
     }
@@ -135,7 +159,7 @@ class EpgController(
         preferences.customEpgUrl = url
         if (markChosen) preferences.hasChosenEpgSource = true
         _epgState.update { it.copy(customUrl = url, suggestedUrl = null, isLoading = true, hasError = false) }
-        scope.launch {
+        launchLoad {
             applyEpgOutcome(epgRepository.loadFromUrl(url))
         }
     }
