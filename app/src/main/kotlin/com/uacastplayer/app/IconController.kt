@@ -66,7 +66,14 @@ class IconController(
         scope.launch {
             PlaybackActivity.isActive.collect { active ->
                 if (active) {
-                    iconPrefetchJob?.cancel()
+                    // cancelPrefetch, not a bare job cancel: runPrefetch clears isRunning on its
+                    // own last line, which a cancellation never reaches, so cancelling the job
+                    // alone left the flag set. Both places that read it draw progress - the top-bar
+                    // DownloadStatusBanner and the channel list's LinearProgressIndicator - so a
+                    // prefetch interrupted by a *cast* (playback the user watches from this very
+                    // screen, unlike local playback which covers it) left both frozen at whatever
+                    // percentage they had reached, for the whole session.
+                    cancelPrefetch()
                 } else if (lastPrefetchChannels.isNotEmpty()) {
                     startPrefetchJob()
                 }
