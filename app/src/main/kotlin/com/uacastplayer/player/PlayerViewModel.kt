@@ -418,6 +418,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         stallState = StallDetectionPolicy.StallState.NONE
         stallRetryState = StallRetryPolicy.State()
         stallRecoveryJob?.cancel()
+        // The other per-channel recovery budget, reset here for the same reason its stall sibling
+        // above is: RetryState counts attempts at playing *this* channel (see PlaybackRetryPolicy,
+        // and start(), which resets it too), and carrying a spent one into the next channel gave
+        // that channel no attempts at all. A channel abandoned after burning its four tries left
+        // the budget at MAX, so the next channel's very first network error went straight to
+        // GiveUp - marked dead in deadIndices, and with auto-skip on, skipped to another channel
+        // that inherited the same empty budget and died on its first error too. One broken channel
+        // could bury a run of working ones, which is the same cascade DeadChannelPolicy's network
+        // check exists to prevent, arriving by the one door that check does not cover.
+        retryState = RetryState()
+        // And its pending work. retryJob holds a delayed exoPlayer.prepare() aimed at the channel
+        // being left; releasePlayback and onCleared both cancel it, this path did not. Left alive
+        // it re-prepares the *new* channel mid-play, which on a live stream is a rebuffer on a
+        // channel that was working.
+        retryJob?.cancel()
         val channel = channels[index]
         preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
