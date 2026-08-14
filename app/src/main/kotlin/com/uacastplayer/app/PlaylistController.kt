@@ -227,6 +227,17 @@ class PlaylistController(
         val previousActiveId = preferences.activePlaylistSourceId
         val result = PlaylistSourcePolicy.remove(_playlistSources.value, previousActiveId, id)
         if (result !is PlaylistSourceRemovalResult.Removed) return
+        // A load for the source being removed must not outlive it. It writes a snapshot when it
+        // finishes (PlaylistRepository.persistIfLoaded), so a load still in flight would put the
+        // deleted playlist back on screen and re-create the file deleted below - orphaned this
+        // time, since no source names it any more, so nothing will ever delete it again.
+        //
+        // Only the active source can be the one loading, so removing any other must leave that load
+        // alone. Cancelled rather than awaited: a load stuck in a socket read does not stop until
+        // its timeout, and holding the save behind that would risk losing the removal itself if the
+        // process died meanwhile - a worse failure than the one being fixed. The branch below that
+        // switches to another source cancels this again through launchLoad, harmlessly.
+        if (previousActiveId == id) loadJob?.cancel()
         _playlistSources.value = result.sources
         scope.launch {
             playlistRepository.saveSources(result.sources)
