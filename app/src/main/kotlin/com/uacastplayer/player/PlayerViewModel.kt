@@ -573,13 +573,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Whether the system reports a network with validated internet access.
-     *
-     * Validated, not merely connected: a captive portal that has not been signed into looks like a
-     * working Wi-Fi connection and reaches nothing, which is exactly the case that would otherwise
-     * be mistaken for every channel being broken at once.
-     */
-    /**
      * Suspends until a network with internet access becomes available, or [timeoutMillis] passes.
      *
      * Registered per wait rather than held for the ViewModel's life: this is the only moment the
@@ -612,6 +605,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Whether the system reports a network with validated internet access.
+     *
+     * Validated, not merely connected: a captive portal that has not been signed into looks like a
+     * working Wi-Fi connection and reaches nothing, which is exactly the case that would otherwise
+     * be mistaken for every channel being broken at once.
+     */
     private fun hasNetwork(): Boolean {
         val connectivityManager = getApplication<Application>()
             .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -868,13 +868,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         return getApplication<Application>().getString(R.string.player_track_unknown, index)
     }
 
-    /**
-     * Frees the loaded stream and its decoder/buffer resources when the player is fully closed,
-     * WITHOUT destroying this (Activity-scoped, reused-across-reopens) ViewModel - see [PlayerHost].
-     * stop() releases the codecs and buffered samples, clearMediaItems() drops the stream, so an
-     * idle closed player costs almost nothing; the ExoPlayer and MediaSession instances themselves
-     * are kept for the next open. [onCleared] (on Activity destroy) is what releases the instances.
-     */
     /** True only between a pause this app made because the screen went away and the resume that
      * undoes it - see [BackgroundPlaybackPolicy.shouldResumeOnStart]. */
     private var pausedForBackground = false
@@ -929,6 +922,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Frees the loaded stream and its decoder/buffer resources when the player is fully closed,
+     * WITHOUT destroying this (Activity-scoped, reused-across-reopens) ViewModel - see
+     * [com.uacastplayer.ui.player.PlayerHost]. stop() releases the codecs and buffered samples,
+     * clearMediaItems() drops the stream, so an idle closed player costs almost nothing; the
+     * ExoPlayer and MediaSession instances themselves are kept for the next open. [onCleared] (on
+     * Activity destroy) is what releases the instances.
+     */
     fun releasePlayback() {
         pausedForBackground = false
         // Nothing is owed to a player with no stream left in it.
