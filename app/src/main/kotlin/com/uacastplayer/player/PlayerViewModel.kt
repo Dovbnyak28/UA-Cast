@@ -273,11 +273,44 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 isDlnaActive = false,
             )
         ) {
-            exoPlayer.prepare()
-            exoPlayer.play()
+            resumeLocalPlayback()
         }
         updateSeekability()
         PlaybackActivity.setActive(_uiState.value.isPlaying || isRemoteCasting)
+    }
+
+    /**
+     * Takes the stream back onto the phone after a receiver let go of it - deferred if the app is
+     * not on screen to take it.
+     *
+     * Both cast paths end here (see [handleCastSideEffect] and [handleDlnaStateChange]), and both
+     * used to `prepare()` + `play()` on the spot. That is right when the user is looking at the
+     * player and wrong in the case that reaches it just as often: casting and then putting the
+     * phone away is, in [BackgroundPlaybackPolicy]'s own words, "the normal way to use a cast" - so
+     * the policy deliberately does not pause on backgrounding while a cast is running, and the
+     * phone is off screen with nothing paused when the TV is switched off. Playing then produced
+     * exactly what that policy exists to prevent, arriving by a door it never sees: a live stream
+     * out of a stopped activity, several megabits a minute, a wake lock and a Wi-Fi lock held, and
+     * audio out of the speaker of a phone in somebody's pocket - with no notification to stop it,
+     * because this app has no MediaSessionService.
+     *
+     * Deferred rather than dropped. Dropping it would leave the user returning to a player that is
+     * simply dead - the media item is set but was never prepared (see [switchToIndexImmediate],
+     * which skips prepare while casting) - so the resume is owed and [onReturnToForeground] pays it.
+     *
+     * While casting, [switchToIndexImmediate] skips `prepare()` for the current channel so the
+     * phone is not buffering the same stream in parallel with the receiver. The media item is still
+     * set, just never prepared, which is why `prepare()` has to come before `play()` here.
+     */
+    @VisibleForTesting
+    internal fun resumeLocalPlayback() {
+        if (isInBackground) {
+            AppLog.d(TAG) { "Cast ended off screen - local playback owed until the app is back" }
+            resumeLocalWhenForeground = true
+            return
+        }
+        exoPlayer.prepare()
+        exoPlayer.play()
     }
 
     suspend fun discoverDlnaDevices(): List<DlnaDevice> = dlnaRepository.discoverDevices()
@@ -319,12 +352,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     isDlnaActive = isDlnaCasting,
                 )
             ) {
-                // While casting, switchToIndexImmediate() skips prepare() for whatever channel is
-                // current (see there) so the phone isn't buffering the same stream twice in
-                // parallel with the receiver - the media item is still set, just never prepared,
-                // so it must be prepared here before play() can do anything.
-                exoPlayer.prepare()
-                exoPlayer.play()
+                resumeLocalPlayback()
             }
             is CastSideEffect.ApplyPendingChannelSwitch -> switchToIndexImmediate(effect.index)
             is CastSideEffect.RecordIncompatibility ->
@@ -851,8 +879,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * undoes it - see [BackgroundPlaybackPolicy.shouldResumeOnStart]. */
     private var pausedForBackground = false
 
+    /** Whether the app is off screen. Distinct from [pausedForBackground], which records only the
+     * narrower fact that *this policy* was what paused: while casting nothing is paused at all, and
+     * that is precisely when [resumeLocalPlayback] needs to know the phone is away. */
+    private var isInBackground = false
+
+    /** A local resume a cast handed back while the app was off screen, owed until it returns - see
+     * [resumeLocalPlayback]. */
+    private var resumeLocalWhenForeground = false
+
     /** The app is no longer on screen. See [BackgroundPlaybackPolicy] for what this is preventing. */
     fun onEnterBackground(isInPictureInPicture: Boolean) {
+        // Picture-in-picture is still a window the user is looking at, so it does not count as off
+        // screen for the purposes of starting playback - same distinction the pause decision below
+        // draws, for the same reason.
+        isInBackground = !isInPictureInPicture
         val shouldPause = BackgroundPlaybackPolicy.shouldPauseOnStop(
             isCasting = _uiState.value.isCasting,
             // playWhenReady, not isPlaying - see the policy: a stream that is still buffering is not
@@ -868,6 +909,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     /** The app is visible again. Resumes only what [onEnterBackground] stopped, so a channel the
      * user paused themselves stays paused. */
     fun onReturnToForeground() {
+        isInBackground = false
         val shouldResume = BackgroundPlaybackPolicy.shouldResumeOnStart(
             pausedByPolicy = pausedForBackground,
             isCasting = _uiState.value.isCasting,
@@ -875,11 +917,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         // Cleared either way: the pause it records has been answered for, and carrying it forward
         // would resume a later, unrelated backgrounding that the user had paused through.
         pausedForBackground = false
-        if (shouldResume) exoPlayer.play()
+        // A cast that ended off screen left local playback owed instead of started - see
+        // resumeLocalPlayback. Cleared either way, for the same reason as above, and only paid if
+        // nothing has taken the stream back in the meantime.
+        val owedLocalResume = resumeLocalWhenForeground
+        resumeLocalWhenForeground = false
+        when {
+            owedLocalResume && !isRemoteCasting -> resumeLocalPlayback()
+            shouldResume -> exoPlayer.play()
+            else -> Unit
+        }
     }
 
     fun releasePlayback() {
         pausedForBackground = false
+        // Nothing is owed to a player with no stream left in it.
+        resumeLocalWhenForeground = false
         pendingSwitchJob?.cancel()
         retryJob?.cancel()
         stallRecoveryJob?.cancel()
