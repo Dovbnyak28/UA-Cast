@@ -693,8 +693,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             null
         }
         val settings = BackupSettings(
-            iconDisplayMode = settingsState.value.iconDisplayMode.name,
-            listDensity = settingsState.value.listDensity.name,
+            // Only what the user actually chose - the same rule the EPG fields below already
+            // follow. These two are exactly the settings DeviceTierDefaults computes per device, so
+            // settingsState carries a value for them whether anybody picked one or not, and
+            // exporting that shipped one phone's tier default to another as a decision. The
+            // receiving end could not undo it either: applyImportedSettings goes through
+            // setIconDisplayMode/setListDensity, which write the preference and so make
+            // hasChosen... true forever - so a backup taken on a flagship pinned full icon
+            // rendering on a low-end phone the tier logic exists to keep light, and a backup taken
+            // on a low-end phone pinned placeholders on a flagship. bufferSize is not tier-derived
+            // and stays unconditional.
+            iconDisplayMode = settingsState.value.iconDisplayMode.name
+                .takeIf { preferences.hasChosenIconDisplayMode },
+            listDensity = settingsState.value.listDensity.name
+                .takeIf { preferences.hasChosenListDensity },
             bufferSize = settingsState.value.bufferSize.name,
             epgSourceId = exportEpgSourceId,
             epgCustomUrl = if (preferences.hasChosenEpgSource) preferences.customEpgUrl else null,
