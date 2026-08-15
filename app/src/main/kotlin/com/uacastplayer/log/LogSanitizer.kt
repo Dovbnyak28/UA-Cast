@@ -22,7 +22,25 @@ object LogSanitizer {
     private const val MARKER_HEX_DIGITS = 6
     private const val HEX_RADIX = 16
 
-    private val URL_REGEX = Regex("""https?://[^\s"'<>]+""")
+    /**
+     * Any scheme, not just `http`/`https`.
+     *
+     * [redactUrl] below has always been scheme-agnostic - it asks [URI] for the host and keeps
+     * nothing else - so `http` here was the one place the guarantee narrowed to a protocol. An M3U
+     * entry's `streamUrl` is whatever the provider wrote, and `rtmp://`, `rtsp://` and `mms://` all
+     * appear in real playlists, with credentials in exactly the two shapes this exists to catch:
+     * `rtmp://user:pass@host/live` and `rtmp://host/user/pass/1234.ts`. Measured before the change:
+     * both passed through this object completely unaltered, password included.
+     *
+     * Nothing logs a raw stream url today. That is the point - this object's own contract is that a
+     * single careless call "can never" leak one, and a guarantee that rests on no caller ever
+     * writing that line is caller discipline by another name.
+     */
+    private val URL_REGEX = Regex("""[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s"'<>]+""")
+
+    /** What [URL_REGEX] needs to be present at all - checked before the regex runs, and before the
+     * cheap rejection below decides a message is too short to hold anything. */
+    private const val SCHEME_MARKER = "://"
     private val PARAM_REGEX = Regex("""(?i)(username|password|token|auth)=[^&\s"'<>]*""")
     private val TOKEN_REGEX = Regex("""[A-Za-z0-9_+/=-]{$MIN_TOKEN_LENGTH,}""")
 
@@ -53,12 +71,12 @@ object LogSanitizer {
     fun sanitize(message: String): String {
         // Cheapest possible rejection for the overwhelmingly common case (a short, plain-text
         // message): no allocation, just three scans of the original reference.
-        if (message.length < MIN_TOKEN_LENGTH && !message.contains("http") && !message.contains('=')) {
+        if (message.length < MIN_TOKEN_LENGTH && !message.contains(SCHEME_MARKER) && !message.contains('=')) {
             return message
         }
 
         var result = message
-        if (result.contains("http")) {
+        if (result.contains(SCHEME_MARKER)) {
             result = URL_REGEX.replace(result) { redactUrl(it.value) }
         }
         if (result.contains('=')) {

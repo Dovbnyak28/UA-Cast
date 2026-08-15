@@ -244,4 +244,76 @@ class LogSanitizerTest {
             assertTrue("expected a token marker, got: $result", result.contains("<token:"))
         }
     }
+
+    // A stream url is whatever the provider wrote into the M3U, and http is not the only thing they
+    // write. The redaction step was always scheme-agnostic - it asks URI for the host and keeps
+    // nothing else - but the pattern that decided *what to redact* matched http and https only, so
+    // every other scheme walked past this object untouched. Measured before the fix: the two lines
+    // below came out byte-for-byte identical to their input, password included.
+
+    @Test
+    fun `strips credentials from a stream url that is not http`() {
+        for (scheme in listOf("rtmp", "rtmps", "rtsp", "mms")) {
+            val result = LogSanitizer.sanitize("loading $scheme://joe:hunter2@iptv.example.com:1935/live/1")
+
+            assertFalse("leaked user in $scheme, got: $result", result.contains("joe"))
+            assertFalse("leaked password in $scheme, got: $result", result.contains("hunter2"))
+            assertFalse("leaked userinfo separator in $scheme, got: $result", result.contains("@"))
+        }
+    }
+
+    /**
+     * The other shape credentials come in, and the more common one on Xtream-style providers:
+     * `<host>/<username>/<password>/<streamId>.ts`. Nothing in it looks like a credential, so the
+     * whole path has to go.
+     *
+     * **The last assertion is the one that means anything here.** This particular string is long
+     * enough that the token net redacted the path even before the url pattern matched non-http
+     * schemes - so asserting only that the values are gone would have passed either way and proved
+     * nothing. Reduction to scheme, host and marker is what the url match, and only the url match,
+     * produces; the token net leaves `rtmp://iptv.example.<token:...>` instead. A shorter path
+     * would not have been caught by either.
+     */
+    @Test
+    fun `strips credentials carried as path segments of a non-http stream url`() {
+        val result = LogSanitizer.sanitize("loading rtmp://iptv.example.com/live/realuser/hunter2/1234.ts")
+
+        assertFalse("leaked user, got: $result", result.contains("realuser"))
+        assertFalse("leaked password, got: $result", result.contains("hunter2"))
+        assertTrue("expected the whole url reduced, got: $result", result.contains("rtmp://iptv.example.com/…#"))
+    }
+
+    /**
+     * The same shape with a path too short for the token net to reach - 24 characters of token-class
+     * run is the threshold, and `/a/joe/hunter2` is nowhere near it. Nothing but the url match can
+     * redact this one, which is what makes it the honest version of the test above.
+     */
+    @Test
+    fun `strips a short credential path that no other net would catch`() {
+        val result = LogSanitizer.sanitize("loading rtmp://a.tv/a/joe/hunter2")
+
+        assertFalse("leaked user, got: $result", result.contains("joe"))
+        assertFalse("leaked password, got: $result", result.contains("hunter2"))
+    }
+
+    /** The scheme and host survive for every scheme, or a report stops saying which origin a line
+     * was about - the same trade this object already makes for http. */
+    @Test
+    fun `keeps the scheme host and port of a non-http url`() {
+        val result = LogSanitizer.sanitize("loading rtsp://iptv.example.com:554/live/1")
+
+        assertTrue("expected scheme, host and port, got: $result", result.contains("rtsp://iptv.example.com:554/…#"))
+    }
+
+    /** The widened pattern must not start eating ordinary prose. A message with no scheme in it at
+     * all is still returned as-is. */
+    @Test
+    fun `a sentence containing a colon is not mistaken for a url`() {
+        val message = "cast status: state=IDLE idleReason=ERROR action=Reload"
+
+        val result = LogSanitizer.sanitize(message)
+
+        assertTrue("expected the message to survive, got: $result", result.contains("state=IDLE"))
+        assertFalse(result.contains("<url:"))
+    }
 }
