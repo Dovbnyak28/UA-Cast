@@ -3,6 +3,7 @@ import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.annotation.StringRes
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -659,8 +660,9 @@ private fun BackupImportSummaryBanner(
  * not report a failure the user never asked about. It is cleared on the way out, so returning to
  * Settings tomorrow does not show yesterday's answer as if it were fresh.
  */
+@VisibleForTesting
 @Composable
-private fun UpdateCheckRow(section: UpdateSectionState) {
+internal fun UpdateCheckRow(section: UpdateSectionState) {
     DisposableEffect(Unit) { onDispose { section.onOutcomeShown() } }
 
     Text(
@@ -712,24 +714,37 @@ private fun UpdateCheckRow(section: UpdateSectionState) {
             },
             modifier = Modifier.padding(top = 10.dp),
         )
-        if (outcome == UpdateCheckOutcome.UPDATE_AVAILABLE) {
-            val release = section.state.availableRelease
-            val apk = release?.apk
-            // The direct install first when there is one, the release page always. A user who would
-            // rather read the notes before installing must not have to take the app's word for it,
-            // and when the release has no APK this build will take (see ReleaseApkPolicy) the page
-            // is the whole offer.
-            if (apk != null) {
-                UpdateInstallRow(section, apk)
-            }
-            if (release?.releaseUrl != null) {
-                SecondaryButton(
-                    text = stringResource(R.string.update_banner_action),
-                    onClick = { section.onOpenRelease(release.releaseUrl) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-            }
+    }
+
+    /*
+     * Offered on [UpdateUiState.availableRelease], not on the outcome line above it.
+     *
+     * lastOutcome is documented as "result of the most recent *manual* check only" - the weekly
+     * automatic one leaves it null on purpose, so that a check nobody asked for cannot report a
+     * failure. Hanging the offer off it meant the automatic check could raise the banner in the top
+     * bar and then, on the one screen the user goes to about updates, show nothing but the button
+     * that starts another check. The install this app can now perform was unreachable except by
+     * asking GitHub a second time for an answer it already had.
+     *
+     * availableRelease is the fact itself, and it is only ever set when a release really is newer.
+     * Dismissing the banner clears it, so Settings falls back to offering a check - which is
+     * consistent: a manual check deliberately overrides an earlier dismissal.
+     */
+    val release = section.state.availableRelease
+    if (release != null && !section.state.isChecking) {
+        val apk = release.apk
+        // The direct install first when there is one, the release page always. A user who would
+        // rather read the notes before installing must not have to take the app's word for it, and
+        // when the release has no APK this build will take (see ReleaseApkPolicy) the page is the
+        // whole offer.
+        if (apk != null) {
+            UpdateInstallRow(section, apk)
         }
+        SecondaryButton(
+            text = stringResource(R.string.update_banner_action),
+            onClick = { section.onOpenRelease(release.releaseUrl) },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
     }
 }
 
