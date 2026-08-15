@@ -409,12 +409,21 @@
     <string name="update_banner_message">Версию %1$s можно загрузить.</string>
     <string name="update_banner_action">Открыть релиз</string>
     <string name="settings_section_updates">Обновления</string>
-    <string name="settings_update_hint">Приложение проверяет новую версию раз в неделю при открытии. Оно ничего не загружает и не устанавливает само — кнопка ниже открывает страницу релиза в браузере.</string>
+    <string name="settings_update_hint">Приложение проверяет новую версию раз в неделю при открытии. Если к релизу прикреплён APK, оно может скачать и установить его — файл сверяется с релизом и должен быть подписан тем же разработчиком, что и ваша копия, иначе он будет отклонён. Вы всегда можете вместо этого открыть страницу релиза в браузере.</string>
     <string name="settings_update_check_button">Проверить обновления</string>
     <string name="settings_update_checking">Проверяем…</string>
     <string name="settings_update_up_to_date">У вас последняя версия.</string>
     <string name="settings_update_available">Доступна версия %1$s.</string>
     <string name="settings_update_failed">Не удалось проверить. Попробуйте позже.</string>
+    <string name="settings_update_install_button">Скачать и установить</string>
+    <string name="settings_update_downloading">Загрузка…</string>
+    <string name="settings_update_downloading_percent">Загрузка… %1$d%%</string>
+    <string name="settings_update_launching">Готово. Подтвердите установку на экране.</string>
+    <string name="settings_update_needs_permission">Чтобы устанавливать отсюда, разрешите UA Cast устанавливать приложения.</string>
+    <string name="settings_update_grant_permission_button">Открыть настройки</string>
+    <string name="settings_update_untrusted">Этот файл подписан не тем разработчиком, что ваша копия, поэтому он не установлен. Скачайте его со страницы релиза.</string>
+    <string name="settings_update_corrupt">Загруженный файл повреждён. Попробуйте ещё раз.</string>
+    <string name="settings_update_install_failed">Не удалось установить. Попробуйте ещё раз.</string>
 
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Бесплатная версия</string>

@@ -2,6 +2,7 @@ package com.uacastplayer.ui.settings
 import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.UaTheme
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -84,6 +85,8 @@ import com.uacastplayer.premium.PremiumAvailability
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.premium.PremiumContent
 import com.uacastplayer.update.UpdateCheckOutcome
+import com.uacastplayer.update.ReleaseApk
+import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.components.SetPinDialog
@@ -710,16 +713,111 @@ private fun UpdateCheckRow(section: UpdateSectionState) {
             modifier = Modifier.padding(top = 10.dp),
         )
         if (outcome == UpdateCheckOutcome.UPDATE_AVAILABLE) {
-            val url = section.state.availableRelease?.releaseUrl
-            if (url != null) {
+            val release = section.state.availableRelease
+            val apk = release?.apk
+            // The direct install first when there is one, the release page always. A user who would
+            // rather read the notes before installing must not have to take the app's word for it,
+            // and when the release has no APK this build will take (see ReleaseApkPolicy) the page
+            // is the whole offer.
+            if (apk != null) {
+                UpdateInstallRow(section, apk)
+            }
+            if (release?.releaseUrl != null) {
                 SecondaryButton(
                     text = stringResource(R.string.update_banner_action),
-                    onClick = { section.onOpenRelease(url) },
+                    onClick = { section.onOpenRelease(release.releaseUrl) },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
             }
         }
     }
+}
+
+/**
+ * The download-and-install half of the update row.
+ *
+ * Each failure says what it says because the user's next move differs: a damaged download is worth
+ * repeating, a missing permission is one screen away, and a file signed by somebody else is neither
+ * - the same file would be fetched and refused again, so it offers no retry and points at the
+ * release page instead (which is already rendered below it).
+ */
+@Composable
+private fun UpdateInstallRow(section: UpdateSectionState, apk: ReleaseApk) {
+    when (val install = section.installState) {
+        is UpdateInstallState.Downloading -> {
+            val percent = if (install.totalBytes > 0) {
+                (install.bytesSoFar * PERCENT / install.totalBytes).toInt().coerceIn(0, PERCENT.toInt())
+            } else {
+                null
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = UaTheme.palette.azure,
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    // Indeterminate when the release declared no size: a percentage of nothing is
+                    // worse than no percentage.
+                    text = percent?.let { stringResource(R.string.settings_update_downloading_percent, it) }
+                        ?: stringResource(R.string.settings_update_downloading),
+                    style = BodyRegular,
+                    color = UaTheme.palette.labelSecondary,
+                )
+            }
+        }
+
+        UpdateInstallState.Launching -> UpdateInstallNote(R.string.settings_update_launching)
+
+        UpdateInstallState.NeedsPermission -> {
+            UpdateInstallNote(R.string.settings_update_needs_permission)
+            SecondaryButton(
+                text = stringResource(R.string.settings_update_grant_permission_button),
+                onClick = section.onGrantInstallPermission,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
+
+        UpdateInstallState.Untrusted -> UpdateInstallNote(R.string.settings_update_untrusted)
+
+        UpdateInstallState.Corrupt -> {
+            UpdateInstallNote(R.string.settings_update_corrupt)
+            InstallButton(section, apk)
+        }
+
+        UpdateInstallState.Failed -> {
+            UpdateInstallNote(R.string.settings_update_install_failed)
+            InstallButton(section, apk)
+        }
+
+        UpdateInstallState.Idle -> InstallButton(section, apk)
+    }
+}
+
+@Composable
+private fun InstallButton(section: UpdateSectionState, apk: ReleaseApk) {
+    SecondaryButton(
+        text = stringResource(R.string.settings_update_install_button),
+        onClick = { section.onDownloadAndInstall(apk) },
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+}
+
+/** Whole percent, the unit the label is written in. */
+private const val PERCENT = 100L
+
+@Composable
+private fun UpdateInstallNote(@StringRes text: Int) {
+    Text(
+        text = stringResource(text),
+        style = BodyRegular,
+        color = UaTheme.palette.labelSecondary,
+        modifier = Modifier.padding(top = 10.dp),
+    )
 }
 
 @Composable

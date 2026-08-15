@@ -402,12 +402,21 @@
     <string name="update_banner_message">La versión %1$s está lista para descargar.</string>
     <string name="update_banner_action">Abrir la versión</string>
     <string name="settings_section_updates">Actualizaciones</string>
-    <string name="settings_update_hint">La aplicación busca una nueva versión una vez por semana al abrirla. Nunca descarga ni instala nada por su cuenta: el botón de abajo abre la página de la versión en tu navegador.</string>
+    <string name="settings_update_hint">La aplicación busca una nueva versión una vez por semana al abrirla. Si una versión lleva un APK adjunto, puede descargarlo e instalarlo por ti: el archivo se comprueba con la versión publicada y debe estar firmado por el mismo desarrollador que tu copia, o se rechaza. Siempre puedes abrir la página de la versión en tu navegador.</string>
     <string name="settings_update_check_button">Buscar actualizaciones</string>
     <string name="settings_update_checking">Comprobando…</string>
     <string name="settings_update_up_to_date">Tienes la última versión.</string>
     <string name="settings_update_available">La versión %1$s está disponible.</string>
     <string name="settings_update_failed">No se pudo comprobar. Inténtalo más tarde.</string>
+    <string name="settings_update_install_button">Descargar e instalar</string>
+    <string name="settings_update_downloading">Descargando…</string>
+    <string name="settings_update_downloading_percent">Descargando… %1$d%%</string>
+    <string name="settings_update_launching">Listo. Confirma la instalación en pantalla.</string>
+    <string name="settings_update_needs_permission">Para instalar desde aquí, permite que UA Cast instale aplicaciones.</string>
+    <string name="settings_update_grant_permission_button">Abrir ajustes</string>
+    <string name="settings_update_untrusted">Este archivo no lo firmó el mismo desarrollador que tu copia, así que no se instaló. Descárgalo desde la página de la versión.</string>
+    <string name="settings_update_corrupt">La descarga está dañada. Inténtalo de nuevo.</string>
+    <string name="settings_update_install_failed">No se pudo instalar. Inténtalo de nuevo.</string>
 
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Versión gratuita</string>

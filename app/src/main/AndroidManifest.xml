@@ -10,6 +10,20 @@
          is idle, so without the lock the renderers' replies simply never reach the socket. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- This app is distributed by sideload, not through a store, so it updates itself: it
+         downloads the APK attached to a GitHub release and hands it to the system package
+         installer (see data/update/ApkInstaller). Without this the installer refuses the session
+         outright. From API 26 the user must additionally allow "install unknown apps" for this
+         app; the Settings row asks for that when it is missing. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Normal protection, so it is granted at install time. It only ever lets a session *ask* to
+         skip the confirmation dialog, and the system grants that under its own conditions - which
+         include this app being the installer of record for the package it is updating, something
+         the first update installed this way cannot be. So the dialog is expected at least once and
+         UpdateInstallReceiver treats being asked for it as an ordinary outcome. -->
+    <uses-permission
+        android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"
+        tools:targetApi="s" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- CastProxyService is a foreground service that posts a notification and holds a partial
@@ -94,6 +108,18 @@
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
             android:enabled="false"
             android:exported="false" />
+
+        <!-- Where the system reports what became of an update install. Not exported: the only
+             sender is this app's own PendingIntent, handed to the package installer, and the
+             system delivers it back to the component the intent names regardless. Exporting it
+             would let any app on the device fake an install result. -->
+        <receiver
+            android:name=".data.update.UpdateInstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.uacastplayer.action.INSTALL_STATUS" />
+            </intent-filter>
+        </receiver>
 
         <!-- Lets a diagnostics report be attached to an email as a file. Not exported: the grant
              travels with the intent (FLAG_GRANT_READ_URI_PERMISSION) to the one app the user picks,

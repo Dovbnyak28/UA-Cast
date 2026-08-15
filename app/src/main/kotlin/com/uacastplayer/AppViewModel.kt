@@ -18,9 +18,12 @@ import com.uacastplayer.app.PlaylistController
 import com.uacastplayer.app.SettingsController
 import com.uacastplayer.app.GuidedTourController
 import com.uacastplayer.app.UpdateController
+import com.uacastplayer.app.UpdateInstallController
 import com.uacastplayer.guidedtour.GuidedTourState
 import com.uacastplayer.data.premium.FakeBillingProvider
 import com.uacastplayer.data.premium.PremiumRepository
+import com.uacastplayer.data.update.ApkInstaller
+import com.uacastplayer.data.update.UpdateDownloader
 import com.uacastplayer.data.update.UpdateRepository
 import com.uacastplayer.premium.DeveloperMode
 import com.uacastplayer.premium.Entitlements
@@ -30,6 +33,8 @@ import com.uacastplayer.premium.FeatureManager
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
+import com.uacastplayer.update.ReleaseApk
+import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupFavorite
@@ -155,6 +160,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         installedVersionName = BuildConfig.VERSION_NAME,
     )
     val updateState: StateFlow<UpdateUiState> = updateController.state
+
+    private val updateDownloader = UpdateDownloader(application)
+
+    /** The two Android halves of installing an update are handed in as functions - see
+     * [UpdateInstallController] for why. This is the only place they are named. */
+    private val updateInstallController = UpdateInstallController(
+        scope = viewModelScope,
+        download = { apk, onProgress -> updateDownloader.download(apk, onProgress) },
+        install = { file -> ApkInstaller.install(application, file) },
+    )
+    val updateInstallState: StateFlow<UpdateInstallState> = updateInstallController.state
 
     private val guidedTourController = GuidedTourController(storage = preferences)
     val guidedTourState: StateFlow<GuidedTourState> = guidedTourController.state
@@ -333,6 +349,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** The Settings button. Unlike the weekly check this ignores the throttle and reports failure -
      * see [UpdateController]. */
     fun checkForUpdatesNow() = updateController.checkNow()
+
+    /** Fetches the release's APK, verifies it and hands it to the system installer. */
+    fun downloadAndInstallUpdate(apk: ReleaseApk) = updateInstallController.downloadAndInstall(apk)
+
+    /** Puts the install row back to rest once its result has been read. Deliberately does not stop
+     * a download in flight - see [UpdateInstallController.clearOutcome]. */
+    fun clearUpdateInstallOutcome() = updateInstallController.clearOutcome()
 
     /** Closes the update banner for that release only. */
     fun dismissUpdateBanner() = updateController.dismissAvailableUpdate()

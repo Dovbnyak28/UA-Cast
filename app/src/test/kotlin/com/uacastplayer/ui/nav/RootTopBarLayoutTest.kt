@@ -17,6 +17,7 @@ import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.update.UpdateSectionState
+import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateUiState
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -100,8 +101,11 @@ class RootTopBarLayoutTest {
                     // the title row's height, and a second banner would change what it measures.
                     updateSection = UpdateSectionState(
                         state = UpdateUiState(),
+                        installState = UpdateInstallState.Idle,
                         onCheckNow = {},
                         onOpenRelease = {},
+                        onDownloadAndInstall = {},
+                        onGrantInstallPermission = {},
                         onDismissBanner = {},
                         onOutcomeShown = {},
                     ),

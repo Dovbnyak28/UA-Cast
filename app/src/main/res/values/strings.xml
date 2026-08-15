@@ -402,12 +402,21 @@
     <string name="update_banner_message">Version %1$s is ready to download.</string>
     <string name="update_banner_action">Open release</string>
     <string name="settings_section_updates">Updates</string>
-    <string name="settings_update_hint">The app checks for a new version once a week when you open it. It never downloads or installs anything on its own — the button below opens the release page in your browser.</string>
+    <string name="settings_update_hint">The app checks for a new version once a week when you open it. If a release has an APK attached, it can download and install it for you — the file is checked against the release and must be signed by the same developer as the copy you have, or it is refused. You can always open the release page in your browser instead.</string>
     <string name="settings_update_check_button">Check for updates</string>
     <string name="settings_update_checking">Checking…</string>
     <string name="settings_update_up_to_date">You have the latest version.</string>
     <string name="settings_update_available">Version %1$s is available.</string>
     <string name="settings_update_failed">Could not check. Try again later.</string>
+    <string name="settings_update_install_button">Download and install</string>
+    <string name="settings_update_downloading">Downloading…</string>
+    <string name="settings_update_downloading_percent">Downloading… %1$d%%</string>
+    <string name="settings_update_launching">Ready. Confirm the installation on screen.</string>
+    <string name="settings_update_needs_permission">To install from here, allow UA Cast to install apps.</string>
+    <string name="settings_update_grant_permission_button">Open settings</string>
+    <string name="settings_update_untrusted">This file was not signed by the same developer as your copy, so it was not installed. Download it from the release page instead.</string>
+    <string name="settings_update_corrupt">The download is damaged. Try again.</string>
+    <string name="settings_update_install_failed">Could not install. Try again.</string>
 
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Free version</string>

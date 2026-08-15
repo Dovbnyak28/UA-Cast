@@ -411,12 +411,21 @@
     <string name="update_banner_message">Версію %1$s можна завантажити.</string>
     <string name="update_banner_action">Відкрити реліз</string>
     <string name="settings_section_updates">Оновлення</string>
-    <string name="settings_update_hint">Застосунок перевіряє нову версію раз на тиждень, коли ви його відкриваєте. Він нічого не завантажує і не встановлює сам — кнопка нижче відкриває сторінку релізу у браузері.</string>
+    <string name="settings_update_hint">Застосунок перевіряє нову версію раз на тиждень, коли ви його відкриваєте. Якщо до релізу прикріплено APK, він може завантажити й встановити його — файл звіряється з релізом і має бути підписаний тим самим розробником, що й ваша копія, інакше буде відхилений. Ви завжди можете натомість відкрити сторінку релізу у браузері.</string>
     <string name="settings_update_check_button">Перевірити оновлення</string>
     <string name="settings_update_checking">Перевіряємо…</string>
     <string name="settings_update_up_to_date">У вас найновіша версія.</string>
     <string name="settings_update_available">Доступна версія %1$s.</string>
     <string name="settings_update_failed">Не вдалося перевірити. Спробуйте пізніше.</string>
+    <string name="settings_update_install_button">Завантажити й встановити</string>
+    <string name="settings_update_downloading">Завантаження…</string>
+    <string name="settings_update_downloading_percent">Завантаження… %1$d%%</string>
+    <string name="settings_update_launching">Готово. Підтвердьте встановлення на екрані.</string>
+    <string name="settings_update_needs_permission">Щоб встановлювати звідси, дозвольте UA Cast встановлювати застосунки.</string>
+    <string name="settings_update_grant_permission_button">Відкрити налаштування</string>
+    <string name="settings_update_untrusted">Цей файл підписано не тим розробником, що вашу копію, тому його не встановлено. Завантажте його зі сторінки релізу.</string>
+    <string name="settings_update_corrupt">Завантажений файл пошкоджено. Спробуйте ще раз.</string>
+    <string name="settings_update_install_failed">Не вдалося встановити. Спробуйте ще раз.</string>
 
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Безкоштовна версія</string>
