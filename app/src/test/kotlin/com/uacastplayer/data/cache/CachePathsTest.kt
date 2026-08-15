@@ -37,14 +37,52 @@ class CachePathsTest {
         )
     }
 
-    /** `AtomicFile` keeps a `.bak` beside every file it writes. It is the same cache, it is the
-     * same bytes on disk, and a size that ignored it would be wrong by up to a factor of two. */
+    /**
+     * This test used to say `AtomicFile` keeps a `.bak` beside every file it writes, and it passed
+     * because it created that `.bak` itself. It does not: measured against the real implementation,
+     * a write in progress produces `<name>.new` and nothing else. So the suffix being matched could
+     * not exist and the one that does was invisible - see [AtomicSnapshotDeletionTest], which
+     * abandons a real write rather than naming the file by hand.
+     *
+     * `.bak` is still counted, because a file with that name is stale cache whatever left it there.
+     */
     @Test
-    fun atomicFileBackupsCountAsCacheToo() {
+    fun whatAnUnfinishedWriteLeavesBehindCountsAsCacheToo() {
         write("playlist_snapshot_abc123.bin", 10)
-        write("playlist_snapshot_abc123.bin.bak", 10)
+        write("playlist_snapshot_abc123.bin.new", 10)
+        write("playlist_snapshot_abc123.bin.bak", 5)
 
-        assertEquals(20L, CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(folder.root)))
+        assertEquals(25L, CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(folder.root)))
+    }
+
+    /**
+     * The one that is stranded for good. A removed source's id is never written again, so nothing
+     * will rename or truncate its leftover, and `filesDir` is not a directory Android reclaims -
+     * this listing is the only mechanism left that can reach it. Measured at 5.6MB for a
+     * 40,000-channel playlist.
+     */
+    @Test
+    fun anUnfinishedWriteWithNoBaseFileIsStillFound() {
+        write("playlist_snapshot_removed.bin.new", 10)
+
+        assertEquals(
+            listOf("playlist_snapshot_removed.bin.new"),
+            names(CachePaths.playlistSnapshots(folder.root)),
+        )
+    }
+
+    /** The EPG snapshot has the same leftover, and an EPG parse is where this app has been killed
+     * before - so the row that reports it has to look at both names. */
+    @Test
+    fun theEpgSnapshotAndItsUnfinishedWriteAreBothAccountedFor() {
+        write(CachePaths.EPG_SNAPSHOT, 30)
+        write(CachePaths.EPG_SNAPSHOT + CachePaths.ATOMIC_WRITE_SUFFIX, 12)
+
+        assertEquals(42L, CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(folder.root)))
+
+        CacheSizeUtils.clear(CachePaths.epgSnapshots(folder.root))
+
+        assertEquals(0L, CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(folder.root)))
     }
 
     /** An install that upgraded but has not yet had its first launch still has the old file, and
@@ -83,7 +121,8 @@ class CachePathsTest {
     fun clearingRemovesEverySnapshot() {
         write("playlist_snapshot_abc.bin", 10)
         write("playlist_snapshot_def.bin", 10)
-        write("playlist_snapshot_def.bin.bak", 10)
+        write("playlist_snapshot_def.bin.new", 10)
+        write("playlist_snapshot_ghi.bin.bak", 10)
         write("favorites.json", 10)
 
         CacheSizeUtils.clear(CachePaths.playlistSnapshots(folder.root))

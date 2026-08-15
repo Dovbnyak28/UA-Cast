@@ -15,8 +15,7 @@ object CachePaths {
 
     /**
      * What every playlist snapshot written today is named: `playlist_snapshot_<sourceId>.bin`, one
-     * per saved source (see `PlaylistSnapshotStore`), plus the `.bak` copies `AtomicFile` keeps
-     * beside them.
+     * per saved source (see `PlaylistSnapshotStore`).
      *
      * The cache screen used to point at [LEGACY_PLAYLIST_SNAPSHOT] alone, so on every install
      * created since multi-playlist support it reported the playlist cache as 0 B and its Clear
@@ -30,16 +29,51 @@ object CachePaths {
     const val COIL_CACHE_DIR = "coil_cache"
 
     /**
-     * Every playlist snapshot file in [filesDir], current and legacy, including `AtomicFile`'s
-     * backups.
+     * What `androidx.core.util.AtomicFile` writes into while a write is in progress, and leaves
+     * behind when the process dies before finishing one.
+     *
+     * This file used to look for `.bak` instead, on the belief that a backup is what `AtomicFile`
+     * keeps beside each file. It is not - and the test that said so was passing only because it
+     * created the `.bak` itself. Measured against the real implementation: a write in progress
+     * produces `<name>.new` and nothing else, `finishWrite` renames it onto the base name, and a
+     * `.bak` is never created at all (it is a name the class only ever *reads*, for compatibility
+     * with the framework `AtomicFile` this app has never used).
+     *
+     * So the suffix the cache screen was matching could not exist, and the one that does was
+     * invisible to it - not counted in the size it reports and not removed by its Clear button.
+     * `.bak` is still matched, because a file with that name would be stale cache whatever left it
+     * there, and matching it costs nothing.
+     */
+    const val ATOMIC_WRITE_SUFFIX = ".new"
+
+    private val CACHE_SUFFIXES = listOf(".bin", ".bin$ATOMIC_WRITE_SUFFIX", ".bin.bak")
+
+    /**
+     * Every playlist snapshot file in [filesDir], current and legacy, including whatever an
+     * unfinished write left beside them.
      *
      * Matched by name rather than rebuilt from the saved source list on purpose: a snapshot whose
      * source has since been removed is exactly the kind of file the cache screen exists to find,
-     * and asking the source list would be the one place guaranteed not to mention it.
+     * and asking the source list would be the one place guaranteed not to mention it. That is not
+     * hypothetical for the `.new` files - a source's id is never written again once it is removed,
+     * so nothing else will ever rename or truncate one, and this is the only mechanism left that
+     * can reach it.
      */
     fun playlistSnapshots(filesDir: File): List<File> =
         filesDir.listFiles { file ->
             file.isFile && file.name.startsWith(PLAYLIST_SNAPSHOT_PREFIX) &&
-                (file.name.endsWith(".bin") || file.name.endsWith(".bin.bak"))
+                CACHE_SUFFIXES.any { file.name.endsWith(it) }
         }?.toList().orEmpty()
+
+    /**
+     * The EPG snapshot and any unfinished write beside it.
+     *
+     * A list for one fixed name, because the name is not the only file: an EPG parse is where this
+     * app has been killed before (see `EpgDownloader.deleteStaleDownloads` and the OutOfMemoryError
+     * entry in CHANGELOG 0.9.0), and being killed mid-write is exactly what leaves a `.new` behind.
+     * Unlike a per-source playlist snapshot that one is eventually reused by the next write, but
+     * until then it is bytes the cache screen was neither reporting nor able to remove.
+     */
+    fun epgSnapshots(filesDir: File): List<File> =
+        listOf(File(filesDir, EPG_SNAPSHOT), File(filesDir, EPG_SNAPSHOT + ATOMIC_WRITE_SUFFIX))
 }

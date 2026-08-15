@@ -100,10 +100,10 @@ class PlaylistRepository(context: Context) {
 
     suspend fun saveSources(sources: List<PlaylistSource>) = sourceStore.save(sources)
 
-    suspend fun deleteSnapshot(sourceId: String) = withContext(Dispatchers.IO) {
-        File(appContext.filesDir, "playlist_snapshot_$sourceId.bin").delete()
-        Unit
-    }
+    /** Delegated rather than reaching for the file directly - this used to spell the snapshot's
+     * name out a second time and delete only that one name, which left `AtomicFile`'s in-progress
+     * file behind. See [PlaylistSnapshotStore.delete]. */
+    suspend fun deleteSnapshot(sourceId: String) = PlaylistSnapshotStore(appContext, sourceId).delete()
 
     /**
      * One-time upgrade path: before multi-playlist support there was exactly one snapshot file

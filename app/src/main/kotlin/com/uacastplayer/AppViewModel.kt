@@ -766,7 +766,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // button deleted nothing on every install created since.
         val files = when (kind) {
             CacheKind.PLAYLIST -> CachePaths.playlistSnapshots(filesDir)
-            CacheKind.EPG -> listOf(File(filesDir, CachePaths.EPG_SNAPSHOT))
+            CacheKind.EPG -> CachePaths.epgSnapshots(filesDir)
             CacheKind.ICONS -> listOf(File(filesDir, CachePaths.ICON_CACHE_DIR))
             CacheKind.COIL -> listOf(File(filesDir, CachePaths.COIL_CACHE_DIR))
         }
@@ -793,7 +793,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val sizes = withContext(Dispatchers.IO) {
                 CacheSizes(
                     playlistBytes = CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(filesDir)),
-                    epgBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.EPG_SNAPSHOT)),
+                    epgBytes = CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(filesDir)),
                     iconCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.ICON_CACHE_DIR)),
                     coilCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.COIL_CACHE_DIR)),
                 )

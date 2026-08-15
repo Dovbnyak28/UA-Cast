@@ -1,6 +1,7 @@
 package com.uacastplayer.data.playlist
 
 import android.content.Context
+import androidx.core.util.AtomicFile
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSnapshotCodec
 import java.io.File
@@ -28,8 +29,14 @@ internal object LegacyPlaylistSnapshotFile {
         }
     }
 
+    /**
+     * Through [AtomicFile] because that is what wrote this file: until multi-playlist support it
+     * was `AtomicFile(File(filesDir, "playlist_snapshot.bin"))`, so an install killed mid-write by
+     * the old build left a `playlist_snapshot.bin.new` beside it. Deleting the base name alone
+     * stranded that one on the first launch after the upgrade, at which point nothing in the app
+     * refers to either name again.
+     */
     suspend fun delete(context: Context) = withContext(Dispatchers.IO) {
-        File(context.filesDir, FILE_NAME).delete()
-        Unit
+        AtomicFile(File(context.filesDir, FILE_NAME)).delete()
     }
 }

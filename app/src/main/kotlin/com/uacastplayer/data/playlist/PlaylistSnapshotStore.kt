@@ -31,6 +31,20 @@ class PlaylistSnapshotStore(context: Context, sourceId: String) {
         Unit
     }
 
+    /**
+     * Removes this source's snapshot, including whatever an unfinished write left beside it.
+     *
+     * Here rather than in `PlaylistRepository`, which used to build the same filename a second time
+     * and hand it to `File.delete()`. That missed the `.new` file `AtomicFile` writes into (see
+     * [com.uacastplayer.data.cache.CachePaths.ATOMIC_WRITE_SUFFIX]), and for a *removed* source
+     * that file is stranded for good: its id is never written again, so nothing will rename or
+     * truncate it, and `filesDir` is not a directory Android ever reclaims. Measured at 5.6MB for a
+     * 40,000-channel playlist.
+     */
+    suspend fun delete() = withContext(Dispatchers.IO) {
+        atomicFile.delete()
+    }
+
     suspend fun load(): PlaylistSnapshot? = withContext(Dispatchers.IO) {
         try {
             atomicFile.openRead().use { PlaylistSnapshotCodec.decode(it) }
