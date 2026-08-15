@@ -42,10 +42,16 @@ object LicenseRecordCodec {
      * The tag is the last field and the payload is everything before it, so a `source` containing
      * the separator cannot shift the boundary - which a naive split on every separator would let it
      * do, and which would let a chosen playlist name move the tag.
+     *
+     * **An empty tag is a record, not rubbish.** [encode] is called with one whenever the device
+     * could not produce a tag at all, so rejecting it here threw away the licence of every user
+     * whose Keystore will not co-operate - the exact case the writer went out of its way to keep.
+     * Deciding whether an untagged record may be *believed* is the caller's job and needs a fact
+     * this codec does not have: whether this device can tag at all. Parsing it is not believing it.
      */
     fun decode(stored: String): Pair<String, String>? {
         val cut = stored.lastIndexOf(SEPARATOR)
-        if (cut <= 0 || cut == stored.length - 1) return null
+        if (cut <= 0) return null
         return stored.substring(0, cut) to stored.substring(cut + 1)
     }
 }

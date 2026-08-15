@@ -73,6 +73,22 @@ class LicenseRecordCodecTest {
         assertNull("empty", LicenseRecordCodec.decode(""))
         assertNull("no separator", LicenseRecordCodec.decode("LIFETIME"))
         assertNull("nothing before the tag", LicenseRecordCodec.decode("|abc"))
-        assertNull("nothing after the payload", LicenseRecordCodec.decode("LIFETIME|-|-|"))
+    }
+
+    /**
+     * This case used to be asserted null, one line up from here, alongside the rubbish - and it is
+     * not rubbish. It is exactly what [LicenseRecordCodec.encode] writes when the device could not
+     * produce a tag, so refusing to parse it threw away the licence of every user whose Keystore
+     * will not co-operate, on the very next read. Whether an untagged record may be *believed* is a
+     * separate question with a separate answer, and `AppPreferences` is where it is asked.
+     */
+    @Test
+    fun aRecordWrittenWithNoTagIsStillARecord() {
+        val untagged = LicenseRecordCodec.encode(payload(LicenseTier.LIFETIME), mac = "")
+
+        val (decodedPayload, mac) = LicenseRecordCodec.decode(untagged)!!
+
+        assertEquals(payload(LicenseTier.LIFETIME), decodedPayload)
+        assertEquals("", mac)
     }
 }

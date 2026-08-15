@@ -24,8 +24,16 @@ private const val TAG = "AppPreferences"
  * Values here are all tiny scalars; there is no need for the AtomicFile/versioned-snapshot
  * machinery used by the playlist/EPG/favorites caches.
  */
-class AppPreferences(context: Context) :
-    ParentalControlPinStorage,
+class AppPreferences(
+    context: Context,
+    /**
+     * Whether this device can tag a licence at all - the one fact that tells an untagged record
+     * written here apart from one somebody stripped the tag off. Injected only so both answers can
+     * be tested: no Keystore exists under Robolectric, so a test could otherwise never reach the
+     * device-can-tag half of that decision. Every caller in the app takes the default.
+     */
+    private val canTagLicense: () -> Boolean = LicenseIntegrity::isAvailable,
+) : ParentalControlPinStorage,
     UpdateCheckStorage,
     LicenseStorage,
     GuidedTourStorage {
@@ -233,8 +241,9 @@ class AppPreferences(context: Context) :
             prefs.edit {
                 // A device that cannot tag stores the payload with an empty tag rather than nothing:
                 // the licence is what the user paid for, and a Keystore that will not co-operate is
-                // not a reason to forget it. readTaggedLicense treats that case as unverifiable
-                // rather than as forged.
+                // not a reason to forget it. [licenseFrom] believes such a record back only while
+                // this device still cannot tag - see the note there for why that condition is the
+                // whole difference between an honest untagged record and a stripped tag.
                 putString(KEY_LICENSE_RECORD, LicenseRecordCodec.encode(payload, mac.orEmpty()))
                 removeLegacyLicenseKeys()
             }
@@ -255,17 +264,31 @@ class AppPreferences(context: Context) :
      * One record, believed or not.
      *
      * The three ways it can fail to be this app's - not a record at all, too few fields, a tag that
-     * does not match - are one decision rather than three, because they have one answer. An empty
-     * tag is not a failure: it means the device could not produce one when the record was written
-     * (see the setter), and verifying against a Keystore that has since started working would
-     * revoke a licence nobody touched.
+     * does not match - are one decision rather than three, because they have one answer.
+     *
+     * **An empty tag is answered by asking the device, not by a fixed rule**, because the two things
+     * it can mean pull in opposite directions. Written by the setter, it means this device could not
+     * produce a tag, and refusing it would revoke a licence the user paid for - which
+     * [LicenseIntegrity] states plainly is the worse bug of the two. Written by hand, it is the
+     * cheapest attack there is: open the file, delete everything after the last separator, keep the
+     * tier. [canTagLicense] is what separates them, and it is why [LicenseIntegrity.isAvailable]
+     * exists. So on any device that can tag - which is very nearly all of them - a missing tag is
+     * still a missing licence, and only a device that genuinely cannot tag believes an untagged one.
+     *
+     * The cost of drawing it here: a device that could not tag when the record was written and can
+     * tag by the time it is read - a Keystore repaired by a system update - drops to the free tier,
+     * and its owner restores the purchase to get it back. The alternative, re-signing whatever is
+     * found untagged, would hand every stripped tag a fresh valid one, which is the whole attack.
      */
     private fun licenseFrom(stored: String): License {
         val decoded = LicenseRecordCodec.decode(stored)
         val fields = decoded?.first?.split('|').orEmpty()
-        val ours = decoded != null &&
-            fields.size >= LICENSE_FIELD_COUNT &&
-            (decoded.second.isEmpty() || LicenseIntegrity.verify(decoded.first, decoded.second))
+        val tagIsGood = when {
+            decoded == null -> false
+            decoded.second.isEmpty() -> !canTagLicense()
+            else -> LicenseIntegrity.verify(decoded.first, decoded.second)
+        }
+        val ours = tagIsGood && fields.size >= LICENSE_FIELD_COUNT
         if (!ours) {
             AppLog.w(TAG) { "The stored licence is not one this app wrote; treating it as free" }
             return License.FREE
