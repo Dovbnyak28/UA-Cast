@@ -267,10 +267,11 @@ dependencies {
 
     baselineProfile(project(":baselineprofile"))
 
-    // Debug-only: instruments Activity/Fragment/ViewModel and reports retained instances. Kept out
-    // of release entirely (debugImplementation). See block 1.0 of the leak-fix plan - this is what
-    // makes a leaked PlayerViewModel/ExoPlayer visible the day it appears instead of via an OOM.
-    debugImplementation(libs.leakcanary.android)
+    // LeakCanary used to sit here, debug-only. Removed after never reporting anything: the leak it
+    // was brought in for - the double ExoPlayer - had already been found by hand, and what keeps
+    // that particular one from coming back is PlayerViewModel's own `liveInstances` counter, which
+    // fails loudly in every debug build and in the unit tests. The cost was paid on every debug run
+    // in heap dumps and build time. If a leak is suspected again, this is one line to put back.
 
     implementation(libs.play.billing)
 
