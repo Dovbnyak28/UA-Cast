@@ -138,7 +138,16 @@ class DlnaSessionRepository private constructor(context: Context) {
      */
     private val connectGeneration = AtomicLong(0)
 
-    /** The [connectGeneration] idea applied to volume - see [setVolume] for why it is needed. */
+    /**
+     * The [connectGeneration] idea applied to volume - see [setVolume] for why it is needed.
+     *
+     * Bumped by [startSession] and [stop] as well as by each [setVolume], for the same reason
+     * [connectGeneration] is: a session ending or a new one starting retires every answer still in
+     * flight for the old one. Without those two, the "still connected" half of [setVolume]'s guard
+     * did not mean what it says - `connectedDevice` is non-null again the moment the user connects
+     * to the next renderer, so a volume read belonging to the session they just stopped could land
+     * on the one they just started and sit there until the next drag.
+     */
     private val volumeGeneration = AtomicLong(0)
 
     private val _state = MutableStateFlow(DlnaConnectionState())
@@ -215,6 +224,9 @@ class DlnaSessionRepository private constructor(context: Context) {
     private fun startSession(device: DlnaDevice, streamUrl: String, title: String, isRepoint: Boolean) {
         _state.update { it.copy(isConnecting = true) }
         val generation = connectGeneration.incrementAndGet()
+        // This session ends by publishing the volume it read from the renderer itself, so an answer
+        // still in flight for the previous one describes a state that is about to be replaced.
+        volumeGeneration.incrementAndGet()
         connectJob?.cancel()
         connectJob = scope.launch {
             val connected = withContext(Dispatchers.IO) {
@@ -385,6 +397,8 @@ class DlnaSessionRepository private constructor(context: Context) {
         // blocked on a renderer that never answers would come back after the user had already
         // stopped, find its own generation current, and tear down a second time.
         connectGeneration.incrementAndGet()
+        // And the same for volume: see volumeGeneration. The next session reads its own.
+        volumeGeneration.incrementAndGet()
         connectJob?.cancel()
         connectJob = null
         sessionToken = null

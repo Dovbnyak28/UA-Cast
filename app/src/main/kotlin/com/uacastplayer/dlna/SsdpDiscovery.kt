@@ -165,12 +165,30 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
             try {
                 val packet = DatagramPacket(buffer, buffer.size)
                 socket.receive(packet)
-                val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
-                SsdpResponseParser.parse(text).location?.let { locations += it }
+                collectLocationFrom(packet, locations)
             } catch (_: SocketTimeoutException) {
                 // Expected: soTimeout just lets us re-check the overall deadline periodically.
             }
         }
+    }
+
+    /**
+     * Records one datagram's LOCATION, up to [MAX_LOCATIONS] of them.
+     *
+     * Bounded here rather than only by the `take()` after the loop, which is where the cap used to
+     * be applied. LOCATION is an unvalidated header value up to the size of the receive buffer, and
+     * nothing rate-limits who may answer an M-SEARCH - anything on the LAN can unicast replies at
+     * this socket for the whole window, and every distinct one was kept until the loop ended.
+     *
+     * Below the cap this changes nothing: the `take()` already discarded everything past it, and a
+     * LinkedHashSet hands back the same first [MAX_LOCATIONS] either way. Above it, a noisy or
+     * hostile network can no longer grow the set without limit, and the parse is skipped along with
+     * it. Receiving continues rather than breaking out, so the window still ends when it always did.
+     */
+    private fun collectLocationFrom(packet: DatagramPacket, locations: MutableSet<String>) {
+        if (locations.size >= MAX_LOCATIONS) return
+        val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
+        SsdpResponseParser.parse(text).location?.let { locations += it }
     }
 
     /** One unreachable or misbehaving renderer must not lose the whole discovery result - a device
