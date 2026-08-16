@@ -166,6 +166,11 @@ class PremiumRepository(
     }
 
     private fun applyPurchases(purchases: Set<PurchaseRecord>) {
+        // Before the licence is decided, and outside every branch below. Whether a purchase is the
+        // one this app grants access from is a different question from whether the store is still
+        // waiting to be told it happened, and the early return below would otherwise skip it for a
+        // set whose entries have all expired.
+        acknowledgeAll(purchases)
         val best = bestOf(purchases)
         if (best == null) {
             // The store is connected and says nothing is owned. If the device is holding a paid
@@ -186,12 +191,28 @@ class PremiumRepository(
                 source = best.productId,
             ),
         )
+    }
 
-        if (best.needsAcknowledgement) {
-            // Google Play refunds anything unacknowledged after three days. Skipping this does not
-            // fail loudly - it quietly reverses a sale that already happened.
-            scope.launch { provider.acknowledge(best) }
-        }
+    /**
+     * Every purchase that needs one, not just the one [bestOf] selected.
+     *
+     * Google Play refunds each unacknowledged purchase on its own three-day clock, and it does not
+     * care which of them this app considered best. Acknowledging only the best one therefore
+     * reversed a sale whenever a user owned two that both still needed it - an active subscription
+     * with a lifetime bought on top, or a pair whose first acknowledgement failed on a bad
+     * connection. It fails silently in the worst direction: the user keeps the features, because
+     * the licence is decided by the best purchase and that one *was* acknowledged, while the money
+     * for the other goes back.
+     *
+     * There is no retry here beyond the next store update, and none is needed: Play keeps returning
+     * a purchase as unacknowledged until it is acknowledged, and `applyPurchases` runs on every
+     * connection and every refresh - so a failed attempt is retried on the next launch, well inside
+     * three days.
+     */
+    private fun acknowledgeAll(purchases: Set<PurchaseRecord>) {
+        val owed = purchases.filter { it.needsAcknowledgement }
+        if (owed.isEmpty()) return
+        scope.launch { owed.forEach { provider.acknowledge(it) } }
     }
 
     /** Buys [productId]; the resulting entitlement is published through [entitlements] like any

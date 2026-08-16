@@ -218,6 +218,55 @@ class PremiumRepositoryTest {
         assertEquals("lifetime", provider.acknowledged.single().productId)
     }
 
+    /**
+     * **Every** purchase needing acknowledgement gets one, not only the best of them.
+     *
+     * Acknowledgement used to be sent for whichever purchase `bestOf` selected - the one that
+     * decides the licence. That is the wrong set: Play refunds each unacknowledged purchase on its
+     * own three-day clock, and it does not care which of them this app considered best. So a user
+     * who owns two - an active subscription beside a lifetime bought on top of it, or two whose
+     * first acknowledgement failed on a bad connection - had one of them quietly reversed while
+     * keeping the features, and the developer lost the money without anything failing anywhere.
+     *
+     * Both are unacknowledged here because that is the shape that loses money; the usual case, where
+     * the older one was acknowledged long ago, loses nothing either way.
+     */
+    @Test
+    fun everyUnacknowledgedPurchaseGetsAcknowledged() = runTest {
+        val provider = StubProvider()
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = setOf(
+            purchase(LicenseTier.LIFETIME, id = "lifetime", needsAck = true),
+            purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "yearly", needsAck = true),
+        )
+
+        assertEquals(
+            "both purchases must be acknowledged, or Play refunds the one that was not",
+            setOf("lifetime", "yearly"),
+            provider.acknowledged.map { it.productId }.toSet(),
+        )
+    }
+
+    /** The control: an acknowledgement already given must not be sent again on every store update -
+     * `applyPurchases` runs on each connection and each refresh. */
+    @Test
+    fun aPurchaseAlreadyAcknowledgedIsLeftAlone() = runTest {
+        val provider = StubProvider()
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = setOf(
+            purchase(LicenseTier.LIFETIME, id = "lifetime", needsAck = false),
+            purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "yearly", needsAck = true),
+        )
+
+        assertEquals(listOf("yearly"), provider.acknowledged.map { it.productId })
+    }
+
     /** Nothing else notices that a trial has ended - a running app has to re-resolve it against
      * the clock. */
     @Test
