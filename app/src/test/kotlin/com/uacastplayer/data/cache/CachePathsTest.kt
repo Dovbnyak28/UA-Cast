@@ -85,6 +85,32 @@ class CachePathsTest {
         assertEquals(0L, CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(folder.root)))
     }
 
+    /**
+     * A guide download the process died part-way through is the largest thing this app ever leaves
+     * on disk, and it was invisible to the only screen that offers to remove anything.
+     *
+     * Measured, not supposed: a Mi A2 running this project's own instrumented suite - which starts
+     * the app repeatedly and tears each one down mid-download - ended with **747MB in `filesDir`**,
+     * twenty-two stranded `epg_download_*.tmp` files, most of them the full 45.8MB guide. The cache
+     * screen beside them said the EPG cache was **9.5 MB**.
+     *
+     * `EpgDownloader.deleteStaleDownloads` does reclaim these, and must keep sparing anything
+     * younger than an hour so it cannot delete a download in flight. That gate is the gap: for that
+     * hour the bytes are real, and a user out of space now needs to see and remove them now.
+     */
+    @Test
+    fun aStrandedGuideDownloadIsAccountedForAndRemovable() {
+        write(CachePaths.EPG_SNAPSHOT, 30)
+        write("epg_download_1593862807445241594.tmp", 4000)
+        write("epg_download_210421173743586472.tmp", 1000)
+
+        assertEquals(5030L, CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(folder.root)))
+
+        CacheSizeUtils.clear(CachePaths.epgSnapshots(folder.root))
+
+        assertEquals(0L, CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(folder.root)))
+    }
+
     /** An install that upgraded but has not yet had its first launch still has the old file, and
      * it is real bytes the user should be able to see and remove. */
     @Test
@@ -107,6 +133,27 @@ class CachePathsTest {
         File(folder.root, "icon_cache").mkdirs()
 
         assertEquals(listOf("playlist_snapshot_abc.bin"), names(CachePaths.playlistSnapshots(folder.root)))
+    }
+
+    /**
+     * The same guard on the EPG side, and it matters more there now: that row stopped being two
+     * fixed names and became a listing of `filesDir` with a prefix, which is the exact shape one
+     * careless edit away from offering to delete the licence.
+     */
+    @Test
+    fun nothingElseInFilesDirIsTreatedAsEpgCache() {
+        write("epg_snapshot.bin", 10)
+        write("epg_download_123.tmp", 10)
+        write("favorites.json", 10)
+        write("parental_control_locked_channels.json", 10)
+        write("playlist_sources.bin", 10)
+        write("playlist_snapshot_abc.bin", 10)
+        write("epg_sources.bin", 10)
+
+        assertEquals(
+            listOf("epg_download_123.tmp", "epg_snapshot.bin"),
+            names(CachePaths.epgSnapshots(folder.root)).filter { File(folder.root, it).isFile }.sorted(),
+        )
     }
 
     @Test

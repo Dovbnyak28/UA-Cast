@@ -65,15 +65,40 @@ object CachePaths {
                 CACHE_SUFFIXES.any { file.name.endsWith(it) }
         }?.toList().orEmpty()
 
+    /** What `EpgDownloader` names the file it streams a guide into before parsing it - and leaves
+     * behind whenever the process dies first. Mirrored here rather than shared, because this is a
+     * name to *find* files by; `EpgDownloader` owns creating and sweeping them. */
+    private const val EPG_DOWNLOAD_PREFIX = "epg_download_"
+    private const val EPG_DOWNLOAD_SUFFIX = ".tmp"
+
     /**
-     * The EPG snapshot and any unfinished write beside it.
+     * The EPG snapshot, any unfinished write beside it, and any download stranded part-way.
      *
-     * A list for one fixed name, because the name is not the only file: an EPG parse is where this
-     * app has been killed before (see `EpgDownloader.deleteStaleDownloads` and the OutOfMemoryError
-     * entry in CHANGELOG 0.9.0), and being killed mid-write is exactly what leaves a `.new` behind.
-     * Unlike a per-source playlist snapshot that one is eventually reused by the next write, but
-     * until then it is bytes the cache screen was neither reporting nor able to remove.
+     * A list rather than one fixed name, because the name is not the only file: an EPG parse is
+     * where this app has been killed before (see `EpgDownloader.deleteStaleDownloads` and the
+     * OutOfMemoryError entry in CHANGELOG 0.9.0), and being killed mid-write is exactly what leaves
+     * a `.new` behind.
+     *
+     * **The downloads are here because a real device said so.** A Mi A2 running this app's own
+     * instrumented suite - which starts the app repeatedly and tears each one down mid-download -
+     * finished with **747MB in `filesDir`**, twenty-two stranded `epg_download_*.tmp` files, most of
+     * them the full 45.8MB guide. The cache screen alongside them reported the EPG cache as
+     * **9.5 MB**, and its Clear button removed none of it.
+     *
+     * `EpgDownloader.deleteStaleDownloads` does reclaim them, and nothing here changes that: it runs
+     * at startup and before every download, and it deliberately spares anything younger than an hour
+     * so it can never delete the file a download in flight is still writing. That age gate is
+     * correct and it is also the whole gap - within that hour the bytes exist, they are the largest
+     * thing this app ever writes, and the one screen that exists to say what is on disk was not
+     * counting them. A user out of space now cannot wait an hour for an answer.
+     *
+     * Clearing one that a download is still writing into fails that download and no more; the
+     * downloader already treats a vanished temp file as a failed attempt and retries later. That is
+     * the right trade for a button the user pressed on purpose.
      */
     fun epgSnapshots(filesDir: File): List<File> =
-        listOf(File(filesDir, EPG_SNAPSHOT), File(filesDir, EPG_SNAPSHOT + ATOMIC_WRITE_SUFFIX))
+        listOf(File(filesDir, EPG_SNAPSHOT), File(filesDir, EPG_SNAPSHOT + ATOMIC_WRITE_SUFFIX)) +
+            filesDir.listFiles { file ->
+                file.isFile && file.name.startsWith(EPG_DOWNLOAD_PREFIX) && file.name.endsWith(EPG_DOWNLOAD_SUFFIX)
+            }.orEmpty()
 }
