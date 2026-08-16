@@ -141,4 +141,36 @@ class GitHubReleaseParserTest {
         assertNotNull(parsed)
         assertEquals("b".repeat(64), parsed!!.apk?.sha256)
     }
+
+    /**
+     * The real thing: the exact document `api.github.com` returned for this app's own repository,
+     * saved verbatim (less the `author` record, which this parser never looks at).
+     *
+     * Every other test here is written against JSON this file also wrote, which cannot catch the one
+     * failure that matters most - the server sending a shape nobody anticipated. GitHub's release
+     * object carries nineteen top-level fields; the hand-written fixtures above carry five.
+     *
+     * It also pins the state the repository is genuinely in, which is not a corner case: one
+     * published release, **zero assets**. That is why the update banner on a real device offers to
+     * open the release page rather than to install anything - see `UpdateBanner`. Attach the APKs to
+     * a release and `apk` here stops being null; until then this documents, in the app's own tests,
+     * exactly why the install path never engages.
+     */
+    @Test
+    fun theResponseThisRepositoryActuallyReturnsIsParsedAndCarriesNoApk() {
+        val json = checkNotNull(javaClass.classLoader?.getResourceAsStream(REAL_RESPONSE)) {
+            "missing test resource $REAL_RESPONSE"
+        }.use { it.readBytes().decodeToString() }
+
+        val parsed = GitHubReleaseParser.parse(json, supportedAbis = listOf("arm64-v8a"))
+
+        assertNotNull("the live response did not parse at all", parsed)
+        assertEquals("v0.9.1", parsed!!.tagName)
+        assertEquals("https://github.com/Dovbnyak28/UA-Cast/releases/tag/v0.9.1", parsed.releaseUrl)
+        assertNull("this release has no assets, so there is nothing to install", parsed.apk)
+    }
+
+    private companion object {
+        const val REAL_RESPONSE = "github-latest-release-no-assets.json"
+    }
 }
