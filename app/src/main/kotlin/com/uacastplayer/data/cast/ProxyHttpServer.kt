@@ -189,6 +189,20 @@ internal class ProxyHttpServer(private val onRequest: (ParsedRequest, OutputStre
         builder.append("Access-Control-Expose-Headers: Content-Length, Content-Range\r\n")
         builder.append("Connection: close\r\n\r\n")
         output.write(builder.toString().toByteArray(Charsets.ISO_8859_1))
+        // Flushed here rather than left to each caller, because the caller that forgets loses the
+        // whole response silently and nothing anywhere says so. [handleConnection] wraps the socket
+        // in a BufferedOutputStream and then closes the *socket*, not the stream - so bytes still
+        // sitting in that buffer are never written at all. A HEAD on the flattened-HLS path was
+        // exactly that: headers written, nothing flushed, connection closed, and a renderer asking
+        // what the resource is got a socket that opened and shut with nothing on it.
+        //
+        // Headers are also the one thing worth sending early on their own. A response whose body
+        // arrives a segment at a time - see HlsFlattenedStream - leaves a renderer waiting on a
+        // status line it could have had immediately, and some give up before it comes.
+        //
+        // The flushes callers do after writing a body are still theirs to do; this only covers the
+        // head of the response.
+        output.flush()
     }
 
     /** A CORS preflight (the receiver's browser sends OPTIONS before any XHR with a non-safelisted

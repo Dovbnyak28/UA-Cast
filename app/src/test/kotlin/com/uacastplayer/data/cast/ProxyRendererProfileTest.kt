@@ -286,6 +286,61 @@ class ProxyRendererProfileTest {
         assertTrue("expected the manifest as a fallback, got:\n${body.take(200)}", body.contains("#EXTM3U"))
     }
 
+    /** The Content-Type a HEAD is answered with - what a renderer decides on before it ever asks
+     * for the body. */
+    private fun headContentType(originUrl: String): String? {
+        val server = ProxyServer(OkHttpClient()).also { proxy = it }
+        server.start(
+            sessionToken = "session",
+            host = "127.0.0.1",
+            remuxEnabled = false,
+            unwrapWrapperPlaylists = true,
+            flattenHlsToStream = true,
+        )
+        val resourceId = server.registerPlaylist(originUrl)
+        val request = Request.Builder().url(server.buildLocalUrl(resourceId)).head().build()
+        client.newCall(request).execute().use { return it.header("Content-Type") }
+    }
+
+    /**
+     * A HEAD has to name the content type the GET will actually produce.
+     *
+     * DLNA renderers ask what a resource is before asking for it, and this path answered "video/
+     * mp2t" for every channel without checking - while the GET falls back to the manifest whenever
+     * flattening turns out to be impossible, which is routine. The renderer commits to MPEG-TS and
+     * is then handed an M3U8.
+     *
+     * That mismatch is not a new theory. [ProxyServer.serveUpstreamPlaylist]'s own KDoc records it
+     * arriving in the field from the other direction: "M3U8 *text* where the receiver expects
+     * MPEG-TS *bytes* - confirmed in the field as the receiver going permanently silent after its
+     * very first playlist fetch."
+     */
+    @Test
+    fun `a head on a channel that cannot be flattened names the manifest`() {
+        val origin = Origin(mutableMapOf()).also { this.origin = it }
+        val encrypted = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-TARGETDURATION:4")
+            appendLine("#EXT-X-KEY:METHOD=AES-128,URI=\"k.key\"")
+            appendLine("#EXTINF:4,")
+            appendLine("/a.ts")
+            appendLine("#EXT-X-ENDLIST")
+        }
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", encrypted.toByteArray())
+
+        assertEquals("application/vnd.apple.mpegurl", headContentType(origin.urlFor("/live.m3u8")))
+    }
+
+    /** The control, and what stops the assertion above from being satisfied by a HEAD that simply
+     * never announces a stream: a channel that can be flattened still says so. */
+    @Test
+    fun `a head on a channel that can be flattened names the stream`() {
+        val origin = hlsOrigin()
+
+        assertEquals("video/mp2t", headContentType(origin.urlFor("/live.m3u8")))
+        assertEquals("a HEAD must not pull any media", 0, origin.hitsFor("/a.ts"))
+    }
+
     /**
      * A master playlist is followed one level to its first variant. A renderer being fed a fixed
      * stream cannot adapt anyway, and the first entry is conventionally the most compatible one.

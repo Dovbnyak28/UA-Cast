@@ -504,10 +504,6 @@ class ProxyServer(
         output: OutputStream,
     ): Boolean {
         val headers = mapOf("Content-Type" to "video/mp2t")
-        if (method != "GET") {
-            httpServer.writeHeaders(output, 200, "OK", headers)
-            return true
-        }
         // Captured, then compared: the server being up is not enough on its own, because start()
         // stops and rebinds for a genuinely new session and would read as running again. A loop
         // left over from the previous session has to stop, and its token is what says it is left
@@ -520,11 +516,35 @@ class ProxyServer(
             referrer = resource.referrer,
             isRunning = { httpServer.isRunning && sessionToken == servingSession },
         )
+        if (method != "GET") return announceFlattened(stream, output, headers)
         val wrote = stream.writeTo(output) { httpServer.writeHeaders(output, 200, "OK", headers) }
         if (wrote) {
             AppLog.d(TAG) { "Flattened HLS stream ended for $resourceId after ${stream.bytesWritten}B" }
         }
         return wrote
+    }
+
+    /**
+     * Answers a HEAD, which asks what a resource is rather than for it.
+     *
+     * This used to answer "video/mp2t" for every channel without checking. Falling back to the
+     * manifest is routine on this path - encrypted segments, an fMP4 init, a variant that cannot be
+     * read - so a renderer that HEADs first was told MPEG-TS and then handed an M3U8 on the GET,
+     * which is the exact mismatch [serveUpstreamPlaylist]'s own KDoc records going into the field:
+     * "the receiver going permanently silent after its very first playlist fetch".
+     *
+     * False here falls through to the manifest exactly as it does for a GET, so the two answers
+     * agree. The cost is one upstream fetch on a request whose whole purpose is to ask this
+     * question.
+     */
+    private fun announceFlattened(
+        stream: HlsFlattenedStream,
+        output: OutputStream,
+        headers: Map<String, String>,
+    ): Boolean {
+        if (!stream.canFlatten()) return false
+        httpServer.writeHeaders(output, 200, "OK", headers)
+        return true
     }
 
     private fun serveUnwrappedStream(

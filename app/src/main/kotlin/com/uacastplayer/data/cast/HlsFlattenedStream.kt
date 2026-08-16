@@ -62,6 +62,20 @@ internal class HlsFlattenedStream(
         private set
 
     /**
+     * Whether this channel can be replayed as a stream at all, without replaying any of it.
+     *
+     * For a HEAD, which asks what a resource is rather than for it. Answering "MPEG-TS" and then
+     * serving a manifest on the GET is a mismatch a DLNA renderer does not recover from, so the
+     * question has to be actually asked - one playlist fetch, two if it is a master.
+     *
+     * It is not a promise. A channel can pass this and still serve nothing, because whether the
+     * segments themselves are reachable is only discovered by reaching for them (see [writeTo]).
+     * What it rules out is the deterministic half: encrypted segments, an fMP4 init, an empty or
+     * unreadable playlist, a master whose first variant is any of those.
+     */
+    fun canFlatten(): Boolean = resolveMediaPlaylist() != null
+
+    /**
      * Runs until the client disconnects, the origin stops publishing, or the playlist turns out to
      * be one that cannot be replayed this way.
      *
