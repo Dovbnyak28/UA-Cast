@@ -2,10 +2,65 @@
 
 Versions are marked in two places, which must move together: the local defaults in
 `app/build.gradle.kts` and `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`. CI appends
-its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.0.<run>` with a
+its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.1.<run>` with a
 `versionCode` of the run number - the values below are what a local build produces.
 
-## 0.9.0 - unreleased
+## 0.9.1
+
+`versionCode` 10. **The first version to actually reach anyone.** 0.9.0 below was never published -
+its section stays as written, because everything in it ships here for the first time and a reader
+holding this APK needs both. What follows is only what changed after it.
+
+### Fixed
+
+- **A DLNA channel that connected, stayed connected, and played nothing.** The HLS-to-TS route
+  resolved every relative segment URI against the URL it *asked for* rather than the one the
+  playlist *came from*. An IPTV `.m3u8` answering 302 to a tokenised CDN path is the norm and a
+  master playlist's variants redirect almost always, so segments were fetched from the wrong
+  directory and the origin refused all of them - which this route deliberately treats as a glitch
+  to skip rather than the end of a channel. No error appeared anywhere.
+
+- **The same route committed its response before it had a single byte.** Headers went out before
+  the first segment was even requested, so a channel whose segments all failed produced a valid
+  200 with an endless empty body, and the manifest fallback that exists for exactly that case was
+  already unreachable.
+
+- **A HEAD on that route answered with nothing at all.** The proxy wraps its socket in a buffered
+  stream and closes the *socket*, so a response that never flushed was never sent. A renderer
+  asking what the resource is got a connection that opened and shut empty. `writeHeaders` now
+  flushes itself, which also gets the status line onto the wire without waiting for a segment.
+
+- **And when it did answer, it answered wrongly.** The HEAD announced `video/mp2t` for every
+  channel without checking whether flattening was possible - it routinely is not - so a renderer
+  committed to MPEG-TS and was then handed an M3U8 on the GET.
+
+- **The diagnostics share sheet could not read the file it was previewing.** The attachment
+  travelled as `EXTRA_STREAM` with a read grant, which reaches the app the user picks but not the
+  chooser itself - a separate process that reads the file first, to draw its name. The share sheet
+  showed no file name on the one screen whose job is to say what is about to leave the phone.
+
+- **The cache screen under-reported by three orders of magnitude.** A guide download the process
+  died part-way through is the largest thing this app leaves on disk, and it was invisible to the
+  only screen that offers to remove anything: a device carrying 747MB of stranded downloads was
+  told its guide cache was 9.5 MB, and Clear removed none of them.
+
+- **The update banner promised a download it had no way to perform.** Its message was
+  unconditional while its button was not: with no APK attached to a release it can only open the
+  release page, and saying "ready to download" over that is what sent people to GitHub's source
+  archives in the first place.
+
+### Changed
+
+- Instrumented coverage went from 9 tests to 49, on a real phone: the proxy over a socket, both
+  stream-rewriting routes, the DLNA control stack against a fake UPnP renderer, the update chain
+  including the signature gate - which cannot be tested off a device at all - and the player's
+  video-fit setting.
+
+- Diagnostics reports now name the video fit mode. A report arrived saying fullscreen video was
+  "stretched too much" and could not answer which of the three modes was in force, which is the one
+  question that would have settled it.
+
+## 0.9.0 - superseded by 0.9.1 without ever being published
 
 `versionCode` 9. Renumbered from 0.3.0 while still unreleased, and the jump past 0.4-0.8 is
 deliberate rather than an accident of counting: what this section describes is not a third
