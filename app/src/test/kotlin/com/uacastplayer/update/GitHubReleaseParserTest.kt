@@ -3,6 +3,7 @@ package com.uacastplayer.update
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GitHubReleaseParserTest {
@@ -170,7 +171,41 @@ class GitHubReleaseParserTest {
         assertNull("this release has no assets, so there is nothing to install", parsed.apk)
     }
 
+    /**
+     * The same repository once the APKs were attached, saved verbatim the moment it went live.
+     *
+     * Together with the case above this is the whole of what the update flow decides, taken from
+     * the server rather than from anyone's idea of what the server sends: with no assets there is
+     * nothing to install and the banner can only offer the release page; with them, the universal
+     * APK is chosen over three per-ABI builds and carries a digest to verify against.
+     *
+     * The digest arrives as `sha256:<hex>` - GitHub's own prefixed form, which is not what
+     * [com.uacastplayer.data.update.UpdateDownloader] compares against and is exactly the kind of
+     * detail a hand-written fixture gets wrong by writing bare hex.
+     */
+    @Test
+    fun theResponseWithApksAttachedPicksTheUniversalBuild() {
+        val json = checkNotNull(javaClass.classLoader?.getResourceAsStream(REAL_RESPONSE_WITH_APKS)) {
+            "missing test resource $REAL_RESPONSE_WITH_APKS"
+        }.use { it.readBytes().decodeToString() }
+
+        val parsed = GitHubReleaseParser.parse(json, supportedAbis = listOf("arm64-v8a"))
+
+        assertNotNull("the live response did not parse", parsed)
+        assertEquals("v0.9.1", parsed!!.tagName)
+        val apk = checkNotNull(parsed.apk) { "no APK was picked from four attached assets" }
+        assertTrue(
+            "the universal APK must win over the per-ABI builds, got ${apk.downloadUrl}",
+            apk.downloadUrl.endsWith("app-universal-release.apk"),
+        )
+        assertEquals(UNIVERSAL_BYTES, apk.sizeBytes)
+        assertEquals("the sha256: prefix was not stripped", UNIVERSAL_SHA256, apk.sha256)
+    }
+
     private companion object {
         const val REAL_RESPONSE = "github-latest-release-no-assets.json"
+        const val REAL_RESPONSE_WITH_APKS = "github-latest-release-with-apks.json"
+        const val UNIVERSAL_BYTES = 23_773_806L
+        const val UNIVERSAL_SHA256 = "b66cb0f9c7de0e7468d86a57c0c9fca20134d72c1271cff93ba24d6fbd3e70c8"
     }
 }
