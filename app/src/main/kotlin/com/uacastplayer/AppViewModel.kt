@@ -725,13 +725,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // setIconDisplayMode/setListDensity, which write the preference and so make
             // hasChosen... true forever - so a backup taken on a flagship pinned full icon
             // rendering on a low-end phone the tier logic exists to keep light, and a backup taken
-            // on a low-end phone pinned placeholders on a flagship. bufferSize is not tier-derived
-            // and stays unconditional.
+            // on a low-end phone pinned placeholders on a flagship.
+            //
+            // bufferSize joined them: it used to be the same for every device and so was exported
+            // unconditionally, and it is now computed from this app's own heap limit (see
+            // HeapBudget). Left unconditional it would do the identical damage in the identical
+            // way - a backup from a phone with room pinning a 16MB media buffer on the 128MB device
+            // whose crash is the reason that default exists.
             iconDisplayMode = settingsState.value.iconDisplayMode.name
                 .takeIf { preferences.hasChosenIconDisplayMode },
             listDensity = settingsState.value.listDensity.name
                 .takeIf { preferences.hasChosenListDensity },
-            bufferSize = settingsState.value.bufferSize.name,
+            bufferSize = settingsState.value.bufferSize.name
+                .takeIf { preferences.hasChosenBufferSize },
             epgSourceId = exportEpgSourceId,
             epgCustomUrl = if (preferences.hasChosenEpgSource) preferences.customEpgUrl else null,
         )

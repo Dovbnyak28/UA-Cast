@@ -110,6 +110,13 @@ class AppPreferences(
         get() = BufferSize.fromId(prefs.getString(KEY_BUFFER_SIZE, null))
         set(value) = prefs.edit { putString(KEY_BUFFER_SIZE, value.name) }
 
+    /** Once true, the user's explicit choice above wins forever over the heap-computed default -
+     * the same contract [hasChosenIconDisplayMode] and [hasChosenListDensity] have, and for the
+     * same reason: see [com.uacastplayer.performance.HeapBudget.defaultBufferSize], which now
+     * computes one per device rather than every device getting MEDIUM. */
+    val hasChosenBufferSize: Boolean
+        get() = prefs.contains(KEY_BUFFER_SIZE)
+
     /** Global video fit/fill/zoom preset - see [PlayerResizeMode]. */
     var playerResizeMode: PlayerResizeMode
         get() = PlayerResizeMode.fromId(prefs.getString(KEY_PLAYER_RESIZE_MODE, null))

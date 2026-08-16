@@ -4,6 +4,7 @@ import com.uacastplayer.data.prefs.BufferSize
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.log.LogEntry
 import com.uacastplayer.performance.DeviceTier
+import com.uacastplayer.performance.HeapBudget
 import com.uacastplayer.ui.theme.AppTheme
 
 /** Everything the diagnostics report needs, gathered by the caller (see
@@ -104,6 +105,16 @@ object DiagnosticsReportBuilder {
             "Memory: ${snapshot.usedMemoryBytes.toMb()}MB used / " +
                 "${snapshot.totalMemoryBytes.toMb()}MB total / ${snapshot.maxMemoryBytes.toMb()}MB max",
         )
+        // The heap limit alone does not say what was done about it. A report carrying "128MB max"
+        // and an OutOfMemoryError left the next question - was anything scaled down for this
+        // device? - answerable only by reading the source and guessing the device's limit. These
+        // are the two numbers HeapBudget actually derived, so a report says it outright.
+        if (HeapBudget.isTight(snapshot.maxMemoryBytes)) {
+            appendLine(
+                "Tight heap: guide capped at ${HeapBudget.maxProgrammes(snapshot.maxMemoryBytes)} programmes, " +
+                    "media buffer defaults to ${HeapBudget.defaultBufferSize(snapshot.maxMemoryBytes)}",
+            )
+        }
         snapshot.lastCrash?.let { crash ->
             appendLine()
             appendLine("--- Last recorded crash ---")

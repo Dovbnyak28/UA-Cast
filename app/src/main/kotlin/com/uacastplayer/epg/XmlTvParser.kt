@@ -66,11 +66,19 @@ object XmlTvParser {
      *   days and this app can display one; the rest was spending [MAX_PROGRAMMES] on television no
      *   screen here can reach - see [EpgRetentionPolicy.keepUntil]. Defaults to no far end, for the
      *   same clockless caller.
+     * @param maxProgrammes the ceiling to enforce, which the caller should take from
+     *   [com.uacastplayer.performance.HeapBudget.maxProgrammes] with this app's own heap limit.
+     *   [MAX_PROGRAMMES] was a constant for every device, and a device is not free to hold what
+     *   another device can: a field crash came from a phone whose heap growth limit is 128MB, where
+     *   this cap describes a guide roughly half the size of the entire heap. The default keeps the
+     *   old ceiling for callers with no reason to care - the tests, and anything parsing a feed it
+     *   is not about to hold.
      */
     fun parse(
         input: InputStream,
         keepFromMillis: Long = 0L,
         keepUntilMillis: Long = Long.MAX_VALUE,
+        maxProgrammes: Int = MAX_PROGRAMMES,
     ): XmlTvParseResult {
         val factory = SAXParserFactory.newInstance()
         trySetFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true)
@@ -80,7 +88,7 @@ object XmlTvParser {
         trySetFeature(reader, "http://xml.org/sax/features/external-parameter-entities", false)
         reader.entityResolver = EntityResolver { _, _ -> InputSource(StringReader("")) }
 
-        val handler = XmlTvHandler(keepFromMillis, keepUntilMillis)
+        val handler = XmlTvHandler(keepFromMillis, keepUntilMillis, maxProgrammes)
         reader.contentHandler = handler
         reader.parse(InputSource(input))
         return handler.result()
@@ -106,6 +114,7 @@ object XmlTvParser {
 private class XmlTvHandler(
     private val keepFromMillis: Long,
     private val keepUntilMillis: Long,
+    private val maxProgrammes: Int,
 ) : DefaultHandler() {
 
     private val channels = mutableListOf<EpgChannel>()
@@ -222,7 +231,7 @@ private class XmlTvHandler(
                 // screen - and telling them their guide is incomplete on that basis would be a
                 // warning they can neither act on nor turn off.
                 if (channelId != null && start != null && !skippingProgramme) {
-                    if (programmes.size < XmlTvParser.MAX_PROGRAMMES) {
+                    if (programmes.size < maxProgrammes) {
                         programmes += EpgProgramme(
                             channelId = channelId,
                             startMillis = start,

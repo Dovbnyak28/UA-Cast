@@ -12,6 +12,7 @@ import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgTruncation
 import com.uacastplayer.epg.XmlTvParseResult
 import com.uacastplayer.epg.XmlTvParser
+import com.uacastplayer.performance.HeapBudget
 import com.uacastplayer.log.AppLog
 import java.io.InputStream
 import java.io.PushbackInputStream
@@ -151,7 +152,18 @@ class EpgRepository(context: Context) {
         val zone = ZoneId.systemDefault()
         val keepFrom = EpgRetentionPolicy.keepFrom(now, zone)
         val keepUntil = EpgRetentionPolicy.keepUntil(now, zone)
-        return stream.use { XmlTvParser.parse(it, keepFrom, keepUntil) }
+        // Capped against this app's own heap limit rather than a constant. A guide is the largest
+        // thing this app holds that it can decide the size of, and the parse peak is about twice
+        // its resting size - see HeapBudget, which is written from the measurements and from the
+        // 128MB device that ran out of memory inside the video decoder.
+        return stream.use {
+            XmlTvParser.parse(
+                input = it,
+                keepFromMillis = keepFrom,
+                keepUntilMillis = keepUntil,
+                maxProgrammes = HeapBudget.maxProgrammes(Runtime.getRuntime().maxMemory()),
+            )
+        }
     }
 
     private fun buildEpgData(parsed: XmlTvParseResult): EpgData {

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.backup.BackupCodec
 import com.uacastplayer.backup.BackupSettings
+import com.uacastplayer.data.prefs.BufferSize
 import com.uacastplayer.data.prefs.IconDisplayMode
 import com.uacastplayer.data.prefs.ListDensity
 import java.io.ByteArrayOutputStream
@@ -73,8 +74,13 @@ class BackupExportedSettingsTest {
 
         assertNull("an unchosen icon display mode is this device's default, not a decision", settings.iconDisplayMode)
         assertNull("an unchosen list density is this device's default, not a decision", settings.listDensity)
-        assertNotNull(
-            "buffer size is not tier-derived and must still be carried",
+        // This one used to be asserted non-null, on the stated grounds that buffer size "is not
+        // tier-derived". It is derived now - from this app's own heap limit rather than from the
+        // tier (see HeapBudget), after a 128MB device died of an OutOfMemoryError inside the video
+        // decoder. So it belongs with the other two: exported unconditionally it would pin a 16MB
+        // media buffer, chosen by a phone with room, onto the phone the smaller default exists for.
+        assertNull(
+            "an unchosen buffer size is this device's heap default, not a decision",
             settings.bufferSize,
         )
     }
@@ -93,6 +99,18 @@ class BackupExportedSettingsTest {
 
         assertEquals(IconDisplayMode.PLACEHOLDERS.name, settings.iconDisplayMode)
         assertEquals(ListDensity.FULL.name, settings.listDensity)
+    }
+
+    /** The same control for the setting that just joined them - a buffer size the user picked is
+     * still a decision, and still travels. */
+    @Test
+    fun `a backup does export a buffer size the user picked`() {
+        val viewModel = AppViewModel(application)
+        viewModel.setBufferSize(BufferSize.LARGE)
+
+        val settings = exportedSettings(viewModel)
+
+        assertEquals(BufferSize.LARGE.name, settings.bufferSize)
     }
 
     private companion object {
