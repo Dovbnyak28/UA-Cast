@@ -2,6 +2,7 @@ package com.uacastplayer.diagnostics
 
 import com.uacastplayer.data.prefs.BufferSize
 import com.uacastplayer.data.prefs.IconDisplayMode
+import com.uacastplayer.data.prefs.PlayerResizeMode
 import com.uacastplayer.log.LogEntry
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.performance.HeapBudget
@@ -67,6 +68,21 @@ data class DiagnosticsSnapshot(
     /** Whether something was being cast when the report was made - the local player behaves
      * deliberately differently then, and a reader who does not know that misreads the whole log. */
     val casting: Boolean = false,
+
+    /**
+     * How the video is being fitted to the screen.
+     *
+     * Added because a real report could not answer a real question. A user wrote in that fullscreen
+     * video was "stretched too much" and sent a diagnostics report with it; the report said the
+     * device, the buffer, the network and the codec, and nothing at all about the one setting that
+     * decides whether a picture is letterboxed, stretched or cropped. FILL stretches to the screen
+     * and does not preserve the aspect ratio - which is exactly what "stretched" describes, and is
+     * one accidental tap on the resize button away at any time.
+     *
+     * The default is FIT, so a report that says FIT moves the question somewhere else entirely -
+     * to the stream's own declared aspect ratio - instead of leaving it unanswerable.
+     */
+    val playerResizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
 )
 
 /** Formats a [DiagnosticsSnapshot] into the plain-text report shared from HelpScreen's "Send
@@ -95,6 +111,7 @@ object DiagnosticsReportBuilder {
         appendLine("Device tier: ${snapshot.deviceTier}")
         appendLine("Buffer size: ${snapshot.bufferSize}")
         appendLine("Icon display mode: ${snapshot.iconDisplayMode}")
+        appendLine("Video fit: ${snapshot.playerResizeMode}")
         appendLine("App theme: ${snapshot.appTheme} | Language: ${snapshot.language}")
         appendLine("Network: ${snapshot.network}")
         appendLine("Free storage: ${snapshot.freeStorageBytes.toMb()}MB")

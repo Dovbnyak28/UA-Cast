@@ -530,6 +530,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 deviceTier = settingsState.value.deviceTier,
                 bufferSize = settingsState.value.bufferSize,
                 iconDisplayMode = settingsState.value.iconDisplayMode,
+                // Read from preferences rather than from PlayerViewModel's ui state, and it has to
+                // be: this report is most often made from Settings or Help, with no player open at
+                // all, and the setting is global and persisted precisely so it outlives one.
+                playerResizeMode = preferences.playerResizeMode,
                 appTheme = uiState.value.appTheme,
                 usedMemoryBytes = runtime.totalMemory() - runtime.freeMemory(),
                 totalMemoryBytes = runtime.totalMemory(),
