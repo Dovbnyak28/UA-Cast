@@ -100,6 +100,16 @@ class ProxyServer(
      */
     @Volatile private var unwrapWrapperPlaylists = true
 
+    /**
+     * Whether an HLS channel should be replayed to the client as one continuous MPEG-TS response
+     * instead of being served as a manifest - see [HlsFlattenedStream].
+     *
+     * Off for Chromecast, which reads HLS natively and would only lose adaptive switching by it.
+     * On for DLNA, where a manifest is the one thing most renderers cannot read at all, and where
+     * the alternative is what a Hisense VIDAA answered with "Archivo no compatible".
+     */
+    @Volatile private var flattenHlsToStream = false
+
     // Deliberately never reset - not by start(), not by stop(). The only consumer
     // (CastSessionRepository's stall watchdog) reads DELTAS between two ticks, and a reset mid-load
     // would make a delta negative, i.e. read as "no progress" and fire the very watchdog this
@@ -122,15 +132,17 @@ class ProxyServer(
         host: String,
         remuxEnabled: Boolean = true,
         unwrapWrapperPlaylists: Boolean = true,
+        flattenHlsToStream: Boolean = false,
     ): Int {
         val currentPort = httpServer.port
         val sameSession = this.sessionToken == sessionToken && this.host == host
         if (httpServer.isRunning && currentPort != null && sameSession) {
             this.remuxEnabled = remuxEnabled
             this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
+            this.flattenHlsToStream = flattenHlsToStream
             return currentPort
         }
-        return start(sessionToken, host, remuxEnabled, unwrapWrapperPlaylists)
+        return start(sessionToken, host, remuxEnabled, unwrapWrapperPlaylists, flattenHlsToStream)
     }
 
     /** Always tears down and rebinds a fresh socket/port, discarding every resource and remux
@@ -141,12 +153,14 @@ class ProxyServer(
         host: String,
         remuxEnabled: Boolean = true,
         unwrapWrapperPlaylists: Boolean = true,
+        flattenHlsToStream: Boolean = false,
     ): Int {
         stop()
         this.sessionToken = sessionToken
         this.host = host
         this.remuxEnabled = remuxEnabled
         this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
+        this.flattenHlsToStream = flattenHlsToStream
         return httpServer.start()
     }
 
@@ -456,11 +470,50 @@ class ProxyServer(
         val text = response.use { readPlaylistText(it, output) } ?: return
         val unwrapTarget =
             if (unwrapWrapperPlaylists) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
-        if (unwrapTarget == null) {
-            serveRewrittenPlaylist(text, finalUrl, method, output, resource)
-        } else {
-            serveUnwrappedStream(resourceId, resource, unwrapTarget, method, output)
+        when {
+            unwrapTarget != null -> serveUnwrappedStream(resourceId, resource, unwrapTarget, method, output)
+            // Tried before the rewrite, and falls through to it on any refusal - a receiver that
+            // can read a manifest is no worse off than before, and one that cannot was getting
+            // nothing playable at all. See HlsFlattenedStream.
+            flattenHlsToStream && serveFlattenedHls(resourceId, resource, finalUrl, method, output) -> Unit
+            // Tried before the rewrite, and falls through to it on any refusal - a receiver that
+            // can read a manifest is no worse off than before, and one that cannot was getting
+            // nothing playable at all. See HlsFlattenedStream.
+            else -> serveRewrittenPlaylist(text, finalUrl, method, output, resource)
         }
+    }
+
+    /**
+     * Replays an HLS channel as one continuous MPEG-TS response for a receiver that cannot read a
+     * manifest.
+     *
+     * Returns false when nothing was written, which is the whole reason the headers are deferred
+     * into a callback: until the first segment's bytes exist there is still a working fallback,
+     * and a response that has already claimed `video/mp2t` cannot take it. Encrypted segments,
+     * fragmented MP4 and an unreachable playlist all land here.
+     *
+     * A HEAD is answered with the headers alone. A DLNA renderer commonly HEADs a url before
+     * committing to it, and replaying a live channel to answer that would fetch media nobody is
+     * going to watch.
+     */
+    private fun serveFlattenedHls(
+        resourceId: String,
+        resource: ResourceEntry,
+        playlistUrl: String,
+        method: String,
+        output: OutputStream,
+    ): Boolean {
+        val headers = mapOf("Content-Type" to "video/mp2t")
+        if (method != "GET") {
+            httpServer.writeHeaders(output, 200, "OK", headers)
+            return true
+        }
+        val stream = HlsFlattenedStream(httpClient, playlistUrl, resource.userAgent, resource.referrer)
+        val wrote = stream.writeTo(output) { httpServer.writeHeaders(output, 200, "OK", headers) }
+        if (wrote) {
+            AppLog.d(TAG) { "Flattened HLS stream ended for $resourceId after ${stream.bytesWritten}B" }
+        }
+        return wrote
     }
 
     private fun serveUnwrappedStream(

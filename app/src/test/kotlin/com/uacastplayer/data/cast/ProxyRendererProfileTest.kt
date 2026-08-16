@@ -134,13 +134,19 @@ class ProxyRendererProfileTest {
     }
 
     /** Returns the response body and its Content-Type. */
-    private fun fetch(originUrl: String, unwrap: Boolean, remux: Boolean): Pair<String, String?> {
+    private fun fetch(
+        originUrl: String,
+        unwrap: Boolean,
+        remux: Boolean,
+        flatten: Boolean = false,
+    ): Pair<String, String?> {
         val server = ProxyServer(OkHttpClient()).also { proxy = it }
         server.start(
             sessionToken = "session",
             host = "127.0.0.1",
             remuxEnabled = remux,
             unwrapWrapperPlaylists = unwrap,
+            flattenHlsToStream = flatten,
         )
         val resourceId = server.registerPlaylist(originUrl)
         val request = Request.Builder().url(server.buildLocalUrl(resourceId)).build()
@@ -195,7 +201,113 @@ class ProxyRendererProfileTest {
         )
     }
 
+    // ---- replaying an HLS channel as a continuous stream (the DLNA profile) ----
+
+    /**
+     * A real live media playlist and the segments it lists.
+     *
+     * Ends with `#EXT-X-ENDLIST` so the replay finishes and can be asserted on - a genuinely live
+     * playlist never would, which is the point of it but not something a test can wait for.
+     */
+    private fun hlsOrigin(segments: List<String> = listOf("/a.ts", "/b.ts")): Origin {
+        val routes = segments.associateWith { "video/mp2t" to tsBytes(SEGMENT_PACKETS) }.toMutableMap()
+        val origin = Origin(routes).also { this.origin = it }
+        val body = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-VERSION:3")
+            appendLine("#EXT-X-TARGETDURATION:4")
+            appendLine("#EXT-X-MEDIA-SEQUENCE:7")
+            segments.forEach {
+                appendLine("#EXTINF:4.0,")
+                appendLine(origin.urlFor(it))
+            }
+            appendLine("#EXT-X-ENDLIST")
+        }
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", body.toByteArray())
+        return origin
+    }
+
+    /**
+     * The channel the field report was actually about: one whose *origin* is HLS, where no flag can
+     * help because the manifest is what the origin hands out. The renderer has to receive the
+     * segments' bytes, in order, as one MPEG-TS response.
+     */
+    @Test
+    fun `an hls channel is replayed to the renderer as one continuous stream`() {
+        val origin = hlsOrigin()
+
+        val (body, contentType) = fetch(origin.urlFor("/live.m3u8"), unwrap = true, remux = false, flatten = true)
+
+        assertEquals("video/mp2t", contentType)
+        assertFalse("the renderer must not see a manifest", body.contains("#EXTM3U"))
+        assertEquals("both segments must be fetched", 1, origin.hitsFor("/a.ts"))
+        assertEquals(1, origin.hitsFor("/b.ts"))
+        assertEquals(
+            "and both must arrive, concatenated",
+            tsBytes(SEGMENT_PACKETS).size * 2,
+            body.toByteArray(Charsets.ISO_8859_1).size,
+        )
+    }
+
+    /**
+     * The control. Chromecast reads HLS natively, so with the profile off the same channel comes
+     * back as the manifest it always did, and the phone fetches no media at all.
+     */
+    @Test
+    fun `the same channel is still served as a manifest when flattening is off`() {
+        val origin = hlsOrigin()
+
+        val (body, _) = fetch(origin.urlFor("/live.m3u8"), unwrap = true, remux = false, flatten = false)
+
+        assertTrue("expected a rewritten manifest, got:\n${body.take(200)}", body.contains("#EXTM3U"))
+        assertEquals("the phone must not fetch media for a receiver that fetches its own", 0, origin.hitsFor("/a.ts"))
+    }
+
+    /**
+     * Falling back rather than failing. Encrypted segments cannot be concatenated into anything
+     * meaningful - the bytes would be noise - so the manifest is served instead, which leaves a
+     * receiver that can read one exactly as well off as before.
+     */
+    @Test
+    fun `an encrypted channel falls back to the manifest instead of serving noise`() {
+        val origin = Origin(mutableMapOf()).also { this.origin = it }
+        val playlist = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-TARGETDURATION:4")
+            appendLine("#EXT-X-KEY:METHOD=AES-128,URI=\"k.key\"")
+            appendLine("#EXTINF:4,")
+            appendLine("/a.ts")
+            appendLine("#EXT-X-ENDLIST")
+        }
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", playlist.toByteArray())
+
+        val (body, _) = fetch(origin.urlFor("/live.m3u8"), unwrap = true, remux = false, flatten = true)
+
+        assertTrue("expected the manifest as a fallback, got:\n${body.take(200)}", body.contains("#EXTM3U"))
+    }
+
+    /**
+     * A master playlist is followed one level to its first variant. A renderer being fed a fixed
+     * stream cannot adapt anyway, and the first entry is conventionally the most compatible one.
+     */
+    @Test
+    fun `a master playlist is followed to its first variant`() {
+        val origin = hlsOrigin(listOf("/a.ts"))
+        val master = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-STREAM-INF:BANDWIDTH=800000")
+            appendLine(origin.urlFor("/live.m3u8"))
+        }
+        origin.addRoute("/master.m3u8", "application/vnd.apple.mpegurl", master.toByteArray())
+
+        val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
+
+        assertEquals("video/mp2t", contentType)
+        assertEquals(1, origin.hitsFor("/a.ts"))
+    }
+
     private companion object {
         const val TS_PACKET_SIZE = 188
+        const val SEGMENT_PACKETS = 10
     }
 }

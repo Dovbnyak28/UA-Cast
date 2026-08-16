@@ -344,8 +344,19 @@ class DlnaSessionRepository private constructor(context: Context) {
         //
         // So remuxing for DLNA took a stream the renderer would have played and turned it into one
         // it refuses. Left on, it also cost a decode/re-segment pass on the phone for no benefit.
-        // This does not help a channel whose *origin* is already HLS - see docs/DLNA.md.
-        proxyServer.ensureStarted(sessionToken = token, host = host, remuxEnabled = false)
+        //
+        // flattenHlsToStream is the other half, and it is what covers the channel actually
+        // reported: one whose *origin* is HLS, where no flag can help because the manifest is what
+        // the origin hands out. There the proxy does the HLS client's own job on the phone and
+        // replays the channel as one continuous MPEG-TS response - see HlsFlattenedStream. It falls
+        // back to serving the manifest whenever it cannot (encrypted segments, fragmented MP4), so
+        // a renderer that *can* read one is never worse off.
+        proxyServer.ensureStarted(
+            sessionToken = token,
+            host = host,
+            remuxEnabled = false,
+            flattenHlsToStream = true,
+        )
         sessionHost = host
         val localUrl = proxyServer.buildLocalUrl(proxyServer.registerPlaylist(streamUrl))
 
