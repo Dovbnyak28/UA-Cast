@@ -92,7 +92,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // CastSessionRepository and is unreachable from this player's focus/noisy callbacks.
     private val exoPlayer: ExoPlayer = ExoPlayer.Builder(application, PlayerRenderersFactoryProvider.create(application))
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory))
-        .setLoadControl(buildLoadControl(preferences.bufferSize))
+        .setLoadControl(buildLoadControl(preferences.effectiveBufferSize))
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -670,7 +670,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             playWhenReady = exoPlayer.playWhenReady,
             isLive = exoPlayer.isCurrentMediaItemLive,
         )
-        val threshold = StallDetectionPolicy.thresholdMillisFor(preferences.bufferSize)
+        val threshold = StallDetectionPolicy.thresholdMillisFor(preferences.effectiveBufferSize)
         val result = StallDetectionPolicy.evaluate(tick, stallState, threshold)
         stallState = result.state
         if (result.health != StallDetectionPolicy.Health.STALLED) {

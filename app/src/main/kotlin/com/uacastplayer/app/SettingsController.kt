@@ -37,7 +37,7 @@ class SettingsController(
             showIconTierBanner = iconTierBannerVisible(resolvedIconDisplayMode(baseDeviceTier)),
             listDensity = resolvedListDensity(baseDeviceTier),
             channelLayout = preferences.channelLayout,
-            bufferSize = resolvedBufferSize(),
+            bufferSize = preferences.effectiveBufferSize,
             favoritesSortOrder = preferences.favoritesSortOrder,
             customIconSources = iconController.customIconSources(),
             wrapAroundEnabled = preferences.wrapAroundEnabled,
@@ -86,24 +86,6 @@ class SettingsController(
 
     private fun resolvedListDensity(tier: DeviceTier): ListDensity =
         if (preferences.hasChosenListDensity) preferences.listDensity else DeviceTierDefaults.listDensity(tier)
-
-    /**
-     * The media buffer, defaulted from the heap this app was actually given rather than fixed at
-     * MEDIUM for every device.
-     *
-     * Not a function of the device *tier*, unlike the two above, and that is the point: the tier is
-     * scored from RAM, cores and API level, all of which the phone this came from scores well on
-     * while being handed a 128MB heap. See [com.uacastplayer.performance.HeapBudget].
-     *
-     * Read once at construction rather than recomputed with the tier, because unlike the tier this
-     * cannot change while the app runs - a heap limit is fixed for the life of the process.
-     */
-    private fun resolvedBufferSize(): BufferSize =
-        if (preferences.hasChosenBufferSize) {
-            preferences.bufferSize
-        } else {
-            HeapBudget.defaultBufferSize(Runtime.getRuntime().maxMemory())
-        }
 
     fun recomputeDeviceTierDefaults(effectiveTier: DeviceTier) {
         val iconDisplayMode = resolvedIconDisplayMode(effectiveTier)

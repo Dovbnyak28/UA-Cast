@@ -8,6 +8,7 @@ import com.uacastplayer.core.i18n.LanguageResolver
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.guidedtour.GuidedTourStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
+import com.uacastplayer.performance.HeapBudget
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.core.security.LicenseIntegrity
 import com.uacastplayer.core.security.LicenseRecordCodec
@@ -33,6 +34,12 @@ class AppPreferences(
      * device-can-tag half of that decision. Every caller in the app takes the default.
      */
     private val canTagLicense: () -> Boolean = LicenseIntegrity::isAvailable,
+    /**
+     * The heap this app may grow into, for [effectiveBufferSize]. Injected for the same reason as
+     * [canTagLicense]: the unit-test harness runs with a 512MB heap, so a test could otherwise never
+     * reach the tight-heap branch at all. Every caller in the app takes the default.
+     */
+    private val maxHeapBytes: () -> Long = { Runtime.getRuntime().maxMemory() },
 ) : ParentalControlPinStorage,
     UpdateCheckStorage,
     LicenseStorage,
@@ -116,6 +123,24 @@ class AppPreferences(
      * computes one per device rather than every device getting MEDIUM. */
     val hasChosenBufferSize: Boolean
         get() = prefs.contains(KEY_BUFFER_SIZE)
+
+    /**
+     * The buffer size to actually *use* - the user's choice when they made one, and otherwise the
+     * one this device's heap can afford.
+     *
+     * **Read this, not [bufferSize], anywhere the value is going to be acted on.** The raw property
+     * above is the stored value and answers a different question: it is what the backup exports and
+     * what `hasChosenBufferSize` is about. It falls back to a flat `MEDIUM` for every device,
+     * because that is what "nothing stored" means in storage terms.
+     *
+     * The distinction is not academic - it was a live defect. When the heap-derived default was
+     * introduced it was resolved inside `SettingsController`, so the Settings screen showed the
+     * smaller buffer while `PlayerViewModel`, which reads its own value straight from preferences,
+     * went on allocating the larger one. The device the default exists for kept the 16MB that
+     * helped run it out of memory, and the screen said otherwise.
+     */
+    val effectiveBufferSize: BufferSize
+        get() = if (hasChosenBufferSize) bufferSize else HeapBudget.defaultBufferSize(maxHeapBytes())
 
     /** Global video fit/fill/zoom preset - see [PlayerResizeMode]. */
     var playerResizeMode: PlayerResizeMode
