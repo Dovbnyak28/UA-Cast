@@ -70,7 +70,14 @@ internal class HlsFlattenedStream(
      */
     fun writeTo(output: OutputStream, onHeadersNeeded: () -> Unit): Boolean {
         val opening = resolveMediaPlaylist() ?: return false
-        val url = opening.url
+        // Two URLs, not one, and they are only the same when nothing redirected. [requestUrl] is what
+        // gets re-fetched every refresh - the original, so a rotating token or a rebalanced edge is
+        // re-followed each time rather than pinned to whichever CDN answered first. [base] is what
+        // that fetch actually resolved to, and is the only correct thing to resolve a relative
+        // segment URI against. Every other playlist path in this app already works this way; see
+        // `finalUrl` in [ProxyServer.servePlaylist].
+        val requestUrl = opening.requestUrl
+        var base = opening.base
         var playlist: HlsMediaPlaylist? = opening.playlist
         var nextSequence = 0L
         var headersSent = false
@@ -78,17 +85,30 @@ internal class HlsFlattenedStream(
         while (playlist != null) {
             val current = playlist
             val absolute = HlsFlattenPolicy.segmentsToServe(current, nextSequence)
-                .mapNotNull { M3u8Rewriter.resolveUrl(url, it) }
+                .mapNotNull { M3u8Rewriter.resolveUrl(base, it) }
             // all(), not a loop with a break: it stops on the first false, which is exactly the
             // "client hung up, stop fetching" behaviour wanted, and says so in one line.
             val clientGone = !absolute.all { segmentUrl ->
-                if (!headersSent) {
-                    onHeadersNeeded()
-                    headersSent = true
+                streamSegment(segmentUrl, output) {
+                    if (!headersSent) {
+                        onHeadersNeeded()
+                        headersSent = true
+                    }
                 }
-                streamSegment(segmentUrl, output)
             }
             nextSequence = HlsFlattenPolicy.sequenceAfterServing(current, nextSequence)
+            // Nothing written on a whole pass over the playlist means this route cannot serve this
+            // channel, and the caller is still free to fall back to the manifest - but only for as
+            // long as no headers have gone out. Without this the loop would keep polling a playlist
+            // whose every segment is refused (see [streamSegment]: a refusal is a glitch to skip,
+            // not an end) and the renderer would hold an endless, empty, perfectly valid-looking
+            // response. A stream that plays nothing is worse than a manifest that might.
+            // `break` rather than a return, and they are the same thing here: `headersSent` is what
+            // this function returns, and it is false.
+            if (!headersSent) {
+                AppLog.w(TAG) { "Flattened stream served no bytes on its first pass; leaving it to the manifest" }
+                break
+            }
             playlist = when {
                 clientGone -> null
                 // A finished playlist will never grow, so there is nothing left to wait for. Rare
@@ -103,13 +123,27 @@ internal class HlsFlattenedStream(
                 !isRunning() -> null
                 !sleepInterruptibly(HlsFlattenPolicy.refreshDelayMillis(current)) -> null
                 !isRunning() -> null
-                else -> fetchPlaylist(url)
+                // The base moves with the refresh: a redirect can land on a different edge from one
+                // refresh to the next, and the segment URIs in the body that came back are relative
+                // to where that body came from.
+                else -> fetchPlaylist(requestUrl)?.also { base = it.base }?.playlist
             }
         }
         return headersSent
     }
 
-    private data class Resolved(val url: String, val playlist: HlsMediaPlaylist)
+    /**
+     * A fetched playlist and where it came from.
+     *
+     * [requestUrl] is what was asked for; [base] is where the response finally came from after any
+     * redirects, and the two differ constantly on IPTV origins - an Xtream-style `.m3u8` typically
+     * answers 302 to a tokenised CDN path, and a master playlist's variants almost always do. Every
+     * segment URI in the body is relative to [base]; resolving them against [requestUrl] instead
+     * builds URLs on the wrong host or the wrong directory, and the origin answers 404 to all of
+     * them. [streamSegment] treats a refused segment as a glitch worth skipping, so the failure is
+     * not an error at all - it is a stream that connects, stays connected, and plays nothing.
+     */
+    private data class Fetched(val requestUrl: String, val base: String, val playlist: HlsMediaPlaylist)
 
     /**
      * The media playlist to replay, following at most one level of master playlist.
@@ -119,10 +153,10 @@ internal class HlsFlattenedStream(
      * variant is taken rather than the highest bitrate - a renderer being fed a fixed stream cannot
      * adapt, and the first entry is conventionally the most compatible one.
      */
-    private fun resolveMediaPlaylist(): Resolved? {
+    private fun resolveMediaPlaylist(): Fetched? {
         val first = fetchPlaylist(playlistUrl) ?: return null
-        return when (val verdict = HlsFlattenPolicy.verdictFor(first)) {
-            HlsFlattenPolicy.Verdict.Ok -> Resolved(playlistUrl, first)
+        return when (val verdict = HlsFlattenPolicy.verdictFor(first.playlist)) {
+            HlsFlattenPolicy.Verdict.Ok -> first
             is HlsFlattenPolicy.Verdict.Unsupported -> {
                 AppLog.d(TAG) { "Not flattening this channel: ${verdict.reason}" }
                 null
@@ -131,23 +165,27 @@ internal class HlsFlattenedStream(
         }
     }
 
-    private fun resolveVariant(master: HlsMediaPlaylist): Resolved? {
-        val variantUrl = master.segmentUris.firstNotNullOfOrNull { M3u8Rewriter.resolveUrl(playlistUrl, it) }
+    private fun resolveVariant(master: Fetched): Fetched? {
+        // Against the master's own base, for the same reason the segments are: a master that
+        // redirected lists its variants relative to where it landed.
+        val variantUrl = master.playlist.segmentUris.firstNotNullOfOrNull { M3u8Rewriter.resolveUrl(master.base, it) }
         val variant = variantUrl?.let(::fetchPlaylist)
-        val verdict = variant?.let(HlsFlattenPolicy::verdictFor)
+        val verdict = variant?.let { HlsFlattenPolicy.verdictFor(it.playlist) }
         if (verdict != null && verdict != HlsFlattenPolicy.Verdict.Ok) {
             AppLog.d(TAG) { "Not flattening this channel's first variant: $verdict" }
         }
-        return if (verdict == HlsFlattenPolicy.Verdict.Ok) Resolved(variantUrl, variant) else null
+        return if (verdict == HlsFlattenPolicy.Verdict.Ok) variant else null
     }
 
-    private fun fetchPlaylist(url: String): HlsMediaPlaylist? = try {
+    private fun fetchPlaylist(url: String): Fetched? = try {
         newCall(url).execute().use { response ->
             if (!response.isSuccessful) {
                 AppLog.w(TAG) { "Flattened stream playlist refresh returned HTTP ${response.code}" }
                 null
             } else {
-                HlsMediaPlaylistParser.parse(response.body.string())
+                // response.request, not the url asked for: OkHttp follows redirects itself and this
+                // is the request that finally answered.
+                Fetched(url, response.request.url.toString(), HlsMediaPlaylistParser.parse(response.body.string()))
             }
         }
     } catch (e: IOException) {
@@ -155,9 +193,16 @@ internal class HlsFlattenedStream(
         null
     }
 
-    /** False once the client has gone or the origin has - either way there is nothing left to do,
-     * and the loop above stops rather than fetching a stream nobody is reading. */
-    private fun streamSegment(url: String, output: OutputStream): Boolean = try {
+    /**
+     * False once the client has gone or the origin has - either way there is nothing left to do,
+     * and the loop above stops rather than fetching a stream nobody is reading.
+     *
+     * [onBytesComing] fires once the origin has answered and the copy is about to start, never
+     * before. That ordering is the whole point of it: it is what commits the response to being a
+     * flattened stream, and committing on a segment that then turns out to 404 leaves the renderer
+     * holding an endless empty body with no way back to the manifest.
+     */
+    private fun streamSegment(url: String, output: OutputStream, onBytesComing: () -> Unit): Boolean = try {
         newCall(url).execute().use { response ->
             if (!response.isSuccessful) {
                 // One refused segment is not the end of a channel: an origin that limits concurrent
@@ -166,6 +211,7 @@ internal class HlsFlattenedStream(
                 AppLog.w(TAG) { "Flattened stream segment returned HTTP ${response.code}; skipping it" }
                 true
             } else {
+                onBytesComing()
                 copyToClient(response.body.byteStream(), output)
                 true
             }
