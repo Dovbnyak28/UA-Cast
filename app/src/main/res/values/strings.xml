@@ -400,6 +400,7 @@
 
     <string name="update_banner_title">A new version is available</string>
     <string name="update_banner_message">Version %1$s is ready to download.</string>
+    <string name="update_banner_message_page_only">Version %1$s was published without an APK - the release page will open.</string>
     <string name="update_banner_action">Open release</string>
     <string name="settings_section_updates">Updates</string>
     <string name="settings_update_hint">The app checks for a new version once a week when you open it. If a release has an APK attached, it can download and install it for you — the file is checked against the release and must be signed by the same developer as the copy you have, or it is refused. You can always open the release page in your browser instead.</string>

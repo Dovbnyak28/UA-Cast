@@ -90,13 +90,37 @@ class UpdateBannerTest {
     fun theVersionIsNamedSoTheUserKnowsWhatTheyAreBeingOffered() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                Banner(release = release)
+                Banner(release = release.copy(apk = apk))
             }
         }
 
         composeRule.onNodeWithTag(UiTestTags.UPDATE_BANNER).assertIsDisplayed()
         composeRule.onNodeWithText("Доступна нова версія").assertIsDisplayed()
         composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertIsDisplayed()
+    }
+
+    /**
+     * The message has to describe the button underneath it.
+     *
+     * This assertion used to be made against [release] - which has no APK - and so pinned the
+     * banner saying "Версію v1.4.0 можна завантажити" over a button that opens a web page. There is
+     * nothing to download in that state, and a release page whose most prominent downloads are
+     * GitHub's own source archives is precisely what a user asked us to stop sending them to.
+     *
+     * Seen on a device against the real repository: its one published release carries no assets at
+     * all, so this is the state the banner is actually in today, not a hypothetical one.
+     */
+    @Test
+    fun aReleaseWithNoApkDoesNotPromiseADownload() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Banner(release = release)
+            }
+        }
+
+        composeRule.onNodeWithText("Версію v1.4.0 опубліковано без APK — відкриється сторінка релізу.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertDoesNotExist()
     }
 
     /**
@@ -210,13 +234,16 @@ class UpdateBannerTest {
                 Banner(release = current.value)
             }
         }
-        composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertIsDisplayed()
+        // The page-only wording, because [release] carries no APK - which text it is does not matter
+        // to this test, only that the same one is still there mid-animation.
+        val message = "Версію v1.4.0 опубліковано без APK — відкриється сторінка релізу."
+        composeRule.onNodeWithText(message).assertIsDisplayed()
 
         composeRule.mainClock.autoAdvance = false
         current.value = null
         composeRule.mainClock.advanceTimeByFrame()
 
         // Mid-exit: still the old text, not an empty line.
-        composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertExists()
+        composeRule.onNodeWithText(message).assertExists()
     }
 }

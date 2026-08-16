@@ -124,7 +124,21 @@ fun UpdateBanner(
             }
 
             Text(
-                text = stringResource(R.string.update_banner_message, shown?.tagName.orEmpty()),
+                // Which of the two the banner is about, because the button below is not the same
+                // button in both cases and the message used to promise the wrong one. With no APK
+                // attached to the release there is nothing to download: the only thing this can
+                // offer is the release page in a browser - and "ready to download" over a button
+                // that opens a web page is the exact thing a user asked us to stop doing. Seen on
+                // a device against the real repository, whose one published release carries no
+                // assets at all.
+                text = stringResource(
+                    if (shown?.apk != null) {
+                        R.string.update_banner_message
+                    } else {
+                        R.string.update_banner_message_page_only
+                    },
+                    shown?.tagName.orEmpty(),
+                ),
                 color = UaTheme.palette.labelSecondary,
                 style = BodyRegular,
                 // Two lines, not one: the message carries a version number at its end, and at a

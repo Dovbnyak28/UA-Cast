@@ -400,6 +400,7 @@
 
     <string name="update_banner_title">Hay una nueva versión disponible</string>
     <string name="update_banner_message">La versión %1$s está lista para descargar.</string>
+    <string name="update_banner_message_page_only">La versión %1$s se publicó sin APK: se abrirá la página de la versión.</string>
     <string name="update_banner_action">Abrir la versión</string>
     <string name="settings_section_updates">Actualizaciones</string>
     <string name="settings_update_hint">La aplicación busca una nueva versión una vez por semana al abrirla. Si una versión lleva un APK adjunto, puede descargarlo e instalarlo por ti: el archivo se comprueba con la versión publicada y debe estar firmado por el mismo desarrollador que tu copia, o se rechaza. Siempre puedes abrir la página de la versión en tu navegador.</string>

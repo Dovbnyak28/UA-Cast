@@ -409,6 +409,7 @@
 
     <string name="update_banner_title">Доступна нова версія</string>
     <string name="update_banner_message">Версію %1$s можна завантажити.</string>
+    <string name="update_banner_message_page_only">Версію %1$s опубліковано без APK — відкриється сторінка релізу.</string>
     <string name="update_banner_action">Відкрити реліз</string>
     <string name="settings_section_updates">Оновлення</string>
     <string name="settings_update_hint">Застосунок перевіряє нову версію раз на тиждень, коли ви його відкриваєте. Якщо до релізу прикріплено APK, він може завантажити й встановити його — файл звіряється з релізом і має бути підписаний тим самим розробником, що й ваша копія, інакше буде відхилений. Ви завжди можете натомість відкрити сторінку релізу у браузері.</string>
