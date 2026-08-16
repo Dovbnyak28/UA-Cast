@@ -1,6 +1,7 @@
 package com.uacastplayer.ui.diagnostics
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -67,7 +68,7 @@ fun diagnosticsEmailIntent(report: String): Intent =
  * body stays the readable summary either way; the file is the summary plus the process's own log,
  * which is where the libraries that actually fail write their side of the story.
  */
-private fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Intent =
+internal fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Intent =
     Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_EMAIL, arrayOf(DiagnosticsEmail.RECIPIENT))
@@ -77,6 +78,30 @@ private fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Inte
         // The receiving app gets to read this one file and nothing else, for as long as it holds
         // the intent. Without this the attachment arrives as a URI it has no permission to open.
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // The same URI a second time, as clip data, which is not redundant: the flag above travels
+        // with `EXTRA_STREAM` to the app the user *picks*, but the chooser itself is a separate
+        // process - `android:uid=1000` - and it reads the attachment before anyone has picked
+        // anything, to draw the file's name and thumbnail in the preview. `EXTRA_STREAM` is an
+        // extra, invisible to that grant; `clipData` is the field the framework does propagate.
+        //
+        // A ZTE Blade A34 field log has both halves of this, twice:
+        //   SecurityException: Permission Denial: reading FileProvider uri
+        //     content://com.uacastplayer.debug.diagnostics/diagnostics/ua-cast-log-....txt
+        //     from pid=1720, uid=1000 ... requires the provider be exported, or grantUriPermission()
+        //   ChooserActivity: Could not load (...) thumbnail/name for preview. If desired, consider
+        //     using Intent#createChooser ... and set your Intent's clipData and flags in accordance
+        //     with that method's documentation
+        // The send still worked - Gmail opened with the file attached - so nothing here was ever
+        // going to be reported as broken. What the user saw was a share sheet that showed no file
+        // name, on the one screen whose whole job is to say what is about to leave their phone.
+        //
+        // `newRawUri`, not `newUri`: the latter asks the ContentResolver for the MIME type, which is
+        // a call into a provider that can throw - and this is the "something is broken, send me the
+        // log" button, the last place that may crash. The framework's own
+        // `Intent.migrateExtraStreamToClipData` uses the raw form here too, and the intent already
+        // states its type on the line above. The label is the file name, which is what the chooser
+        // shows if it cannot query the provider itself.
+        clipData = ClipData.newRawUri(attachment.lastPathSegment, attachment)
     }
 
 /**
