@@ -44,9 +44,18 @@ built at all (see `ndk.abiFilters`).
 For Play Store specifically, prefer `./gradlew :app:bundleRelease` - Play performs the same split
 server-side from a single `.aab` and none of the above needs thinking about.
 
-Each per-ABI APK gets its own `versionCode` (base × 10 + an ABI digit, see `androidComponents` in
-`app/build.gradle.kts`); the universal APK keeps the plain base code. A store rejects multiple APKs
-sharing one `versionCode`.
+Every APK of a release gets its own `versionCode` - base × 10 plus a per-ABI digit, see
+`abiVersionCodeOffsets` in `app/build.gradle.kts`. A store rejects multiple APKs sharing one
+`versionCode`, and it has no way to tell which one to serve an upgrading device.
+
+**The universal APK is the highest of the four, not the lowest** (offset 4, above `x86_64`'s 3).
+This paragraph used to say it kept the plain base code, which is what the build actually did until
+an off-by-one was found: that put universal *below* all three per-ABI APKs, and a `versionCode` that
+goes down is not an update - Android refuses the install and tells the user only "App not
+installed". Universal is the build that runs everywhere, so it is the one every other install must
+be able to move *to*. `scripts/check-version-code-ordering.sh` reads the ordering back out of
+`output-metadata.json` after a release build, because a comment cannot be wrong about what was
+actually built and a check can only be wrong about nothing.
 
 ## Versioning
 
@@ -85,10 +94,20 @@ this runbook:
    newer than `v0.9.0` - and a CI build reporting `0.9.0.147` is newer than the `v0.9.0` release it
    came from, so it is not offered an "update" back to itself.
 
-The check never downloads or installs anything: the banner and the Settings row open the release
-page in a browser. Every release APK must therefore be signed with the *same* key as the one it is
-replacing - Android refuses an APK signed with a different one, and the user sees an install
-failure rather than an update.
+3. **Attach the APKs to the release, or the install path never engages.** The app can now download
+   and install an update itself - it did not always, and this paragraph used to say so. It picks an
+   attached asset via `ReleaseApkPolicy` (universal wins when present), verifies size and any
+   published `sha256`, and refuses anything not signed by whoever signed the running copy
+   (`ApkSignatureGate`). With **no assets attached** every one of those steps is skipped and the
+   only thing the banner can offer is the release page in a browser - whose most prominent
+   downloads are GitHub's own source archives, which are not installable. That is the state a
+   release with no APK puts every user in, and it looks like the feature is broken.
+
+Every release APK must be signed with the *same* key as the one it is replacing. Android refuses an
+APK signed with a different one, and the only way out for the user is to uninstall - taking their
+playlist, their guide and their licence with it. `ApkSignatureGate` refuses such a file before the
+system dialog can, which is verified on a real device by
+`UpdateInstallChainInstrumentedTest`.
 
 ### Which digit moves
 
@@ -120,15 +139,21 @@ The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; 
    four `UACAST_*` properties in `~/.gradle/gradle.properties` - never in the project. Losing that
    file means the app can never be updated again, so its backup is the release process, not a step
    in it.
-3. **The instrumented tests cover more than the launch path.** They now genuinely run - on an
-   emulator in CI's `instrumented` job, and by hand through `scripts/run-instrumented-tests.sh`
-   (last: `OK (9 tests)` on a Mi A2, 2026-08-11 - including the three that pin background pause,
-   rotation and the user's own pause). But nine tests over app launch, the player's lifecycle and
-   the empty-playlist state is not coverage of this app: the whole Cast/DLNA/proxy path is still
-   held up by unit tests over pure policy objects plus one person trying it on one phone.
+3. ~~**The instrumented tests cover more than the launch path.**~~ Done (2026-08-16):
+   `OK (49 tests)` on a Mi A2 through `scripts/run-instrumented-tests.sh`, up from nine. The
+   sentence this used to end on - "the whole Cast/DLNA/proxy path is still held up by unit tests
+   over pure policy objects" - is what changed. On the device now: the proxy over a real socket
+   (Range forwarding, CORS preflight, method refusal, session-token expiry, wrapper unwrap,
+   rewritten segment URLs, concurrency), both stream-rewriting routes (HLS→TS flattening and
+   raw-TS→HLS remux), the DLNA control stack against a fake UPnP renderer (relative control URLs,
+   a `701` retried through, a `716` refused at once, volume, an unreachable renderer), the update
+   chain including `ApkSignatureGate` - which cannot be tested off a device at all - and the
+   player's video-fit setting end to end.
 
-None of the three is a code change, which is exactly why none of them gets closer by writing more
-code.
+   What is still missing is point 1, and no test replaces it: a report from hardware nobody here
+   chose.
+
+Point 1 is not a code change, which is exactly why it does not get closer by writing more code.
 
 ## Regenerating the baseline profile
 
