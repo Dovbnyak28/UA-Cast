@@ -21,6 +21,12 @@ import com.uacastplayer.premium.billing.PurchaseResult
  *   It is cleared when the next attempt starts rather than on a timer or on being drawn: a message
  *   that vanishes while being read is the same as no message, and a countdown would have to be
  *   longer than anyone waits before tapping again.
+ * @param isPurchasing an attempt is with the store right now. Every buy control is disabled while
+ *   it is true, and that is not decoration: Play reports a purchase through a client-wide listener
+ *   rather than through the call that started it, so a second attempt launched before the first is
+ *   answered leaves the first waiting for a reply that is now addressed to the second. The button
+ *   also has nothing to say while Play's own sheet is opening, which on a slow phone is long enough
+ *   to press again.
  * @param developerStates license states the debug build can be forced into; empty in a release
  *   build, where the code that would fill them is not compiled (see [DeveloperMode]).
  */
@@ -30,6 +36,7 @@ data class PremiumSectionState(
     val onPurchase: (BillingProduct) -> Unit,
     val onRestore: () -> Unit,
     val lastOutcome: PurchaseResult? = null,
+    val isPurchasing: Boolean = false,
     /** Whether a store can be reached at all, which is what tells "nothing published yet" apart
      * from "this device has no Google Play" when [products] is empty - see [StoreAbsence]. */
     val connection: BillingConnectionState = BillingConnectionState.DISCONNECTED,

@@ -229,6 +229,13 @@ class PlayBillingProvider(
             .build()
 
         val deferred = CompletableDeferred<PurchaseResult>()
+        // The one being replaced is answered before it is dropped. Play reports a purchase through
+        // the client-wide listener rather than through the call that started it, so there is exactly
+        // one slot: a second attempt overwriting the first left that first coroutine awaiting a
+        // reply now addressed to the second, and it would never arrive. The UI is what stops two
+        // attempts from overlapping (see AppViewModel.isPurchasing); this is what stops a
+        // coroutine being stranded if one ever does.
+        pendingPurchase?.complete(PurchaseResult.Cancelled)
         pendingPurchase = deferred
         val launch = client.launchBillingFlow(activity, flow)
         if (launch.responseCode != BillingClient.BillingResponseCode.OK) {

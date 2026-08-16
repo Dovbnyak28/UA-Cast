@@ -400,14 +400,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     val lastPurchaseOutcome: StateFlow<PurchaseResult?> = _lastPurchaseOutcome.asStateFlow()
 
-    fun purchasePremium(product: BillingProduct, launchContext: Any?) {
-        _lastPurchaseOutcome.value = null
-        viewModelScope.launch { report(premiumRepository.purchase(product.id, launchContext)) }
+    private val _isPurchasing = MutableStateFlow(false)
+
+    /**
+     * Whether an attempt is with the store right now, so the buy controls can be disabled.
+     *
+     * A guard rather than a spinner, and it guards something real: Play answers a purchase through
+     * a client-wide listener rather than through the call that started it, so a second attempt
+     * launched before the first is answered leaves the first waiting for a reply now addressed to
+     * the second. It also covers the seconds while Play's own sheet is opening, which on a slow
+     * phone is long enough to press again and which the screen has nothing to say about otherwise.
+     */
+    val isPurchasing: StateFlow<Boolean> = _isPurchasing.asStateFlow()
+
+    fun purchasePremium(product: BillingProduct, launchContext: Any?) = startStoreAttempt {
+        premiumRepository.purchase(product.id, launchContext)
     }
 
-    fun restorePremiumPurchases() {
+    fun restorePremiumPurchases() = startStoreAttempt { premiumRepository.restore() }
+
+    /**
+     * One attempt at a time, and the flag is cleared in a `finally`: a store call that throws would
+     * otherwise leave every buy button disabled for the rest of the session, which is a worse
+     * outcome than the double tap this prevents.
+     */
+    private fun startStoreAttempt(attempt: suspend () -> PurchaseResult) {
+        if (_isPurchasing.value) return
         _lastPurchaseOutcome.value = null
-        viewModelScope.launch { report(premiumRepository.restore()) }
+        _isPurchasing.value = true
+        viewModelScope.launch {
+            try {
+                report(attempt())
+            } finally {
+                _isPurchasing.value = false
+            }
+        }
     }
 
     /**

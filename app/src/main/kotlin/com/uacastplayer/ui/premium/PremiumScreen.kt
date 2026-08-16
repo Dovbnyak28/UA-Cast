@@ -78,12 +78,17 @@ fun PremiumContent(
             )
         } else {
             for (product in section.products) {
-                TierRow(product = product, onPurchase = { section.onPurchase(product) })
+                TierRow(
+                    product = product,
+                    onPurchase = { section.onPurchase(product) },
+                    enabled = !section.isPurchasing,
+                )
             }
 
             SecondaryButton(
                 text = stringResource(R.string.premium_restore),
                 onClick = section.onRestore,
+                enabled = !section.isPurchasing,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
 
@@ -179,7 +184,7 @@ private fun FeatureRow(feature: Feature, unlocked: Boolean) {
 }
 
 @Composable
-private fun TierRow(product: BillingProduct, onPurchase: () -> Unit) {
+private fun TierRow(product: BillingProduct, onPurchase: () -> Unit, enabled: Boolean = true) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -193,6 +198,6 @@ private fun TierRow(product: BillingProduct, onPurchase: () -> Unit) {
         )
         // The price comes from the store, never from a string resource: Play returns it in the
         // user's own currency with regional pricing and any running promotion already applied.
-        SecondaryButton(text = product.formattedPrice, onClick = onPurchase)
+        SecondaryButton(text = product.formattedPrice, onClick = onPurchase, enabled = enabled)
     }
 }
