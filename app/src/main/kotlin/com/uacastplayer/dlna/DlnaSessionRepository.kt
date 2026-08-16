@@ -330,7 +330,22 @@ class DlnaSessionRepository private constructor(context: Context) {
         // socket and port rather than rebind a fresh one out from under a renderer that may still
         // be fetching the previous url - the contract ProxyServer.start's own doc spells out.
         val token = sessionToken ?: UUID.randomUUID().toString().also { sessionToken = it }
-        proxyServer.ensureStarted(sessionToken = token, host = host)
+        // remuxEnabled = false, and the reason is that the remux exists for the opposite kind of
+        // receiver. docs/PROXY_RULES.md states it plainly: "Chromecast's Default Receiver generally
+        // won't play [a continuous raw MPEG-TS] directly ... it's a *container* problem", so the
+        // proxy converts raw TS into an HLS playlist for it.
+        //
+        // A DLNA renderer's preferences are inverted. Continuous MPEG-TS over HTTP is the native
+        // thing a DMR plays; an HLS manifest is what most of them cannot read at all - which this
+        // app's own AvTransportSoapBuilder already says in as many words ("the ones that cannot do
+        // HLS over DLNA at all - which is most sets that are not Samsung"). Field-confirmed on a
+        // Hisense VIDAA: the set fetched the manifest, answered SetAVTransportURI with a refusal,
+        // and put "Archivo no compatible" on screen having never requested a single segment.
+        //
+        // So remuxing for DLNA took a stream the renderer would have played and turned it into one
+        // it refuses. Left on, it also cost a decode/re-segment pass on the phone for no benefit.
+        // This does not help a channel whose *origin* is already HLS - see docs/DLNA.md.
+        proxyServer.ensureStarted(sessionToken = token, host = host, remuxEnabled = false)
         sessionHost = host
         val localUrl = proxyServer.buildLocalUrl(proxyServer.registerPlaylist(streamUrl))
 

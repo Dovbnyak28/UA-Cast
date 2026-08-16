@@ -84,6 +84,22 @@ class ProxyServer(
     @Volatile private var host: String = "127.0.0.1"
     @Volatile private var remuxEnabled = true
 
+    /**
+     * Whether an m3u8 that is really a pointer at one endless stream should be followed to that
+     * stream (see [PlaylistUnwrapPolicy]) rather than rewritten as a playlist.
+     *
+     * Separate from [remuxEnabled], which it used to be read off. They answer different questions:
+     * unwrapping is about *what the origin actually is* - a playlist-shaped pointer is not a
+     * playlist - while remuxing is about what one particular receiver can swallow. Tying them
+     * together meant a receiver that wants no remux also got no unwrap, and so was handed a
+     * manifest whose single "segment" is an endless raw TS.
+     *
+     * That combination is exactly what a DLNA renderer must never be given, and unwrapping is what
+     * turns it into the one thing such a renderer plays best: a continuous MPEG-TS, passed
+     * through untouched.
+     */
+    @Volatile private var unwrapWrapperPlaylists = true
+
     // Deliberately never reset - not by start(), not by stop(). The only consumer
     // (CastSessionRepository's stall watchdog) reads DELTAS between two ticks, and a reset mid-load
     // would make a delta negative, i.e. read as "no progress" and fire the very watchdog this
@@ -101,24 +117,36 @@ class ProxyServer(
      * its own doc). Only an actual new cast session (a new token) or a host change forces a real
      * [start].
      */
-    fun ensureStarted(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
+    fun ensureStarted(
+        sessionToken: String,
+        host: String,
+        remuxEnabled: Boolean = true,
+        unwrapWrapperPlaylists: Boolean = true,
+    ): Int {
         val currentPort = httpServer.port
         val sameSession = this.sessionToken == sessionToken && this.host == host
         if (httpServer.isRunning && currentPort != null && sameSession) {
             this.remuxEnabled = remuxEnabled
+            this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
             return currentPort
         }
-        return start(sessionToken, host, remuxEnabled)
+        return start(sessionToken, host, remuxEnabled, unwrapWrapperPlaylists)
     }
 
     /** Always tears down and rebinds a fresh socket/port, discarding every resource and remux
      * session - appropriate for an actual new cast session, not a mid-session channel switch (see
      * [ensureStarted], which every caller other than this class's own tests should prefer). */
-    fun start(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
+    fun start(
+        sessionToken: String,
+        host: String,
+        remuxEnabled: Boolean = true,
+        unwrapWrapperPlaylists: Boolean = true,
+    ): Int {
         stop()
         this.sessionToken = sessionToken
         this.host = host
         this.remuxEnabled = remuxEnabled
+        this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
         return httpServer.start()
     }
 
@@ -426,7 +454,8 @@ class ProxyServer(
     ) {
         val finalUrl = response.request.url.toString()
         val text = response.use { readPlaylistText(it, output) } ?: return
-        val unwrapTarget = if (remuxEnabled) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
+        val unwrapTarget =
+            if (unwrapWrapperPlaylists) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
         if (unwrapTarget == null) {
             serveRewrittenPlaylist(text, finalUrl, method, output, resource)
         } else {

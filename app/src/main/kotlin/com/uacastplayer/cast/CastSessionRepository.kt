@@ -514,6 +514,13 @@ class CastSessionRepository private constructor(context: Context) {
             sessionToken = proxySessionToken,
             host = host,
             remuxEnabled = preferences.rawTsRemuxEnabled,
+            // Passed rather than left at its default so that turning the remux escape hatch off
+            // restores exactly the behaviour it always restored on this path - the two used to be
+            // one flag (see ProxyServer.unwrapWrapperPlaylists). Untying them for Chromecast is
+            // arguably the better default, since an unwrapped stream would be passed through
+            // rather than handed over as a manifest with an endless "segment" in it, but that is a
+            // change to a receiver this cannot be tested against.
+            unwrapWrapperPlaylists = preferences.rawTsRemuxEnabled,
         )
     }
 
@@ -679,6 +686,13 @@ class CastSessionRepository private constructor(context: Context) {
             sessionToken = proxySessionToken,
             host = host,
             remuxEnabled = preferences.rawTsRemuxEnabled,
+            // Passed rather than left at its default so that turning the remux escape hatch off
+            // restores exactly the behaviour it always restored on this path - the two used to be
+            // one flag (see ProxyServer.unwrapWrapperPlaylists). Untying them for Chromecast is
+            // arguably the better default, since an unwrapped stream would be passed through
+            // rather than handed over as a manifest with an endless "segment" in it, but that is a
+            // change to a receiver this cannot be tested against.
+            unwrapWrapperPlaylists = preferences.rawTsRemuxEnabled,
         )
         applyProxyLifecycle(ProxyLifecycleEvent.STARTED, channelTitle = title, receiverName = currentSession?.castDevice?.friendlyName)
         val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
