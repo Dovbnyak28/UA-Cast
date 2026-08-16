@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.update.InstallStatusPolicy
 
 private const val TAG = "UpdateInstallReceiver"
 
@@ -32,7 +33,14 @@ class UpdateInstallReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_INSTALL_STATUS) return
-        when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
+        // Reported before anything else here, and unconditionally. Whoever is showing "confirm the
+        // install on screen" has no other way to learn that the screen in question is gone: the
+        // session was committed, and every ending except a success used to arrive here, get logged,
+        // and stop - leaving that message up for good with nothing to press. See
+        // [com.uacastplayer.update.InstallSessionOutcome] for the field measurement behind this.
+        InstallOutcomeBus.report(InstallStatusPolicy.outcomeFor(status))
+        when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> askTheUser(context, intent)
             PackageInstaller.STATUS_SUCCESS -> AppLog.d(TAG) { "Update installed" }
             else -> AppLog.w(TAG) {

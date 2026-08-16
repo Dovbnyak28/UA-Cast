@@ -2,6 +2,7 @@ package com.uacastplayer.app
 
 import com.uacastplayer.data.update.InstallLaunch
 import com.uacastplayer.data.update.UpdateDownload
+import com.uacastplayer.update.InstallSessionOutcome
 import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateInstallState
 import java.io.File
@@ -10,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -36,6 +38,10 @@ class UpdateInstallControllerTest {
     private var downloadCalls = 0
     private var installCalls = 0
 
+    /** What [com.uacastplayer.data.update.UpdateInstallReceiver] publishes in production, so a test
+     * can be the system reporting back without a device or a broadcast. */
+    private val outcomes = MutableSharedFlow<InstallSessionOutcome>(extraBufferCapacity = 1)
+
     private fun controller(
         result: UpdateDownload = UpdateDownload.Ready(file),
         launch: InstallLaunch = InstallLaunch.Started,
@@ -43,6 +49,7 @@ class UpdateInstallControllerTest {
         scope = scope,
         download = { _, _ -> downloadCalls++; result },
         install = { installCalls++; launch },
+        outcomes = outcomes,
     )
 
     @Test
@@ -207,5 +214,78 @@ class UpdateInstallControllerTest {
 
         assertEquals(UpdateInstallState.Idle, controller.state.value)
         assertTrue(downloadCalls == 0 && installCalls == 0)
+    }
+
+    /**
+     * The dead end this exists to close.
+     *
+     * A committed session is not the end of the story. `Launching` says "confirm the install on
+     * screen", and until the system's verdict came back here that message stayed up for good
+     * whatever happened next - no button to retry, nothing to press, only a restart cleared it.
+     *
+     * **Measured on a Mi A2 against the real v0.9.1 release**: Google Play Protect refuses a
+     * sideloaded APK by default (`VerifyApps: Returning package verification result, result=REJECT`)
+     * and the install simply does not happen. So the ordinary first attempt at updating an app
+     * published outside Play ended exactly here.
+     */
+    @Test
+    fun `a session the system refused stops telling the user to confirm it`() {
+        val controller = controller()
+        controller.downloadAndInstall(apk)
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+
+        outcomes.tryEmit(InstallSessionOutcome.Failed)
+
+        assertEquals(UpdateInstallState.Failed, controller.state.value)
+    }
+
+    /** Being asked to confirm is not an ending - the session is alive and the system is showing its
+     * own dialog, which is what `Launching` already says. Moving off it here would replace a true
+     * message with a false one. */
+    @Test
+    fun `waiting on the user's confirmation changes nothing`() {
+        val controller = controller()
+        controller.downloadAndInstall(apk)
+
+        outcomes.tryEmit(InstallSessionOutcome.AwaitingUser)
+
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+    }
+
+    /** A success needs nothing done: this process is about to be replaced by the version it just
+     * installed, and there is no screen left to correct. */
+    @Test
+    fun `a successful install is left alone`() {
+        val controller = controller()
+        controller.downloadAndInstall(apk)
+
+        outcomes.tryEmit(InstallSessionOutcome.Installed)
+
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+    }
+
+    /**
+     * The guard that makes the collector safe to leave running for the controller's whole life.
+     *
+     * A verdict from a session the user has moved on from - they dismissed the dialog, pressed the
+     * button again, and are now watching a fresh download - must not drag the state backwards into
+     * a failure that is no longer true.
+     */
+    @Test
+    fun `a late verdict cannot disturb a download that has since started`() {
+        val held = CompletableDeferred<UpdateDownload>()
+        val controller = UpdateInstallController(
+            scope = scope,
+            download = { _, onProgress -> onProgress(10L, 1000L); held.await() },
+            install = { InstallLaunch.Started },
+            outcomes = outcomes,
+        )
+        controller.downloadAndInstall(apk)
+        assertEquals(UpdateInstallState.Downloading(10L, 1000L), controller.state.value)
+
+        outcomes.tryEmit(InstallSessionOutcome.Failed)
+
+        assertEquals(UpdateInstallState.Downloading(10L, 1000L), controller.state.value)
+        held.complete(UpdateDownload.Ready(file))
     }
 }

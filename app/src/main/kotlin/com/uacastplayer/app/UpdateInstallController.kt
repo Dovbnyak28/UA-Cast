@@ -1,13 +1,16 @@
 package com.uacastplayer.app
 
 import com.uacastplayer.data.update.InstallLaunch
+import com.uacastplayer.data.update.InstallOutcomeBus
 import com.uacastplayer.data.update.UpdateDownload
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.update.InstallSessionOutcome
 import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateInstallState
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,11 +36,37 @@ class UpdateInstallController(
     private val scope: CoroutineScope,
     private val download: suspend (ReleaseApk, (Long, Long) -> Unit) -> UpdateDownload,
     private val install: (File) -> InstallLaunch,
+    /** How the system's verdict on a committed session gets back here - see [InstallOutcomeBus].
+     * Injected so this can be driven without a `BroadcastReceiver` or a device. */
+    outcomes: Flow<InstallSessionOutcome> = InstallOutcomeBus.outcomes,
 ) {
     private val _state = MutableStateFlow<UpdateInstallState>(UpdateInstallState.Idle)
     val state: StateFlow<UpdateInstallState> = _state.asStateFlow()
 
     private var job: Job? = null
+
+    init {
+        scope.launch { outcomes.collect(::onSessionOutcome) }
+    }
+
+    /**
+     * A committed session finally answered, so stop telling the user to confirm something.
+     *
+     * Only while [UpdateInstallState.Launching], and that guard is the whole of the correctness
+     * here: a stale verdict from a previous session must not overwrite a download the user has
+     * since started, and a success needs nothing done because this process is about to be replaced
+     * by the version it just installed.
+     *
+     * [InstallSessionOutcome.AwaitingUser] deliberately changes nothing. The session is alive and
+     * the system is showing its dialog, which is exactly what `Launching` already says.
+     */
+    private fun onSessionOutcome(outcome: InstallSessionOutcome) {
+        if (_state.value != UpdateInstallState.Launching) return
+        when (outcome) {
+            InstallSessionOutcome.Failed -> _state.value = UpdateInstallState.Failed
+            InstallSessionOutcome.Installed, InstallSessionOutcome.AwaitingUser -> Unit
+        }
+    }
 
     /**
      * A second press while the first download is running is ignored rather than queued or
