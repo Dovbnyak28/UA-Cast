@@ -381,6 +381,8 @@ internal fun RootTopBar(
         DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState)
         UpdateBanner(
             release = updateSection.state.availableRelease,
+            installState = updateSection.installState,
+            onInstall = updateSection.onDownloadAndInstall,
             onOpen = updateSection.onOpenRelease,
             onDismiss = updateSection.onDismissBanner,
         )

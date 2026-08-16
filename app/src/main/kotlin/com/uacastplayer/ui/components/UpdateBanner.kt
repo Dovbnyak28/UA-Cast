@@ -36,6 +36,8 @@ import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.TabLabel
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.update.GitHubRelease
+import com.uacastplayer.update.ReleaseApk
+import com.uacastplayer.update.UpdateInstallState
 
 /**
  * Tells the user a newer release exists, in the same place and shape as [DownloadStatusBanner] -
@@ -47,14 +49,24 @@ import com.uacastplayer.update.GitHubRelease
  * [com.uacastplayer.app.UpdateController]), so the moment there is something to say the user is
  * already looking at the screen.
  *
- * [onOpen] hands the release page to a browser. Nothing is downloaded or installed by the app.
+ * **The button installs when there is an APK to install.** It used to hand the release page to a
+ * browser unconditionally, which meant the one action the banner offered led to a GitHub page whose
+ * most prominent downloads are the source archives - a zip and a tar.gz of the code, neither of
+ * which is installable, and the first of which is exactly what a phone browser offers to save.
+ * Opening the page stays the offer for a release this build will not take an APK from (see
+ * [com.uacastplayer.update.ReleaseApkPolicy], which refuses to guess between several), because then
+ * a human reading the page is the only way through.
  *
  * @param release the newer release, or null when there is none to announce - including when the
  *   user has closed this banner for that version.
+ * @param installState so the banner reports its own download rather than appearing to do nothing -
+ *   the same state the Settings row renders, from the same controller.
  */
 @Composable
 fun UpdateBanner(
     release: GitHubRelease?,
+    installState: UpdateInstallState,
+    onInstall: (ReleaseApk) -> Unit,
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -122,14 +134,66 @@ fun UpdateBanner(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            SecondaryButton(
-                text = stringResource(R.string.update_banner_action),
-                onClick = { shown?.releaseUrl?.let(onOpen) },
-                modifier = Modifier.fillMaxWidth(),
+            UpdateBannerAction(
+                release = shown,
+                installState = installState,
+                onInstall = onInstall,
+                onOpen = onOpen,
             )
         }
     }
 }
+
+/**
+ * The one button, and what it says while a download is running.
+ *
+ * Deliberately fewer states than the Settings row shows. This is a banner in the top bar, not the
+ * screen a user goes to about updates: it reports progress, and every ending - installed, refused,
+ * failed - sends them to Settings rather than growing a second copy of that vocabulary here.
+ */
+@Composable
+private fun UpdateBannerAction(
+    release: GitHubRelease?,
+    installState: UpdateInstallState,
+    onInstall: (ReleaseApk) -> Unit,
+    onOpen: (String) -> Unit,
+) {
+    val apk = release?.apk
+    when {
+        installState is UpdateInstallState.Downloading -> Text(
+            text = installState.percent()
+                ?.let { stringResource(R.string.settings_update_downloading_percent, it) }
+                ?: stringResource(R.string.settings_update_downloading),
+            color = UaTheme.palette.labelSecondary,
+            style = BodyRegular,
+        )
+
+        installState is UpdateInstallState.Launching -> Text(
+            text = stringResource(R.string.settings_update_launching),
+            color = UaTheme.palette.labelSecondary,
+            style = BodyRegular,
+        )
+
+        apk != null -> SecondaryButton(
+            text = stringResource(R.string.settings_update_install_button),
+            onClick = { onInstall(apk) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        else -> SecondaryButton(
+            text = stringResource(R.string.update_banner_action),
+            onClick = { release?.releaseUrl?.let(onOpen) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** Whole percent, or null when the release declared no size - an indeterminate label beats a
+ * percentage of nothing. */
+private fun UpdateInstallState.Downloading.percent(): Int? =
+    if (totalBytes > 0) (bytesSoFar * PERCENT / totalBytes).toInt().coerceIn(0, PERCENT.toInt()) else null
+
+private const val PERCENT = 100L
 
 /** Keeps the last non-null value so content stays readable while the container animates out. */
 @Composable
