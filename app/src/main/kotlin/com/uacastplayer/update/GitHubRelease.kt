@@ -5,15 +5,15 @@ import org.json.JSONObject
 
 /**
  * The parts of a GitHub release this app cares about: which version it is, where a human can go to
- * read about it, and the APK to install if the release published exactly one.
+ * read about it, and the APK to install.
  *
  * The release notes are still not kept. They live on the page [releaseUrl] points at, so carrying a
  * copy through the app would be a field nothing reads.
  *
  * [apk] is null far more often than it is a fault: a release with no APK attached, one whose upload
- * never finished, or one carrying several (see [ReleaseApkPolicy], which refuses to guess between
- * them). Every one of those falls back to the same offer this flow used to make on its own - open
- * the release page in a browser and let the user see what they are installing.
+ * never finished, or one carrying several that [ReleaseApkPolicy] cannot choose between. Every one
+ * of those falls back to the same offer this flow used to make on its own - open the release page in
+ * a browser and let the user see what they are installing.
  */
 data class GitHubRelease(
     val version: AppVersion,
@@ -36,7 +36,7 @@ object GitHubReleaseParser {
     // JSON" signal itself rather than an error with anything more to say - a captive portal's login
     // page reaching here is ordinary, not exceptional.
     @Suppress("ReturnCount", "SwallowedException")
-    fun parse(json: String): GitHubRelease? {
+    fun parse(json: String, supportedAbis: List<String> = emptyList()): GitHubRelease? {
         val obj = try {
             JSONObject(json)
         } catch (e: JSONException) {
@@ -55,7 +55,7 @@ object GitHubReleaseParser {
             releaseUrl = releaseUrl,
             // Mechanical: which of the attached files is the one to install is [ReleaseApkPolicy]'s
             // decision, kept out of here so it can be tested without a JSON document around it.
-            apk = ReleaseApkPolicy.pick(readAssets(obj)),
+            apk = ReleaseApkPolicy.pick(readAssets(obj), supportedAbis),
         )
     }
 

@@ -36,35 +36,60 @@ data class ReleaseApk(
 /**
  * Which attached file, if any, is the APK for this release.
  *
- * **Ambiguity is answered by refusing, not by guessing.** A release carrying more than one APK is
- * either per-ABI splits or a debug build published beside the release one, and both make the choice
- * consequential: an APK signed with the debug key cannot install over a release-signed app at all
- * (Android refuses a signature change outright), and the wrong ABI installs and then fails to run.
- * Neither failure is one the user can read anything useful out of. Refusing leaves the release page
- * as the offer, where a human can see what the files are - two extra taps against an install that
- * cannot work.
+ * **A release of this app carries four APKs, not one**, and that is what this has to be right
+ * about. `./gradlew :app:assembleRelease` produces `app-armeabi-v7a-release.apk`,
+ * `app-arm64-v8a-release.apk`, `app-x86_64-release.apk` and `app-universal-release.apk` (see the
+ * `splits` block and docs/RELEASING.md) - native code is ~78% of this app, so a per-ABI APK is less
+ * than half the size of the universal one and publishing them together is the point.
  *
- * That is a rule about *this* project's releases, which publish one universal APK. Choosing between
- * splits would mean matching `Build.SUPPORTED_ABIS` against filenames, which is a different feature
- * with its own failure modes, and is deliberately not smuggled in here.
+ * **The universal APK wins whenever it is there**, even though it is twice the download. That is
+ * not a preference, it is forced by this project's own versionCode scheme: each per-ABI APK gets
+ * `base × 10 + an ABI digit`, and universal deliberately takes the *highest* digit so that "every
+ * other install must be able to move to it". A device currently on universal therefore cannot
+ * install a per-ABI APK of the same release at all - Android refuses it as a downgrade, after the
+ * download, in a system dialog. Saving 11MB is not worth an install that can be refused.
+ *
+ * Only when no universal APK was published does the device's own ABI decide, taking
+ * `Build.SUPPORTED_ABIS` in its own order, which is most-preferred first. A per-ABI APK for the
+ * wrong architecture fails at install with `INSTALL_FAILED_NO_MATCHING_ABIS`, so guessing here is
+ * strictly worse than choosing.
+ *
+ * **What is still refused rather than guessed**: several APKs, none universal, none matching this
+ * device. That is a release built for architectures this phone is not, or a debug build published
+ * beside a release one - and an APK signed with the debug key cannot install over a release-signed
+ * app under any circumstances. Refusing leaves the release page as the offer, where a human can
+ * see what the files are.
  */
 object ReleaseApkPolicy {
 
     private const val APK_SUFFIX = ".apk"
     private const val STATE_UPLOADED = "uploaded"
 
-    fun pick(assets: List<ReleaseAsset>): ReleaseApk? {
+    /** The name AGP gives the APK with no ABI filter - the one that runs everywhere. */
+    private const val UNIVERSAL_MARKER = "universal"
+
+    /**
+     * @param supportedAbis this device's `Build.SUPPORTED_ABIS`, most-preferred first. Passed in
+     *   rather than read here so this stays a pure rule with no Android behind it, the same shape
+     *   every other policy in this package has.
+     */
+    fun pick(assets: List<ReleaseAsset>, supportedAbis: List<String> = emptyList()): ReleaseApk? {
         val candidates = assets.filter { asset ->
             asset.name.endsWith(APK_SUFFIX, ignoreCase = true) &&
                 asset.state == STATE_UPLOADED &&
                 asset.sizeBytes > 0 &&
                 asset.downloadUrl.isNotBlank()
         }
-        val only = candidates.singleOrNull() ?: return null
+        val chosen = candidates.singleOrNull()
+            ?: candidates.firstOrNull { it.name.contains(UNIVERSAL_MARKER, ignoreCase = true) }
+            ?: supportedAbis.firstNotNullOfOrNull { abi ->
+                candidates.firstOrNull { it.name.contains(abi, ignoreCase = true) }
+            }
+            ?: return null
         return ReleaseApk(
-            downloadUrl = only.downloadUrl,
-            sizeBytes = only.sizeBytes,
-            sha256 = ReleaseDigest.parse(only.digest),
+            downloadUrl = chosen.downloadUrl,
+            sizeBytes = chosen.sizeBytes,
+            sha256 = ReleaseDigest.parse(chosen.digest),
         )
     }
 }

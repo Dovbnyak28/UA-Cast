@@ -7,11 +7,15 @@ import org.junit.Test
 /**
  * Which attached file a release is willing to install, and which published hash it will trust.
  *
- * Both halves exist to keep a bad answer from reaching [com.uacastplayer.data.update.ApkInstaller].
- * Picking the wrong APK produces a failure the user cannot read anything out of - a debug-signed
- * build cannot install over a release-signed app at all, and the wrong ABI installs and then will
- * not run - so the rule refuses rather than guesses. Accepting a digest that only looks like one
- * would be worse than having none, because the check would then pass having verified nothing.
+ * Both halves exist to keep a bad answer from reaching [com.uacastplayer.data.update.ApkInstaller],
+ * where every wrong answer fails the same unreadable way: after the download, in a system dialog,
+ * with a message the user can do nothing with.
+ *
+ * A release of this app carries **four** APKs - three per-ABI and one universal - so "which one" is
+ * a question that has to be answered rather than dodged. It is answered by rule where a rule exists
+ * (universal always installs; failing that, an architecture this device runs) and refused where one
+ * does not. Accepting a digest that only looks like one would be worse than having none, because
+ * the check would then pass having verified nothing.
  */
 class ReleaseApkPolicyTest {
 
@@ -33,13 +37,76 @@ class ReleaseApkPolicyTest {
         assertEquals(40_000_000L, picked?.sizeBytes)
     }
 
-    /** The rule this policy exists for. Two APKs mean splits or a debug build published beside the
-     * release one, and choosing wrong fails in a way the user cannot act on. */
+    /**
+     * What a release of this app actually looks like: four APKs, three per-ABI and one universal
+     * (`./gradlew :app:assembleRelease`, see the `splits` block).
+     *
+     * Universal wins even though it is twice the download, and the reason is this project's own
+     * versionCode scheme rather than taste: each per-ABI APK gets `base × 10 + an ABI digit` and
+     * universal deliberately takes the highest, so a device already on universal cannot install a
+     * per-ABI APK of the same release at all - Android refuses it as a downgrade, after the
+     * download, in a system dialog.
+     */
     @Test
-    fun `two apks are refused rather than guessed between`() {
-        val picked = ReleaseApkPolicy.pick(listOf(asset(name = "app-release.apk"), asset(name = "app-debug.apk")))
+    fun `a full release picks the universal apk whatever this device runs`() {
+        val release = listOf(
+            asset(name = "app-armeabi-v7a-release.apk"),
+            asset(name = "app-arm64-v8a-release.apk"),
+            asset(name = "app-x86_64-release.apk"),
+            asset(name = "app-universal-release.apk"),
+        )
 
-        assertNull(picked)
+        val picked = ReleaseApkPolicy.pick(release, supportedAbis = listOf("arm64-v8a", "armeabi-v7a"))
+
+        assertEquals("https://example.test/app-universal-release.apk", picked?.downloadUrl)
+    }
+
+    /** Only when no universal APK was published does the architecture decide, and it takes
+     * `Build.SUPPORTED_ABIS` in its own order - most preferred first. */
+    @Test
+    fun `without a universal apk this device's own architecture decides`() {
+        val release = listOf(
+            asset(name = "app-armeabi-v7a-release.apk"),
+            asset(name = "app-arm64-v8a-release.apk"),
+            asset(name = "app-x86_64-release.apk"),
+        )
+
+        val picked = ReleaseApkPolicy.pick(release, supportedAbis = listOf("arm64-v8a", "armeabi-v7a"))
+
+        assertEquals("https://example.test/app-arm64-v8a-release.apk", picked?.downloadUrl)
+    }
+
+    /** A 64-bit phone lists the 32-bit ABI too, second. With no arm64 build published it should take
+     * the one it can actually run rather than refusing. */
+    @Test
+    fun `a later supported architecture is taken when the preferred one is absent`() {
+        val release = listOf(asset(name = "app-armeabi-v7a-release.apk"), asset(name = "app-x86_64-release.apk"))
+
+        val picked = ReleaseApkPolicy.pick(release, supportedAbis = listOf("arm64-v8a", "armeabi-v7a"))
+
+        assertEquals("https://example.test/app-armeabi-v7a-release.apk", picked?.downloadUrl)
+    }
+
+    /**
+     * Still refused rather than guessed: several APKs, none universal, none this device can run.
+     * That is a release built for architectures this phone is not - or a debug build published
+     * beside a release one, and an APK signed with the debug key cannot install over a
+     * release-signed app under any circumstances.
+     */
+    @Test
+    fun `apks this device cannot run are refused rather than guessed between`() {
+        val release = listOf(asset(name = "app-x86_64-release.apk"), asset(name = "app-debug.apk"))
+
+        assertNull(ReleaseApkPolicy.pick(release, supportedAbis = listOf("arm64-v8a", "armeabi-v7a")))
+    }
+
+    /** One APK is still one APK - the ordinary hand-published release, with no ABI question to
+     * answer. */
+    @Test
+    fun `a single apk is taken without consulting the architecture at all`() {
+        val picked = ReleaseApkPolicy.pick(listOf(asset(name = "app-x86_64-release.apk")), supportedAbis = emptyList())
+
+        assertEquals("https://example.test/app-x86_64-release.apk", picked?.downloadUrl)
     }
 
     /**

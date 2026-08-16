@@ -1,5 +1,6 @@
 package com.uacastplayer.data.update
 
+import android.os.Build
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.update.GitHubReleaseParser
@@ -63,7 +64,10 @@ class UpdateRepository(
                 // peekBody rather than body.string(): it stops at the cap instead of trusting a
                 // Content-Length that a response is under no obligation to tell the truth about.
                 val json = response.peekBody(MAX_BODY_BYTES).string()
-                val release = GitHubReleaseParser.parse(json)
+                // Build.SUPPORTED_ABIS is read here, at the one place with an Android runtime
+                // under it, and handed to a rule that stays pure. It only ever decides between
+                // per-ABI APKs when no universal one was published - see ReleaseApkPolicy.
+                val release = GitHubReleaseParser.parse(json, Build.SUPPORTED_ABIS.orEmpty().toList())
                 if (release == null) {
                     // A release exists but cannot be read - a draft that slipped through, or a tag
                     // that is not a version. Not "nothing published": something is, and this build
