@@ -9,6 +9,7 @@ import com.uacastplayer.icons.IconCandidate
 import com.uacastplayer.icons.IconFailurePolicy
 import com.uacastplayer.icons.IconMemoryCacheKey
 import com.uacastplayer.icons.IconResolver
+import com.uacastplayer.icons.ImageFormatDetector
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
 import com.uacastplayer.log.AppLog
@@ -177,9 +178,30 @@ class IconRepository(context: Context) {
                     failureStore.recordFailure(url, isPermanent = permanent)
                     return@withContext null
                 }
-                val body = response.body ?: return@withContext null
-                val bounded = BoundedByteReader.readBytes(body.byteStream(), IconDiskCache.MAX_ICON_BYTES)
-                if (bounded !is BoundedBytesResult.Success) return@withContext null
+                val bounded = BoundedByteReader.readBytes(response.body.byteStream(), IconDiskCache.MAX_ICON_BYTES)
+                if (bounded !is BoundedBytesResult.Success) {
+                    // Permanent: a file over the cap does not get smaller, and this is a fetch that
+                    // downloaded MAX_ICON_BYTES before giving up. Left unrecorded it downloaded them
+                    // again on every prefetch pass and every scroll past the row.
+                    failureStore.recordFailure(url, isPermanent = true)
+                    return@withContext null
+                }
+                // The gap this closes. An origin that answers 200 with an HTML page instead of a
+                // picture - which is how hotlink protection commonly refuses, rather than with the
+                // 403 the branch above catches - produced a successful response, a body that is not
+                // an image, a null from the cache, and *no record anywhere that it had failed*. The
+                // failure store was consulted on every attempt and never learned about the one kind
+                // of failure that looks like success, so the same URL was refetched forever.
+                //
+                // Transient, unlike the size cap: an error page is often the moment rather than the
+                // URL, and a week of blacklisting for a host having a bad minute is the wrong price.
+                // Checked here rather than inferred from a null out of the cache, because the cache
+                // also answers null when it could not *write* - a full disk is not the icon's fault
+                // and must not blacklist it.
+                if (ImageFormatDetector.detect(bounded.bytes) == null) {
+                    failureStore.recordFailure(url, isPermanent = false)
+                    return@withContext null
+                }
                 diskCache.put(url, bounded.bytes)
             }
         } catch (e: CancellationException) {
