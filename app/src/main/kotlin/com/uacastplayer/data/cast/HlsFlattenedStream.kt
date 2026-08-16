@@ -36,6 +36,25 @@ internal class HlsFlattenedStream(
     private val playlistUrl: String,
     private val userAgent: String,
     private val referrer: String?,
+    /**
+     * Checked either side of every wait, and the loop stops the moment it says no.
+     *
+     * The hazard is the one `ProxyResourceRegistry.startRemuxSession` already names for the remux
+     * path - "a background thread reading the upstream live stream indefinitely with no owner left
+     * to ever stop it" - and this loop is a second place it could happen. Nothing else here would
+     * notice a session ending: the client socket is only discovered to be gone by a *write*
+     * failing, and this loop spends most of its time not writing.
+     *
+     * **Stated precisely, because it was measured rather than assumed**: `ProxyServer.stop()` tears
+     * the pool down with `shutdownNow()`, whose interrupt makes the next `Thread.sleep` here throw
+     * on its own - so the loop does already end shortly after a stop without this. What this adds
+     * is not depending on that. An interrupt flag survives only as long as nothing between here and
+     * the sleep swallows it, and everything between here and the sleep is OkHttp and a socket; a
+     * library that catches `InterruptedException` without restoring the flag would turn a bounded
+     * wait into an unbounded one. This check asks the owner directly, and it also ends the loop at
+     * the first opportunity rather than after however long the segment fetch in progress takes.
+     */
+    private val isRunning: () -> Boolean,
 ) {
 
     /** Bytes written to the client, for the caller's logging. */
@@ -78,10 +97,13 @@ internal class HlsFlattenedStream(
                     AppLog.d(TAG) { "Flattened stream reached the end of a finished playlist" }
                     null
                 }
-                else -> {
-                    Thread.sleep(HlsFlattenPolicy.refreshDelayMillis(current))
-                    fetchPlaylist(url)
-                }
+                // Checked *before* the sleep as well as after it: the cheap case is a session that
+                // was already over when this iteration began, and waiting out a target duration to
+                // discover that is exactly the delay this exists to avoid.
+                !isRunning() -> null
+                !sleepInterruptibly(HlsFlattenPolicy.refreshDelayMillis(current)) -> null
+                !isRunning() -> null
+                else -> fetchPlaylist(url)
             }
         }
         return headersSent
@@ -150,6 +172,23 @@ internal class HlsFlattenedStream(
         }
     } catch (e: IOException) {
         AppLog.d(TAG) { "Flattened stream ended: ${e.javaClass.simpleName}" }
+        false
+    }
+
+    /**
+     * False when the wait was interrupted, which is `shutdownNow()` tearing the pool down - the one
+     * signal that reaches a sleeping thread at all.
+     *
+     * The flag is restored rather than swallowed: this runs on a pooled thread that goes back to
+     * serving other connections, and a cleared interrupt would leave the next thing it does unaware
+     * the pool is shutting down.
+     */
+    private fun sleepInterruptibly(millis: Long): Boolean = try {
+        Thread.sleep(millis)
+        true
+    } catch (_: InterruptedException) {
+        Thread.currentThread().interrupt()
+        AppLog.d(TAG) { "Flattened stream interrupted while waiting for the next playlist" }
         false
     }
 

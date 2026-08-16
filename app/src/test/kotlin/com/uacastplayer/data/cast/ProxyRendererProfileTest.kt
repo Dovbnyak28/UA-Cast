@@ -306,8 +306,59 @@ class ProxyRendererProfileTest {
         assertEquals(1, origin.hitsFor("/a.ts"))
     }
 
+    /**
+     * A stopped session must stop pulling the origin, whatever ends the loop.
+     *
+     * The playlist here is genuinely live - no `#EXT-X-ENDLIST` - so a loop that ignored the stop
+     * would poll forever, and this asserts the origin is not asked again after it.
+     *
+     * **What this does not measure, said plainly**: it passes with or without the explicit
+     * `isRunning` guard, because `stop()` tears the pool down with `shutdownNow()` and the interrupt
+     * that leaves behind makes the next `Thread.sleep` throw by itself. That was checked by removing
+     * the guard and watching this still pass. It stays as the regression test for the outcome;
+     * `HlsFlattenedStreamTest` is where the guard itself is pinned, with no interrupt near it.
+     */
+    @Test
+    fun `stopping the proxy stops the replay from pulling the origin`() {
+        val origin = Origin(mutableMapOf("/a.ts" to ("video/mp2t" to tsBytes(SEGMENT_PACKETS))))
+            .also { this.origin = it }
+        val live = buildString {
+            appendLine("#EXTM3U")
+            // The smallest target duration the policy will honour, so a leak shows up quickly.
+            appendLine("#EXT-X-TARGETDURATION:1")
+            appendLine("#EXT-X-MEDIA-SEQUENCE:1")
+            appendLine("#EXTINF:1.0,")
+            appendLine(origin.urlFor("/a.ts"))
+        }
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", live.toByteArray())
+
+        val server = ProxyServer(OkHttpClient()).also { proxy = it }
+        server.start("session", "127.0.0.1", remuxEnabled = false, flattenHlsToStream = true)
+        val resourceId = server.registerPlaylist(origin.urlFor("/live.m3u8"))
+        val request = Request.Builder().url(server.buildLocalUrl(resourceId)).build()
+
+        // Read only the head of the response and walk away, the way a renderer that was told to
+        // Stop does - the body is endless, so consuming it would never finish.
+        val call = client.newCall(request)
+        call.execute().use { it.body.byteStream().read(ByteArray(1)) }
+
+        server.stop()
+        val afterStop = origin.hitsFor("/live.m3u8")
+        Thread.sleep(REFRESH_SETTLE_MILLIS)
+
+        assertEquals(
+            "the replay kept refreshing the playlist after the session was stopped",
+            afterStop,
+            origin.hitsFor("/live.m3u8"),
+        )
+    }
+
     private companion object {
         const val TS_PACKET_SIZE = 188
         const val SEGMENT_PACKETS = 10
+
+        /** Several times the 500ms floor the refresh interval is bounded at, so a loop that ignored
+         * the stop would have polled repeatedly inside it. */
+        const val REFRESH_SETTLE_MILLIS = 2_500L
     }
 }

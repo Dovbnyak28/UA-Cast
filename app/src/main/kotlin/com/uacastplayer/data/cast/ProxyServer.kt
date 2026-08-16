@@ -508,7 +508,18 @@ class ProxyServer(
             httpServer.writeHeaders(output, 200, "OK", headers)
             return true
         }
-        val stream = HlsFlattenedStream(httpClient, playlistUrl, resource.userAgent, resource.referrer)
+        // Captured, then compared: the server being up is not enough on its own, because start()
+        // stops and rebinds for a genuinely new session and would read as running again. A loop
+        // left over from the previous session has to stop, and its token is what says it is left
+        // over.
+        val servingSession = sessionToken
+        val stream = HlsFlattenedStream(
+            httpClient = httpClient,
+            playlistUrl = playlistUrl,
+            userAgent = resource.userAgent,
+            referrer = resource.referrer,
+            isRunning = { httpServer.isRunning && sessionToken == servingSession },
+        )
         val wrote = stream.writeTo(output) { httpServer.writeHeaders(output, 200, "OK", headers) }
         if (wrote) {
             AppLog.d(TAG) { "Flattened HLS stream ended for $resourceId after ${stream.bytesWritten}B" }
