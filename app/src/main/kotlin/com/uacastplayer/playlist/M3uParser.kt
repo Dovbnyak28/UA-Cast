@@ -32,6 +32,15 @@ object M3uParser {
         var pendingGroupOverride: String? = null
         var pendingUserAgent: String? = null
         var pendingReferrer: String? = null
+        // A real provider's group-title repeats hundreds of times over ("Movies", "Sports", "News"
+        // on every one of thousands of channels), and each occurrence used to become its own fresh
+        // String - one heap object per channel for a value that is, in practice, drawn from a
+        // couple dozen distinct strings. Interning collapses that to one instance per distinct
+        // title, the same fix XmlTvParser's channelIdPool already applies for the same reason on
+        // its own hottest repeated field. Scoped to this call rather than held on the object: this
+        // is a stateless singleton reused across every playlist parse, and a pool that outlived one
+        // parse would just be a permanent retention of every group title ever seen.
+        val groupTitlePool = HashMap<String, String>()
         // Only the (normally singular) #EXTM3U line ever carries these, so first-found wins - no
         // need to keep scanning once set.
         var epgUrls: List<String> = emptyList()
@@ -81,7 +90,8 @@ object M3uParser {
                                 tvgId = extinf.tvgId,
                                 tvgName = extinf.tvgName,
                                 tvgLogo = extinf.tvgLogo,
-                                groupTitle = extinf.groupTitle ?: pendingGroupOverride,
+                                groupTitle = (extinf.groupTitle ?: pendingGroupOverride)
+                                    ?.let { groupTitlePool.getOrPut(it) { it } },
                                 userAgent = pendingUserAgent,
                                 referrer = pendingReferrer,
                             )
