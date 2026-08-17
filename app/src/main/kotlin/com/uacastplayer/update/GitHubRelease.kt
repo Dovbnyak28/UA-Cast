@@ -45,9 +45,9 @@ object GitHubReleaseParser {
 
         if (obj.optBoolean("draft", false) || obj.optBoolean("prerelease", false)) return null
 
-        val tagName = obj.optString("tag_name").takeIf { it.isNotBlank() } ?: return null
+        val tagName = obj.stringOrNull("tag_name") ?: return null
         val version = AppVersion.parse(tagName) ?: return null
-        val releaseUrl = obj.optString("html_url").takeIf { it.isNotBlank() } ?: return null
+        val releaseUrl = obj.stringOrNull("html_url") ?: return null
 
         return GitHubRelease(
             version = version,
@@ -71,17 +71,43 @@ object GitHubReleaseParser {
         val array = obj.optJSONArray("assets") ?: return emptyList()
         return (0 until array.length()).mapNotNull { index ->
             val asset = array.optJSONObject(index) ?: return@mapNotNull null
-            val name = asset.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val url = asset.optString("browser_download_url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val name = asset.stringOrNull("name") ?: return@mapNotNull null
+            val url = asset.stringOrNull("browser_download_url") ?: return@mapNotNull null
             ReleaseAsset(
                 name = name,
-                state = asset.optString("state"),
+                state = asset.stringOrNull("state").orEmpty(),
                 downloadUrl = url,
                 sizeBytes = asset.optLong("size", 0L),
-                // optString turns JSON null into "", which is not a digest either - both mean the
-                // same thing here and ReleaseDigest.parse answers both with null.
-                digest = asset.optString("digest").takeIf { it.isNotBlank() },
+                // GitHub sends `"digest": null` for every asset uploaded before it began recording
+                // one - see ReleaseApk, where that absence is documented as ordinary rather than a
+                // fault. This is the field in this file most likely to actually be null.
+                digest = asset.stringOrNull("digest"),
             )
         }
     }
+
+    /**
+     * A field's value, or null when it is absent, explicitly `null`, or blank.
+     *
+     * `optString(name).takeIf { it.isNotBlank() }` was doing this, and it does not, on the platform
+     * this runs on. The two `org.json` implementations disagree, measured directly on `{"a":null}`:
+     * the reference one - which `testImplementation(libs.org.json)` puts under the unit tests -
+     * answers `""`, while Android's answers `"null"`, four characters, because `optString` goes
+     * through `JSON.toString(opt(name))` and `JSONObject.NULL.toString()` is `"null"`. So a blank
+     * check was being handed a non-blank string for a field that was explicitly null, and only on a
+     * device.
+     *
+     * The outcomes here happened to survive it - a digest of `"null"` is refused by
+     * [ReleaseDigest.parse] just as a missing one is, and an asset named `"null"` does not end in
+     * `.apk` - but `html_url` would have become the literal string `"null"` and been offered to the
+     * user as the release page. The comment that used to sit on the digest line asserted the
+     * reference behaviour as fact, which is the part worth removing: the next reader would have
+     * believed it.
+     *
+     * `isNull` is the one accessor both implementations agree on, and it is true for an absent name
+     * as well as an explicit null. See `BackupCodec.stringOrNull`, which is the same guard for the
+     * same reason.
+     */
+    private fun JSONObject.stringOrNull(name: String): String? =
+        if (isNull(name)) null else optString(name).ifBlank { null }
 }
