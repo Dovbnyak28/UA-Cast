@@ -96,3 +96,26 @@ small gaps or overlaps between a programme's declared stop and the next one's st
 times are the more reliable signal. `epg/ProgrammeProgress.kt` turns `(start, effectiveStop, now)`
 into a clamped 0..1 progress fraction for the UI's progress bar, which ticks every 30 seconds
 (`AppViewModel`'s EPG tick loop) - not on every recomposition.
+
+## The day's lineup
+
+`epg/DayScheduleBuilder.kt` builds what the guide sheet draws: one channel's programmes for the
+local calendar day containing `now`, as `past` / `current` / `upcoming`.
+
+Two rules about it are easy to lose and were both lost once.
+
+**The three lists must partition the day.** They are everything `ui/epg/EpgGuideSheet.kt` draws, so
+a programme in none of them is one nobody can see. They were once three independent filters - has
+finished, is the first one airing, starts later - which only partition a day with at most one
+programme on at a time. Overlapping listings are ordinary (the same fact `ProgrammeLookup` above
+exists to work around), and the second of two overlapping programmes matched none of the three. The
+rule now is a single split: finished is the past, the first unfinished programme that has already
+begun is on air, everything else still to finish is upcoming.
+
+**A start time is not a key.** The guide sheet's rows live in a `LazyColumn`, which throws
+`IllegalArgumentException` out of composition on a repeated key rather than drawing a duplicate row.
+Nothing between the XML and that list promises start times differ: `XmlTvParser` keeps every
+`<programme>` element it is handed, `EpgRepository` only sorts them, and a feed merging several
+providers repeats entries as a matter of course. A repeat with no stop time is a second way in,
+since `EpgProgramme` falls back to the start for its stop. Row keys therefore carry the position as
+well as the start time.
