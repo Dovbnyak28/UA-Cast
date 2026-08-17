@@ -102,7 +102,18 @@ class TsSegmenter(
      * Returns a completed [TsSegment] when this packet lands on a cut point, in which case the
      * packet itself starts the *next* segment (it is never dropped). */
     override fun feed(data: ByteArray, offset: Int): TsSegment? {
-        if (offset + PACKET_SIZE > data.size || (data[offset].toInt() and 0xFF) != SYNC_BYTE) return null
+        // `offset > data.size - PACKET_SIZE`, not `offset + PACKET_SIZE > data.size`: the addition
+        // overflows, and an overflowed sum is negative, so the guard passed and the read below threw
+        // `Index 2147483646 out of bounds for length 188`. The subtraction cannot overflow - both
+        // sides are non-negative and it only ever goes down - and it stays correct for a buffer
+        // shorter than one packet, where the right-hand side is simply negative.
+        // `||` short-circuits, so the read is only reached once the bounds are known good.
+        if (offset < 0 ||
+            offset > data.size - PACKET_SIZE ||
+            (data[offset].toInt() and 0xFF) != SYNC_BYTE
+        ) {
+            return null
+        }
         val pid = pidOf(data, offset)
         discoverProgramInfo(pid, data, offset)
         val pcr = readPcr(pid, data, offset)
