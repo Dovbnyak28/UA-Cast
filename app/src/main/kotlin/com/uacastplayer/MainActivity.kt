@@ -58,6 +58,7 @@ import com.uacastplayer.ui.language.LanguagePickerScreen
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import com.uacastplayer.core.ui.findActivity
+import com.uacastplayer.core.ui.launchOrLogAbsence
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.data.update.ApkInstaller
 import com.uacastplayer.update.UpdateSectionState
@@ -399,9 +400,17 @@ private fun MainAppContent(
                 showAddPlaylist = false
                 focusChannelsToken++
             },
-            pickPlaylistFile = { pickPlaylistFile.launch(arrayOf("audio/x-mpegurl", "*/*")) },
-            exportBackupFile = { exportBackupFile.launch("ua-cast-backup-${LocalDate.now()}.json") },
-            importBackupFile = { importBackupFile.launch(arrayOf("application/json", "*/*")) },
+            // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
+            // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
+            pickPlaylistFile = {
+                pickPlaylistFile.launchOrLogAbsence(arrayOf("audio/x-mpegurl", "*/*"), "pick a playlist")
+            },
+            exportBackupFile = {
+                exportBackupFile.launchOrLogAbsence("ua-cast-backup-${LocalDate.now()}.json", "export a backup")
+            },
+            importBackupFile = {
+                importBackupFile.launchOrLogAbsence(arrayOf("application/json", "*/*"), "import a backup")
+            },
             requireParentalControlUnlock = requireParentalControlUnlock,
             premiumSection = premiumSection,
         )
