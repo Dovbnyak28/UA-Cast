@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -77,16 +77,30 @@ fun EpgGuideSheet(channel: M3uChannel, epgData: EpgData?, nowMillis: Long, onDis
     }
 }
 
+/** Internal rather than private so the list can be rendered without a [ModalBottomSheet] around
+ * it - the sheet is a container, and what is worth asserting is what the list does with a feed. */
 @Composable
-private fun ScheduleList(schedule: DaySchedule, nowMillis: Long, zoneId: ZoneId) {
-    val effectiveCurrentStop = schedule.upcoming.firstOrNull()?.startMillis ?: schedule.current?.stopMillis
+internal fun ScheduleList(schedule: DaySchedule, nowMillis: Long, zoneId: ZoneId) {
+    // `firstOrNull { it.startMillis > nowMillis }`, not `firstOrNull()`: since [DayScheduleBuilder]
+    // stopped dropping a programme running alongside the current one, the head of `upcoming` can be
+    // one that has already begun. Its start is behind `nowMillis`, which would put the progress bar
+    // of the programme on air at a hard 100% for the rest of its run.
+    val effectiveCurrentStop = schedule.upcoming.firstOrNull { it.startMillis > nowMillis }?.startMillis
+        ?: schedule.current?.stopMillis
 
     LazyColumn(modifier = Modifier.fillMaxWidth()) {
-        items(schedule.past, key = { it.startMillis }) { programme ->
+        // Keyed on the position as well as the start time, because a start time is not unique and a
+        // `LazyColumn` requires that its keys are: a repeated key is an IllegalArgumentException
+        // thrown out of composition, not a duplicated row. Two `<programme>` entries at the same
+        // start on one channel are ordinary in an aggregated feed, and nothing between the XML and
+        // this list removes them - so opening the guide for such a channel crashed. The start time
+        // stays in the key so that a row keeps its identity as the clock moves it from one bucket
+        // to the next, which is what the key was for.
+        itemsIndexed(schedule.past, key = { index, past -> "past-$index-${past.startMillis}" }) { _, programme ->
             ProgrammeRow(programme, state = ProgrammeRowState.PAST, zoneId = zoneId)
         }
         schedule.current?.let { current ->
-            item(key = current.startMillis) {
+            item(key = "current-${current.startMillis}") {
                 ProgrammeRow(
                     current,
                     state = ProgrammeRowState.CURRENT,
@@ -96,7 +110,7 @@ private fun ScheduleList(schedule: DaySchedule, nowMillis: Long, zoneId: ZoneId)
                 )
             }
         }
-        items(schedule.upcoming, key = { it.startMillis }) { programme ->
+        itemsIndexed(schedule.upcoming, key = { index, next -> "next-$index-${next.startMillis}" }) { _, programme ->
             ProgrammeRow(programme, state = ProgrammeRowState.UPCOMING, zoneId = zoneId)
         }
     }
