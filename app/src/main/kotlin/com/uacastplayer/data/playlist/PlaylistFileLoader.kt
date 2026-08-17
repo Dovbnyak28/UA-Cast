@@ -93,7 +93,9 @@ class PlaylistFileLoader(private val context: Context) {
             throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Cannot read the picked playlist: ${e.javaClass.simpleName}" }
-            PlaylistLoadResult.ReadError(e.message)
+            // The same class name the log line above already uses, not e.message - see
+            // PlaylistLoadResult.ReadError's own doc for why.
+            PlaylistLoadResult.ReadError(e.javaClass.simpleName)
         }
     }
 }

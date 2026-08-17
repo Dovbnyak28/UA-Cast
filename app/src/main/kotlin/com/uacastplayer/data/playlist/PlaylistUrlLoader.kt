@@ -58,7 +58,15 @@ class PlaylistUrlLoader(private val client: OkHttpClient) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            PlaylistLoadResult.ReadError(e.message)
+            // e.javaClass.simpleName, not e.message - see PlaylistLoadResult.ReadError's own doc.
+            // An IOException from this specific call routinely names the request URL, and that URL
+            // is this app's playlist address - for an Xtream source, with its username/password as
+            // query parameters right there in the string.
+            // e.javaClass.simpleName, not e.message - see PlaylistLoadResult.ReadError's own doc.
+            // An IOException from this specific call routinely names the request URL, and that URL
+            // is this app's playlist address - for an Xtream source, with its username/password as
+            // query parameters right there in the string.
+            PlaylistLoadResult.ReadError(e.javaClass.simpleName)
         }
     }
 
