@@ -30,9 +30,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.player.BrightnessGestureStart
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.RadiusField
+
+private const val TAG = "PlayerGestureLayer"
 
 internal const val DEFAULT_BRIGHTNESS_LEVEL = 0.5f
 
@@ -71,10 +74,37 @@ internal fun initialBrightnessLevel(activity: Activity): Float {
     return BrightnessGestureStart.level(activity.window.attributes.screenBrightness, systemBrightness)
 }
 
-internal fun applyStreamVolume(audioManager: AudioManager, level: Float) {
-    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+internal fun applyStreamVolume(audioManager: AudioManager, level: Float) = applyStreamVolume(
+    max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+    level = level,
+    setVolume = { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) },
+)
+
+/**
+ * The volume drag, with the one call that can refuse handed in.
+ *
+ * `AudioManager.setStreamVolume` documents a `SecurityException` "if the volume change triggers a
+ * Do Not Disturb change and the caller is not granted notification policy access". This app does
+ * not hold `ACCESS_NOTIFICATION_POLICY` and has no business asking for it, so with Do Not Disturb
+ * in its total-silence mode - where media is silenced too - a drag on the right-hand side of the
+ * fullscreen player is a documented way to throw an unchecked exception straight out of a pointer
+ * handler on the main thread. The gesture is discoverable and unlabelled, so the first thing a user
+ * with Do Not Disturb on learns about it is the app closing mid-programme.
+ *
+ * Refused is not failed: Do Not Disturb is holding the volume where the user put it, and the right
+ * answer is to leave it there. The indicator has already moved, and it corrects itself the next
+ * time the player reads the real volume back (see `currentVolumeFraction`).
+ *
+ * Taking [setVolume] as a function rather than the manager is what makes the refusal testable at
+ * all - the same seam, for the same reason, as `UpdateInstallController`'s downloader and installer.
+ */
+internal fun applyStreamVolume(max: Int, level: Float, setVolume: (Int) -> Unit) {
     val target = (level * max).toInt().coerceIn(0, max)
-    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+    try {
+        setVolume(target)
+    } catch (e: SecurityException) {
+        AppLog.w(TAG) { "Do Not Disturb refused the volume change: ${e.javaClass.simpleName}" }
+    }
 }
 
 /** Thin vertical fill bar shown while dragging in the brightness/volume zones of the fullscreen
