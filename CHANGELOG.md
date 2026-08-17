@@ -2,8 +2,80 @@
 
 Versions are marked in two places, which must move together: the local defaults in
 `app/build.gradle.kts` and `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`. CI appends
-its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.1.<run>` with a
+its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.2.<run>` with a
 `versionCode` of the run number - the values below are what a local build produces.
+
+## 0.9.2
+
+`versionCode` 11. Fixes only, and every one of them is a fault that is in the 0.9.1 APK people are
+holding - checked against that release's own commit rather than assumed. Three of them close the
+app outright.
+
+### Fixed
+
+- **Opening the TV guide could close the app.** The guide sheet keyed its rows on a programme's
+  start time, and a `LazyColumn` does not draw a duplicate row for a repeated key - it throws
+  `IllegalArgumentException` out of composition. Nothing between the XMLTV file and that list ever
+  promised those keys differ: the parser keeps every `<programme>` element it is handed and the
+  repository only sorts them, so a feed that merges several providers - which is most of them -
+  repeats entries as a matter of course. A repeat carrying no stop time is a second way in, since a
+  programme with no stop falls back to its start. Rows now carry their position in the key as well.
+
+- **A programme airing at the same time as another vanished from the guide.** The day's lineup was
+  three independent filters over one list - has finished, is the first one airing, starts later -
+  and those only divide up a day in which at most one programme is on at a time. Overlapping
+  listings are ordinary, and the second of two matched none of the three, so it was in neither the
+  past, the present nor the upcoming list. Those three lists are everything the guide draws.
+
+- **A refused install left the app asking for a confirmation that was no longer on screen.** Google
+  Play Protect rejects a sideloaded APK by default, which is the ordinary first outcome for an app
+  published outside the store - measured on a Mi A2 against the real 0.9.1 release. The install
+  simply did not happen, and "confirm the install on screen" stayed up for good with nothing to
+  press; only restarting the app cleared it. The system's verdict on a committed session now
+  reaches the screen that is waiting for it.
+
+- **Picking a file could close the app on a device that has no file picker.** "Choose a playlist
+  file", "export a backup" and "import a backup" called the system picker directly, and
+  `ACTION_OPEN_DOCUMENT` is a package (`DocumentsUI`) rather than part of Android: a ROM built
+  without it, a managed profile whose policy disables it, and Android TV all resolve nothing, which
+  throws from the tap. Now the button does nothing on such a device instead - and on the playlist
+  screen it was never the only way in, since a URL or an Xtream login reach the same place.
+
+- **A volume swipe while Do Not Disturb was on could close the app.** Setting the media volume
+  raises a `SecurityException` when the change would touch Do Not Disturb and the app has no
+  notification-policy access - which this app does not ask for and should not. In the total-silence
+  mode, where media is silenced too, that is what an ordinary drag on the right-hand side of the
+  player did. The refusal is now left alone: Do Not Disturb is holding the volume where its owner
+  put it.
+
+- **An imported backup could contain the word "null" where a value should be.** The `org.json` that
+  runs on a phone and the one this project's tests run against disagree about a field written as an
+  explicit `null`: one reads it as empty, the other as the four-character string `"null"`. Every
+  "is this field filled in" check in the backup reader is an emptiness check, so a *required* field
+  written as null passed the check that exists to reject it - importing a favourite whose stream
+  address is the word "null", which looks ordinary in the list and plays nothing. Backups this app
+  writes never contain one; a hand-edited or third-party file is what the reader is built to
+  survive.
+
+- **The same disagreement in the update check**, where the document is GitHub's own API response
+  rather than a local file. Most of it survived by luck, but a release published without a page
+  link would have offered `"null"` to a browser as its release page - the fallback offer for every
+  release this app cannot install by itself.
+
+- **A malformed byte offset into the stream segmenter read past the end of its buffer.** The bounds
+  check added before comparing, and that addition overflows, so at the top of the integer range the
+  check passed and the read threw. No path in the app reaches it today; it is closed because that
+  check is the only thing standing between the segmenter and a caller that gets an offset wrong,
+  and it was failing at exactly the value it exists for.
+
+### Changed
+
+- The proxy's byte parsers - the ones pointed at a third-party origin - now have the same
+  fuzz-testing net the playlist and guide parsers have had. It matters more there: the raw-TS
+  session deliberately catches everything around the segmenter so a corrupt packet ends one read
+  rather than the process, which also means a genuine fault in it never crashes and never reports.
+  It reconnects, and the user sees a channel that rebuffers with a log line blaming the network.
+  That net is what found the overflow above.
 
 ## 0.9.1
 
