@@ -124,6 +124,57 @@ class DayScheduleBuilderTest {
         assertEquals(emptyList<EpgProgramme>(), schedule.upcoming)
     }
 
+    /**
+     * The three lists are everything the guide sheet draws, so a programme in none of them is a
+     * programme nobody can see.
+     *
+     * They used to be three independent filters - finished, "the first one airing", starts later -
+     * and those only partition the day while at most one programme is airing at a time. Overlapping
+     * listings are routine (see [ProgrammeLookup], which exists partly because feeds disagree with
+     * themselves about where one programme stops and the next starts), and the second of two
+     * overlapping programmes matched none of the three: not finished, not the first airing one, not
+     * starting later. It was dropped from the day without a trace.
+     */
+    @Test
+    fun `a second programme airing at the same time is still somewhere in the day`() {
+        val long = programme("long", dayStart, dayStart + 3 * hour)
+        val overlapping = programme("overlapping", dayStart + hour, dayStart + 2 * hour)
+        val nowMillis = dayStart + hour + hour / 2
+
+        val schedule = DayScheduleBuilder.build(listOf(long, overlapping), nowMillis, zone)
+
+        assertEquals(long, schedule.current)
+        assertEquals(
+            "the overlapping programme has to be drawn somewhere",
+            listOf(overlapping),
+            schedule.past + schedule.upcoming,
+        )
+    }
+
+    /** The same rule stated as an invariant, so a future rewrite of the bucketing cannot lose a
+     * programme in some other shape of feed. */
+    @Test
+    fun `every programme of the day lands in exactly one bucket`() {
+        val programmes = listOf(
+            programme("finished", dayStart, dayStart + hour),
+            programme("airing", dayStart + hour, dayStart + 4 * hour),
+            programme("airing too", dayStart + 2 * hour, dayStart + 3 * hour),
+            programme("zero length, now", dayStart + 2 * hour + hour / 2, dayStart + 2 * hour + hour / 2),
+            programme("later", dayStart + 5 * hour, dayStart + 6 * hour),
+        )
+        val nowMillis = dayStart + 2 * hour + hour / 2
+
+        val schedule = DayScheduleBuilder.build(programmes, nowMillis, zone)
+
+        val drawn = schedule.past + listOfNotNull(schedule.current) + schedule.upcoming
+        assertEquals("nothing drawn twice", drawn.size, drawn.distinct().size)
+        assertEquals(
+            "nothing dropped",
+            programmes.map { it.title }.toSet(),
+            drawn.map { it.title }.toSet(),
+        )
+    }
+
     @Test
     fun `unsorted input is sorted before bucketing`() {
         val first = programme("first", dayStart, dayStart + hour)

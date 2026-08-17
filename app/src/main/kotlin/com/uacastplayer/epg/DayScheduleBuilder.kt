@@ -37,9 +37,19 @@ object DayScheduleBuilder {
             .filter { it.stopMillis > dayStartMillis && it.startMillis < dayEndMillis }
             .sortedBy { it.startMillis }
 
-        val current = todays.firstOrNull { it.startMillis <= nowMillis && it.stopMillis > nowMillis }
-        val past = todays.filter { it.stopMillis <= nowMillis }
-        val upcoming = todays.filter { it.startMillis > nowMillis }
+        // Split once, rather than filtered three times with three independent predicates. Those
+        // three - finished, "the first one airing", starts later - only partition the day while at
+        // most one programme is airing at a time, and overlapping listings are routine: the very
+        // reason [ProgrammeLookup] prefers the next start over the declared stop is that feeds
+        // disagree with themselves about where one programme ends. The second of two overlapping
+        // programmes matched none of the three and was dropped from the guide silently.
+        val (past, unfinished) = todays.partition { it.stopMillis <= nowMillis }
+        // The list is sorted by start, so the first unfinished programme that has already begun is
+        // the one on air. Anything else still to finish is upcoming - including a programme running
+        // alongside this one, which now reads as "starting next" rather than as nothing at all.
+        val currentIndex = unfinished.indexOfFirst { it.startMillis <= nowMillis }
+        val current = unfinished.getOrNull(currentIndex)
+        val upcoming = unfinished.filterIndexed { index, _ -> index != currentIndex }
 
         return DaySchedule(past, current, upcoming)
     }
