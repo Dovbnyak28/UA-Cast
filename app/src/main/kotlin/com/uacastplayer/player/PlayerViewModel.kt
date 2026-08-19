@@ -441,6 +441,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchToIndexImmediate(index: Int) {
         if (index !in channels.indices) return
+        // A third stale-job class alongside stallRecoveryJob/retryJob below: requestSwitch's own
+        // debounce cancels only a *previous* debounce, not a switch that lands through some other
+        // path (start() loading a fresh playlist, a cast-driven ApplyPendingChannelSwitch, an
+        // auto-skip to the next live channel) while its delay is still running. Left alive, that
+        // debounce fires later against whatever `channels`/`index` mean by then - which, after a
+        // fresh start(), is a different playlist than the one the tap was made against.
+        pendingSwitchJob?.cancel()
         channelHistory = ChannelHistoryPolicy.onSwitch(channelHistory, index)
         currentIndex = index
         stallState = StallDetectionPolicy.StallState.NONE
