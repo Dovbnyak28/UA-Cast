@@ -189,7 +189,18 @@ class CastSessionRepository private constructor(context: Context) {
         override fun onStatusUpdated() {
             val status = currentSession?.remoteMediaClient?.mediaStatus ?: return
             val receiverStatus = mapPlayerState(status.playerState)
-            if (receiverStatus == ReceiverStatus.PLAYING) watchdogJob?.cancel()
+            if (receiverStatus == ReceiverStatus.PLAYING) {
+                watchdogJob?.cancel()
+                // A recovery reload can still be sitting in scheduleReload's backoff when the
+                // receiver reports PLAYING on its own - the synthetic IDLE that scheduled it (see
+                // scheduleSustainedBufferingWatchdog/scheduleStallWatchdog) is a heuristic guess,
+                // and the real receiver can catch up before the delayed reload fires. Left alive,
+                // that reload runs anyway once its backoff elapses: StaleChannelGuard only checks
+                // the channel hasn't changed, not that the receiver is still unwell, so a channel
+                // already PLAYING fine gets an unrequested reload - the exact rebuffer this whole
+                // recovery path exists to avoid, just self-inflicted instead of network-caused.
+                recoveryJob?.cancel()
+            }
             if (receiverStatus == ReceiverStatus.BUFFERING) {
                 scheduleSustainedBufferingWatchdog()
             } else {
