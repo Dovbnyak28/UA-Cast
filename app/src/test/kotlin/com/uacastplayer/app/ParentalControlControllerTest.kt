@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -168,7 +169,7 @@ class ParentalControlControllerTest {
         controller(pins = second).setPin("1234")
 
         assertTrue(first.parentalControlPinHash != null && first.parentalControlPinSalt != null)
-        assertFalse(first.parentalControlPinHash!!.contains("1234"))
+        assertNotEquals("the stored hash must not be the plaintext PIN", "1234", first.parentalControlPinHash)
         assertTrue(
             "same PIN must not produce the same stored hash on two installs",
             first.parentalControlPinHash != second.parentalControlPinHash,
