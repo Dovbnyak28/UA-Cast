@@ -17,7 +17,8 @@ enum class AppLanguage(val code: String) {
      * [com.uacastplayer.playlist.ChannelGrouper].
      *
      * `Locale.getDefault()` is the wrong answer for those, and specifically wrong in this app:
-     * [withAppLocale] wraps a Configuration rather than calling `Locale.setDefault`, so the process
+     * [com.uacastplayer.data.prefs.withAppLocale] wraps a Configuration rather than calling
+     * `Locale.setDefault`, so the process
      * default stays whatever the *device* is set to no matter what the user picked here. Somebody
      * running a phone in English with this app in Ukrainian would have got English collation.
      */

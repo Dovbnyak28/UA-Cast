@@ -2,6 +2,7 @@ package com.uacastplayer.data.playlist
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.data.writeSafely
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.PlaylistSnapshot
@@ -9,7 +10,7 @@ import com.uacastplayer.playlist.PlaylistSnapshotCodec
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PlaylistSnapshotStore"
@@ -20,11 +21,15 @@ private const val TAG = "PlaylistSnapshotStore"
  * (its stable fingerprint) so switching between multiple saved sources doesn't require a fresh
  * network fetch every time, only the first time a given source is loaded.
  */
-class PlaylistSnapshotStore(context: Context, sourceId: String) {
+class PlaylistSnapshotStore(
+    context: Context,
+    sourceId: String,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "playlist_snapshot_$sourceId.bin"))
 
-    suspend fun save(snapshot: PlaylistSnapshot) = withContext(Dispatchers.IO) {
+    suspend fun save(snapshot: PlaylistSnapshot) = withContext(ioDispatcher) {
         atomicFile.writeSafely(TAG, "Playlist snapshot") { stream ->
             PlaylistSnapshotCodec.encode(snapshot, stream)
         }
@@ -41,11 +46,11 @@ class PlaylistSnapshotStore(context: Context, sourceId: String) {
      * truncate it, and `filesDir` is not a directory Android ever reclaims. Measured at 5.6MB for a
      * 40,000-channel playlist.
      */
-    suspend fun delete() = withContext(Dispatchers.IO) {
+    suspend fun delete() = withContext(ioDispatcher) {
         atomicFile.delete()
     }
 
-    suspend fun load(): PlaylistSnapshot? = withContext(Dispatchers.IO) {
+    suspend fun load(): PlaylistSnapshot? = withContext(ioDispatcher) {
         try {
             atomicFile.openRead().use { PlaylistSnapshotCodec.decode(it) }
         } catch (_: FileNotFoundException) {

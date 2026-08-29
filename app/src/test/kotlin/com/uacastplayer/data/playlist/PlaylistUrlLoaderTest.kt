@@ -46,4 +46,13 @@ class PlaylistUrlLoaderTest {
         assertFalse("the host leaked into the result", message.orEmpty().contains(host))
         assertFalse("the password leaked into the result", message.orEmpty().contains("realsecret"))
     }
+
+    @Test
+    fun `a malformed imported url becomes a read error instead of escaping`() = runTest {
+        val loader = PlaylistUrlLoader(OkHttpClient())
+
+        val result = loader.load("content://not-an-http-playlist")
+
+        assertEquals(PlaylistLoadResult.ReadError("IllegalArgumentException"), result)
+    }
 }

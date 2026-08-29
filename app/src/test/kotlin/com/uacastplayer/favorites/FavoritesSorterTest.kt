@@ -1,6 +1,5 @@
 package com.uacastplayer.favorites
 
-import com.uacastplayer.data.prefs.FavoritesSortOrder
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test

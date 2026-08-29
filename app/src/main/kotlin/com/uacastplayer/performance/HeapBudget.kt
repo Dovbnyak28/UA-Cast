@@ -1,6 +1,6 @@
 package com.uacastplayer.performance
 
-import com.uacastplayer.data.prefs.BufferSize
+import com.uacastplayer.core.settings.BufferSize
 
 /**
  * What this app may hold, decided from the heap it was actually given.

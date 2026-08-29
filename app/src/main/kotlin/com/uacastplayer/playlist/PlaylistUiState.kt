@@ -1,9 +1,9 @@
 package com.uacastplayer.playlist
 
-sealed class PlaylistError {
-    data object SizeLimitExceeded : PlaylistError()
-    data class Http(val code: Int) : PlaylistError()
-    data object Network : PlaylistError()
+sealed interface PlaylistError {
+    data object SizeLimitExceeded : PlaylistError
+    data class Http(val code: Int) : PlaylistError
+    data object Network : PlaylistError
 
     /**
      * The source was read and held no channels.
@@ -14,11 +14,20 @@ sealed class PlaylistError {
      * sees - so the answer to "I added my playlist and nothing happened" was a blank screen and no
      * sentence anywhere saying the file had nothing in it.
      */
-    data object Empty : PlaylistError()
+    data object Empty : PlaylistError
 }
 
 data class PlaylistUiState(
     val groups: List<GroupedChannels> = emptyList(),
+    /**
+     * The same channels in playback order, materialized once when a load is reduced.
+     *
+     * Home, Channels, Favorites, Settings and process-death recovery all need this view. Having
+     * each screen call `groups.flatMap` allocated another 40,000-element list on the Compose
+     * thread whenever a large playlist reached that screen. The default keeps hand-built preview
+     * and test states consistent; production supplies the list already built off the main thread.
+     */
+    val channels: List<M3uChannel> = groups.flatMap { it.channels },
     val isLoading: Boolean = false,
     val skippedLineCount: Int = 0,
     val error: PlaylistError? = null,
@@ -32,5 +41,5 @@ data class PlaylistUiState(
      * one-tap refresh instead of sending the user back through Settings to retype it. */
     val sourceUrl: String? = null,
 ) {
-    val hasChannels: Boolean get() = groups.isNotEmpty()
+    val hasChannels: Boolean get() = channels.isNotEmpty()
 }

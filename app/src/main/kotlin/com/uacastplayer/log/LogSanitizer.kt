@@ -1,5 +1,6 @@
 package com.uacastplayer.log
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import java.net.URI
 
 /**
@@ -134,7 +135,7 @@ object LogSanitizer {
      * report, which is the right way round for a component whose failure mode is a leak.
      */
     private fun redactUrl(url: String): String {
-        val uri = runCatching { URI(url) }.getOrNull()
+        val uri = runCatchingNonFatal { URI(url) }.getOrNull()
         val host = uri?.host ?: return "<url:${shortMarker(url)}>"
         val scheme = uri.scheme ?: "http"
         val port = if (uri.port != -1) ":${uri.port}" else ""

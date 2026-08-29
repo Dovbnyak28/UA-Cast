@@ -42,6 +42,7 @@ android {
         // are what local (non-CI) builds get.
         versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 11
         versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.2"
+        buildConfigField("boolean", "SELF_UPDATER_ENABLED", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -114,6 +115,11 @@ android {
                 signingConfig = releaseSigning
             }
         }
+        create("play") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "SELF_UPDATER_ENABLED", "false")
+        }
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
@@ -138,6 +144,20 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            // These third-party binaries are pre-stripped (no .debug_* or .symtab sections),
+            // but AGP still tries to invoke an NDK strip tool for them. Keeping only this explicit
+            // list avoids a noisy no-op when the NDK is not installed and does not widen the rule
+            // to future native dependencies that may actually contain debug symbols.
+            keepDebugSymbols += listOf(
+                "**/libandroidx.graphics.path.so",
+                "**/libavcodec.so",
+                "**/libavutil.so",
+                "**/libmedia3ext.so",
+                "**/libswresample.so",
+                "**/libswscale.so",
+            )
         }
     }
 
@@ -164,17 +184,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            kotlin.srcDirs("src/main/kotlin")
-        }
-        getByName("test") {
-            kotlin.srcDirs("src/test/kotlin")
-        }
-        getByName("androidTest") {
-            kotlin.srcDirs("src/androidTest/kotlin")
-        }
-    }
 }
 
 kotlin {
@@ -209,6 +218,16 @@ private val abiVersionCodeOffsets = mapOf<String?, Int>(
 
 androidComponents {
     onVariants { variant ->
+        // The Baseline Profile plugin creates these variants after the Android extension is
+        // evaluated, so a conventional static source-set lookup cannot see them. Register through
+        // the Variant API at the point they actually exist. The same registration also attaches
+        // the manifest overlay; generated source sets do not discover it on their own.
+        if (variant.name == "benchmarkRelease" || variant.name == "nonMinifiedRelease") {
+            // Register through AGP's Java source API: Kotlin Android also compiles `.kt` files
+            // from these directories, while its parallel Kotlin source-set API is deprecated.
+            variant.sources.java?.addStaticSourceDirectory("src/benchmarkFixtures/kotlin")
+            variant.sources.manifests.addStaticManifestFile("src/${variant.name}/AndroidManifest.xml")
+        }
         variant.outputs.forEach { output ->
             val abi = output.filters
                 .find { it.filterType == FilterConfiguration.FilterType.ABI }
@@ -358,6 +377,3 @@ tasks.withType<Test>().configureEach {
         }
     )
 }
-
-
-

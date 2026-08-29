@@ -13,6 +13,22 @@ app outright.
 
 ### Fixed
 
+- **Channel logos could disappear for valid provider URLs.** Some IPTV playlists supplied
+  protocol-relative or HTML-escaped artwork URLs, which were rejected or requested with the wrong
+  query string before the fallback chain could help. Those URLs are now canonicalized safely,
+  malformed candidates are skipped so EPG/custom sources can be tried, AVIF artwork is recognized,
+  and `CACHE_LIMITED` devices warm a bounded set of priority logos instead of waiting for a row to
+  be scrolled into view.
+
+- **Logo prefetch could duplicate work or wait for the wrong network.** Equivalent URL spellings
+  were treated as different in-memory jobs, and a failed prefetch watched only for Wi-Fi even when
+  the setting allowed mobile data. Cache keys now use the resolver's canonical URL form, while
+  recovery watches for any internet-capable network and lets the Wi-Fi-only gate decide eligibility.
+
+- **Whitespace around M3U metadata could split otherwise identical channels.** Quoted `tvg-id`,
+  `tvg-name`, `tvg-logo` and `group-title` values are now trimmed at the parser boundary, keeping
+  grouping, EPG matching and generated logo URLs stable across provider formatting differences.
+
 - **Opening the TV guide could close the app.** The guide sheet keyed its rows on a programme's
   start time, and a `LazyColumn` does not draw a duplicate row for a repeated key - it throws
   `IllegalArgumentException` out of composition. Nothing between the XMLTV file and that list ever

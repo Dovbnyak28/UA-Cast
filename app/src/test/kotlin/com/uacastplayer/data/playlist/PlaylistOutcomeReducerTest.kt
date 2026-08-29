@@ -8,6 +8,7 @@ import com.uacastplayer.playlist.PlaylistUiState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class PlaylistOutcomeReducerTest {
@@ -67,6 +68,38 @@ class PlaylistOutcomeReducerTest {
     }
 
     @Test
+    fun `a loaded state reuses the flat channel list prepared off the main thread`() {
+        val first = channel("A")
+        val second = channel("B")
+        val groups = listOf(
+            GroupedChannels(ChannelGroup.Custom("One"), listOf(first)),
+            GroupedChannels(ChannelGroup.Custom("Two"), listOf(second)),
+        )
+        val prepared = listOf(first, second)
+
+        val result = PlaylistOutcomeReducer.reduce(
+            current = loadedState,
+            outcome = PlaylistOutcome.Loaded(groups = groups, skippedLineCount = 0),
+            fromCache = false,
+            displayName = null,
+            loadedChannels = prepared,
+        )
+
+        assertSame(prepared, result.channels)
+        assertEquals(listOf("A", "B"), result.channels.map { it.displayName })
+    }
+
+    @Test
+    fun `a hollow group is not reported as a loaded playlist`() {
+        val state = PlaylistUiState(
+            groups = listOf(GroupedChannels(ChannelGroup.Custom("Empty"), emptyList())),
+        )
+
+        assertFalse(state.hasChannels)
+        assertEquals(emptyList<M3uChannel>(), state.channels)
+    }
+
+    @Test
     fun `a Loaded outcome replaces groups and clears any previous error`() {
         val outcome = PlaylistOutcome.Loaded(
             groups = listOf(GroupedChannels(ChannelGroup.Custom("New"), listOf(channel("B")))),
@@ -116,20 +149,31 @@ class PlaylistOutcomeReducerTest {
         assertEquals(loadedState.sourceUrl, result.sourceUrl)
         assertEquals(loadedState.displayName, result.displayName)
         assertEquals(loadedState.activePlaylistId, result.activePlaylistId)
+        assertSame(loadedState.channels, result.channels)
         assertEquals(PlaylistError.Http(503), result.error)
         assertEquals(false, result.isLoading)
     }
 
     @Test
     fun `a size limit failure also preserves the previously loaded channels`() {
-        val result = PlaylistOutcomeReducer.reduce(loadedState, PlaylistOutcome.SizeLimitExceeded, fromCache = false, displayName = null)
+        val result = PlaylistOutcomeReducer.reduce(
+            loadedState,
+            PlaylistOutcome.SizeLimitExceeded,
+            fromCache = false,
+            displayName = null,
+        )
         assertEquals(loadedState.groups, result.groups)
         assertEquals(PlaylistError.SizeLimitExceeded, result.error)
     }
 
     @Test
     fun `a network read error also preserves the previously loaded channels`() {
-        val result = PlaylistOutcomeReducer.reduce(loadedState, PlaylistOutcome.ReadError("timeout"), fromCache = false, displayName = null)
+        val result = PlaylistOutcomeReducer.reduce(
+            loadedState,
+            PlaylistOutcome.ReadError("timeout"),
+            fromCache = false,
+            displayName = null,
+        )
         assertEquals(loadedState.groups, result.groups)
         assertEquals(PlaylistError.Network, result.error)
     }

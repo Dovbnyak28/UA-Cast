@@ -46,4 +46,11 @@ class EpgDownloaderReadErrorTest {
         assertTrue("credentials leaked into a shared report: $cause", "password" !in cause)
         assertTrue("the url leaked into a shared report: $cause", "127.0.0.1" !in cause)
     }
+
+    @Test
+    fun `a malformed imported url is a read error rather than an uncaught exception`() {
+        val result = download("not a valid XMLTV URL")
+
+        assertEquals(EpgDownloadResult.ReadError("IllegalArgumentException"), result)
+    }
 }

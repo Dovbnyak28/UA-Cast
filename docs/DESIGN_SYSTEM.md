@@ -1,11 +1,12 @@
 # Design system
 
 Every screen is built from the tokens in `ui/theme/` and the components in `ui/components/`
-(mainly `DesignSystemControls.kt`). Vanilla Material3 widgets (`FilterChip`, `OutlinedButton`,
-`MaterialTheme.typography.*`, `MaterialTheme.colorScheme.*`, `Toast`) should not appear in new UI
-code - they don't track this palette/type scale and drift out of sync with the rest of the app the
-moment a token changes. `TermsScreen`/`HelpScreen`/`PlayerScreen` are the reference implementations
-for "screen built entirely from tokens."
+(mainly `DesignSystemControls.kt`). User-facing chrome uses the app wrappers (`PrimaryButton`,
+`SecondaryButton`, `SegmentedControl`, `uaTextFieldColors`) rather than raw Material defaults.
+Material3 remains allowed for behavior-heavy primitives such as dialogs, switches, text fields,
+progress indicators, pull-to-refresh and menus, provided their colors and typography are mapped to
+`UaTheme`. A bare `MaterialTheme.*` value is acceptable only inside a shared component that performs
+that mapping; screens read `UaTheme.palette` and the named type tokens directly.
 
 **Colors specifically go through `UaTheme.palette` (see "Themes" below), not a bare Color.kt
 constant.** The color names below (`Void`, `Azure`, `LabelPrimary`, ...) are still where the
@@ -48,6 +49,9 @@ reaching for `MaterialTheme.typography.bodyMedium` etc.
 
 ## Motion (`ui/theme/Motion.kt`)
 
+- **Navigation transition** (`DUR_NAV = 220ms`) - top-level destination changes use a short,
+  directional slide/fade. The transition is skipped when Android reduced-motion is enabled.
+
 - `EaseSpring` - the standard easing curve for all token-driven animations.
 - `DurPress` (250ms) - press/release scale and highlight-slide animations.
 - `DurEnter` (700ms) + `StaggerMs` (70ms) - list/grid entry, via `Modifier.staggeredEntry` (see
@@ -56,6 +60,9 @@ reaching for `MaterialTheme.typography.bodyMedium` etc.
 - `DurRing` (1400ms) - the ring that leaves a Cast/DLNA button while a session is live
   (`ui/components/LiveRing.kt`).
 - `BreatheMs` (2000ms) - the player overlay's ambient pulse.
+- **Reduced motion** - stagger, shimmer and live-ring effects read Android's animator-duration
+  scale through `MotionAccessibility.kt`. At scale `0` content appears immediately, shimmer becomes
+  static and connection state keeps a non-animated ring.
 - **Rule 2 (press-scale)** - interactive controls scale down slightly on press using
   `collectIsPressedAsState()` + `animateFloatAsState`: `PressScalePlay` (0.94, play button),
   `PressScaleRound` (0.88, round icon buttons), `PressScaleIcon` (0.90, small icon buttons). New
@@ -142,7 +149,7 @@ app-wide.
 | Theme | Background | Accent | Character |
 | --- | --- | --- | --- |
 | `AppTheme.AZURE` (default) | neutral near-black, textured | cool blue | unchanged from before themes existed |
-| `AppTheme.CINEMA` | warm charcoal, textured | champagne gold | serif display type, pill-shaped controls |
+| `AppTheme.CINEMA` | warm charcoal, textured | champagne gold | bold sans display type, pill-shaped controls |
 | `AppTheme.MIDNIGHT` | true `#000000`, flat | muted pewter | no wallpaper texture, no vignette, maximum contrast |
 
 They're deliberately spread across the axes rather than being three shades of the same idea: Azure
@@ -256,19 +263,14 @@ surface reads as visual noise instead of drawing the eye to what's actually live
 `raisedSurface` itself never glows for this reason; a glowing control layers its own
 `.shadow(spotColor = ...)` separately, the same way `GradientPlayButton` already does.
 
-### Serif display type
+### Display type
 
-`UaPalette.displayFontFamily` (`FontFamily.Serif` in Cinema, the platform default elsewhere) is
-consumed through `Type.kt`'s `DisplayTitle`/`DisplayName` styles, not read directly at call sites -
-see the "Typography" section above for the base styles they wrap. `FontFamily.Serif` is Android's
-generic serif alias (resolves to whatever serif face the device ships) rather than a specific
-bundled typeface like Playfair Display: no font binary was available when this was built, and the
-first attempt (Android's Downloadable Fonts API against the Google Play Services Fonts provider)
-was confirmed on-device to silently fail on de-Googled ROMs (LineageOS + microG) - package-visibility
-blocked the query since microG doesn't implement that provider, so it fell back to the platform
-default with no error. `FontFamily.Serif` has none of that risk (no network, no GMS dependency) at
-the cost of not being a specific named typeface. A future iteration could swap in an actually-bundled
-OFL font file by changing just `CinemaPalette.kt`'s `displayFontFamily` value.
+`UaPalette.displayFontFamily` is consumed through `Type.kt`'s `DisplayTitle`/`DisplayName` styles,
+not read directly at call sites - see the "Typography" section above for the base styles they
+wrap. Cinema deliberately uses Android's offline `FontFamily.SansSerif`, matching the rest of the
+app so long titles keep predictable metrics across OEMs and locales. A future iteration can still
+swap in an actually-bundled OFL font file by changing just `CinemaPalette.kt`'s
+`displayFontFamily` value.
 
 ## §E Equal-share rows
 

@@ -1,5 +1,6 @@
 package com.uacastplayer.backup
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -25,14 +26,14 @@ object BackupCodec {
     }
 
     /**
-     * The whole body is guarded, not just the initial [JSONObject] construction: `runCatching`
+     * The whole body is guarded, not just the initial [JSONObject] construction: `runCatchingNonFatal`
      * around that alone left every accessor below it free to throw, and one did - see
      * [toObjectList]. This file is user-visible and meant to be hand-editable, so "unusable input
      * yields null" has to hold for the entire parse, not for its first line.
      */
     fun decode(text: String): BackupData? {
         if (text.isBlank()) return null
-        return runCatching {
+        return runCatchingNonFatal {
             JSONObject(text)
                 .takeIf { it.optInt("version", -1) == CURRENT_VERSION }
                 ?.let { root ->

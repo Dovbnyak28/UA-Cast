@@ -20,6 +20,13 @@ class XtreamUrlBuilderTest {
     }
 
     @Test
+    fun `normalizes an upper case https scheme without double prefixing`() {
+        val url = XtreamUrlBuilder.playlistUrl("HTTPS://example.com", "user", "pass")
+        assertTrue(url.startsWith("https://example.com/get.php"))
+        assertTrue(!url.contains("http://HTTPS://"))
+    }
+
+    @Test
     fun `preserves a port in the server address`() {
         val url = XtreamUrlBuilder.playlistUrl("example.com:8080", "user", "pass")
         assertTrue(url.startsWith("http://example.com:8080/get.php"))

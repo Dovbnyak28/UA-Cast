@@ -46,4 +46,22 @@ class SsdpResponseParserTest {
         assertNull(response.location)
         assertEquals(0, response.headers.size)
     }
+
+    @Test
+    fun `non HTTP and relative locations are rejected before discovery capacity is consumed`() {
+        for (location in listOf("file:///tmp/device.xml", "/device.xml", "http://user:pass@10.0.0.5/device")) {
+            val response = SsdpResponseParser.parse("HTTP/1.1 200 OK\r\nLOCATION: $location\r\n\r\n")
+
+            assertNull("accepted unsafe SSDP LOCATION: $location", response.location)
+        }
+    }
+
+    @Test
+    fun `HTTPS and a valid explicit port remain supported`() {
+        val response = SsdpResponseParser.parse(
+            "HTTP/1.1 200 OK\r\nLOCATION: https://tv.local:8443/device.xml\r\n\r\n",
+        )
+
+        assertEquals("https://tv.local:8443/device.xml", response.location)
+    }
 }

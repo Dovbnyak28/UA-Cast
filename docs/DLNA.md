@@ -27,6 +27,18 @@ Two consequences of "same proxy" that are easy to get wrong, and were:
   out from under a renderer that may still be fetching the previous url. `start` is only reached
   through `ensureStarted`'s own new-session path.
 
+The renderer profile is deliberately different from Chromecast's: raw MPEG-TS stays a continuous
+stream (`remuxEnabled=false`), single-URL wrapper playlists are unwrapped, and a real HLS channel is
+replayed as one continuous `video/mp2t` response (`flattenHlsToStream=true`). This is the direct fix
+for a Hisense VIDAA field capture where the set fetched one manifest, no segments, refused
+`SetAVTransportURI`, and displayed "Archivo no compatible". A master playlist is probed in order,
+with a bounded eight-variant budget, so an unsupported fMP4/encrypted first variant does not hide a
+later MPEG-TS fallback. A generic origin MIME such as `application/octet-stream` is normalized to
+`video/mp2t` only after MPEG-TS sync bytes prove what the body is. Encrypted, fragmented-MP4 and
+byte-range media playlists still fall back to the manifest rather than being concatenated into
+corrupt output. A live encoder whose media sequence persistently resets is resumed after three
+consecutive rollback windows; one stale CDN response is ignored rather than replaying old video.
+
 ## Discovery
 
 `dlna/SsdpDiscovery` sends SSDP M-SEARCH multicast datagrams to `239.255.255.250:1900` and collects
@@ -60,11 +72,13 @@ including - especially - when the result is empty. An empty device sheet is the 
 report, and the counts are what separate "nothing answered the multicast" from "several devices
 answered but none of them can receive video".
 
-Each collected `LOCATION` is fetched (body size capped via `core/io/BoundedByteReader`) and parsed
-by `dlna/DeviceDescriptionParser`, a hardened SAX parser (external entities disabled, same
-discipline as `epg/XmlTvParser`) that pulls out `friendlyName` and the `controlURL` of the first
-`AVTransport` service. `controlURL` is very often a relative path in real device descriptions, so
-it is resolved against the device's own `LOCATION` url before being stored.
+Only absolute HTTP(S) `LOCATION` values without embedded credentials enter the bounded discovery
+set, so invalid replies cannot consume its capacity or reach OkHttp. Each accepted description is
+fetched with a body cap (`core/io/BoundedByteReader`) and parsed by `dlna/DeviceDescriptionParser`,
+a hardened SAX parser (DOCTYPE and external entities disabled) that pulls out `friendlyName` and
+the `controlURL` of the first `AVTransport` service. A relative `controlURL` is resolved against the
+standard UPnP `URLBase` when present and valid, otherwise against the device's own `LOCATION` URL.
+The resulting SOAP endpoint is validated by the same HTTP endpoint policy as SSDP.
 
 ## Casting
 
@@ -120,7 +134,9 @@ DLNA session rather than a Chromecast one. This replaced a bare `CastWakeLocks` 
 `PARTIAL_WAKE_LOCK` keeps the CPU awake but does nothing to stop the OS reclaiming a backgrounded
 process, and the proxy only matters while it is *serving* - so leaving the app killed the TV's stream
 on exactly the aggressive OEM builds that service was written for. The service owns the wake/wifi
-locks for its own lifetime; `DlnaSessionRepository` holds none of its own.
+locks for its own lifetime; `DlnaSessionRepository` holds none of its own. Chromecast and DLNA are
+separate owners of that lifetime: stopping either one removes only its owner, and the service and
+locks remain active while the other still needs them.
 
 `stop()` tears the proxy and locks down *synchronously* and only defers the SOAP `Stop`: with the
 teardown behind the coroutine that first waits out a renderer's timeout, a user who stopped and
@@ -185,17 +201,13 @@ changed nothing anywhere: the TV kept the old channel and the phone played nothi
 - **No renderer position/state tracking.** The app never polls `GetPositionInfo` or
   `GetTransportInfo`. There is no seek-on-the-TV and no progress bar synced back from the
   renderer - once `Play` succeeds, the app simply shows "connected" until the user hits stop.
-- **DLNA and Chromecast are mutually exclusive.** `DlnaSessionRepository` and
+- **No coordinated handoff between DLNA and Chromecast.** `DlnaSessionRepository` and
   `CastSessionRepository` are independent singletons with no shared state (each owns its own
-  `ProxyServer` instance); there is no handling for both being "connected" at once, and no attempt
-  to hand a session off between them.
-
-  *Measured, and only half true.* On a Mi A2 both connected at the same time - a Chromecast and a
-  Samsung set playing the same channel, each through its own proxy - and neither disturbed the
-  other. What is genuinely absent is *coordination*: nothing prevents it, nothing presents it as one
-  session, and `LocalPlaybackPolicy.shouldResumeAfterDisconnect` had to be taught about both targets
-  precisely because disconnecting one used to resume the phone underneath the other.
-- **Codec compatibility is not gated.** `cast/CastCompatibilityPolicy.kt` producing Chromecast
+  `ProxyServer` instance). On a Mi A2 both were measured connected at once - a Chromecast and a
+  Samsung set playing the same channel, each through its own proxy - and the shared foreground
+  service now keeps independent ownership for both. What remains deliberately absent is a handoff
+  or a single combined session UI: nothing presents the two receivers as one session.
+- **Codec compatibility is not gated.** `core/cast/CastCompatibilityPolicy.kt` producing Chromecast
   codec verdicts is intentionally *not* consulted here. Real DLNA/UPnP TVs are generally far more
   codec-permissive than a Chromecast Default Receiver (MPEG-2, MP2, AC-3, HEVC are usually fine),
   so gating the DLNA path on Chromecast's verdicts would reject streams a real TV can play just

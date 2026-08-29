@@ -5,9 +5,9 @@ data class BottomNavState(val stack: List<BottomDestination> = listOf(BottomDest
     val current: BottomDestination get() = stack.last()
 }
 
-sealed class BottomNavEvent {
-    data class Select(val destination: BottomDestination) : BottomNavEvent()
-    data object Back : BottomNavEvent()
+sealed interface BottomNavEvent {
+    data class Select(val destination: BottomDestination) : BottomNavEvent
+    data object Back : BottomNavEvent
 }
 
 data class BottomNavResult(val state: BottomNavState, val shouldExitApp: Boolean)

@@ -32,13 +32,20 @@ object ChannelGrouper {
      *   folder, so having it in an order their alphabet does not recognise is the version of this
      *   bug that costs the most.
      */
-    fun group(channels: List<M3uChannel>, locale: Locale = Locale.getDefault()): List<GroupedChannels> {
+    fun group(
+        channels: List<M3uChannel>,
+        locale: Locale = Locale.getDefault(),
+        checkCancellation: () -> Unit = {},
+    ): List<GroupedChannels> {
         val byGroup = linkedMapOf<ChannelGroup, MutableList<M3uChannel>>()
-        for (channel in channels) {
+        checkCancellation()
+        for ((index, channel) in channels.withIndex()) {
+            if (index % CANCELLATION_CHECK_INTERVAL_CHANNELS == 0) checkCancellation()
             val group = ChannelGroupNormalizer.normalize(channel.groupTitle)
             byGroup.getOrPut(group) { mutableListOf() }.add(channel)
         }
 
+        checkCancellation()
         val known = byGroup.keys.filterIsInstance<ChannelGroup.Known>()
             .sortedBy { knownOrder.indexOf(it.key).takeIf { i -> i >= 0 } ?: Int.MAX_VALUE }
         // A Collator, not `lowercase()`: lowercasing sorts by UTF-16 code unit, which puts Ukrainian
@@ -47,6 +54,9 @@ object ChannelGrouper {
             .sortedWith(compareBy(Collator.getInstance(locale)) { it.rawTitle })
         val ungrouped = byGroup.keys.filterIsInstance<ChannelGroup.Ungrouped>()
 
+        checkCancellation()
         return (known + custom + ungrouped).map { GroupedChannels(it, byGroup.getValue(it)) }
     }
+
+    private const val CANCELLATION_CHECK_INTERVAL_CHANNELS = 256
 }

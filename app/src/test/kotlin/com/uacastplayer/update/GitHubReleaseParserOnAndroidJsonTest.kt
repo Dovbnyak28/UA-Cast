@@ -51,7 +51,7 @@ class GitHubReleaseParserOnAndroidJsonTest {
                 [{
                   "name": "app-universal-release.apk",
                   "state": "uploaded",
-                  "browser_download_url": "https://example.test/app.apk",
+                  "browser_download_url": "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.2.0/app.apk",
                   "size": 40000000,
                   "digest": null
                 }]
@@ -73,7 +73,7 @@ class GitHubReleaseParserOnAndroidJsonTest {
                 [{
                   "name": "app-universal-release.apk",
                   "state": "uploaded",
-                  "browser_download_url": "https://example.test/app.apk",
+                  "browser_download_url": "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.2.0/app.apk",
                   "size": 40000000,
                   "digest": "sha256:$hex"
                 }]

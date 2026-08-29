@@ -201,6 +201,29 @@ class UpdateControllerTest {
         assertEquals(UpdateCheckOutcome.FAILED, controller.state.value.lastOutcome)
     }
 
+    @Test
+    fun `an unexpected release source exception finishes the manual check as failed`() = runTest {
+        val storage = FakeStorage()
+        val source = object : ReleaseSource {
+            override suspend fun fetchLatestRelease(): ReleaseLookup =
+                throw IllegalStateException("provider failed")
+        }
+        val controller = UpdateController(
+            releaseSource = source,
+            storage = storage,
+            scope = this,
+            installedVersionName = "0.9.0",
+            now = { now },
+        )
+
+        controller.checkNow()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(controller.state.value.isChecking)
+        assertEquals(UpdateCheckOutcome.FAILED, controller.state.value.lastOutcome)
+        assertEquals(now, storage.lastUpdateCheckAtMillis)
+    }
+
     /** Even a failure records the timestamp: a device that is offline on every launch must not
      * re-request on every launch. */
     @Test

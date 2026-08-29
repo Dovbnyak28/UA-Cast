@@ -1,8 +1,9 @@
 package com.uacastplayer.log
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import java.io.File
 import java.io.PrintWriter
-import java.io.StringWriter
+import java.io.Writer
 
 private const val TAG = "CrashLog"
 private const val CRASH_FILE_NAME = "last_crash.txt"
@@ -33,6 +34,7 @@ object CrashLog {
      * everything would turn a crash into a crash plus an ANR.
      */
     private const val LOG_TAIL_ENTRIES = 60
+    private const val MAX_STACK_TRACE_CHARS = 64_000
 
     @Volatile private var crashFile: File? = null
 
@@ -55,11 +57,11 @@ object CrashLog {
 
     /** The last recorded crash, or null when the app has never crashed (or the record was cleared). */
     fun read(): String? = crashFile?.takeIf { it.isFile }?.let { file ->
-        runCatching { file.readText() }.getOrNull()
+        runCatchingNonFatal { file.readText() }.getOrNull()
     }
 
     fun clear() {
-        crashFile?.let { file -> runCatching { file.delete() } }
+        crashFile?.let { file -> runCatchingNonFatal { file.delete() } }
     }
 
     /**
@@ -117,11 +119,12 @@ object CrashLog {
      * nothing is the wrong trade.
      */
     private fun stackTraceOf(error: Throwable): String {
-        val writer = StringWriter()
+        val writer = BoundedTraceWriter(MAX_STACK_TRACE_CHARS)
         PrintWriter(writer).use(error::printStackTrace)
-        return writer.toString()
+        val sanitized = writer.toString()
             .lineSequence()
             .joinToString("\n") { line -> if (line.isFrameLine()) line else LogSanitizer.sanitize(line) }
+        return if (writer.truncated) "$sanitized\n[stack trace truncated]" else sanitized
     }
 
     /** `\tat com.example.Thing.method(Thing.kt:42)`, and the `... 3 more` elision that follows a
@@ -131,4 +134,28 @@ object CrashLog {
         val body = trimStart()
         return body.startsWith("at ") || body.startsWith("... ")
     }
+}
+
+/** Writer used by the uncaught-exception path so a huge message/cause chain cannot grow a report
+ * without a bound while the process is already failing. */
+private class BoundedTraceWriter(private val maxChars: Int) : Writer() {
+    private val builder = StringBuilder(maxChars)
+    var truncated: Boolean = false
+        private set
+
+    override fun write(cbuf: CharArray, off: Int, len: Int) {
+        if (len <= 0 || builder.length >= maxChars) {
+            if (len > 0) truncated = true
+            return
+        }
+        val accepted = minOf(len, maxChars - builder.length)
+        builder.append(cbuf, off, accepted)
+        if (accepted < len) truncated = true
+    }
+
+    override fun flush() = Unit
+
+    override fun close() = Unit
+
+    override fun toString(): String = builder.toString()
 }

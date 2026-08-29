@@ -25,30 +25,30 @@ object XmlTvTimeParser {
         return if (civilMillis == null || offsetMillis == null) null else civilMillis - offsetMillis
     }
 
-    /**
-     * Epoch millis for the `yyyyMMddHHmmss` block at [from], before any UTC offset is applied.
-     * The literal offsets are the field positions in that fixed-width layout, which the format
-     * string above names better than a constant per field would.
-     */
-    @Suppress("ReturnCount", "MagicNumber")
+    /** Epoch millis for the `yyyyMMddHHmmss` block at [from], before any UTC offset is applied. */
     private fun readCivilMillis(value: String, from: Int): Long? {
-        val year = readDigits(value, from, YEAR_WIDTH) ?: return null
-        val month = readDigits(value, from + 4, FIELD_WIDTH) ?: return null
-        val day = readDigits(value, from + 6, FIELD_WIDTH) ?: return null
-        val hour = readDigits(value, from + 8, FIELD_WIDTH) ?: return null
-        val minute = readDigits(value, from + 10, FIELD_WIDTH) ?: return null
-        val second = readDigits(value, from + 12, FIELD_WIDTH) ?: return null
-        if (!isInRange(month, day, hour, minute, second)) return null
-
-        val dayMillis = daysFromCivil(year, month, day) * MILLIS_PER_DAY
-        return dayMillis + hour * MILLIS_PER_HOUR + minute * MILLIS_PER_MINUTE + second * MILLIS_PER_SECOND
+        val year = readDigits(value, from + YEAR_OFFSET, YEAR_WIDTH)
+        val month = readDigits(value, from + MONTH_OFFSET, FIELD_WIDTH)
+        val day = readDigits(value, from + DAY_OFFSET, FIELD_WIDTH)
+        val hour = readDigits(value, from + HOUR_OFFSET, FIELD_WIDTH)
+        val minute = readDigits(value, from + MINUTE_OFFSET, FIELD_WIDTH)
+        val second = readDigits(value, from + SECOND_OFFSET, FIELD_WIDTH)
+        return if (isDateInRange(year, month, day) && isTimeInRange(hour, minute, second)) {
+            val dayMillis = daysFromCivil(year, month, day) * MILLIS_PER_DAY
+            dayMillis + hour * MILLIS_PER_HOUR + minute * MILLIS_PER_MINUTE + second * MILLIS_PER_SECOND
+        } else {
+            null
+        }
     }
 
-    @Suppress("ComplexCondition", "MagicNumber")
-    private fun isInRange(month: Int, day: Int, hour: Int, minute: Int, second: Int): Boolean =
-        // Second allows 60 for a leap second; day is only bounded at 31 because a short month's
-        // overflow is carried, not rejected - see daysFromCivil.
-        month in 1..12 && day in 1..31 && hour in 0..23 && minute in 0..59 && second in 0..60
+    private fun isDateInRange(year: Int, month: Int, day: Int): Boolean =
+        // Day is only bounded at 31 because a short month's overflow is carried, not rejected -
+        // see daysFromCivil.
+        year >= 0 && month in 1..MONTHS_PER_YEAR && day in 1..MAX_DAY_OF_MONTH
+
+    // Second allows 60 for a leap second.
+    private fun isTimeInRange(hour: Int, minute: Int, second: Int): Boolean =
+        hour in 0..MAX_HOUR && minute in 0..MAX_MINUTE && second in 0..MAX_SECOND
 
     /** Zero when no offset follows the timestamp; null when what follows is not a valid one. */
     private fun readOffsetMillis(value: String, from: Int, to: Int): Long? {
@@ -57,32 +57,36 @@ object XmlTvTimeParser {
         return if (start == to) 0L else parseOffsetMillis(value, start, to)
     }
 
-    @Suppress("ReturnCount")
     private fun parseOffsetMillis(value: String, from: Int, to: Int): Long? {
         val sign = when (value[from]) {
             '+' -> 1
             '-' -> -1
-            else -> return null
+            else -> INVALID_SIGN
         }
-        // Every character after the sign must be a digit, as before - "+0200x" is not an offset.
-        if (to - from - 1 < OFFSET_DIGITS) return null
-        for (i in from + 1 until to) {
-            if (value[i] !in '0'..'9') return null
+        val hasExactWidth = to - from - SIGN_WIDTH == OFFSET_DIGITS
+        val hours = if (hasExactWidth) readDigits(value, from + SIGN_WIDTH, FIELD_WIDTH) else INVALID_FIELD
+        val minutes = if (hasExactWidth) {
+            readDigits(value, from + SIGN_WIDTH + FIELD_WIDTH, FIELD_WIDTH)
+        } else {
+            INVALID_FIELD
         }
-        val hours = readDigits(value, from + 1, FIELD_WIDTH) ?: return null
-        val minutes = readDigits(value, from + 1 + FIELD_WIDTH, FIELD_WIDTH) ?: return null
-        return sign * (hours * MILLIS_PER_HOUR + minutes * MILLIS_PER_MINUTE)
+        val valid = sign != INVALID_SIGN && hours in 0..MAX_HOUR && minutes in 0..MAX_MINUTE
+        return if (valid) sign * (hours * MILLIS_PER_HOUR + minutes * MILLIS_PER_MINUTE) else null
     }
 
-    /** Reads exactly [count] ASCII digits at [from]; null if any of them is not a digit. */
-    private fun readDigits(value: String, from: Int, count: Int): Int? {
+    /**
+     * Reads exactly [count] ASCII digits at [from], or [INVALID_FIELD]. A primitive sentinel keeps
+     * this million-call parser path free of nullable-Int boxing.
+     */
+    private fun readDigits(value: String, from: Int, count: Int): Int {
         var acc = 0
+        var valid = true
         for (i in from until from + count) {
             val digit = value[i] - '0'
-            if (digit !in 0..MAX_DIGIT) return null
-            acc = acc * DECIMAL_RADIX + digit
+            if (digit !in 0..MAX_DIGIT) valid = false
+            if (valid) acc = acc * DECIMAL_RADIX + digit
         }
-        return acc
+        return if (valid) acc else INVALID_FIELD
     }
 
     /**
@@ -91,18 +95,18 @@ object XmlTvTimeParser {
      * the following month exactly as the lenient [java.util.Calendar] this replaced did, so a
      * feed's "20260230" still resolves to 2 March rather than being lost.
      *
-     * MagicNumber is suppressed rather than satisfied: every literal below is a fixed coefficient
-     * of that published algorithm, and naming `153` or `5` individually would describe the
-     * arithmetic step without explaining anything the reference doesn't.
+     * The named coefficients below are the fixed constants from that published algorithm.
      */
-    @Suppress("MagicNumber")
     private fun daysFromCivil(year: Int, month: Int, day: Int): Long {
-        val shiftedYear = if (month <= 2) year - 1 else year
-        val era = (if (shiftedYear >= 0) shiftedYear else shiftedYear - 399) / 400
-        val yearOfEra = shiftedYear - era * 400
-        val shiftedMonth = (month + 9) % 12
-        val dayOfYear = (153 * shiftedMonth + 2) / 5 + day - 1
-        val dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        val shiftedYear = if (month <= FEBRUARY) year - 1 else year
+        val eraYear = if (shiftedYear >= 0) shiftedYear else shiftedYear - (YEARS_PER_ERA - 1)
+        val era = eraYear / YEARS_PER_ERA
+        val yearOfEra = shiftedYear - era * YEARS_PER_ERA
+        val shiftedMonth = (month + MARCH_BASED_MONTH_SHIFT) % MONTHS_PER_YEAR
+        val dayOfYear = (DAYS_FORMULA_MULTIPLIER * shiftedMonth + DAYS_FORMULA_OFFSET) /
+            DAYS_FORMULA_DIVISOR + day - 1
+        val dayOfEra = yearOfEra * DAYS_PER_COMMON_YEAR + yearOfEra / LEAP_YEAR_DIVISOR -
+            yearOfEra / NON_LEAP_CENTURY_DIVISOR + dayOfYear
         return era.toLong() * DAYS_PER_ERA + dayOfEra.toLong() - DAYS_FROM_ERA_START_TO_EPOCH
     }
 
@@ -120,11 +124,36 @@ object XmlTvTimeParser {
 
     private const val DECIMAL_RADIX = 10
     private const val MAX_DIGIT = 9
+    private const val INVALID_FIELD = -1
+    private const val INVALID_SIGN = 0
+
+    private const val MAX_DAY_OF_MONTH = 31
+    private const val MAX_HOUR = 23
+    private const val MAX_MINUTE = 59
+    private const val MAX_SECOND = 60
+    private const val MONTHS_PER_YEAR = 12
+
+    private const val FEBRUARY = 2
+    private const val YEARS_PER_ERA = 400
+    private const val MARCH_BASED_MONTH_SHIFT = 9
+    private const val DAYS_FORMULA_MULTIPLIER = 153
+    private const val DAYS_FORMULA_OFFSET = 2
+    private const val DAYS_FORMULA_DIVISOR = 5
+    private const val DAYS_PER_COMMON_YEAR = 365
+    private const val LEAP_YEAR_DIVISOR = 4
+    private const val NON_LEAP_CENTURY_DIVISOR = 100
 
     /** `HHMM` - the digit count a `±ZZZZ` UTC offset must carry after its sign. */
     private const val OFFSET_DIGITS = 4
+    private const val SIGN_WIDTH = 1
 
     /** `yyyyMMddHHmmss` - the fixed-width block every XMLTV timestamp starts with. */
     private const val TIMESTAMP_WIDTH = 14
     private const val YEAR_WIDTH = 4
+    private const val YEAR_OFFSET = 0
+    private const val MONTH_OFFSET = 4
+    private const val DAY_OFFSET = 6
+    private const val HOUR_OFFSET = 8
+    private const val MINUTE_OFFSET = 10
+    private const val SECOND_OFFSET = 12
 }

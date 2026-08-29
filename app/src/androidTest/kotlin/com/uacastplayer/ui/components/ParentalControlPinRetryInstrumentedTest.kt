@@ -74,6 +74,9 @@ class ParentalControlPinRetryInstrumentedTest {
                 )
             }
         }
+        // setContent schedules the first composition; wait before querying the field so a slow
+        // device cannot turn a valid dialog test into a false "No compose hierarchies" failure.
+        composeRule.waitForIdle()
     }
 
     private fun guess(pin: String) {

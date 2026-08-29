@@ -1,12 +1,11 @@
 package com.uacastplayer.diagnostics
 
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.log.LogEntry
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.performance.HeapBudget
-import com.uacastplayer.ui.theme.AppTheme
 
 /** Everything the diagnostics report needs, gathered by the caller (see
  * [com.uacastplayer.AppViewModel.buildDiagnosticsReport]) so the formatting itself stays a plain,
@@ -18,7 +17,7 @@ data class DiagnosticsSnapshot(
     val deviceTier: DeviceTier,
     val bufferSize: BufferSize,
     val iconDisplayMode: IconDisplayMode,
-    val appTheme: AppTheme,
+    val appThemeId: String,
     val usedMemoryBytes: Long,
     val totalMemoryBytes: Long,
     val maxMemoryBytes: Long,
@@ -112,7 +111,7 @@ object DiagnosticsReportBuilder {
         appendLine("Buffer size: ${snapshot.bufferSize}")
         appendLine("Icon display mode: ${snapshot.iconDisplayMode}")
         appendLine("Video fit: ${snapshot.playerResizeMode}")
-        appendLine("App theme: ${snapshot.appTheme} | Language: ${snapshot.language}")
+        appendLine("App theme: ${snapshot.appThemeId} | Language: ${snapshot.language}")
         appendLine("Network: ${snapshot.network}")
         appendLine("Free storage: ${snapshot.freeStorageBytes.toMb()}MB")
         appendLine("Playlist: ${snapshot.channelCount} channels in ${snapshot.groupCount} groups")

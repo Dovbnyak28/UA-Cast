@@ -19,6 +19,31 @@ class IconResolverTest {
     }
 
     @Test
+    fun `normalizes protocol relative and HTML escaped provider URLs`() {
+        val result = IconResolver.candidates(
+            tvgLogo = " //cdn.example.com/logo.png?token=a&amp;b=1 ",
+            epgIconUrl = "https://epg.example.com/icon.png",
+            tvgId = null,
+            cdnFallbackUrl = cdnBuilder,
+        )
+        assertEquals(
+            IconCandidate.Fetchable("https://cdn.example.com/logo.png?token=a&b=1"),
+            result[0],
+        )
+    }
+
+    @Test
+    fun `skips malformed primary URL so later candidates can be tried`() {
+        val result = IconResolver.candidates(
+            tvgLogo = "javascript:alert(1)",
+            epgIconUrl = "https://epg.example.com/icon.png",
+            tvgId = null,
+            cdnFallbackUrl = cdnBuilder,
+        )
+        assertEquals(listOf(IconCandidate.Fetchable("https://epg.example.com/icon.png")), result)
+    }
+
+    @Test
     fun `falls back to EPG icon when tvg-logo is absent`() {
         val result = IconResolver.candidates(
             tvgLogo = null,
@@ -91,8 +116,32 @@ class IconResolverTest {
     }
 
     @Test
+    fun `deduplicates equivalent candidates while keeping the highest priority kind`() {
+        val result = IconResolver.candidates(
+            tvgLogo = " https://cdn.example.com/ch1.png ",
+            epgIconUrl = "https://cdn.example.com/ch1.png",
+            tvgId = "ch1",
+            customBaseUrls = listOf("https://cdn.example.com"),
+            cdnFallbackUrl = cdnBuilder,
+        )
+
+        assertEquals(
+            listOf(IconCandidate.Fetchable("https://cdn.example.com/ch1.png")),
+            result,
+        )
+    }
+
+    @Test
     fun `iconUrl trims a trailing slash on the base url`() {
         assertEquals("https://mycdn.com/logos/ch1.png", IconResolver.iconUrl("https://mycdn.com/logos/", "ch1"))
         assertEquals("https://mycdn.com/logos/ch1.png", IconResolver.iconUrl("https://mycdn.com/logos", "ch1"))
+    }
+
+    @Test
+    fun `encodes reserved and unicode tvg-id characters inside one path segment`() {
+        assertEquals(
+            "https://mycdn.com/logos/news%2Fde%3Fedition%3D%CE%B1%20%CE%B2.png",
+            IconResolver.iconUrl("https://mycdn.com/logos/", "news/de?edition=α β"),
+        )
     }
 }

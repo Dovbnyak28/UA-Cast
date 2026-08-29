@@ -11,7 +11,7 @@ old data, and never a raw URL or device identifier on disk - only SHA-256 finger
 | Channel icons | `filesDir/icon_cache/` | Raw validated bytes, one file per `SHA-256(url)` | 256MB / 20,000 files, 5MB per icon | LRU by file `lastModified`, via `IconCacheTrimmer` |
 | Icon failure memory (permanent) | SharedPreferences `uacast_icon_failures` | key → timestamp | - | 7-day TTL (`IconFailurePolicy`) |
 | Icon failure memory (transient) | In-memory `ConcurrentHashMap` | key → timestamp | - | 1-hour TTL, process lifetime only |
-| Cast incompatibility memory | SharedPreferences `uacast_cast_incompatibility` | key → timestamp | - | 30-day TTL (`IncompatibilityMemoryPolicy`), debounced writes |
+| Cast incompatibility memory | SharedPreferences `uacast_cast_incompatibility` | key → timestamp | - | 30-day TTL (`core/cast/IncompatibilityMemoryPolicy`), debounced writes |
 | Favorites | `filesDir/favorites.json` | JSON array (hand-rolled `MiniJson`, not `org.json`) | - | User-driven (add/remove) |
 | Coil image cache | `filesDir/coil_cache/` | Coil's own disk cache | 128MB | Coil's own LRU |
 

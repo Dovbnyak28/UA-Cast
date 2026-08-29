@@ -5,23 +5,24 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 
-sealed class BoundedBytesResult {
-    data class Success(val bytes: ByteArray) : BoundedBytesResult() {
+sealed interface BoundedBytesResult {
+    data class Success(val bytes: ByteArray) : BoundedBytesResult {
         override fun equals(other: Any?): Boolean =
             other is Success && bytes.contentEquals(other.bytes)
 
         override fun hashCode(): Int = bytes.contentHashCode()
     }
 
-    data object SizeLimitExceeded : BoundedBytesResult()
+    data object SizeLimitExceeded : BoundedBytesResult
 }
 
-sealed class BoundedFileCopyResult {
-    data class Success(val bytesWritten: Long) : BoundedFileCopyResult()
-    data object SizeLimitExceeded : BoundedFileCopyResult()
+sealed interface BoundedFileCopyResult {
+    data class Success(val bytesWritten: Long) : BoundedFileCopyResult
+    data object SizeLimitExceeded : BoundedFileCopyResult
 }
 
-/** Same streaming-with-early-bailout shape as [com.uacastplayer.playlist.BoundedTextReader], for binary content (the EPG gzip blob is stored as-is and must not go through text decoding). */
+/** Same streaming-with-early-bailout shape as
+ * [com.uacastplayer.playlist.BoundedTextReader], for binary content such as EPG gzip blobs. */
 object BoundedByteReader {
 
     private const val CHUNK_SIZE = 8192

@@ -16,11 +16,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.diagnostics.DiagnosticsArchive
 import com.uacastplayer.diagnostics.DiagnosticsEmail
 import com.uacastplayer.log.AppLog
@@ -28,7 +30,7 @@ import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.UaTheme
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 private const val TAG = "DiagnosticsSend"
@@ -112,7 +114,12 @@ internal fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Int
  * such a user can still get the report out through whatever they do have, and the failure that
  * remains after that is one nothing can fix: no app on the device can send anything.
  */
-suspend fun sendDiagnostics(context: Context, report: String, chooserTitle: String) {
+suspend fun sendDiagnostics(
+    context: Context,
+    report: String,
+    chooserTitle: String,
+    ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
     // Written first, because whether there is a file decides which intent is used. A device that
     // will not give up its log still sends the summary, which is how this worked before.
     //
@@ -125,10 +132,10 @@ suspend fun sendDiagnostics(context: Context, report: String, chooserTitle: Stri
     // when they already think the app is broken.
     //
     // Everything after this line stays on the main thread, which is where startActivity belongs.
-    val attachment = withContext(Dispatchers.IO) { DiagnosticsArchive.write(context, report) }
+    val attachment = withContext(ioDispatcher) { DiagnosticsArchive.write(context, report) }
     if (attachment != null) {
         val withLog = Intent.createChooser(diagnosticsEmailIntentWithLog(report, attachment), chooserTitle)
-        runCatching { context.startActivity(withLog) }
+        runCatchingNonFatal { context.startActivity(withLog) }
             .onSuccess { return }
             .onFailure { AppLog.w(TAG) { "Nothing could take the report with its log; sending the summary" } }
     }
@@ -142,7 +149,7 @@ suspend fun sendDiagnostics(context: Context, report: String, chooserTitle: Stri
             putExtra(Intent.EXTRA_SUBJECT, DiagnosticsEmail.subject(BuildConfig.VERSION_NAME, android.os.Build.MODEL))
             putExtra(Intent.EXTRA_TEXT, report)
         }
-        runCatching { context.startActivity(Intent.createChooser(fallback, chooserTitle)) }
+        runCatchingNonFatal { context.startActivity(Intent.createChooser(fallback, chooserTitle)) }
             .onFailure { AppLog.w(TAG) { "Nothing on this device can send the report" } }
     }
 }

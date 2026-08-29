@@ -2,6 +2,7 @@ package com.uacastplayer.data.playlist
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.data.writeSafely
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.PlaylistSource
@@ -9,13 +10,16 @@ import com.uacastplayer.playlist.PlaylistSourceCodec
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PlaylistSourceStore"
 
 /** Persists the list of saved playlist sources (see [PlaylistSource]) so they survive an app restart. */
-class PlaylistSourceStore(context: Context) {
+class PlaylistSourceStore(
+    context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "playlist_sources.bin"))
 
@@ -32,7 +36,7 @@ class PlaylistSourceStore(context: Context) {
      * Refusing the write is the recoverable failure: the user's new playlist is not saved this
      * session, and everything they already had survives the trip back up.
      */
-    suspend fun save(sources: List<PlaylistSource>) = withContext(Dispatchers.IO) {
+    suspend fun save(sources: List<PlaylistSource>) = withContext(ioDispatcher) {
         if (writtenByANewerBuild()) {
             AppLog.w(TAG) { "Playlist sources on disk are from a newer format - not overwriting them" }
             return@withContext
@@ -53,7 +57,7 @@ class PlaylistSourceStore(context: Context) {
         false
     }
 
-    suspend fun load(): List<PlaylistSource> = withContext(Dispatchers.IO) {
+    suspend fun load(): List<PlaylistSource> = withContext(ioDispatcher) {
         try {
             atomicFile.openRead().use { PlaylistSourceCodec.decode(it) }
         } catch (_: FileNotFoundException) {

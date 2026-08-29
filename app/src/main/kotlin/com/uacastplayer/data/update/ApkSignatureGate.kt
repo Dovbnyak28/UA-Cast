@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.security.Hex
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.update.ApkTrustPolicy
@@ -28,8 +29,12 @@ object ApkSignatureGate {
     /** True only when [file] was signed by whoever signed the running app. */
     fun isTrustedUpdate(context: Context, file: File): Boolean {
         val installed = installedSigners(context)
-        val candidate = apkSigners(context, file)
-        val trusted = ApkTrustPolicy.isSameSigner(installed, candidate)
+        val candidate = apkSigningIdentity(context, file)
+        val trusted = ApkTrustPolicy.isTrustedUpdate(
+            installedCurrent = installed,
+            candidateCurrent = candidate.current,
+            candidateHistory = candidate.history,
+        )
         if (!trusted) {
             // No certificate digests in the log. They are not secret, but a mismatch is the one
             // moment this app tells the user something is wrong, and hex nobody can act on is not
@@ -37,13 +42,13 @@ object ApkSignatureGate {
             // which is the only distinction worth having here.
             AppLog.w(TAG) {
                 "Refusing an update signed by someone else: ${installed.size} installed signer(s), " +
-                    "${candidate.size} in the file"
+                    "${candidate.current.size} in the file"
             }
         }
         return trusted
     }
 
-    private fun installedSigners(context: Context): Set<String> = runCatching {
+    private fun installedSigners(context: Context): Set<String> = runCatchingNonFatal {
         digestsOf(context.packageManager.getPackageInfo(context.packageName, signingFlags()))
     }.getOrElse {
         AppLog.w(TAG) { "Cannot read this app's own signature: ${it.javaClass.simpleName}" }
@@ -55,23 +60,25 @@ object ApkSignatureGate {
      * that is not a readable APK - a truncated download, an HTML error page saved under an .apk
      * name, a file the download never finished.
      */
-    private fun apkSigners(context: Context, file: File): Set<String> = runCatching {
+    private data class SigningIdentity(val current: Set<String>, val history: Set<String>)
+
+    private fun apkSigningIdentity(context: Context, file: File): SigningIdentity = runCatchingNonFatal {
         val info = context.packageManager.getPackageArchiveInfo(file.absolutePath, signingFlags())
         if (info == null) {
             AppLog.w(TAG) { "The downloaded file is not a readable APK" }
-            return emptySet()
+            return SigningIdentity(emptySet(), emptySet())
         }
         // Only the archive's *own* package name may be installed over this one. Android enforces
         // this too, but a mismatch here is a clearer thing to refuse early than a system dialog
         // offering to install some other app the user did not ask for.
         if (info.packageName != context.packageName) {
             AppLog.w(TAG) { "The downloaded APK is a different application" }
-            return emptySet()
+            return SigningIdentity(emptySet(), emptySet())
         }
-        digestsOf(info)
+        SigningIdentity(digestsOf(info), signingHistoryOf(info))
     }.getOrElse {
         AppLog.w(TAG) { "Cannot read the downloaded APK's signature: ${it.javaClass.simpleName}" }
-        emptySet()
+        SigningIdentity(emptySet(), emptySet())
     }
 
     @Suppress("DEPRECATION")
@@ -90,6 +97,25 @@ object ApkSignatureGate {
     private fun digestsOf(info: PackageInfo): Set<String> {
         val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             info.signingInfo?.apkContentsSigners
+        } else {
+            info.signatures
+        }
+        return signatures.orEmpty().filterNotNull().map { signature ->
+            Hex.encode(MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()))
+        }.toSet()
+    }
+
+    /** On P+ this is verified by PackageManager from the APK's proof-of-rotation structure. On
+     * older Android there is no key-rotation support, so the current signer is the whole history. */
+    @Suppress("DEPRECATION")
+    private fun signingHistoryOf(info: PackageInfo): Set<String> {
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signingInfo = info.signingInfo
+            if (signingInfo?.hasMultipleSigners() == true) {
+                signingInfo.apkContentsSigners
+            } else {
+                signingInfo?.signingCertificateHistory
+            }
         } else {
             info.signatures
         }

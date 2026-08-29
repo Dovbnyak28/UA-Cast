@@ -61,7 +61,7 @@ class PlayerLifecycleInstrumentedTest {
             skipOnboarding(activity)
             loadTestPlaylist(activity, server)
         }
-        composeTestRule.waitForChannelsLoaded()
+        composeTestRule.waitForChannelsLoaded(server)
         composeTestRule.openChannelViaSearch("Channel 1")
     }
 
@@ -94,12 +94,11 @@ class PlayerLifecycleInstrumentedTest {
     /**
      * Whether the player intends to play, which is what [BackgroundPlaybackPolicy] acts on.
      *
-     * Deliberately not `isPlaying`. [FakeOriginServer] serves a sentence of ASCII where a transport
-     * stream should be - enough for a data source to connect to, and nothing a decoder will ever
-     * render - so `isPlaying` is false throughout this suite no matter what the app does. Asserting
-     * on it made these tests unpassable by construction, and because the first one wedged the
-     * process it took the rest of the class down with it. `playWhenReady` is the flag pause() and
-     * play() move, so it is both the honest signal here and the one production reads.
+     * Deliberately not `isPlaying`. [FakeOriginServer] serves a valid but empty HLS VOD - enough for
+     * a data source to complete cleanly, with no frame a decoder could ever render - so `isPlaying`
+     * is false throughout this suite no matter what the app does. Asserting on it made these tests
+     * unpassable by construction. `playWhenReady` is the flag pause() and play() move, so it is both
+     * the honest signal here and the one production reads.
      *
      * One `onActivity` per read, never nested: it posts to the main thread and blocks until it
      * returns, so calling it from inside another one deadlocks - which is precisely what happened.

@@ -21,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +36,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
@@ -45,7 +46,7 @@ import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.raisedSurface
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -59,6 +60,7 @@ fun HelpScreen(
     onBackClick: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     modifier: Modifier = Modifier,
+    ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
     val context = LocalContext.current
     var diagnosticsReport by remember { mutableStateOf<String?>(null) }
@@ -140,18 +142,17 @@ fun HelpScreen(
             }
         }
 
-        OutlinedButton(
+        SecondaryButton(
+            text = stringResource(R.string.help_send_diagnostics_button),
             // Off the main thread: the report reads the crash file and the filesystem's free space,
             // and walks the whole guide to count its programmes. See SettingsScreen's copy of this.
             onClick = {
                 diagnosticsScope.launch {
-                    diagnosticsReport = withContext(Dispatchers.IO) { onBuildDiagnosticsReport() }
+                    diagnosticsReport = withContext(ioDispatcher) { onBuildDiagnosticsReport() }
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
-        ) {
-            Text(stringResource(R.string.help_send_diagnostics_button))
-        }
+        )
     }
 
     diagnosticsReport?.let { report ->
@@ -170,4 +171,3 @@ fun HelpScreen(
         )
     }
 }
-

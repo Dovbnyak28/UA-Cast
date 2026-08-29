@@ -42,7 +42,8 @@ respects the proposed dependency direction and needs no work.
    becomes a legitimate `:data -> :core` edge, or store the preference as a plain string/id in
    `:data` and let the `:app`/UI layer map it to `AppTheme`.
 
-3. **`core/i18n/LocalizedContext.kt` imports `data.prefs.AppPreferences`** - `:core` is meant to be
+3. **`data/prefs/LocalizedPreferencesContext.kt` imports `data.prefs.AppPreferences`** - the locale
+   adapter was moved beside its preference source, so `:core` is meant to be
    the foundation everything else depends on, but this file reads the user's saved language
    preference directly from `:data`. Fix: pass the resolved `AppLanguage` in as a parameter from the
    call site instead of reading prefs from inside `:core`, or move language storage itself into

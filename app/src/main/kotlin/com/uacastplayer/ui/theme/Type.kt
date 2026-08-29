@@ -4,73 +4,75 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
-// Design spec calls for the Inter family; no font files are bundled under res/font yet, so these
-// tokens fall back to the platform default family until Inter is added.
-private const val TabularNums = "tnum"
+// Explicit Android sans-serif keeps every token on one family instead of mixing an implicit OEM
+// default with a separate generic serif on Cinema. It is offline and available on every API level.
+private val AppSansFamily = FontFamily.SansSerif
+private const val TABULAR_NUMS = "tnum"
 
 val LargeTitle = TextStyle(
     fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.03).em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val Title = TextStyle(
     fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.03).em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val CardTitle = TextStyle(
     fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.02).em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val BodyText = TextStyle(
     fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.01).em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val BodyRegular = TextStyle(
     fontSize = 13.5.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val Caption = TextStyle(
     fontSize = 12.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val CaptionSemibold = TextStyle(
     fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val Micro = TextStyle(
-    fontSize = 11.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.em,
-    fontFeatureSettings = TabularNums,
+    fontSize = 12.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.em,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val SectionLabel = TextStyle(
-    fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.16.em,
-    fontFeatureSettings = TabularNums,
+    fontSize = 11.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.12.em,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val ButtonLabel = TextStyle(
     fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.01).em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val PillText = TextStyle(
-    fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.04.em,
-    fontFeatureSettings = TabularNums,
+    fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.03.em,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val LiveText = TextStyle(
-    fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.12.em,
-    fontFeatureSettings = TabularNums,
+    fontSize = 11.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.em,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val RingValue = TextStyle(
     fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.02).em,
-    fontFeatureSettings = TabularNums,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val TabLabel = TextStyle(
-    fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
-    fontFeatureSettings = TabularNums,
+    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
+    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 
 /**
- * [LargeTitle] with the active theme's [UaPalette.displayFontFamily] - serif in Cinema, unchanged
- * elsewhere. Use for big screen titles (nav bar screen title, Home's app-name title) - see
+ * [LargeTitle] with the active theme's [UaPalette.displayFontFamily]. Use for big screen titles
+ * (nav bar screen title, Home's app-name title) - see
  * docs/DESIGN_SYSTEM.md "Themes".
  */
 val DisplayTitle: TextStyle

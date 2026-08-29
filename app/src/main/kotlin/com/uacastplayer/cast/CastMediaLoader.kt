@@ -5,6 +5,7 @@ import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.common.images.WebImage
+import com.uacastplayer.core.cast.TsSourceKind
 
 /** Builds a direct-to-receiver load request for a channel's stream URL. */
 object CastMediaLoader {

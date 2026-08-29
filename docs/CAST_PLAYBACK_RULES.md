@@ -65,7 +65,7 @@ direct→proxy *mode switch*. A stream that's geo-restricted or VPN-only often d
 the receiver - it just buffers forever. So after a direct load, if the receiver isn't `PLAYING`
 within **4 seconds**, the app falls back to the proxy. This is raced against
 `data/cast/TsFirstSegmentDiagnostic` probing the stream for its actual declared video/audio codecs
-(`cast/TsProgramInfoParser.kt`, reading PAT/PMT). Flat 4s is right here: nothing travels through
+(`core/cast/TsProgramInfoParser.kt`, reading PAT/PMT). Flat 4s is right here: nothing travels through
 the phone in direct mode, and firing costs only a mode switch.
 
 **The stall watchdog** (`CastSessionRepository.scheduleStallWatchdog`, policy in
@@ -117,7 +117,7 @@ logging the url.
 
 Probing a stream is a real HTTP fetch, and casting or re-casting the same channel shouldn't pay for
 it every time. `data/cast/DiagnosticResultCache.kt` (an LRU cache of 32 entries keyed by stream URL,
-governed by `cast/DiagnosticCachePolicy.kt`) remembers the verdict; `loadDirectWithWatchdog` checks
+governed by `core/cast/DiagnosticCachePolicy.kt`) remembers the verdict; `loadDirectWithWatchdog` checks
 it first and, on a hit, skips the HTTP probe entirely. A `Compatible`/`LikelyCompatible`/
 `IncompatibleVideo` entry is trusted for the rest of the process's lifetime, but an `Unknown` one
 (PAT/PMT not found in the probe window) only for 10 minutes - it might just have caught the origin
@@ -142,7 +142,7 @@ first segment separately; raw TS is sniffed directly, no second request.
 
 ### Routing table
 
-`cast/CastCompatibilityPolicy.kt` turns the probed codecs into a verdict, and
+`core/cast/CastCompatibilityPolicy.kt` turns the probed codecs into a verdict, and
 `cast/CastDeliveryStrategy.onDiagnosticResult(verdict, sourceKind)` turns *that* into a routing
 decision the moment the diagnostic resolves - even mid-watchdog-window, not just at the 4s mark:
 
@@ -203,7 +203,7 @@ action=<...>`.
 A (stream-fingerprint, receiver-fingerprint) pair that fails - direct fails **and** the proxy also
 fails - is remembered on disk (`data/cast/IncompatibilityMemoryStore.kt`, keyed by
 `SHA-256("streamUrl|receiverId")`, never the raw URL) for **30 days**
-(`cast/IncompatibilityMemoryPolicy.kt`). The next time that exact pair is cast, `CastDeliveryStrategy`
+(`core/cast/IncompatibilityMemoryPolicy.kt`). The next time that exact pair is cast, `CastDeliveryStrategy`
 starts straight on the proxy instead of wasting 4 seconds re-discovering the same failure. Writes
 are debounced (minimum 2 seconds apart) so a flaky reconnect loop can't hammer the store.
 

@@ -6,10 +6,10 @@ package com.uacastplayer.playlist
  * name verbatim (it isn't one of our recognized categories, but it's still real data worth
  * keeping); [Ungrouped] is the fallback for channels with no group at all.
  */
-sealed class ChannelGroup {
-    data class Known(val key: String) : ChannelGroup()
-    data class Custom(val rawTitle: String) : ChannelGroup()
-    data object Ungrouped : ChannelGroup()
+sealed interface ChannelGroup {
+    data class Known(val key: String) : ChannelGroup
+    data class Custom(val rawTitle: String) : ChannelGroup
+    data object Ungrouped : ChannelGroup
 
     companion object {
         const val KEY_MOVIES = "movies"

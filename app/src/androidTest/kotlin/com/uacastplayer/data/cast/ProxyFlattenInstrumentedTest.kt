@@ -156,6 +156,11 @@ class ProxyFlattenInstrumentedTest {
             assertEquals("video/mp2t", response.header("Content-Type"))
             assertEquals(tsBytes().size, response.body.bytes().size)
         }
+        assertEquals(
+            "flattened media was omitted from the watchdog's progress counter",
+            tsBytes().size.toLong(),
+            proxy!!.bytesServedToReceiver(),
+        )
         assertEquals("the segment was fetched from the wrong base", 1, origin.hitsFor("/cdn/a.ts"))
         assertEquals("a URL built on the pre-redirect base was requested", 0, origin.hitsFor("/a.ts"))
     }

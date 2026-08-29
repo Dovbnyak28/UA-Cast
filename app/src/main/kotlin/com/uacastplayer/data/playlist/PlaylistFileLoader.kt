@@ -4,21 +4,26 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.log.AppLog
-import com.uacastplayer.playlist.BoundedBytesResult
-import com.uacastplayer.playlist.BoundedTextReader
+import com.uacastplayer.core.io.BoundedByteReader
+import com.uacastplayer.core.io.BoundedBytesResult
 import com.uacastplayer.playlist.CharsetDetector
 import com.uacastplayer.playlist.PlaylistLoadResult
 import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PlaylistFileLoader"
 
 /** Reads a playlist selected through the Storage Access Framework, capping the read size. */
-class PlaylistFileLoader(private val context: Context) {
+class PlaylistFileLoader(
+    private val context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     /**
      * Asks to keep reading [uri] after this process ends.
@@ -33,7 +38,7 @@ class PlaylistFileLoader(private val context: Context) {
      * the app exactly where it was before, reading from a grant that lasts as long as the task.
      */
     fun rememberAccess(uri: Uri) {
-        runCatching {
+        runCatchingNonFatal {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }.onFailure { e ->
             AppLog.w(TAG) { "No persistable access to the picked file: ${e.javaClass.simpleName}" }
@@ -51,7 +56,7 @@ class PlaylistFileLoader(private val context: Context) {
      * Asked once, when the playlist is added, and stored - not looked up on every render. The
      * answer needs the read grant, and a saved playlist outlives grants (see [rememberAccess]).
      */
-    fun documentName(uri: Uri): String? = runCatching {
+    fun documentName(uri: Uri): String? = runCatchingNonFatal {
         context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor ->
                 val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -76,14 +81,14 @@ class PlaylistFileLoader(private val context: Context) {
      */
     @Suppress("TooGenericExceptionCaught")
 
-    suspend fun load(uri: Uri): PlaylistLoadResult = withContext(Dispatchers.IO) {
+    suspend fun load(uri: Uri): PlaylistLoadResult = withContext(ioDispatcher) {
         try {
             val stream = context.contentResolver.openInputStream(uri)
                 ?: return@withContext PlaylistLoadResult.ReadError("Unable to open file")
             stream.use {
                 // A local file (picked via the Storage Access Framework) has no Content-Type to
                 // consult - always sniff the bytes.
-                when (val bounded = BoundedTextReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
+                when (val bounded = BoundedByteReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
                     is BoundedBytesResult.Success -> PlaylistLoadResult.Success(CharsetDetector.decode(bounded.bytes))
                     BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
                 }

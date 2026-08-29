@@ -1,7 +1,11 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.AudioCodec
+import com.uacastplayer.core.cast.VideoCodec
+
 /**
- * Human-readable names for the codecs [TsProgramInfoParser] can identify, for the "this channel
+ * Human-readable names for the codecs [com.uacastplayer.core.cast.TsProgramInfoParser] can identify,
+ * for the "this channel
  * uses X, which Chromecast doesn't support" message (see [CodecIncompatibility]) - naming the
  * actual codec is far more useful to a user than a generic "unsupported format".
  */

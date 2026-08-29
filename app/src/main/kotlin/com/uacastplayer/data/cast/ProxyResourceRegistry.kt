@@ -1,5 +1,6 @@
 package com.uacastplayer.data.cast
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.net.HttpDefaults
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.proxy.RemuxHandoffPolicy
@@ -16,19 +17,33 @@ internal const val RESOURCE_TYPE_MEDIA = "media"
  * time if the channel didn't specify one via `#EXTVLCOPT:http-user-agent=`); [referrer] is only
  * ever set from that same per-channel override. Resources discovered while rewriting a playlist
  * (segments, sub-playlists, key URIs) inherit both from their parent - see [ProxyServer.servePlaylist]. */
-internal data class ResourceEntry(val type: String, val originalUrl: String, val userAgent: String, val referrer: String?)
+internal data class ResourceEntry(
+    val type: String,
+    val originalUrl: String,
+    val userAgent: String,
+    val referrer: String?,
+)
 
 /**
  * The proxy's per-session state that outlives any single request: the resource map (every
  * playlist/media URL discovered, keyed by a stable `SHA-256("type:url")` id via [Fingerprint], so
  * re-registering the same URL is idempotent), LRU-bounded to [MAX_RESOURCES] entries - plus the
- * "one active remux stream per session" handoff (docs/PROXY_RULES.md): a channel switch replaces
- * the active [RawTsRemuxSession] but keeps the replaced one servable for a grace period (see
- * [beginDraining]/[RemuxHandoffPolicy]) instead of stopping it the instant it's replaced.
+ * "one active remux stream per session" handoff (docs/PROXY_RULES.md): a channel switch stops the
+ * replaced session's upstream reader immediately, while keeping its completed buffer servable for
+ * a grace period (see [beginDraining]/[RemuxHandoffPolicy]).
  */
 internal class ProxyResourceRegistry(private val httpClient: OkHttpClient) {
 
-    private val resources = object : LinkedHashMap<String, ResourceEntry>(16, 0.75f, true) {
+    private companion object {
+        const val RESOURCE_MAP_INITIAL_CAPACITY = 16
+        const val RESOURCE_MAP_LOAD_FACTOR = 0.75f
+    }
+
+    private val resources = object : LinkedHashMap<String, ResourceEntry>(
+        RESOURCE_MAP_INITIAL_CAPACITY,
+        RESOURCE_MAP_LOAD_FACTOR,
+        true,
+    ) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ResourceEntry>?): Boolean =
             size > MAX_RESOURCES
     }
@@ -104,25 +119,44 @@ internal class ProxyResourceRegistry(private val httpClient: OkHttpClient) {
         isServerRunning: () -> Boolean,
     ): RawTsRemuxSession? {
         val session = RawTsRemuxSession(resourceId, response, httpClient, segmentUrl)
-        synchronized(remuxLock) {
+        val selected = synchronized(remuxLock) {
             if (!isServerRunning()) {
-                runCatching { response.close() }
-                return null
+                runCatchingNonFatal { response.close() }
+                null
+            } else {
+                val previous = activeRemuxSession
+                // HEAD+GET (and some renderers, two GETs) can race through the initial upstream
+                // sniff before either request has installed a reusable remux session. The first
+                // request owns the live reader. Replacing it with an identical second resource
+                // stops the first and lets its waiting handler return an empty manifest. Reuse it;
+                // the redundant upstream response has no owner and must be closed here.
+                if (previous != null && previous.resourceId == resourceId && !previous.hasEnded) {
+                    runCatchingNonFatal { response.close() }
+                    previous
+                } else {
+                    activeRemuxSession = session
+                    if (previous != null && previous.resourceId != resourceId) {
+                        beginDraining(previous)
+                    } else {
+                        previous?.stop()
+                    }
+                    session
+                }
             }
-            val previous = activeRemuxSession
-            activeRemuxSession = session
-            if (previous != null && previous.resourceId != resourceId) beginDraining(previous) else previous?.stop()
         }
-        session.start()
-        return session
+        if (selected === session) session.start()
+        return selected
     }
 
-    /** See [RemuxHandoffPolicy]: keeps [previous] servable for a grace period instead of stopping
-     * it the instant it's replaced, so an in-flight request for the channel just switched away from
-     * doesn't turn a successful switch into a visible glitch. Only one session ever drains at a
-     * time - a session already draining when a newer replacement lands has waited long enough. */
+    /** See [RemuxHandoffPolicy]: keeps [previous]'s buffered window servable for a grace period so
+     * an in-flight request for the channel just switched away from doesn't turn a successful switch
+     * into a visible glitch. Its upstream reader is stopped immediately: draining serves bytes
+     * already promised by its last playlist, it must not keep growing a second 48 MiB buffer and
+     * consuming a second IPTV connection beside the new active session. Only one session ever
+     * drains at a time - an older draining session is discarded when a newer replacement lands. */
     private fun beginDraining(previous: RawTsRemuxSession) {
         drainingRemuxSession?.stop()
+        previous.stop()
         drainingRemuxSession = previous
         drainTimerThread?.interrupt() // the session it was timing is stopped just above
         val startedAt = System.currentTimeMillis()

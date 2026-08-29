@@ -1,9 +1,11 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.core.concurrent.LatestValueWriter
 import com.uacastplayer.core.security.PinHasher
 import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinPolicy
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
+import com.uacastplayer.log.AppLog
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val TAG = "ParentalControlController"
 
 /**
  * Owns the parental-control PIN lock (see [LockedChannelsStorage]/[ParentalControlPinStorage.parentalControlPinHash]).
@@ -29,6 +33,13 @@ class ParentalControlController(
      * tests stay on their own dispatcher instead of hopping to a real thread pool mid-assertion. */
     private val hashingDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
+    private val writer = LatestValueWriter(scope, store::save) { error ->
+        AppLog.w(TAG) { "Parental-control persistence failed: ${error.javaClass.simpleName}" }
+    }
+    private var initialLoadFinished = false
+    private val pendingAdds = mutableSetOf<String>()
+    private val pendingRemovals = mutableSetOf<String>()
+    private var pendingReset = false
     private val _lockedKeys = MutableStateFlow<Set<String>>(emptySet())
     val lockedKeys: StateFlow<Set<String>> = _lockedKeys.asStateFlow()
 
@@ -39,15 +50,31 @@ class ParentalControlController(
     val unlockedThisSession: StateFlow<Boolean> = _unlockedThisSession.asStateFlow()
 
     fun loadInitial() {
-        scope.launch { _lockedKeys.value = store.load() }
+        scope.launch {
+            val loaded = store.load()
+            val hadPendingMutation = pendingReset || pendingAdds.isNotEmpty() || pendingRemovals.isNotEmpty()
+            val base = if (pendingReset) emptySet() else loaded
+            val resolved = (base - pendingRemovals) + pendingAdds
+            initialLoadFinished = true
+            pendingReset = false
+            pendingAdds.clear()
+            pendingRemovals.clear()
+            _lockedKeys.value = resolved
+            if (hadPendingMutation) writer.submit(resolved)
+        }
     }
 
     fun isLocked(channelKey: String): Boolean = channelKey in _lockedKeys.value
 
     fun lockChannel(channelKey: String) {
         if (channelKey in _lockedKeys.value) return
-        _lockedKeys.value = _lockedKeys.value + channelKey
-        scope.launch { store.save(_lockedKeys.value) }
+        val updated = _lockedKeys.value + channelKey
+        if (!initialLoadFinished) {
+            pendingAdds += channelKey
+            pendingRemovals -= channelKey
+        }
+        _lockedKeys.value = updated
+        if (initialLoadFinished) writer.submit(updated)
     }
 
     /** Permanently removes [channelKey] from the locked set. Callers must gate this behind
@@ -56,8 +83,13 @@ class ParentalControlController(
      * channel. */
     fun unlockChannelPermanently(channelKey: String) {
         if (channelKey !in _lockedKeys.value) return
-        _lockedKeys.value = _lockedKeys.value - channelKey
-        scope.launch { store.save(_lockedKeys.value) }
+        val updated = _lockedKeys.value - channelKey
+        if (!initialLoadFinished) {
+            pendingRemovals += channelKey
+            pendingAdds -= channelKey
+        }
+        _lockedKeys.value = updated
+        if (initialLoadFinished) writer.submit(updated)
     }
 
     /** Verifies [pin] against the stored hash and, on success, flips [unlockedThisSession] for the
@@ -103,6 +135,12 @@ class ParentalControlController(
         _isPinSet.value = false
         _unlockedThisSession.value = false
         _lockedKeys.value = emptySet()
-        scope.launch { store.save(emptySet()) }
+        if (initialLoadFinished) {
+            writer.submit(emptySet())
+        } else {
+            pendingReset = true
+            pendingAdds.clear()
+            pendingRemovals.clear()
+        }
     }
 }

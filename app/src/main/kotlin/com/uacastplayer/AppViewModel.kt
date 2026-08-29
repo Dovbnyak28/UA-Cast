@@ -37,14 +37,19 @@ import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
+import com.uacastplayer.backup.BackupExportResult
 import com.uacastplayer.backup.BackupFavorite
 import com.uacastplayer.backup.BackupImportSummary
 import com.uacastplayer.backup.BackupPlaylistSource
 import com.uacastplayer.backup.BackupSettings
 import com.uacastplayer.cast.CastPlaybackState
 import com.uacastplayer.cast.CastSessionRepository
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.concurrent.LatestResultGuard
 import com.uacastplayer.core.i18n.AppLanguage
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.appTheme
 import com.uacastplayer.data.cache.CachePaths
 import com.uacastplayer.data.cache.CacheSizeUtils
 import com.uacastplayer.data.epg.EpgRepository
@@ -55,12 +60,12 @@ import com.uacastplayer.data.parentalcontrol.ParentalControlStore
 import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.data.prefs.DeviceSpecsProvider
-import com.uacastplayer.data.prefs.FavoritesSortOrder
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.favorites.FavoritesSortOrder
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.DiagnosticsReportBuilder
 import com.uacastplayer.diagnostics.DiagnosticsSnapshot
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
@@ -82,7 +87,8 @@ import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.CacheSizes
 import com.uacastplayer.settings.SettingsUiState
 import java.io.File
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,16 +115,21 @@ data class AppUiState(
  * icon prefetch, EPG auto-detect, cache-size refresh), and exposes the exact same public API it
  * always did so the UI layer needed no changes.
  */
-class AppViewModel(application: Application) : AndroidViewModel(application) {
+class AppViewModel @JvmOverloads constructor(
+    application: Application,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) : AndroidViewModel(application) {
 
-    private val preferences = AppPreferences(application)
-    private val remuxEffectivenessStore = RemuxEffectivenessStore.getInstance(application)
-    private val playlistRepository = PlaylistRepository(application)
-    private val epgRepository = EpgRepository(application)
-    private val iconRepository = IconRepository(application)
+    internal val preferences = AppPreferences(application)
+    internal val remuxEffectivenessStore = RemuxEffectivenessStore.getInstance(application)
+    private val playlistRepository = PlaylistRepository(application, ioDispatcher)
+    private val epgRepository = EpgRepository(application, ioDispatcher)
+    private val iconRepository = IconRepository(application, ioDispatcher)
     private val iconPrefetcher = IconPrefetcher(application, iconRepository)
-    private val favoritesRepository = FavoritesRepository(application)
-    private val groupVisibilityStore = GroupVisibilityStore(application)
+    internal val favoritesRepository = FavoritesRepository(application, viewModelScope)
+    private val groupVisibilityStore = GroupVisibilityStore(application, ioDispatcher)
+    private val cacheSizeRefreshGeneration = LatestResultGuard()
+    private var cacheSizeRefreshJob: Job? = null
 
     private val baseDeviceTier: DeviceTier = DeviceSpecsProvider.current(application).let { specs ->
         DevicePerformanceClassifier.classify(specs.totalRamBytes, specs.cpuCoreCount, specs.sdkInt)
@@ -127,7 +138,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val castState: StateFlow<CastPlaybackState> = CastSessionRepository.getInstance(application).state
     val favorites: StateFlow<List<FavoriteChannel>> = favoritesRepository.favorites
 
-    private val playlistController: PlaylistController = PlaylistController(
+    internal val playlistController: PlaylistController = PlaylistController(
         preferences = preferences,
         playlistRepository = playlistRepository,
         scope = viewModelScope,
@@ -149,30 +160,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val playlistSources: StateFlow<List<PlaylistSource>> = playlistController.playlistSources
     val activePlaylistSourceId: StateFlow<String?> = playlistController.activePlaylistSourceId
 
-    private val groupVisibilityController = GroupVisibilityController(groupVisibilityStore, viewModelScope)
+    internal val groupVisibilityController = GroupVisibilityController(groupVisibilityStore, viewModelScope)
     val pinnedGroupKeys: StateFlow<Set<String>> = groupVisibilityController.pinnedKeys
     val hiddenGroupKeys: StateFlow<Set<String>> = groupVisibilityController.hiddenKeys
 
-    private val updateController = UpdateController(
-        releaseSource = UpdateRepository(),
+    internal val updateController = UpdateController(
+        releaseSource = UpdateRepository(ioDispatcher = ioDispatcher),
         storage = preferences,
         scope = viewModelScope,
         installedVersionName = BuildConfig.VERSION_NAME,
     )
     val updateState: StateFlow<UpdateUiState> = updateController.state
 
-    private val updateDownloader = UpdateDownloader(application)
+    private val updateDownloader = UpdateDownloader(application, ioDispatcher = ioDispatcher)
 
     /** The two Android halves of installing an update are handed in as functions - see
      * [UpdateInstallController] for why. This is the only place they are named. */
-    private val updateInstallController = UpdateInstallController(
+    internal val updateInstallController = UpdateInstallController(
         scope = viewModelScope,
         download = { apk, onProgress -> updateDownloader.download(apk, onProgress) },
         install = { file -> ApkInstaller.install(application, file) },
     )
     val updateInstallState: StateFlow<UpdateInstallState> = updateInstallController.state
 
-    private val guidedTourController = GuidedTourController(storage = preferences)
+    internal val guidedTourController = GuidedTourController(storage = preferences)
     val guidedTourState: StateFlow<GuidedTourState> = guidedTourController.state
     val hasSeenGuidedTour: StateFlow<Boolean> = guidedTourController.hasSeenTour
 
@@ -215,7 +226,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * import. The value survives Clear data and is reset only by a real uninstall, which is what
      * makes it worth asking for at all.
      */
-    private fun firstInstallTimeMillis(): Long? = runCatching {
+    private fun firstInstallTimeMillis(): Long? = runCatchingNonFatal {
         val application = getApplication<Application>()
         application.packageManager.getPackageInfo(application.packageName, 0).firstInstallTime
     }.getOrNull()
@@ -231,13 +242,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * store, which the premium screen says out loud rather than showing an empty price list. */
     val premiumProducts: StateFlow<List<BillingProduct>> = _premiumProducts.asStateFlow()
 
-    private val parentalControlController =
-        ParentalControlController(ParentalControlStore(application), preferences, viewModelScope)
+    internal val parentalControlController =
+        ParentalControlController(
+            ParentalControlStore(application, ioDispatcher),
+            preferences,
+            viewModelScope,
+        )
     val lockedChannelKeys: StateFlow<Set<String>> = parentalControlController.lockedKeys
     val parentalControlPinSet: StateFlow<Boolean> = parentalControlController.isPinSet
     val parentalControlUnlocked: StateFlow<Boolean> = parentalControlController.unlockedThisSession
 
-    private val epgController = EpgController(
+    internal val epgController = EpgController(
         preferences = preferences,
         epgRepository = epgRepository,
         scope = viewModelScope,
@@ -253,8 +268,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // the user happened to scroll past that channel. Re-running prefetch here - now that
             // an epgIconUrlFor lookup actually resolves to something - gives those icons the same
             // bulk background download (with the same visible banner) instead.
-            val groups = playlistController.playlistState.value.groups
-            val channels = groups.flatMap { it.channels }
+            val playlist = playlistController.playlistState.value
+            val groups = playlist.groups
+            val channels = playlist.channels
             if (channels.isNotEmpty()) {
                 iconController.triggerPrefetch(
                     channels,
@@ -267,7 +283,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     val epgState: StateFlow<EpgUiState> = epgController.epgState
 
-    private val iconController = IconController(
+    internal val iconController = IconController(
         preferences = preferences,
         iconRepository = iconRepository,
         iconPrefetcher = iconPrefetcher,
@@ -276,24 +292,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     val iconPrefetchState: StateFlow<IconPrefetchUiState> = iconController.iconPrefetchState
 
-    private val settingsController = SettingsController(preferences, iconController, baseDeviceTier)
+    internal val settingsController = SettingsController(preferences, iconController.sources, baseDeviceTier)
     val settingsState: StateFlow<SettingsUiState> = settingsController.settingsState
 
-    private val backupController = BackupController(application, favoritesRepository, viewModelScope)
+    internal val backupController = BackupController(
+        application,
+        favoritesRepository,
+        viewModelScope,
+        ioDispatcher,
+    )
     val backupImportSummary: StateFlow<BackupImportSummary?> = backupController.backupImportSummary
+    val backupExportResult: StateFlow<BackupExportResult?> = backupController.backupExportResult
 
     // AppPreferences is a plain synchronous wrapper, not itself observable, and the player that
     // writes lastWatchedChannelKey is a separate ViewModel instance - so this needs an explicit
     // refresh (see refreshLastWatchedChannel()) rather than picking up the write automatically.
-    private val _lastWatchedChannelKey = MutableStateFlow(preferences.lastWatchedChannelKey)
-    val lastWatchedChannelKey: StateFlow<String?> = _lastWatchedChannelKey.asStateFlow()
+    internal val lastWatchedChannelKeyMutable = MutableStateFlow(preferences.lastWatchedChannelKey)
+    val lastWatchedChannelKey: StateFlow<String?> = lastWatchedChannelKeyMutable.asStateFlow()
 
-    /** Called when the player closes, so Home's "continue watching" card reflects whatever was just played. */
-    fun refreshLastWatchedChannel() {
-        _lastWatchedChannelKey.value = preferences.lastWatchedChannelKey
-    }
-
-    private val _uiState = MutableStateFlow(
+    internal val uiStateMutable = MutableStateFlow(
         AppUiState(
             language = preferences.language,
             appTheme = preferences.appTheme,
@@ -301,10 +318,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             needsTermsAcceptance = !preferences.hasAcceptedTerms,
         )
     )
-    val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
+    val uiState: StateFlow<AppUiState> = uiStateMutable.asStateFlow()
 
-    private val _showBatteryOptimizationHint = MutableStateFlow(false)
-    val showBatteryOptimizationHint: StateFlow<Boolean> = _showBatteryOptimizationHint.asStateFlow()
+    internal val showBatteryOptimizationHintMutable = MutableStateFlow(false)
+    val showBatteryOptimizationHint: StateFlow<Boolean> = showBatteryOptimizationHintMutable.asStateFlow()
 
     init {
         playlistController.loadInitialSource()
@@ -312,8 +329,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         epgController.startTicking()
         groupVisibilityController.loadInitial()
         parentalControlController.loadInitial()
-        // At most one request a week, and only ever adds a banner - see UpdateController.
-        updateController.checkOnLaunch()
+        // Sideload builds may check GitHub for updates; the Play variant deliberately has no
+        // self-updater permission or UI (see build.gradle.kts and src/play/AndroidManifest.xml).
+        if (BuildConfig.SELF_UPDATER_ENABLED) updateController.checkOnLaunch()
         // Grants the first-launch trial if this device has never held a license, then starts
         // listening to whatever store there is.
         premiumRepository.loadInitial()
@@ -328,56 +346,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshCacheSizes()
     }
 
-    /** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]); manufacturer battery managers (MIUI/HyperOS and friends) otherwise silently kill the cast proxy in the background. */
+    /** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]);
+     * manufacturer battery managers can otherwise kill the cast proxy in the background. */
     private fun maybeOfferBatteryOptimizationHint() {
-        if (preferences.hasSeenBatteryOptimizationHint) return
-        val powerManager = getApplication<Application>().getSystemService(PowerManager::class.java) ?: return
-        if (powerManager.isIgnoringBatteryOptimizations(getApplication<Application>().packageName)) return
-        _showBatteryOptimizationHint.value = true
+        val application = getApplication<Application>()
+        val powerManager = application.getSystemService(PowerManager::class.java)
+        val shouldOffer = !preferences.hasSeenBatteryOptimizationHint &&
+            powerManager?.isIgnoringBatteryOptimizations(application.packageName) == false
+        if (shouldOffer) showBatteryOptimizationHintMutable.value = true
     }
-
-    /** Settings screen entry point to bring the hint back up manually, bypassing the "seen" gate. */
-    fun reopenBatteryOptimizationHint() {
-        _showBatteryOptimizationHint.value = true
-    }
-
-    fun dismissBatteryOptimizationHint() {
-        preferences.hasSeenBatteryOptimizationHint = true
-        _showBatteryOptimizationHint.value = false
-    }
-
-    /** The Settings button. Unlike the weekly check this ignores the throttle and reports failure -
-     * see [UpdateController]. */
-    fun checkForUpdatesNow() = updateController.checkNow()
-
-    /** Fetches the release's APK, verifies it and hands it to the system installer. */
-    fun downloadAndInstallUpdate(apk: ReleaseApk) = updateInstallController.downloadAndInstall(apk)
-
-    /** Puts the install row back to rest once its result has been read. Deliberately does not stop
-     * a download in flight - see [UpdateInstallController.clearOutcome]. */
-    fun clearUpdateInstallOutcome() = updateInstallController.clearOutcome()
-
-    /** Closes the update banner for that release only. */
-    fun dismissUpdateBanner() = updateController.dismissAvailableUpdate()
-
-    /** Clears the one-shot result line under the Settings button once it has been read. */
-    fun clearUpdateCheckOutcome() = updateController.clearLastOutcome()
-
-    /** Opens the guided tour on first launch, and once more after an update that ships a newer
-     * edition of it. Called from the UI rather than this class's `init` so it happens *after* the
-     * language/terms gates, not behind them - see `MainActivity`. */
-    fun offerGuidedTourOnLaunch() = guidedTourController.offerOnLaunch()
-
-    /** Settings -> Tutorial. Ignores the "already seen" gate; the user asked. */
-    fun startGuidedTour() = guidedTourController.startFromSettings()
-
-    fun guidedTourNext() = guidedTourController.next()
-
-    fun guidedTourBack() = guidedTourController.back()
-
-    fun guidedTourSkip() = guidedTourController.skip()
-
-    fun guidedTourComplete() = guidedTourController.complete()
 
     /** Re-reads what the store offers. Called when a premium surface opens rather than at startup:
      * an app that never shows the premium screen should not talk to a store at all. */
@@ -534,7 +511,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // be: this report is most often made from Settings or Help, with no player open at
                 // all, and the setting is global and persisted precisely so it outlives one.
                 playerResizeMode = preferences.playerResizeMode,
-                appTheme = uiState.value.appTheme,
+                appThemeId = uiState.value.appTheme.name,
                 usedMemoryBytes = runtime.totalMemory() - runtime.freeMemory(),
                 totalMemoryBytes = runtime.totalMemory(),
                 maxMemoryBytes = runtime.maxMemory(),
@@ -558,85 +535,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    /** True when a crash was recorded and has not been read away yet - Settings shows a row only
-     * then, so a user who has never crashed is never told about a feature for crashes. */
-    fun hasRecordedCrash(): Boolean = CrashLog.read() != null
-
-    /** Drops the recorded crash. Offered next to the report so a user who has sent it (or simply
-     * does not want it sitting there) can get rid of it without clearing app data. */
-    fun clearRecordedCrash() = CrashLog.clear()
-
-    /** Read-only routing stats for Settings -> Diagnostics - see [RemuxEffectivenessStore]. */
-    fun remuxEffectivenessSnapshot(): RemuxEffectivenessCounts = remuxEffectivenessStore.snapshot()
-
-    fun selectLanguage(language: AppLanguage) {
-        preferences.language = language
-        _uiState.value = _uiState.value.copy(language = language, needsLanguagePicker = false)
-    }
-
-    fun selectAppTheme(theme: AppTheme) {
-        preferences.appTheme = theme
-        _uiState.value = _uiState.value.copy(appTheme = theme)
-    }
-
-    /** Declining is handled at the Activity level (exits the app) - see [MainActivity]. */
-    fun acceptTerms() {
-        preferences.hasAcceptedTerms = true
-        _uiState.value = _uiState.value.copy(needsTermsAcceptance = false)
-    }
-
-    fun setPlaylistDisplayName(name: String) = playlistController.setPlaylistDisplayName(name)
-
-    fun loadPlaylistFromUrl(url: String) = playlistController.loadPlaylistFromUrl(url)
-
-    fun loadXtreamPlaylist(server: String, username: String, password: String) =
-        playlistController.loadXtreamPlaylist(server, username, password)
-
-    fun loadPlaylistFromFile(uri: Uri) = playlistController.loadPlaylistFromFile(uri)
-
-    fun refreshPlaylist() = playlistController.refreshPlaylist()
-
-    fun switchPlaylistSource(source: PlaylistSource) = playlistController.switchPlaylistSource(source)
-
-    fun removePlaylistSource(id: String) = playlistController.removePlaylistSource(id)
-
-    fun pinGroup(groupKey: String) = groupVisibilityController.pinGroup(groupKey)
-
-    fun hideGroup(groupKey: String) = groupVisibilityController.hideGroup(groupKey)
-
-    /** Clears any pin/hide override for [groupKey] in the active source, returning it to the
-     * default order/visibility - used both to unpin and to restore a hidden group. */
-    fun clearGroupOverride(groupKey: String) = groupVisibilityController.clearOverride(groupKey)
-
-    fun isChannelLocked(channel: M3uChannel): Boolean = parentalControlController.isLocked(FavoriteKey.of(channel))
-
-    fun lockChannel(channel: M3uChannel) = parentalControlController.lockChannel(FavoriteKey.of(channel))
-
-    /** Caller must already hold [parentalControlUnlocked] (see [verifyParentalControlPin]) - this
-     * function doesn't re-check it, so a PIN entered once this session covers every subsequent
-     * unlock without prompting again. */
-    fun unlockChannelPermanently(channel: M3uChannel) =
-        parentalControlController.unlockChannelPermanently(FavoriteKey.of(channel))
-
-    /** True on a correct PIN, which also flips [parentalControlUnlocked] for the rest of this
-     * process's lifetime - see [ParentalControlController]'s doc for why nothing else resets it. */
-    suspend fun verifyParentalControlPin(pin: String): Boolean = parentalControlController.verifyPin(pin)
-
-    /** Sets the PIN for the first time, or replaces an existing one - callers must gate a
-     * *replacement* behind [parentalControlUnlocked] themselves (Settings' "change PIN" flow does).
-     * False if [pin] isn't 4 digits. */
-    suspend fun setParentalControlPin(pin: String): Boolean = parentalControlController.setPin(pin)
-
-    /** The "forgot PIN" escape hatch - clears the PIN and every locked channel, no PIN required.
-     * Settings' own confirmation dialog is the only guard before this is called. */
-    fun resetParentalControl() = parentalControlController.resetParentalControl()
-
-    fun selectEpgSource(source: EpgSource) = epgController.selectEpgSource(source)
-
-    fun useSuggestedEpgUrl() = epgController.useSuggestedEpgUrl()
-
-    fun setIconWifiOnly(enabled: Boolean) = iconController.setIconWifiOnly(enabled)
-
     /** The channel's icon URL from the matching EPG entry, if any - the "built-in" cdn.epg.one
      * source is only ever reachable this way (see [IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL]'s
      * own candidate being cache-only), so this is also passed to icon prefetch - see
@@ -654,34 +552,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             firstGroupChannels = firstGroupChannels,
             deviceTier = settingsState.value.deviceTier,
         )
-
-    suspend fun resolveChannelIcon(channel: M3uChannel): File? {
-        return iconController.resolveChannelIcon(channel, settingsState.value.iconDisplayMode, epgIconUrlFor(channel))
-    }
-
-    /**
-     * The artwork URL for a channel being cast - handed to [PlayerViewModel] as a function rather
-     * than a value on purpose. EPG data usually arrives *after* playback has already started, so a
-     * URL resolved once at start time would be permanently missing the [epgIconUrlFor] half of the
-     * chain for exactly the channels that need it. Called per channel switch, it sees whatever the
-     * EPG knows by then.
-     */
-    fun castArtworkUrlFor(channel: M3uChannel): String? =
-        iconController.castArtworkUrl(channel, epgIconUrlFor(channel))
-
-    fun isFavorite(channel: M3uChannel): Boolean = favoritesRepository.isFavorite(channel)
-
-    fun toggleFavorite(channel: M3uChannel) = favoritesRepository.toggleFavorite(channel)
-
-    fun removeFavorite(key: String) = favoritesRepository.remove(key)
-
-    fun reorderFavorites(newOrder: List<FavoriteChannel>) = favoritesRepository.reorder(newOrder)
-
-    fun setIconDisplayMode(mode: IconDisplayMode) = settingsController.setIconDisplayMode(mode)
-
-    fun dismissIconTierBanner() = settingsController.dismissIconTierBanner()
-
-    fun setListDensity(density: ListDensity) = settingsController.setListDensity(density)
 
     /**
      * @param playlistChannels the channels the tier should be judged against. Passed in by the
@@ -703,37 +573,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadedPlaylistChannels(): List<M3uChannel> =
-        playlistState.value.groups.flatMap { it.channels }
-
-    fun setChannelLayout(layout: ChannelLayout) = settingsController.setChannelLayout(layout)
-
-    fun setBufferSize(size: BufferSize) = settingsController.setBufferSize(size)
-
-    fun setFavoritesSortOrder(order: FavoritesSortOrder) = settingsController.setFavoritesSortOrder(order)
-
-    fun addCustomIconSource(rawUrl: String) = settingsController.addCustomIconSource(rawUrl)
-
-    fun removeCustomIconSource(url: String) = settingsController.removeCustomIconSource(url)
-
-    fun dismissIconSourceError() = settingsController.dismissIconSourceError()
-
-    fun setWrapAroundEnabled(enabled: Boolean) = settingsController.setWrapAroundEnabled(enabled)
-
-    fun setAutoSkipDeadEnabled(enabled: Boolean) = settingsController.setAutoSkipDeadEnabled(enabled)
+        playlistState.value.channels
 
     fun exportBackupTo(uri: Uri) = backupController.exportTo(uri, buildBackupData())
 
     fun importBackupFrom(uri: Uri) {
         backupController.importFrom(
             uri = uri,
-            currentSources = playlistSources.value,
-            currentFavorites = favorites.value,
+            currentSources = { playlistSources.value },
+            currentFavorites = { favorites.value },
             onSourcesMerged = playlistController::applyImportedSources,
             onSettingsImported = ::applyImportedSettings,
         )
     }
-
-    fun dismissBackupImportSummary() = backupController.dismissImportSummary()
 
     private fun buildBackupData(): BackupData {
         val sources = playlistSources.value.map {
@@ -780,13 +632,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * EPG, actually reloading). */
     private fun applyImportedSettings(settings: BackupSettings) {
         settings.iconDisplayMode
-            ?.let { name -> runCatching { IconDisplayMode.valueOf(name) }.getOrNull() }
+            ?.let { name -> runCatchingNonFatal { IconDisplayMode.valueOf(name) }.getOrNull() }
             ?.let(::setIconDisplayMode)
         settings.listDensity
-            ?.let { name -> runCatching { ListDensity.valueOf(name) }.getOrNull() }
+            ?.let { name -> runCatchingNonFatal { ListDensity.valueOf(name) }.getOrNull() }
             ?.let(::setListDensity)
         settings.bufferSize
-            ?.let { name -> runCatching { BufferSize.valueOf(name) }.getOrNull() }
+            ?.let { name -> runCatchingNonFatal { BufferSize.valueOf(name) }.getOrNull() }
             ?.let(::setBufferSize)
         when {
             settings.epgCustomUrl != null -> epgController.applyCustomEpgUrl(settings.epgCustomUrl, markChosen = true)
@@ -807,27 +659,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             CacheKind.ICONS -> listOf(File(filesDir, CachePaths.ICON_CACHE_DIR))
             CacheKind.COIL -> listOf(File(filesDir, CachePaths.COIL_CACHE_DIR))
         }
-        // Signalled here (synchronously, before launching) so a prefetch tick that's about to
-        // start doesn't slip in between this call and the delete below.
-        if (kind == CacheKind.ICONS) iconController.cancelPrefetch()
-        viewModelScope.launch {
-            // Cancellation is cooperative, not instant - this waits for the prefetch coroutine to
-            // actually unwind so it can't still be mid-write into the directory this deletes.
-            if (kind == CacheKind.ICONS) iconController.awaitPrefetchStopped()
-            withContext(Dispatchers.IO) { CacheSizeUtils.clear(files) }
-            // The deleted files are exactly what resolveChannelIcon's in-memory cache may still be
-            // holding onto (positive results pointing at now-gone files, or negative results that
-            // should be retried once the icon cache is empty) - drop it so the next resolve
-            // actually looks at disk again instead of trusting stale in-memory entries.
+        // A size walk started before this delete describes a filesystem state that is no longer
+        // relevant. Cancel it for efficiency and invalidate it independently because File.walk is
+        // not cooperatively cancellable while it is traversing a large directory.
+        cacheSizeRefreshGeneration.invalidate()
+        cacheSizeRefreshJob?.cancel()
+        // Installed synchronously before launching so a network/playback callback cannot slip a
+        // new writer between cancellation and the delete below. The barrier also remembers every
+        // older cancelled generation which may still be unwinding, not just the latest Job.
+        val iconCacheClearBarrier = if (kind == CacheKind.ICONS) {
+            iconController.beginIconCacheClear()
+        } else {
+            null
+        }
+        val cacheClearJob = viewModelScope.launch {
+            // Cancellation is cooperative, not instant - wait until every captured writer has
+            // actually unwound before deleting its directory.
+            iconCacheClearBarrier?.awaitStopped()
+            withContext(ioDispatcher) { CacheSizeUtils.clear(files) }
+            // The deleted files are exactly what resolveChannelIcon's in-memory cache may still
+            // hold (positive results pointing at gone files, or negative results which should
+            // be retried), so the next resolution must consult disk again.
             if (kind == CacheKind.ICONS) iconController.invalidateMemoryCache()
             refreshCacheSizes()
+        }
+        // A completion handler also runs when launch is born cancelled and never enters its body;
+        // that closes the tiny onCleared-vs-clearCache window without requiring a suspend finally.
+        iconCacheClearBarrier?.let { barrier ->
+            cacheClearJob.invokeOnCompletion { iconController.finishIconCacheClear(barrier) }
         }
     }
 
     private fun refreshCacheSizes() {
-        viewModelScope.launch {
+        val generation = cacheSizeRefreshGeneration.next()
+        cacheSizeRefreshJob?.cancel()
+        cacheSizeRefreshJob = viewModelScope.launch {
             val filesDir = getApplication<Application>().filesDir
-            val sizes = withContext(Dispatchers.IO) {
+            val sizes = withContext(ioDispatcher) {
                 CacheSizes(
                     playlistBytes = CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(filesDir)),
                     epgBytes = CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(filesDir)),
@@ -835,7 +703,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     coilCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.COIL_CACHE_DIR)),
                 )
             }
-            settingsController.updateCacheSizes(sizes)
+            // Cache writes/clears can request another measurement while this non-cancellable file
+            // walk is still unwinding. Never let that older snapshot overwrite the newer result.
+            if (cacheSizeRefreshGeneration.isCurrent(generation)) {
+                settingsController.updateCacheSizes(sizes)
+            }
         }
     }
 

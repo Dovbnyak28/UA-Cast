@@ -22,9 +22,16 @@ class EpgIndex(val channels: List<EpgChannel>) {
     }
 
     fun match(channel: M3uChannel): EpgChannel? {
-        channel.tvgId?.let { id -> byExactId[id]?.let { return it } }
-        channel.tvgId?.let { id -> byNormalizedId[EpgChannelNameNormalizer.normalize(id)]?.let { return it } }
-        channel.tvgName?.let { name -> byNormalizedName[EpgChannelNameNormalizer.normalize(name)]?.let { return it } }
-        return byNormalizedName[EpgChannelNameNormalizer.normalize(channel.displayName)]
+        val exactIdMatch = channel.tvgId?.let(byExactId::get)
+        val normalizedIdMatch = channel.tvgId
+            ?.let(EpgChannelNameNormalizer::normalize)
+            ?.let(byNormalizedId::get)
+        val normalizedNameMatch = channel.tvgName
+            ?.let(EpgChannelNameNormalizer::normalize)
+            ?.let(byNormalizedName::get)
+        return exactIdMatch
+            ?: normalizedIdMatch
+            ?: normalizedNameMatch
+            ?: byNormalizedName[EpgChannelNameNormalizer.normalize(channel.displayName)]
     }
 }

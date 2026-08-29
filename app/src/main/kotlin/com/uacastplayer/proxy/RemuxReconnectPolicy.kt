@@ -12,9 +12,9 @@ private const val BASE_BACKOFF_MILLIS = 1_000L
  */
 object RemuxReconnectPolicy {
 
-    sealed class Decision {
-        data class Retry(val delayMillis: Long, val nextAttempt: Int) : Decision()
-        data object GiveUp : Decision()
+    sealed interface Decision {
+        data class Retry(val delayMillis: Long, val nextAttempt: Int) : Decision
+        data object GiveUp : Decision
     }
 
     /** [attempt] is how many consecutive reconnect attempts have already failed (0 for the first

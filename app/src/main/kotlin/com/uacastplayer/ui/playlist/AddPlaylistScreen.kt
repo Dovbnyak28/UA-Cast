@@ -11,12 +11,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,20 +26,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.playlist.CleartextCredentialPolicy
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.playlist.XtreamUrlBuilder
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.components.SegmentedControl
+import com.uacastplayer.ui.components.PrimaryButton
+import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.raisedSurface
+import com.uacastplayer.ui.theme.appBackground
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
 import com.uacastplayer.ui.theme.Caption
+import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
@@ -71,6 +78,7 @@ fun AddPlaylistScreen(
     var xtreamServer by rememberSaveable { mutableStateOf("") }
     var xtreamUsername by rememberSaveable { mutableStateOf("") }
     var xtreamPassword by rememberSaveable { mutableStateOf("") }
+    var xtreamPasswordVisible by rememberSaveable { mutableStateOf(false) }
     // Only auto-dismiss once we've actually observed a load-in-progress from this screen -
     // otherwise this fires immediately whenever a playlist was already loaded before opening it.
     var hasStartedLoading by rememberSaveable { mutableStateOf(false) }
@@ -82,7 +90,13 @@ fun AddPlaylistScreen(
         // Guard against a *replacement* load failing: the old playlist's hasChannels/groups stay
         // true (applyPlaylistOutcome preserves them on error), so without the error check this
         // would auto-dismiss and hide the failure instead of leaving the status card showing it.
-        if (hasStartedLoading && playlistState.hasChannels && !playlistState.isLoading && playlistState.error == null) {
+        val loadSucceeded = listOf(
+            hasStartedLoading,
+            playlistState.hasChannels,
+            !playlistState.isLoading,
+            playlistState.error == null,
+        ).all { it }
+        if (loadSucceeded) {
             // Only persist the name once the load has actually succeeded - setting it eagerly on
             // tap would silently overwrite the existing name even when the load no-ops (blank URL)
             // or the user cancels the file picker before a file is ever chosen.
@@ -94,6 +108,7 @@ fun AddPlaylistScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .appBackground()
             // safeDrawing, not statusBars alone, and outside the scroll so it shrinks the viewport
             // rather than scrolling away: this is a full-bleed gate screen, so nothing above it pads
             // the bottom, and safeDrawing also covers the IME - which matters here more than on the
@@ -151,41 +166,44 @@ fun AddPlaylistScreen(
 
         when (sourceType) {
             PlaylistSourceType.URL -> UrlSourceFields(url = url, onUrlChange = { url = it })
-            PlaylistSourceType.FILE -> Unit // the OutlinedButton below is this mode's only action.
+            PlaylistSourceType.FILE -> Unit // The file-picker action below is this mode's only input.
             PlaylistSourceType.XTREAM -> XtreamSourceFields(
                 server = xtreamServer,
                 username = xtreamUsername,
                 password = xtreamPassword,
+                passwordVisible = xtreamPasswordVisible,
                 onServerChange = { xtreamServer = it },
                 onUsernameChange = { xtreamUsername = it },
                 onPasswordChange = { xtreamPassword = it },
+                onPasswordVisibilityChanged = { xtreamPasswordVisible = it },
             )
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = GapL)
-                .raisedSurface(
-                    RoundedCornerShape(RadiusCard),
-                    UaTheme.palette.surface1,
-                    edgeColor = UaTheme.palette.hairline,
-                    shadow = true,
+        if (hasLoadFeedback(playlistState)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = GapL)
+                    .raisedSurface(
+                        RoundedCornerShape(RadiusCard),
+                        UaTheme.palette.surface1,
+                        edgeColor = UaTheme.palette.hairline,
+                        shadow = false,
+                    )
+                    .padding(horizontal = CardPadding, vertical = GapM),
+            ) {
+                Text(
+                    text = stringResource(R.string.add_playlist_status_label),
+                    style = SectionLabel,
+                    color = UaTheme.palette.labelSecondary,
                 )
-                .padding(CardPadding),
-        ) {
-            Text(
-                text = stringResource(R.string.add_playlist_status_label),
-                style = SectionLabel,
-                color = UaTheme.palette.labelSecondary,
-            )
-            val hasInput = hasInput(sourceType, url, xtreamServer, xtreamUsername, xtreamPassword)
-            Text(
-                text = statusMessage(playlistState, hasInput, sourceType),
-                style = BodyText,
-                color = UaTheme.palette.labelPrimary,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+                Text(
+                    text = loadFeedbackMessage(playlistState),
+                    style = BodyText,
+                    color = UaTheme.palette.labelPrimary,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         }
 
         SourceActionButton(
@@ -238,38 +256,66 @@ private fun SourceActionButton(
     onPickFile: () -> Unit,
 ) {
     if (sourceType == PlaylistSourceType.FILE) {
-        OutlinedButton(
+        SecondaryButton(
+            text = stringResource(R.string.add_playlist_file_button),
             onClick = onPickFile,
             enabled = !isLoading,
             modifier = Modifier.fillMaxWidth().padding(top = GapL),
-        ) {
-            Icon(AppIcons.Upload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text(stringResource(R.string.add_playlist_file_button))
-        }
+            leadingIcon = AppIcons.Upload,
+        )
     } else {
-        Button(
+        val isInputValid = when (sourceType) {
+            PlaylistSourceType.URL -> PlaylistSourceInputValidator.isValidHttpUrl(url)
+            PlaylistSourceType.XTREAM -> PlaylistSourceInputValidator.isValidXtream(
+                xtreamServer,
+                xtreamUsername,
+                xtreamPassword,
+            )
+            PlaylistSourceType.FILE -> true
+        }
+        PrimaryButton(
+            text = stringResource(R.string.add_playlist_save_button),
             onClick = {
                 if (sourceType == PlaylistSourceType.URL) {
-                    onLoadUrl(url)
+                    onLoadUrl(url.trim())
                 } else {
-                    onLoadXtream(xtreamServer, xtreamUsername, xtreamPassword)
+                    onLoadXtream(xtreamServer.trim(), xtreamUsername.trim(), xtreamPassword)
                 }
             },
-            enabled = !isLoading,
+            enabled = isInputValid && !isLoading,
             modifier = Modifier.fillMaxWidth().padding(top = GapL),
-        ) {
-            Text(stringResource(R.string.add_playlist_save_button))
-        }
+        )
     }
 }
 
 @Composable
 private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
+    val invalidUrl = url.isNotBlank() && !PlaylistSourceInputValidator.isValidHttpUrl(url)
     OutlinedTextField(
         value = url,
         onValueChange = onUrlChange,
         label = { Text(stringResource(R.string.add_playlist_url_hint)) },
         singleLine = true,
+        isError = invalidUrl,
+        supportingText = if (invalidUrl) {
+            { Text(stringResource(R.string.add_playlist_url_error)) }
+        } else {
+            null
+        },
+        trailingIcon = if (url.isNotBlank()) {
+            {
+                IconButton(onClick = { onUrlChange("") }) {
+                    Icon(
+                        AppIcons.Close,
+                        contentDescription = stringResource(R.string.cache_clear_button),
+                        tint = UaTheme.palette.labelSecondary,
+                    )
+                }
+            }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         colors = uaTextFieldColors(),
         modifier = Modifier.fillMaxWidth().padding(top = GapM),
     )
@@ -286,23 +332,42 @@ private fun XtreamSourceFields(
     server: String,
     username: String,
     password: String,
+    passwordVisible: Boolean,
     onServerChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onPasswordVisibilityChanged: (Boolean) -> Unit,
 ) {
+    val invalidServer = server.isNotBlank() && !PlaylistSourceInputValidator.isValidXtreamServer(server)
     OutlinedTextField(
         value = server,
         onValueChange = onServerChange,
         label = { Text(stringResource(R.string.add_playlist_xtream_server_hint)) },
         singleLine = true,
+        isError = invalidServer,
+        supportingText = if (invalidServer) {
+            { Text(stringResource(R.string.add_playlist_server_error)) }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         colors = uaTextFieldColors(),
         modifier = Modifier.fillMaxWidth().padding(top = GapM),
     )
+    if (CleartextCredentialPolicy.exposesCredentials(server)) {
+        Text(
+            text = stringResource(R.string.add_playlist_xtream_cleartext_warning),
+            style = Caption,
+            color = UaTheme.palette.routeRed,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
     OutlinedTextField(
         value = username,
         onValueChange = onUsernameChange,
         label = { Text(stringResource(R.string.add_playlist_xtream_username_hint)) },
         singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
         colors = uaTextFieldColors(),
         modifier = Modifier.fillMaxWidth().padding(top = GapM),
     )
@@ -311,30 +376,36 @@ private fun XtreamSourceFields(
         onValueChange = onPasswordChange,
         label = { Text(stringResource(R.string.add_playlist_xtream_password_hint)) },
         singleLine = true,
-        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        visualTransformation = if (passwordVisible) {
+            VisualTransformation.None
+        } else {
+            androidx.compose.ui.text.input.PasswordVisualTransformation()
+        },
+        trailingIcon = {
+            TextButton(onClick = { onPasswordVisibilityChanged(!passwordVisible) }) {
+                Text(
+                    text = stringResource(
+                        if (passwordVisible) R.string.add_playlist_password_hide
+                        else R.string.add_playlist_password_show,
+                    ),
+                    style = CaptionSemibold,
+                    color = UaTheme.palette.accentText,
+                )
+            }
+        },
         colors = uaTextFieldColors(),
         modifier = Modifier.fillMaxWidth().padding(top = GapM),
     )
 }
 
-private fun hasInput(
-    sourceType: PlaylistSourceType,
-    url: String,
-    xtreamServer: String,
-    xtreamUsername: String,
-    xtreamPassword: String,
-): Boolean = when (sourceType) {
-    PlaylistSourceType.URL -> url.isNotBlank()
-    PlaylistSourceType.FILE -> true // nothing to type - the file picker button is always ready.
-    PlaylistSourceType.XTREAM -> xtreamServer.isNotBlank() && xtreamUsername.isNotBlank() && xtreamPassword.isNotBlank()
-}
+private fun hasLoadFeedback(playlistState: PlaylistUiState): Boolean =
+    playlistState.isLoading ||
+        playlistState.error != null ||
+        (playlistState.activePlaylistId != null && !playlistState.hasChannels)
 
 @Composable
-private fun statusMessage(
-    playlistState: PlaylistUiState,
-    hasInput: Boolean,
-    sourceType: PlaylistSourceType,
-): String = when {
+private fun loadFeedbackMessage(playlistState: PlaylistUiState): String = when {
     playlistState.isLoading -> stringResource(R.string.add_playlist_status_loading)
     playlistState.error != null -> when (val error = playlistState.error) {
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
@@ -350,7 +421,5 @@ private fun statusMessage(
     // actually ran, since PlaylistOutcomeReducer sets it on every Loaded outcome including this one.
     playlistState.activePlaylistId != null && !playlistState.hasChannels ->
         stringResource(R.string.add_playlist_status_no_channels)
-    !hasInput && sourceType == PlaylistSourceType.XTREAM -> stringResource(R.string.add_playlist_status_empty_xtream)
-    !hasInput -> stringResource(R.string.add_playlist_status_empty)
-    else -> stringResource(R.string.add_playlist_status_ready)
+    else -> ""
 }

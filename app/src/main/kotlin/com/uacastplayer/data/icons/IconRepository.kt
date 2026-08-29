@@ -2,8 +2,10 @@ package com.uacastplayer.data.icons
 
 import android.content.Context
 import androidx.collection.LruCache
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.net.HttpDefaults
+import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.icons.CastArtworkPolicy
 import com.uacastplayer.icons.IconCandidate
 import com.uacastplayer.icons.IconFailurePolicy
@@ -17,7 +19,7 @@ import com.uacastplayer.log.RepeatedNoteFilter
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
@@ -37,10 +39,13 @@ private data class CachedIcon(val file: File?)
  * [invalidateMemoryCache] whenever the on-disk picture can have changed underneath it (icon cache
  * cleared, prefetch finished writing new files) rather than tracked per-entry.
  */
-class IconRepository(context: Context) {
+class IconRepository(
+    context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     private val appContext = context.applicationContext
-    private val diskCache = IconDiskCache(appContext)
+    private val diskCache = IconDiskCache(appContext, ioDispatcher)
     private val failureStore = IconFailureStore(appContext)
     private val customSourceStore = CustomIconSourceStore(appContext)
     private val memoryCache = LruCache<String, CachedIcon>(MEMORY_CACHE_SIZE)
@@ -67,17 +72,29 @@ class IconRepository(context: Context) {
         if (baseUrl !in current) {
             customSourceStore.saveBaseUrls(current + baseUrl)
             cachedCustomBaseUrls = null
+            invalidateMemoryCache()
         }
     }
 
     fun removeCustomIconSource(baseUrl: String) {
         customSourceStore.saveBaseUrls(customBaseUrls() - baseUrl)
         cachedCustomBaseUrls = null
+        invalidateMemoryCache()
     }
 
     /** Drops every entry, positive and negative - see the class doc for when this needs calling. */
     fun invalidateMemoryCache() {
         memoryCache.evictAll()
+    }
+
+    /**
+     * Re-opens URLs that failed transiently and drops negative memory results so the next resolve
+     * can actually reach the network. Called on playlist refresh and unmetered-network recovery;
+     * permanent 4xx/5xx records remain protected by [IconFailureStore].
+     */
+    fun retryTransientFailures() {
+        failureStore.clearTransientFailures()
+        invalidateMemoryCache()
     }
 
     suspend fun resolveIconFile(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File? {
@@ -104,21 +121,27 @@ class IconRepository(context: Context) {
         tvgLogo: String?,
         epgIconUrl: String?,
         tvgId: String?,
-    ): File? = withContext(Dispatchers.IO) {
+    ): File? = withContext(ioDispatcher) {
         val candidates = IconResolver.candidates(
             tvgLogo, epgIconUrl, tvgId,
             customBaseUrls = customBaseUrls(),
             cdnFallbackUrl = ::cdnFallbackUrl,
         )
         for (candidate in candidates) {
-            diskCache.get(candidate.url)?.let { return@withContext it }
-            if (candidate is IconCandidate.CacheOnly) continue
-            if (failureStore.shouldSkip(candidate.url)) continue
-
-            val fetched = fetchAndValidate(candidate.url)
-            if (fetched != null) return@withContext fetched
+            resolveCandidate(candidate)?.let { return@withContext it }
         }
         null
+    }
+
+    private suspend fun resolveCandidate(candidate: IconCandidate): File? {
+        val cached = diskCache.get(candidate.url)
+        return cached ?: if (
+            candidate is IconCandidate.CacheOnly || failureStore.shouldSkip(candidate.url)
+        ) {
+            null
+        } else {
+            fetchAndValidate(candidate.url)
+        }
     }
 
     /**
@@ -154,7 +177,13 @@ class IconRepository(context: Context) {
         return url
     }
 
-    suspend fun trimCache() = diskCache.trim()
+    suspend fun trimCache() {
+        diskCache.trim()
+        // Trimming can evict a file that a positive memory entry still points at. Returning that
+        // stale File would make Coil fail from a path that no longer exists; force the next lookup
+        // through the disk/network chain instead.
+        invalidateMemoryCache()
+    }
 
     /** See [IconFailureStore.pruneExpiredFailures] - call once per playlist load/refresh. */
     fun pruneExpiredFailures() = failureStore.pruneExpiredFailures()
@@ -165,47 +194,71 @@ class IconRepository(context: Context) {
     // The IOException itself is never surfaced beyond marking this URL as a transient failure
     // (see IconFailurePolicy) - there's nothing about a network/read error worth logging per icon.
     @Suppress("SwallowedException")
-    private suspend fun fetchAndValidate(url: String): File? = withContext(Dispatchers.IO) {
+    private suspend fun fetchAndValidate(url: String): File? = withContext(ioDispatcher) {
         try {
             // Many icon hosts have hotlink protection that 403s the default OkHttp UA (which
             // identifies itself as "okhttp/<version>") - a browser-looking UA gets through the
             // same check a real browser would pass. See HttpDefaults for why this constant is
             // shared with the playlist/EPG/proxy paths that hit the same kind of origins.
             val request = Request.Builder().url(url).header("User-Agent", HttpDefaults.BROWSER_USER_AGENT).build()
-            httpClient.newCall(request).execute().use { response ->
+            val fetched = httpClient.newCall(request).executeCancellable { response ->
                 if (!response.isSuccessful) {
-                    val permanent = IconFailurePolicy.isPermanentFailure(response.code, isNetworkError = false)
+                    IconFetchResult.HttpError(response.code)
+                } else {
+                    when (val bounded = BoundedByteReader.readBytes(
+                        response.body.byteStream(),
+                        IconDiskCache.MAX_ICON_BYTES,
+                    )) {
+                        is BoundedBytesResult.Success -> {
+                            if (ImageFormatDetector.detect(bounded.bytes) == null) {
+                                IconFetchResult.InvalidImage
+                            } else {
+                                IconFetchResult.Ready(bounded.bytes)
+                            }
+                        }
+                        BoundedBytesResult.SizeLimitExceeded -> IconFetchResult.TooLarge
+                    }
+                }
+            }
+            when (fetched) {
+                is IconFetchResult.HttpError -> {
+                    val permanent = IconFailurePolicy.isPermanentFailure(fetched.code, isNetworkError = false)
                     failureStore.recordFailure(url, isPermanent = permanent)
-                    return@withContext null
+                    null
                 }
-                val bounded = BoundedByteReader.readBytes(response.body.byteStream(), IconDiskCache.MAX_ICON_BYTES)
-                if (bounded !is BoundedBytesResult.Success) {
-                    // Permanent: a file over the cap does not get smaller, and this is a fetch that
-                    // downloaded MAX_ICON_BYTES before giving up. Left unrecorded it downloaded them
-                    // again on every prefetch pass and every scroll past the row.
+                IconFetchResult.TooLarge -> {
+                    // Permanent: a file over the cap does not get smaller, and this fetch already
+                    // downloaded MAX_ICON_BYTES. Without a record every prefetch/scroll repeats it.
                     failureStore.recordFailure(url, isPermanent = true)
-                    return@withContext null
+                    null
                 }
-                // The gap this closes. An origin that answers 200 with an HTML page instead of a
-                // picture - which is how hotlink protection commonly refuses, rather than with the
-                // 403 the branch above catches - produced a successful response, a body that is not
-                // an image, a null from the cache, and *no record anywhere that it had failed*. The
-                // failure store was consulted on every attempt and never learned about the one kind
-                // of failure that looks like success, so the same URL was refetched forever.
-                //
-                // Transient, unlike the size cap: an error page is often the moment rather than the
-                // URL, and a week of blacklisting for a host having a bad minute is the wrong price.
-                // Checked here rather than inferred from a null out of the cache, because the cache
-                // also answers null when it could not *write* - a full disk is not the icon's fault
-                // and must not blacklist it.
-                if (ImageFormatDetector.detect(bounded.bytes) == null) {
+                IconFetchResult.InvalidImage -> {
+                    // The gap this closes. An origin that answers 200 with an HTML page instead of a
+                    // picture - which is how hotlink protection commonly refuses, rather than with
+                    // the 403 branch above - produced a successful response and a body that is not
+                    // an image, but no record anywhere that it failed. The failure store was
+                    // consulted on every attempt and never learned about that kind of failure, so
+                    // the same URL was refetched forever.
+                    //
+                    // Transient, unlike the size cap: an error page is often the moment rather than
+                    // the URL, and a week of blacklisting for a bad minute is the wrong price. This
+                    // is checked here rather than inferred from a null out of the cache, because the
+                    // cache also answers null when it could not write; a full disk is not the icon's
+                    // fault and must not blacklist it.
                     failureStore.recordFailure(url, isPermanent = false)
-                    return@withContext null
+                    null
                 }
-                diskCache.put(url, bounded.bytes)
+                is IconFetchResult.Ready -> diskCache.put(url, fetched.bytes)
             }
         } catch (e: CancellationException) {
             throw e
+        } catch (_: IllegalArgumentException) {
+            // Playlist/EPG icon URLs are provider-controlled. OkHttp rejects a malformed URL
+            // before a Call exists, so this is neither a network IOException nor something a
+            // retry can repair. Remember it as permanent instead of letting one bad logo cancel
+            // the whole prefetch (or crash a row's produceState coroutine).
+            failureStore.recordFailure(url, isPermanent = true)
+            null
         } catch (e: IOException) {
             failureStore.recordFailure(url, isPermanent = false)
             null
@@ -218,3 +271,10 @@ class IconRepository(context: Context) {
 }
 
 private const val TAG = "IconRepository"
+
+private sealed interface IconFetchResult {
+    data class HttpError(val code: Int) : IconFetchResult
+    data class Ready(val bytes: ByteArray) : IconFetchResult
+    data object TooLarge : IconFetchResult
+    data object InvalidImage : IconFetchResult
+}

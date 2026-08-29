@@ -5,9 +5,9 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.backup.BackupCodec
 import com.uacastplayer.backup.BackupSettings
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull

@@ -16,6 +16,7 @@
     <string name="nav_channels">Канали</string>
     <string name="nav_favorites">Улюблені</string>
     <string name="nav_settings">Налаштування</string>
+    <string name="nav_settings_compact">Налашт.</string>
 
     <!-- Home screen -->
     <string name="home_subtitle">Ваше телебачення</string>
@@ -57,12 +58,10 @@
     <string name="add_playlist_title">Додати плейлист</string>
     <string name="add_playlist_name_hint">Назва плейлиста</string>
     <string name="add_playlist_url_hint">URL плейлиста</string>
+    <string name="add_playlist_url_error">Введіть повну адресу з http:// або https://</string>
     <string name="add_playlist_helper">Підтримуються M3U, M3U8, TXT плейлисти. URL має починатися з http:// або https://.</string>
     <string name="add_playlist_status_label">Статус</string>
-    <string name="add_playlist_status_empty">Вставте URL плейлиста M3U або M3U8</string>
-    <string name="add_playlist_status_empty_xtream">Введіть адресу сервера, логін і пароль</string>
     <string name="add_playlist_status_loading">Завантаження…</string>
-    <string name="add_playlist_status_ready">Готово до завантаження</string>
     <string name="add_playlist_status_no_channels">Завантажено, але каналів не знайдено — перевірте посилання</string>
     <string name="add_playlist_save_button">Завантажити та зберегти</string>
     <string name="add_playlist_file_button">Завантажити з файлу</string>
@@ -71,12 +70,18 @@
     <string name="add_playlist_type_file">Файл</string>
     <string name="add_playlist_type_xtream">Xtream</string>
     <string name="add_playlist_xtream_server_hint">Адреса сервера (з портом)</string>
+    <string name="add_playlist_server_error">Введіть URL сервера або host:port</string>
     <string name="add_playlist_xtream_username_hint">Логін</string>
     <string name="add_playlist_xtream_password_hint">Пароль</string>
+    <string name="add_playlist_password_show">Показати</string>
+    <string name="add_playlist_password_hide">Сховати</string>
+    <string name="add_playlist_xtream_cleartext_warning">Цей сервер використовує незашифрований HTTP. Логін, пароль і посилання на потоки можуть прочитати або змінити під час передавання. Використовуйте https://, якщо провайдер його підтримує.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Поки що немає каналів</string>
-    <string name="channels_empty_subtitle">Додайте плейлист у Налаштуваннях, щоб побачити канали тут</string>
+    <string name="channels_empty_subtitle">Додайте плейлист, щоб побачити тут канали</string>
+    <string name="channels_error_subtitle">Перевірте джерело та з’єднання, а потім повторіть</string>
+    <string name="common_retry">Спробувати ще раз</string>
     <string name="channels_search_hint">Пошук каналів</string>
     <string name="channels_groups_title">Групи каналів</string>
     <string name="channels_no_search_results">Немає каналів за запитом «%1$s»</string>
@@ -136,9 +141,19 @@
     <string name="favorites_sort_alphabetical">За алфавітом</string>
     <string name="favorites_sort_recently_added">Нещодавно додані</string>
     <string name="favorites_sort_manual">Власний порядок</string>
+    <string name="favorites_manual_hint">Утримуйте канал, щоб перетягнути його на нову позицію.</string>
 
     <!-- Settings screen -->
     <string name="settings_section_general">Загальні</string>
+    <string name="settings_back_to_overview">Усі налаштування</string>
+    <string name="settings_page_general_summary">Мова, тема, телепрограма та робота батареї</string>
+    <string name="settings_page_playlist_access">Плейлист і доступ</string>
+    <string name="settings_page_playlist_summary">Джерела, приховані групи та батьківський контроль</string>
+    <string name="settings_page_playback_summary">Вигляд каналів, іконки, буфер і навігація</string>
+    <string name="settings_page_data_storage">Дані та сховище</string>
+    <string name="settings_page_data_summary">Кеш, резервна копія, імпорт та експорт</string>
+    <string name="settings_page_help_about">Допомога та про застосунок</string>
+    <string name="settings_page_help_summary">Оновлення, навчання, діагностика й правова інформація</string>
     <string name="settings_section_playlist">Плейлист</string>
     <string name="settings_theme_label">Тема</string>
     <string name="theme_name_azure">Класична</string>
@@ -178,6 +193,7 @@
     <string name="settings_icon_sources_remove">Прибрати джерело</string>
     <string name="settings_icon_sources_error_invalid">Введіть повну URL-адресу http(s)</string>
     <string name="settings_icon_sources_error_duplicate">Це джерело вже додано</string>
+    <string name="settings_icon_sources_error_limit">Можна додати до 16 джерел іконок</string>
     <string name="settings_section_parental_control">Батьківський контроль</string>
     <string name="parental_control_set_up">Встановити PIN-код</string>
     <string name="parental_control_manage_locked">Заблоковані канали (%1$d)</string>
@@ -195,10 +211,15 @@
     <string name="settings_section_playback">Відтворення</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="settings_section_data">Дані</string>
-    <string name="settings_data_hint">Збережіть плейлисти, улюблені канали та основні налаштування у файл, або відновіть їх на іншому пристрої. Кеш ніколи не включається.</string>
+    <string name="settings_data_hint">Збережіть плейлисти, улюблені канали та основні налаштування. Файл не зашифрований і може містити дані доступу провайдера та приватні посилання на потоки.</string>
     <string name="settings_data_export">Експортувати</string>
+    <string name="settings_data_export_warning_title">Експортувати конфіденційні дані?</string>
+    <string name="settings_data_export_warning_message">Ця резервна копія не зашифрована. Вона може містити IPTV-логіни, паролі, токени доступу та приватні посилання на потоки. Зберігайте й передавайте її як пароль.</string>
+    <string name="settings_data_export_confirm">Усе одно експортувати</string>
     <string name="settings_data_import">Імпортувати</string>
     <string name="settings_data_import_summary">Імпортовано: %1$d плейлисти, %2$d улюблених</string>
+    <string name="settings_data_export_success">Резервну копію успішно експортовано</string>
+    <string name="settings_data_export_failure">Не вдалося експортувати резервну копію. Перевірте доступ до сховища й повторіть спробу.</string>
     <string name="cache_playlist_label">Кеш плейлиста</string>
     <string name="cache_epg_label">Кеш телепрограми</string>
     <string name="cache_icons_label">Кеш логотипів</string>
@@ -251,7 +272,7 @@
     <string name="help_cast_errors_body">Телефон і телевізор розуміють різні формати. «відео … не підтримується» або «аудіо … не підтримується» прямо називає формат, від якого відмовився ваш пристрій — найчастіше це аудіо AC-3 та відео MPEG-2 або HEVC. Додаток не може їх перетворити: він передає потік, а не перекодовує його. Пошукайте той самий канал в іншій якості — там часто інша звукова доріжка. «Не вдалося транслювати цей канал» без назви формату означає, що ресивер відмовився з іншої причини. «Резервна трансляція недоступна в цій мережі» — Wi-Fi не видав телефону адреси IPv4, тому проміжний сервер не може запуститись. У всіх цих випадках канал продовжує грати на телефоні.</string>
     <string name="help_send_diagnostics_button">Надіслати діагностику</string>
     <string name="diagnostics_preview_title">Звіт діагностики</string>
-    <string name="diagnostics_preview_body_hint">Звіт містить технічні дані пристрою та журнал останніх дій — без плейлістів, логінів і адрес. Прочитайте його нижче: він відкриється у вашій поштовій програмі, адресований розробнику, і нічого не піде, доки ви не натиснете «Надіслати» там.</string>
+    <string name="diagnostics_preview_body_hint">Звіт містить технічні дані пристрою та журнал останніх дій. URL плейлистів, облікові дані й токени доступу маскуються, але у звіті можуть залишитися назви серверів провайдерів, локальні мережеві адреси, назви каналів і дані пристрою. Прочитайте його нижче: Android відкриє вибір поштової або іншої програми для поширення, де це можливо вже з адресою розробника, і нічого не піде, доки ви не оберете програму й не натиснете «Надіслати» там.</string>
     <string name="diagnostics_preview_send">Надіслати</string>
     <string name="diagnostics_preview_cancel">Скасувати</string>
     <string name="diagnostics_share_chooser_title">Надіслати звіт діагностики через</string>
@@ -295,6 +316,8 @@
     <string name="player_subtitle_track">Субтитри</string>
     <string name="player_subtitle_off">Вимкнено</string>
     <string name="player_fatal_error">Цей канал зараз недоступний</string>
+    <string name="player_retry">Повторити цей канал</string>
+    <string name="player_auto_skip_progress">Канал недоступний — пробуємо наступний (%1$d/%2$d)</string>
     <string name="audio_layout_mono">Моно</string>
     <string name="audio_layout_stereo">Стерео</string>
     <string name="audio_layout_surround_5_1">Об\'ємний звук 5.1</string>

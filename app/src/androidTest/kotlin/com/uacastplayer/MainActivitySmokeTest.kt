@@ -21,6 +21,11 @@ class MainActivitySmokeTest {
 
     @Test
     fun mainActivityLaunchesAndRendersAScreen() {
+        // ActivityScenario startup is asynchronous on a cold device. The rule can enter the test
+        // method before MainActivity has reached RESUMED (and before setContent has registered its
+        // semantics owner), so querying the root immediately races the launch and reports the
+        // misleading "No compose hierarchies" error.
+        composeTestRule.waitForIdle()
         // Throws if no semantics tree exists yet, i.e. nothing rendered - a plain existence check
         // without depending on which screen (language picker vs. Home) happened to show first.
         composeTestRule.onRoot().fetchSemanticsNode()

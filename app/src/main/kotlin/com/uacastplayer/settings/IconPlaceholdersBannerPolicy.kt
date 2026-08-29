@@ -1,6 +1,6 @@
 package com.uacastplayer.settings
 
-import com.uacastplayer.data.prefs.IconDisplayMode
+import com.uacastplayer.core.settings.IconDisplayMode
 
 /**
  * Whether the Channels-tab banner explaining "icons are off to save resources" should show. Only

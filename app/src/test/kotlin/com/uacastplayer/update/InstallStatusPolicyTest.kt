@@ -39,6 +39,17 @@ class InstallStatusPolicyTest {
         )
     }
 
+    @Test
+    fun pendingWithoutLaunchableConfirmationIsAFailure() {
+        assertEquals(
+            InstallSessionOutcome.Failed,
+            InstallStatusPolicy.outcomeFor(
+                InstallStatusPolicy.STATUS_PENDING_USER_ACTION,
+                userActionLaunched = false,
+            ),
+        )
+    }
+
     /**
      * Every documented failure, as one outcome.
      *

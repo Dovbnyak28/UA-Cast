@@ -9,6 +9,9 @@ package com.uacastplayer.playlist
 object M3uParser {
 
     private const val UTF8_BOM = "\uFEFF"
+    private const val CANCELLATION_CHECK_INTERVAL_LINES = 256
+    private const val QUOTED_ATTRIBUTE_VALUE_GROUP = 2
+    private const val UNQUOTED_ATTRIBUTE_VALUE_GROUP = 3
     private val attributePattern = Regex("""([a-zA-Z][\w-]*)=(?:"([^"]*)"|(\S+))""")
 
     /**
@@ -23,91 +26,100 @@ object M3uParser {
      * ending, and `\r` is a control character that cannot legitimately appear inside a channel name
      * or url anyway.
      */
-    fun parse(text: String): M3uParseResult {
-        val lines = text.removePrefix(UTF8_BOM).lineSequence()
-
-        val channels = mutableListOf<M3uChannel>()
-        var skippedLineCount = 0
-        var pendingExtinf: PendingExtinf? = null
-        var pendingGroupOverride: String? = null
-        var pendingUserAgent: String? = null
-        var pendingReferrer: String? = null
-        // A real provider's group-title repeats hundreds of times over ("Movies", "Sports", "News"
-        // on every one of thousands of channels), and each occurrence used to become its own fresh
-        // String - one heap object per channel for a value that is, in practice, drawn from a
-        // couple dozen distinct strings. Interning collapses that to one instance per distinct
-        // title, the same fix XmlTvParser's channelIdPool already applies for the same reason on
-        // its own hottest repeated field. Scoped to this call rather than held on the object: this
-        // is a stateless singleton reused across every playlist parse, and a pool that outlived one
-        // parse would just be a permanent retention of every group title ever seen.
-        val groupTitlePool = HashMap<String, String>()
-        // Only the (normally singular) #EXTM3U line ever carries these, so first-found wins - no
-        // need to keep scanning once set.
-        var epgUrls: List<String> = emptyList()
-
-        for (rawLine in lines) {
+    fun parse(text: String, checkCancellation: () -> Unit = {}): M3uParseResult {
+        val state = ParseState()
+        var linesUntilCancellationCheck = CANCELLATION_CHECK_INTERVAL_LINES
+        checkCancellation()
+        for (rawLine in text.removePrefix(UTF8_BOM).lineSequence()) {
+            linesUntilCancellationCheck--
+            if (linesUntilCancellationCheck == 0) {
+                checkCancellation()
+                linesUntilCancellationCheck = CANCELLATION_CHECK_INTERVAL_LINES
+            }
             val line = rawLine.trim()
-            if (line.isEmpty()) continue
+            if (line.isNotEmpty()) state.accept(line)
+        }
+        checkCancellation()
+        return state.finish()
+    }
 
+    private class ParseState {
+        private val channels = mutableListOf<M3uChannel>()
+        private val groupTitlePool = HashMap<String, String>()
+        private var skippedLineCount = 0
+        private var pendingExtinf: PendingExtinf? = null
+        private var pendingGroupOverride: String? = null
+        private var pendingUserAgent: String? = null
+        private var pendingReferrer: String? = null
+        private var epgUrls: List<String> = emptyList()
+
+        fun accept(line: String) {
             when {
-                line.startsWith("#EXTM3U") -> {
-                    if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line.substring("#EXTM3U".length))
-                }
-
-                line.startsWith("#EXTINF:") -> {
-                    if (pendingExtinf != null) skippedLineCount++
-                    pendingExtinf = parseExtinf(line.substring("#EXTINF:".length))
-                }
-
-                line.startsWith("#EXTGRP:") -> {
-                    pendingGroupOverride = line.substring("#EXTGRP:".length).trim().ifEmpty { null }
-                }
-
-                line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
-                    val option = parseExtVlcOpt(line.substring("#EXTVLCOPT:".length))
-                    when (option?.first?.lowercase()) {
-                        "http-user-agent" -> pendingUserAgent = option.second.ifEmpty { null }
-                        "http-referrer" -> pendingReferrer = option.second.ifEmpty { null }
-                    }
-                }
-
-                line.startsWith("#") -> Unit // unrecognized tag/comment, silently ignored
-
-                else -> {
-                    val extinf = pendingExtinf
-                    if (extinf == null) {
-                        skippedLineCount++
-                    } else {
-                        val displayName = extinf.displayName
-                            ?: extinf.tvgName
-                            ?: extinf.tvgId
-                        if (displayName.isNullOrBlank()) {
-                            skippedLineCount++
-                        } else {
-                            channels += M3uChannel(
-                                displayName = displayName,
-                                streamUrl = line,
-                                tvgId = extinf.tvgId,
-                                tvgName = extinf.tvgName,
-                                tvgLogo = extinf.tvgLogo,
-                                groupTitle = (extinf.groupTitle ?: pendingGroupOverride)
-                                    ?.let { groupTitlePool.getOrPut(it) { it } },
-                                userAgent = pendingUserAgent,
-                                referrer = pendingReferrer,
-                            )
-                        }
-                    }
-                    pendingExtinf = null
-                    pendingGroupOverride = null
-                    pendingUserAgent = null
-                    pendingReferrer = null
-                }
+                line.startsWith("#EXTM3U", ignoreCase = true) -> acceptHeader(line)
+                line.startsWith("#EXTINF:", ignoreCase = true) -> acceptExtinf(line)
+                line.startsWith("#EXTGRP:", ignoreCase = true) -> acceptGroup(line)
+                line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> acceptVlcOption(line)
+                line.startsWith("#") -> Unit
+                else -> acceptStreamUrl(line)
             }
         }
 
-        if (pendingExtinf != null) skippedLineCount++
+        fun finish(): M3uParseResult {
+            if (pendingExtinf != null) skippedLineCount++
+            return M3uParseResult(channels, skippedLineCount, epgUrls)
+        }
 
-        return M3uParseResult(channels = channels, skippedLineCount = skippedLineCount, epgUrls = epgUrls)
+        private fun acceptHeader(line: String) {
+            if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line.substring("#EXTM3U".length))
+        }
+
+        private fun acceptExtinf(line: String) {
+            if (pendingExtinf != null) skippedLineCount++
+            pendingExtinf = parseExtinf(line.substring("#EXTINF:".length))
+        }
+
+        private fun acceptGroup(line: String) {
+            pendingGroupOverride = line.substring("#EXTGRP:".length).trim().ifEmpty { null }
+        }
+
+        private fun acceptVlcOption(line: String) {
+            val option = parseExtVlcOpt(line.substring("#EXTVLCOPT:".length))
+            when (option?.first?.lowercase()) {
+                "http-user-agent" -> pendingUserAgent = option.second.ifEmpty { null }
+                "http-referrer" -> pendingReferrer = option.second.ifEmpty { null }
+            }
+        }
+
+        private fun acceptStreamUrl(streamUrl: String) {
+            val extinf = pendingExtinf
+            val displayName = extinf?.displayName ?: extinf?.tvgName ?: extinf?.tvgId
+            if (extinf == null || displayName.isNullOrBlank()) {
+                skippedLineCount++
+            } else {
+                channels += extinf.toChannel(streamUrl, displayName)
+            }
+            clearPendingChannel()
+        }
+
+        private fun PendingExtinf.toChannel(streamUrl: String, displayName: String): M3uChannel =
+            M3uChannel(
+                displayName = displayName,
+                streamUrl = streamUrl,
+                tvgId = tvgId,
+                tvgName = tvgName,
+                tvgLogo = tvgLogo,
+                groupTitle = (groupTitle ?: pendingGroupOverride)
+                    ?.let { groupTitlePool.getOrPut(it) { it } },
+                userAgent = pendingUserAgent,
+                referrer = pendingReferrer,
+            )
+
+        private fun clearPendingChannel() {
+            pendingExtinf = null
+            pendingGroupOverride = null
+            pendingUserAgent = null
+            pendingReferrer = null
+        }
     }
 
     /** `url-tvg`/`x-tvg-url` (case-insensitive, providers use either) on the `#EXTM3U` line - the
@@ -119,7 +131,10 @@ object M3uParser {
         for (match in attributePattern.findAll(content)) {
             val key = match.groupValues[1].lowercase()
             if (key != "url-tvg" && key != "x-tvg-url") continue
-            val value = (match.groups[2]?.value ?: match.groups[3]?.value).orEmpty()
+            val value = (
+                match.groups[QUOTED_ATTRIBUTE_VALUE_GROUP]?.value
+                    ?: match.groups[UNQUOTED_ATTRIBUTE_VALUE_GROUP]?.value
+                ).orEmpty()
             urls += value.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         }
         return urls
@@ -152,19 +167,24 @@ object M3uParser {
 
         for (match in attributePattern.findAll(attributesSection)) {
             val key = match.groupValues[1].lowercase()
-            val value = (match.groups[2]?.value ?: match.groups[3]?.value).orEmpty()
+            val value = (
+                match.groups[QUOTED_ATTRIBUTE_VALUE_GROUP]?.value
+                    ?: match.groups[UNQUOTED_ATTRIBUTE_VALUE_GROUP]?.value
+                ).orEmpty()
             when (key) {
-                "tvg-id" -> tvgId = value.ifBlank { null }
-                "tvg-name" -> tvgName = value.ifBlank { null }
-                "tvg-logo" -> tvgLogo = value.ifBlank { null }
-                "group-title" -> groupTitle = value.ifBlank { null }
+                "tvg-id" -> tvgId = normalizeAttributeValue(value)
+                "tvg-name" -> tvgName = normalizeAttributeValue(value)
+                "tvg-logo" -> tvgLogo = normalizeAttributeValue(value)
+                "group-title" -> groupTitle = normalizeAttributeValue(value)
             }
         }
 
         return PendingExtinf(displayName, tvgId, tvgName, tvgLogo, groupTitle)
     }
 
-    /** `#EXTVLCOPT:key=value` - value runs to the end of the line (no quoting convention here, unlike EXTINF attributes). */
+    private fun normalizeAttributeValue(value: String): String? = value.trim().ifEmpty { null }
+
+    /** `#EXTVLCOPT:key=value`; unlike EXTINF attributes, its value runs to the line end. */
     private fun parseExtVlcOpt(content: String): Pair<String, String>? {
         val separatorIndex = content.indexOf('=')
         if (separatorIndex == -1) return null

@@ -1,9 +1,10 @@
 package com.uacastplayer.player
 
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -11,7 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.uacastplayer.MainActivity
 import com.uacastplayer.R
 import com.uacastplayer.data.prefs.AppPreferences
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.testsupport.FakeOriginServer
 import com.uacastplayer.testsupport.loadTestPlaylist
 import com.uacastplayer.testsupport.openChannelViaSearch
@@ -69,7 +70,7 @@ class PlayerVideoFitInstrumentedTest {
             skipOnboarding(activity)
             loadTestPlaylist(activity, server)
         }
-        composeTestRule.waitForChannelsLoaded()
+        composeTestRule.waitForChannelsLoaded(server)
         composeTestRule.openChannelViaSearch("Channel 1")
     }
 
@@ -91,7 +92,13 @@ class PlayerVideoFitInstrumentedTest {
     }
 
     private fun tapAspectRatio() {
-        composeTestRule.onNodeWithText(composeTestRule.activity.getString(R.string.player_aspect_ratio))
+        val node = composeTestRule.onNodeWithText(composeTestRule.activity.getString(R.string.player_aspect_ratio))
+        node.performScrollTo()
+        composeTestRule.waitUntil(OPEN_TRANSFORM_TIMEOUT_MILLIS) {
+            val bounds = node.fetchSemanticsNode().boundsInRoot
+            bounds.width > 0f && bounds.height > 0f
+        }
+        node
             .performClick()
         composeTestRule.waitForIdle()
     }
@@ -185,5 +192,6 @@ class PlayerVideoFitInstrumentedTest {
 
     private companion object {
         const val TOP_LINES = 12
+        const val OPEN_TRANSFORM_TIMEOUT_MILLIS = 2_000L
     }
 }

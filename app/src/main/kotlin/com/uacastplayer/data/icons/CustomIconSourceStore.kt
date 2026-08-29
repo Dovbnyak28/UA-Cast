@@ -2,6 +2,8 @@ package com.uacastplayer.data.icons
 
 import android.content.Context
 import androidx.core.content.edit
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.icons.CustomIconSourcePolicy
 import org.json.JSONArray
 
 /**
@@ -16,14 +18,24 @@ class CustomIconSourceStore(context: Context) {
 
     fun getBaseUrls(): List<String> {
         val raw = preferences.getString(KEY_BASE_URLS, null) ?: return emptyList()
-        return runCatching {
+        return runCatchingNonFatal {
             val array = JSONArray(raw)
-            (0 until array.length()).map { index -> array.getString(index) }
+            (0 until array.length())
+                .mapNotNull { index ->
+                    CustomIconSourcePolicy.canonicalize(array.getString(index))
+                }
+                .distinct()
+                .take(CustomIconSourcePolicy.MAX_SOURCES)
         }.getOrDefault(emptyList())
     }
 
     fun saveBaseUrls(urls: List<String>) {
-        val array = JSONArray().apply { urls.forEach(::put) }
+        val safeUrls = urls.asSequence()
+            .mapNotNull(CustomIconSourcePolicy::canonicalize)
+            .distinct()
+            .take(CustomIconSourcePolicy.MAX_SOURCES)
+            .toList()
+        val array = JSONArray().apply { safeUrls.forEach(::put) }
         preferences.edit { putString(KEY_BASE_URLS, array.toString()) }
     }
 

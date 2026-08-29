@@ -14,7 +14,7 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.dp
-import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel

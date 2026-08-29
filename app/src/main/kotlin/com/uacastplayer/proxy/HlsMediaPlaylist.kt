@@ -1,5 +1,9 @@
 package com.uacastplayer.proxy
 
+/** One budget for every path that buffers an HLS manifest, whether it rewrites or replays it. */
+internal const val MAX_HLS_PLAYLIST_BYTES = 4 * 1024 * 1024
+internal const val UTF8_BOM = "\uFEFF"
+
 /**
  * The parts of an HLS media playlist needed to replay it as one continuous stream.
  *
@@ -15,6 +19,9 @@ package com.uacastplayer.proxy
  *   and one of them has to be chosen before any of this applies.
  * @param hasEncryptedSegments carries an `#EXT-X-KEY` naming a method other than NONE.
  * @param hasInitSegment carries `#EXT-X-MAP`, i.e. fragmented MP4 rather than MPEG-TS.
+ * @param hasByteRanges carries `#EXT-X-BYTERANGE`, whose entries cannot be fetched correctly
+ *   without forwarding an HTTP Range header for each segment.
+ * @param hasPlaylistHeader whether the first non-blank line is the mandatory `#EXTM3U` signature.
  */
 data class HlsMediaPlaylist(
     val segmentUris: List<String>,
@@ -24,10 +31,16 @@ data class HlsMediaPlaylist(
     val isMaster: Boolean,
     val hasEncryptedSegments: Boolean,
     val hasInitSegment: Boolean,
+    val hasByteRanges: Boolean = false,
+    val hasPlaylistHeader: Boolean = true,
 ) {
     /** The sequence number one past the last listed segment - where a reader that consumed this
      * whole playlist should resume from on the next refresh. */
-    val nextSequenceAfter: Long get() = mediaSequence + segmentUris.size
+    val nextSequenceAfter: Long
+        get() {
+            val count = segmentUris.size.toLong()
+            return if (mediaSequence > Long.MAX_VALUE - count) Long.MAX_VALUE else mediaSequence + count
+        }
 }
 
 /**
@@ -35,7 +48,7 @@ data class HlsMediaPlaylist(
  *
  * Deliberately not a general HLS parser. Everything here exists to answer one question - which
  * bytes come next, in order - so durations, bandwidth, subtitle renditions and the rest are skipped
- * rather than modelled. The three "cannot do this" flags are the exception: each is a case where
+ * rather than modelled. The "cannot do this" flags are the exception: each is a case where
  * concatenating segments would produce a stream that is silently wrong rather than one that fails,
  * so they must be detected and refused, never ignored.
  */
@@ -47,14 +60,21 @@ object HlsMediaPlaylistParser {
     private const val TAG_STREAM_INF = "#EXT-X-STREAM-INF"
     private const val TAG_KEY = "#EXT-X-KEY"
     private const val TAG_MAP = "#EXT-X-MAP"
+    private const val TAG_BYTERANGE = "#EXT-X-BYTERANGE"
+    private const val PLAYLIST_HEADER = "#EXTM3U"
+    private val keyMethodPattern = Regex("(?:^|,)\\s*METHOD\\s*=\\s*([^,\\s]+)", RegexOption.IGNORE_CASE)
 
     fun parse(text: String): HlsMediaPlaylist {
-        val lines = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        val lines = text.removePrefix(UTF8_BOM)
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
         return HlsMediaPlaylist(
             segmentUris = lines.filterNot { it.startsWith("#") },
             mediaSequence = lines.firstNotNullOfOrNull { line ->
                 line.takeIf { it.startsWith(TAG_MEDIA_SEQUENCE) }
-                    ?.removePrefix(TAG_MEDIA_SEQUENCE)?.trim()?.toLongOrNull()
+                    ?.removePrefix(TAG_MEDIA_SEQUENCE)?.trim()?.toLongOrNull()?.takeIf { it >= 0 }
             } ?: 0L,
             targetDurationSeconds = lines.firstNotNullOfOrNull { line ->
                 line.takeIf { it.startsWith(TAG_TARGET_DURATION) }
@@ -67,10 +87,17 @@ object HlsMediaPlaylistParser {
             isMaster = lines.any { it.startsWith(TAG_STREAM_INF) },
             // METHOD=NONE is the spec's way of saying "encryption stops here", and appears in
             // streams that switch encryption off partway. It is not an obstacle.
-            hasEncryptedSegments = lines.any {
-                it.startsWith(TAG_KEY) && !it.substringAfter("METHOD=").startsWith("NONE")
-            },
+            hasEncryptedSegments = lines.any(::declaresEncryption),
             hasInitSegment = lines.any { it.startsWith(TAG_MAP) },
+            hasByteRanges = lines.any { it.startsWith(TAG_BYTERANGE) },
+            hasPlaylistHeader = lines.firstOrNull() == PLAYLIST_HEADER,
         )
+    }
+
+    private fun declaresEncryption(line: String): Boolean {
+        if (!line.startsWith("$TAG_KEY:")) return false
+        val method = keyMethodPattern.find(line.substringAfter(':'))?.groupValues?.getOrNull(1)
+            ?.trim('"')
+        return !method.equals("NONE", ignoreCase = true)
     }
 }

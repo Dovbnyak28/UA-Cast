@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.data.icons.IconPrefetcher
 import com.uacastplayer.data.icons.IconRepository
 import com.uacastplayer.data.prefs.AppPreferences
-import com.uacastplayer.data.prefs.IconDisplayMode
+import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.player.PlaybackActivity
 import com.uacastplayer.playlist.M3uChannel
 import java.io.IOException
@@ -16,11 +16,17 @@ import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,6 +76,7 @@ class IconPrefetchInterruptionTest {
 
         /** Counts down once some icon request has actually arrived. */
         val requestReceived = CountDownLatch(1)
+        val requestCount = AtomicInteger()
 
         val url: String get() = "http://127.0.0.1:${socket.localPort}/logo.png"
 
@@ -79,6 +86,7 @@ class IconPrefetchInterruptionTest {
                     while (true) {
                         val client = socket.accept()
                         client.getInputStream().read()
+                        requestCount.incrementAndGet()
                         requestReceived.countDown()
                         // Deliberately never answered and never closed: the client stays parked in
                         // its read until this server is closed, which is the whole point.
@@ -92,6 +100,14 @@ class IconPrefetchInterruptionTest {
         override fun close() {
             worker.shutdownNow()
             socket.close()
+        }
+
+        fun awaitRequestCount(expected: Int): Boolean {
+            val deadline = System.currentTimeMillis() + STATE_WAIT_MILLIS
+            while (System.currentTimeMillis() < deadline && requestCount.get() < expected) {
+                Thread.sleep(POLL_INTERVAL_MILLIS)
+            }
+            return requestCount.get() >= expected
         }
     }
 
@@ -138,6 +154,37 @@ class IconPrefetchInterruptionTest {
     }
 
     @Test
+    fun `a wifi-only pass blocked on metered network is not persisted as completed`() {
+        giveTheDeviceANetwork()
+        val preferences = AppPreferences(application).apply {
+            iconWifiOnly = true
+            lastIconPrefetchAtMillis = null
+        }
+        var finishedCallbacks = 0
+        val repository = IconRepository(application)
+        val controller = IconController(
+            preferences = preferences,
+            iconRepository = repository,
+            iconPrefetcher = IconPrefetcher(application, repository),
+            scope = scope,
+            onPrefetchFinished = { finishedCallbacks++ },
+        )
+        val channels = channelsPointingAt("http://example.test/logo.png")
+
+        controller.triggerPrefetch(
+            channels = channels,
+            iconDisplayMode = IconDisplayMode.CACHE,
+            context = IconController.PrefetchContext(firstGroupChannels = channels),
+        )
+
+        assertFalse(controller.iconPrefetchState.value.isRunning)
+        assertEquals(0, controller.iconPrefetchState.value.completedRuns)
+        assertTrue(controller.iconPrefetchState.value.updateReminderDue)
+        assertEquals(null, preferences.lastIconPrefetchAtMillis)
+        assertEquals(0, finishedCallbacks)
+    }
+
+    @Test
     fun `a prefetch interrupted by playback stops claiming to be running`() {
         HeldIconServer().use { server ->
             val controller = controller()
@@ -163,6 +210,25 @@ class IconPrefetchInterruptionTest {
                 "nothing is prefetching once playback has cancelled it, and the progress bars must agree",
                 controller.iconPrefetchState.value.isRunning,
             )
+        }
+    }
+
+    @Test
+    fun `cache limited mode prefetches a bounded priority batch`() {
+        HeldIconServer().use { server ->
+            val controller = controller()
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(
+                channels = channels,
+                iconDisplayMode = IconDisplayMode.CACHE_LIMITED,
+                context = IconController.PrefetchContext(firstGroupChannels = channels),
+            )
+
+            assertTrue(
+                "CACHE_LIMITED should warm the first visible priority channel",
+                server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
+            assertTrue(controller.awaitRunning(true))
         }
     }
 
@@ -199,9 +265,164 @@ class IconPrefetchInterruptionTest {
         }
     }
 
+    @Test
+    fun `an ineligible replacement clears the previous prefetch progress`() {
+        HeldIconServer().use { server ->
+            val controller = controller()
+            val channels = channelsPointingAt(server.url)
+            val context = IconController.PrefetchContext(firstGroupChannels = channels)
+            controller.triggerPrefetch(
+                channels = channels,
+                iconDisplayMode = IconDisplayMode.CACHE,
+                context = context,
+            )
+            assertTrue(
+                "the first generation must really be running before it is replaced",
+                server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
+            assertTrue(controller.awaitRunning(true))
+
+            controller.triggerPrefetch(
+                channels = channels,
+                iconDisplayMode = IconDisplayMode.PLACEHOLDERS,
+                context = context,
+            )
+
+            assertFalse(
+                "the PLACEHOLDERS replacement skips work, so the cancelled CACHE generation cannot stay visible",
+                controller.iconPrefetchState.value.isRunning,
+            )
+        }
+    }
+
+    @Test
+    fun `an unexpected prefetch callback failure clears progress instead of escaping`() {
+        val controller = controller()
+        val channels = channelsPointingAt("http://example.test/logo.png")
+
+        controller.triggerPrefetch(
+            channels = channels,
+            iconDisplayMode = IconDisplayMode.CACHE,
+            epgIconUrlFor = { throw IllegalStateException("EPG index unavailable") },
+            context = IconController.PrefetchContext(firstGroupChannels = channels),
+        )
+
+        assertFalse(controller.iconPrefetchState.value.isRunning)
+        assertEquals(0, controller.iconPrefetchState.value.completedRuns)
+    }
+
+    @Test
+    fun `cache clear waits for row icon resolution and blocks new row writers`() = runBlocking {
+        HeldIconServer().use { server ->
+            val controller = controller()
+            val channel = channelsPointingAt(server.url).single()
+            val firstResolution = scope.launch {
+                controller.resolveChannelIcon(channel, IconDisplayMode.CACHE, epgIconUrl = null)
+            }
+            assertTrue(
+                "the row resolver must be inside a real icon write path before clear begins",
+                server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
+
+            val barrier = controller.beginIconCacheClear()
+            try {
+                val barrierWait = scope.async { barrier.awaitStopped() }
+                Thread.sleep(RESTART_GUARD_MILLIS)
+                assertFalse(
+                    "clear may not delete while an already-started row resolution can still write",
+                    barrierWait.isCompleted,
+                )
+
+                firstResolution.cancelAndJoin()
+                barrierWait.await()
+                val requestsAfterFirstResolution = server.requestCount.get()
+
+                val blockedResolution = scope.launch {
+                    controller.resolveChannelIcon(channel, IconDisplayMode.CACHE, epgIconUrl = null)
+                }
+                Thread.sleep(RESTART_GUARD_MILLIS)
+                assertEquals(
+                    "a new visible row must wait behind the active cache delete",
+                    requestsAfterFirstResolution,
+                    server.requestCount.get(),
+                )
+
+                controller.finishIconCacheClear(barrier)
+                assertTrue(
+                    "the waiting row should continue when deletion releases the cache",
+                    server.awaitRequestCount(requestsAfterFirstResolution + 1),
+                )
+                blockedResolution.cancelAndJoin()
+            } finally {
+                firstResolution.cancelAndJoin()
+                controller.finishIconCacheClear(barrier)
+            }
+        }
+    }
+
+    @Test
+    fun `overlapping cache clears block every prefetch restart until the last delete ends`() = runBlocking {
+        HeldIconServer().use { server ->
+            val controller = controller()
+            val channels = channelsPointingAt(server.url)
+            val context = IconController.PrefetchContext(firstGroupChannels = channels)
+            controller.triggerPrefetch(
+                channels = channels,
+                iconDisplayMode = IconDisplayMode.CACHE,
+                context = context,
+            )
+            assertTrue(
+                "the regression needs a real writer in the icon cache before clearing it",
+                server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
+            assertTrue(controller.awaitRunning(true))
+
+            val firstClear = controller.beginIconCacheClear()
+            val secondClear = controller.beginIconCacheClear()
+            try {
+                firstClear.awaitStopped()
+                secondClear.awaitStopped()
+                assertFalse(controller.iconPrefetchState.value.isRunning)
+                val requestsAfterCancellation = server.requestCount.get()
+
+                controller.finishIconCacheClear(firstClear)
+                controller.triggerPrefetch(
+                    channels = channels,
+                    iconDisplayMode = IconDisplayMode.CACHE,
+                    context = context,
+                )
+                Thread.sleep(RESTART_GUARD_MILLIS)
+
+                assertEquals(
+                    "one finished clear must not reopen the cache while another delete is active",
+                    requestsAfterCancellation,
+                    server.requestCount.get(),
+                )
+                assertFalse(controller.iconPrefetchState.value.isRunning)
+
+                controller.finishIconCacheClear(secondClear)
+                controller.triggerPrefetch(
+                    channels = channels,
+                    iconDisplayMode = IconDisplayMode.CACHE,
+                    context = context,
+                )
+                assertTrue(
+                    "prefetch should become available again after the final clear releases its barrier",
+                    server.awaitRequestCount(requestsAfterCancellation + 1),
+                )
+                assertTrue(controller.awaitRunning(true))
+            } finally {
+                // Idempotent: keep the controller usable even when an assertion above fails.
+                controller.finishIconCacheClear(firstClear)
+                controller.finishIconCacheClear(secondClear)
+            }
+        }
+    }
+
     private companion object {
         const val REQUEST_TIMEOUT_SECONDS = 10L
         const val STATE_WAIT_MILLIS = 5_000L
         const val POLL_INTERVAL_MILLIS = 20L
+        const val RESTART_GUARD_MILLIS = 250L
     }
 }

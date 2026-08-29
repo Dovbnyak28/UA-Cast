@@ -1,5 +1,7 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.update.AppVersion
 import com.uacastplayer.update.ReleaseLookup
 import com.uacastplayer.update.ReleaseSource
@@ -12,6 +14,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+private const val TAG = "UpdateController"
 
 /**
  * Finds out whether a newer release exists, on two schedules that behave differently on purpose.
@@ -83,7 +87,10 @@ class UpdateController(
 
         _state.value = _state.value.copy(isChecking = true)
         scope.launch {
-            val lookup = releaseSource.fetchLatestRelease()
+            val lookup = runCatchingNonFatal { releaseSource.fetchLatestRelease() }.getOrElse { error ->
+                AppLog.w(TAG) { "Update source boundary failed: ${error.javaClass.simpleName}" }
+                ReleaseLookup.Failed
+            }
             // Recorded even when the request failed. Otherwise a device that is offline every time
             // the app opens would retry on every single launch, which is the one case where an
             // update check could become a battery and data cost worth noticing.

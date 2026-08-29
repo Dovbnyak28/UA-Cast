@@ -2,12 +2,13 @@ package com.uacastplayer.data.playlist
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSnapshotCodec
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 /**
@@ -19,7 +20,10 @@ import kotlinx.coroutines.withContext
 internal object LegacyPlaylistSnapshotFile {
     private const val FILE_NAME = "playlist_snapshot.bin"
 
-    suspend fun read(context: Context): PlaylistSnapshot? = withContext(Dispatchers.IO) {
+    suspend fun read(
+        context: Context,
+        ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    ): PlaylistSnapshot? = withContext(ioDispatcher) {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.isFile) return@withContext null
         try {
@@ -36,7 +40,10 @@ internal object LegacyPlaylistSnapshotFile {
      * stranded that one on the first launch after the upgrade, at which point nothing in the app
      * refers to either name again.
      */
-    suspend fun delete(context: Context) = withContext(Dispatchers.IO) {
+    suspend fun delete(
+        context: Context,
+        ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    ) = withContext(ioDispatcher) {
         AtomicFile(File(context.filesDir, FILE_NAME)).delete()
     }
 }

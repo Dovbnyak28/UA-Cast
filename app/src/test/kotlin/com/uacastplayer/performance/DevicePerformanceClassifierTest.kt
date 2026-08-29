@@ -33,7 +33,11 @@ class DevicePerformanceClassifierTest {
 
     @Test
     fun `all factors at zero classifies as LOW_END`() {
-        val tier = DevicePerformanceClassifier.classify(totalRamBytes = 512L * 1024 * 1024, cpuCoreCount = 1, sdkInt = 21)
+        val tier = DevicePerformanceClassifier.classify(
+            totalRamBytes = 512L * 1024 * 1024,
+            cpuCoreCount = 1,
+            sdkInt = 21,
+        )
         assertEquals(DeviceTier.LOW_END, tier)
     }
 

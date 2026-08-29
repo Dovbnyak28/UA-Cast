@@ -1,9 +1,9 @@
 package com.uacastplayer.data.cast
 
-import com.uacastplayer.cast.CachedDiagnostic
-import com.uacastplayer.cast.CastCompatibilityVerdict
-import com.uacastplayer.cast.DiagnosticCachePolicy
-import com.uacastplayer.cast.TsSourceKind
+import com.uacastplayer.core.cast.CachedDiagnostic
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.DiagnosticCachePolicy
+import com.uacastplayer.core.cast.TsSourceKind
 
 private const val INITIAL_CAPACITY = 16
 private const val LOAD_FACTOR = 0.75f

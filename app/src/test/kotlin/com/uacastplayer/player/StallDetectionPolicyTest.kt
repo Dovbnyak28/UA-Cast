@@ -1,6 +1,6 @@
 package com.uacastplayer.player
 
-import com.uacastplayer.data.prefs.BufferSize
+import com.uacastplayer.core.settings.BufferSize
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

@@ -2,32 +2,36 @@ package com.uacastplayer.ui.home
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceLabel
 import com.uacastplayer.playlist.PlaylistSourceType
+import com.uacastplayer.ui.components.PrimaryButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
 
@@ -64,21 +68,39 @@ fun PlaylistSourceSheet(
                     onRemove = { onRemove(source) },
                 )
             }
-            Button(onClick = onAddNew, modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
-                Icon(AppIcons.Plus, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text(stringResource(R.string.home_add_playlist_button))
-            }
+            PrimaryButton(
+                text = stringResource(R.string.home_add_playlist_button),
+                onClick = onAddNew,
+                leadingIcon = AppIcons.Plus,
+                modifier = Modifier.fillMaxWidth().padding(top = GapM),
+            )
         }
     }
 }
 
 @Composable
 private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelect: () -> Unit, onRemove: () -> Unit) {
+    val shape = RoundedCornerShape(RadiusItem)
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onSelect).padding(vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                if (isActive) UaTheme.palette.accentGradientTop.copy(alpha = 0.10f)
+                else UaTheme.palette.surface1,
+            )
+            .clickable(onClick = onSelect)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = isActive, onClick = onSelect)
+        RadioButton(
+            selected = isActive,
+            onClick = onSelect,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = UaTheme.palette.azure,
+                unselectedColor = UaTheme.palette.labelSecondary,
+            ),
+        )
         Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
             Text(
                 text = source.displayName
@@ -94,7 +116,7 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
             Icon(
                 AppIcons.Delete,
                 contentDescription = stringResource(R.string.home_playlist_source_remove),
-                tint = MaterialTheme.colorScheme.error,
+                tint = UaTheme.palette.routeRed,
             )
         }
     }

@@ -2,6 +2,7 @@ package com.uacastplayer.data.epg
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.data.writeSafely
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.epg.DecodedEpgSnapshot
@@ -11,22 +12,30 @@ import com.uacastplayer.epg.EpgSnapshotHeader
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 private const val TAG = "EpgSnapshotStore"
 
-class EpgSnapshotStore(context: Context) {
+class EpgSnapshotStore(
+    context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "epg_snapshot.bin"))
 
     /** Writes the *parsed* guide, not the XMLTV document it came from - see [EpgSnapshotCodec] for
      * why that changed and what it cost to keep the document. */
-    suspend fun save(sourceFingerprint: String, savedAtEpochMillis: Long, data: EpgData) = withContext(Dispatchers.IO) {
+    suspend fun save(sourceFingerprint: String, savedAtEpochMillis: Long, data: EpgData) = withContext(ioDispatcher) {
         atomicFile.writeSafely(TAG, "EPG snapshot") { stream ->
             EpgSnapshotCodec.encode(EpgSnapshotHeader(sourceFingerprint, savedAtEpochMillis), data, stream)
         }
         Unit
+    }
+
+    /** Deletes both the committed snapshot and AtomicFile's unfinished side file, if present. */
+    suspend fun delete() = withContext(ioDispatcher) {
+        atomicFile.delete()
     }
 
     /**
@@ -37,7 +46,7 @@ class EpgSnapshotStore(context: Context) {
      * [DecodedEpgSnapshot.Parsed] result has already consumed everything it needs and this closes
      * the stream itself.
      */
-    suspend fun open(): DecodedEpgSnapshot? = withContext(Dispatchers.IO) {
+    suspend fun open(): DecodedEpgSnapshot? = withContext(ioDispatcher) {
         val stream = try {
             atomicFile.openRead()
         } catch (_: FileNotFoundException) {

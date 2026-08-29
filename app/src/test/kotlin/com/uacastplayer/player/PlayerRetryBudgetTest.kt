@@ -169,7 +169,7 @@ class PlayerRetryBudgetTest {
                     firstChannelAttempts > 1,
                 )
 
-                player.requestSwitch(1)
+                player.navigation.requestSwitch(1)
                 assertTrue(
                     "the switch should have landed on the second channel",
                     pumpUntil { player.uiState.value.currentChannel?.displayName == "Second" },

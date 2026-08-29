@@ -34,14 +34,17 @@ class UpdateInstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_INSTALL_STATUS) return
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
-        // Reported before anything else here, and unconditionally. Whoever is showing "confirm the
-        // install on screen" has no other way to learn that the screen in question is gone: the
-        // session was committed, and every ending except a success used to arrive here, get logged,
-        // and stop - leaving that message up for good with nothing to press. See
-        // [com.uacastplayer.update.InstallSessionOutcome] for the field measurement behind this.
-        InstallOutcomeBus.report(InstallStatusPolicy.outcomeFor(status))
+        val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, INVALID_SESSION_ID)
+        val userActionLaunched = if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            askTheUser(context, intent)
+        } else {
+            true
+        }
+        // Report after trying to open confirmation. PENDING without a usable intent is terminal,
+        // not AwaitingUser: there is no screen capable of advancing that session.
+        InstallOutcomeBus.report(sessionId, InstallStatusPolicy.outcomeFor(status, userActionLaunched))
         when (status) {
-            PackageInstaller.STATUS_PENDING_USER_ACTION -> askTheUser(context, intent)
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> Unit
             PackageInstaller.STATUS_SUCCESS -> AppLog.d(TAG) { "Update installed" }
             else -> AppLog.w(TAG) {
                 // The message is the system's own and says things like "INSTALL_FAILED_VERSION_
@@ -52,17 +55,22 @@ class UpdateInstallReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun askTheUser(context: Context, intent: Intent) {
+    private fun askTheUser(context: Context, intent: Intent): Boolean {
         val confirmation = confirmationIntent(intent)
         if (confirmation == null) {
             AppLog.w(TAG) { "The installer asked for confirmation but sent no way to ask for it" }
-            return
+            return false
         }
         confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
+        return try {
             context.startActivity(confirmation)
+            true
         } catch (e: ActivityNotFoundException) {
             AppLog.w(TAG) { "Nothing on this device can show the install confirmation: ${e.javaClass.simpleName}" }
+            false
+        } catch (e: SecurityException) {
+            AppLog.w(TAG) { "Device refused the install confirmation intent: ${e.javaClass.simpleName}" }
+            false
         }
     }
 
@@ -76,5 +84,6 @@ class UpdateInstallReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_INSTALL_STATUS = "com.uacastplayer.action.INSTALL_STATUS"
+        private const val INVALID_SESSION_ID = -1
     }
 }

@@ -11,22 +11,40 @@ package com.uacastplayer.performance
  */
 object DevicePerformanceClassifier {
 
+    private const val BYTES_PER_GIBIBYTE = 1024L * 1024L * 1024L
+    private const val HIGH_RAM_GIB = 4
+    private const val MID_RAM_GIB = 2
+    private const val HIGH_CPU_CORE_COUNT = 8
+    private const val MID_CPU_CORE_COUNT = 4
+    private const val HIGH_SDK_INT = 31
+    private const val MID_SDK_INT = 26
+    private const val HIGH_SCORE_INCREMENT = 2
+    private const val MID_SCORE_INCREMENT = 1
+    private const val LARGE_PLAYLIST_CHANNEL_COUNT = 5_000
+    private const val MEDIUM_PLAYLIST_CHANNEL_COUNT = 1_500
+    private const val LARGE_EPG_PROGRAMME_COUNT = 100_000
+    private const val MEDIUM_EPG_PROGRAMME_COUNT = 30_000
+    private const val LARGE_CONTENT_PENALTY = 2
+    private const val MEDIUM_CONTENT_PENALTY = 1
+    private const val HIGH_END_MIN_SCORE = 5
+    private const val MID_RANGE_MIN_SCORE = 2
+
     fun classify(totalRamBytes: Long, cpuCoreCount: Int, sdkInt: Int): DeviceTier {
-        val ramGb = totalRamBytes.toDouble() / (1024 * 1024 * 1024)
+        val ramGb = totalRamBytes.toDouble() / BYTES_PER_GIBIBYTE
         var score = 0
         score += when {
-            ramGb >= 4 -> 2
-            ramGb >= 2 -> 1
+            ramGb >= HIGH_RAM_GIB -> HIGH_SCORE_INCREMENT
+            ramGb >= MID_RAM_GIB -> MID_SCORE_INCREMENT
             else -> 0
         }
         score += when {
-            cpuCoreCount >= 8 -> 2
-            cpuCoreCount >= 4 -> 1
+            cpuCoreCount >= HIGH_CPU_CORE_COUNT -> HIGH_SCORE_INCREMENT
+            cpuCoreCount >= MID_CPU_CORE_COUNT -> MID_SCORE_INCREMENT
             else -> 0
         }
         score += when {
-            sdkInt >= 31 -> 2
-            sdkInt >= 26 -> 1
+            sdkInt >= HIGH_SDK_INT -> HIGH_SCORE_INCREMENT
+            sdkInt >= MID_SDK_INT -> MID_SCORE_INCREMENT
             else -> 0
         }
         return tierForScore(score)
@@ -50,8 +68,10 @@ object DevicePerformanceClassifier {
      */
     fun adjustForContentSize(tier: DeviceTier, playlistChannelCount: Int, epgProgrammeCount: Int): DeviceTier {
         val penalty = when {
-            playlistChannelCount > 5000 || epgProgrammeCount > 100_000 -> 2
-            playlistChannelCount > 1500 || epgProgrammeCount > 30_000 -> 1
+            playlistChannelCount > LARGE_PLAYLIST_CHANNEL_COUNT ||
+                epgProgrammeCount > LARGE_EPG_PROGRAMME_COUNT -> LARGE_CONTENT_PENALTY
+            playlistChannelCount > MEDIUM_PLAYLIST_CHANNEL_COUNT ||
+                epgProgrammeCount > MEDIUM_EPG_PROGRAMME_COUNT -> MEDIUM_CONTENT_PENALTY
             else -> 0
         }
         if (penalty == 0) return tier
@@ -60,8 +80,8 @@ object DevicePerformanceClassifier {
     }
 
     private fun tierForScore(score: Int): DeviceTier = when {
-        score >= 5 -> DeviceTier.HIGH_END
-        score >= 2 -> DeviceTier.MID_RANGE
+        score >= HIGH_END_MIN_SCORE -> DeviceTier.HIGH_END
+        score >= MID_RANGE_MIN_SCORE -> DeviceTier.MID_RANGE
         else -> DeviceTier.LOW_END
     }
 }

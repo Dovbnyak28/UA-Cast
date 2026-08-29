@@ -129,7 +129,7 @@ means nothing about content.
 
 ### What 1.0.0 waits for
 
-The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
+The current version is 0.9.2 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
 
 1. **The app has run on hardware nobody here chose.** Every device it has been verified on - one
    Xiaomi phone, one Samsung UE40KU6000, one Chromecast 4th gen - belongs to its author. A first
@@ -158,14 +158,21 @@ Point 1 is not a code change, which is exactly why it does not get closer by wri
 ## Regenerating the baseline profile
 
 **Current status: successfully run once (2026-07-30), on a Pixel 10 Pro emulator (API 37,
-x86_64)** - `app/src/main/baseline-prof.txt` now leads with 24,973 lines of real per-method entries
+x86_64)** - `app/src/main/baseline-prof.txt` now leads with roughly 25,000 lines of real per-method entries
 from that run (1,667 `com.uacastplayer` methods covering the language picker -> Terms -> first-run
-walkthrough -> Home flow), followed by the previous hand-authored wildcard block as a safety net for what that
-scripted flow doesn't reach (see below - mainly playback/media3).
+walkthrough -> Home flow), followed by the previous hand-authored wildcard block as a safety net.
+The generator now continues through a credential-free variant-only fixture into Channels, first
+player launch, fullscreen and EPG; regenerate the profile to replace the older Home-only capture.
 
 ```bash
 ./gradlew :app:generateReleaseBaselineProfile
 ```
+
+Run this only on an emulator or device dedicated to profiling. The generator force-stops the target
+app and replaces the fixture-owned playlist/EPG state with synthetic data before entering the
+player. The benchmark driver no longer runs a blanket `pm clear` by default, but Gradle may still
+uninstall the target package when the run finishes; real app data on that package is not a
+benchmark input and is not guaranteed to be preserved.
 
 This requires a **connected device or running emulator** (there's no Gradle-managed emulator
 configured in this project - `useConnectedDevices = true` in `baselineprofile/build.gradle.kts`).
@@ -223,17 +230,44 @@ adb pull "/storage/emulated/0/Android/media/com.uacastplayer.baselineprofile/Bas
 ```
 
 Running the instrumentation directly like this skips Gradle's uninstall-on-completion behavior, so
-the output file is still on the device afterward to pull. The pulled file only covers what the
-generator's scripted UI flow actually reached (language picker/Terms/guided tour/Home) - it contains
-almost no `androidx/media3` or `com.uacastplayer.player` entries, since the generator never opens a
-channel. Append the previous wildcard block (`HSPLcom/uacastplayer/**->**(**)**` +
+the output file is still on the device afterward to pull. The scripted flow now covers the language
+picker, Terms, guided tour, Home, a synthetic playlist restore, Channels, player, fullscreen and
+EPG. The synthetic state is prepared by activities compiled only into `benchmarkRelease` and
+`nonMinifiedRelease`; `debug` and shipping `release` do not contain them. Append the previous
+wildcard block (`HSPLcom/uacastplayer/**->**(**)**` +
 `HSPLandroidx/media3/exoplayer/**->**(**)**`/`common/**`) to the end rather than replacing it
-outright, so playback still gets AOT coverage the scripted flow doesn't exercise. Verify the merged
+outright, as a safety net for decoder/recovery paths one short invalid-local stream cannot exercise. Verify the merged
 file compiles before committing: `./gradlew :app:compileNonMinifiedReleaseArtProfile`.
 
 Once a run succeeds, review the diff before committing - a profile that shrank a lot usually means
 the generator's UI automation didn't get as far as it used to (see the next paragraph), not that
 the app suddenly needs less warm code.
+
+## Running Macrobenchmarks
+
+Use an emulator or a device dedicated to measurements. Every benchmark owns its precondition and
+force-stops `com.uacastplayer` before writing a credential-free fixture. The driver does not clear
+the whole package by default, but the Gradle task can still uninstall the target during setup or
+cleanup; do not point it at an install whose app-private playlist/EPG data matters. No provider
+credentials or external server are involved.
+
+```bash
+# deterministic 400-channel cold/warm startup
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark
+
+# 40,000-channel restore/open, first player, fullscreen and EPG guide
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.CriticalJourneysBenchmark
+
+# production SAX + retention + heap budget + index build over 350,000 XMLTV programmes
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.EpgParseBenchmark
+```
+
+The critical journeys report frame timing and peak memory; the XMLTV benchmark reports peak memory
+plus the `UaCastEpgParseAndIndex` trace-section duration. The parser uses the target device's actual
+`Runtime.maxMemory()` budget, so a 128MB device measures the same capped path production runs.
 
 **The same UTP failure hits the ordinary instrumented tests**, not only the profile generator:
 `./gradlew :app:connectedDebugAndroidTest` reports FAILURE with `Failed to receive the UTP test
@@ -251,7 +285,7 @@ It also inspects the runner's output rather than its exit code, because **`am in
 whether the tests passed or failed**: pointed at a class that does not exist it prints
 `FAILURES!!!` and still returns 0. A check that trusted the exit code would be green forever.
 
-Last run: `OK (6 tests)` in 32s on a Mi A2 (Android 11). Note that `connectedDebugAndroidTest`
+Last run: `OK (49 tests)` in about 74s on a Mi A2 (Android 11; 73,657 ms in the latest run). Note that `connectedDebugAndroidTest`
 **uninstalls the app under test when it finishes**, taking the imported playlist, the EPG snapshot
 and the icon cache with it - so on a phone carrying real data, use the script above, which does
 not.
@@ -263,13 +297,14 @@ sat there. `:baselineprofile`'s `build` is now bound to compiling and packaging 
 plus `check`; generating a profile stays an explicit request, exactly as described above. A full
 `./gradlew build` takes about two minutes on this machine.
 
-**Why the generator clicks by accessibility role/tree-order instead of text**: none of the three
+**Why the first-run part clicks by accessibility role/tree-order instead of text**: none of the three
 gate screens have `testTag`s, and `:baselineprofile` is a black-box `com.android.test` module (no
 Compose semantics access across the process/APK boundary), so button labels would render in
 whatever language the connected device's system locale resolves to - text matching would make the
 script device-dependent. Tree order happens to disambiguate every gate correctly instead (see the
 generator's own doc comment) - if a gate screen's layout order ever changes, the generator's click
-targets need to move with it.
+targets need to move with it. After the fixture is installed it explicitly selects English, so the
+player/EPG journey can use stable accessibility text without depending on the device locale.
 
 ## Turning premium on
 

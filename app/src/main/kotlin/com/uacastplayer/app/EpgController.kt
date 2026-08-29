@@ -76,7 +76,8 @@ class EpgController(
             // non-suspending sweep inside a single withContext, so cancellation can only be
             // observed on the way out - after the sweep has already run.
             epgRepository.deleteStaleDownloads()
-            val restored = epgRepository.restoreSnapshot()
+            val configuredUrl = preferences.customEpgUrl ?: preferences.epgSource.url
+            val restored = epgRepository.restoreSnapshot(configuredUrl)
             if (restored != null) {
                 applyEpgOutcome(restored.outcome)
                 refreshIfFromAnEarlierDay(restored.savedAtMillis)

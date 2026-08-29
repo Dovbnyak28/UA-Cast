@@ -2,14 +2,17 @@ package com.uacastplayer.dlna
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
+import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.log.AppLog
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -61,7 +64,11 @@ private const val MULTICAST_LOCK_TAG = "UACastPlayer:dlnaDiscovery"
  * acquire-before/release-after discipline [com.uacastplayer.data.cast.CastWakeLocks] uses for the
  * proxy session's power/Wi-Fi locks.
  */
-class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
+class SsdpDiscovery(
+    context: Context,
+    private val httpClient: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     private val appContext = context.applicationContext
 
@@ -78,9 +85,9 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
     suspend fun discover(): List<DlnaDevice> {
         val multicastLock = acquireMulticastLock()
         return try {
-            val locations = withContext(Dispatchers.IO) { collectLocations() }
+            val locations = withContext(ioDispatcher) { collectLocations() }
             val devices = coroutineScope {
-                locations.map { location -> async(Dispatchers.IO) { fetchDevice(location) } }.awaitAll()
+                locations.map { location -> async(ioDispatcher) { fetchDevice(location) } }.awaitAll()
             }.filterNotNull().distinctRenderers()
             // The other half of the empty-sheet diagnosis: locations that answered but yielded no
             // usable renderer are the normal ssdp:all result (routers, printers, speakers), so this
@@ -106,6 +113,8 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
                 sendSearchRequests(socket)
                 receiveResponsesUntilDeadline(socket, deadline, locations)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "SSDP discovery failed: ${e.javaClass.simpleName}" }
         }
@@ -134,6 +143,8 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
             try {
                 socket.send(DatagramPacket(message, message.size, address, SSDP_PORT))
                 sent++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLog.w(TAG) { "M-SEARCH send failed: ${e.javaClass.simpleName}" }
             }
@@ -195,10 +206,14 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
      * whose description cannot be fetched is simply dropped from the list (see the mapNotNull in
      * [discover]), which is why anything thrown here degrades to null rather than propagating. */
     @Suppress("TooGenericExceptionCaught")
-    private fun fetchDevice(location: String): DlnaDevice? {
+    private suspend fun fetchDevice(location: String): DlnaDevice? {
         val request = Request.Builder().url(location).build()
         return try {
-            httpClient.newCall(request).execute().use { response -> parseDeviceDescription(response, location) }
+            httpClient.newCall(request).executeCancellable { response ->
+                parseDeviceDescription(response, location)
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Device description fetch failed for $location: ${e.javaClass.simpleName}" }
             null
@@ -206,7 +221,8 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
     }
 
     private fun parseDeviceDescription(response: Response, location: String): DlnaDevice? {
-        val body = response.body?.byteStream()?.takeIf { response.isSuccessful } ?: return null
+        if (!response.isSuccessful) return null
+        val body = response.body.byteStream()
         return when (val result = BoundedByteReader.readBytes(body, MAX_DEVICE_DESCRIPTION_BYTES)) {
             is BoundedBytesResult.Success -> DeviceDescriptionParser.parse(result.bytes, location)
             BoundedBytesResult.SizeLimitExceeded -> null

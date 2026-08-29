@@ -41,12 +41,12 @@ fun darken(color: Color, fraction: Float): Color {
 }
 
 /**
- * [base], darkened by [PressedDarkenFraction] while [pressed] - the one pressed-state color rule
+ * [base], darkened by [PRESSED_DARKEN_FRACTION] while [pressed] - the one pressed-state color rule
  * every [raisedSurface] user should share, instead of each control picking its own ad-hoc pressed
  * tone (e.g. swapping to a whole different palette surface).
  */
 fun pressedSurface(base: Color, pressed: Boolean): Color =
-    if (pressed) darken(base, PressedDarkenFraction) else base
+    if (pressed) darken(base, PRESSED_DARKEN_FRACTION) else base
 
 /**
  * A subtly "raised" surface: a top-to-bottom gradient from a lightened [base] to [base] itself

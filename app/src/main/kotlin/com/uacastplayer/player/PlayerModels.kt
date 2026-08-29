@@ -2,13 +2,19 @@ package com.uacastplayer.player
 
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.VideoSize
-import com.uacastplayer.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
 import com.uacastplayer.cast.CastStatusMessage
 import com.uacastplayer.cast.CodecIncompatibility
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.playlist.M3uChannel
 
 data class IndexedChannel(val index: Int, val channel: M3uChannel)
+
+/** Visible progress for a finite automatic search after a channel exhausts its retry budget. */
+data class AutoSkipRecoveryState(
+    val skippedChannels: Int,
+    val totalChannels: Int,
+)
 
 data class PlaybackBadgesState(
     val qualityLabel: String? = null,
@@ -84,4 +90,6 @@ data class PlayerUiState(
      * [StallRetryPolicy.CHANNEL_PICKER_HINT_ATTEMPT] the UI adds a "pick another channel" escape
      * hatch alongside the automatic retries, which never stop on their own. */
     val stallRecoveryAttempt: Int = 0,
+    /** Non-null after a dead channel triggered auto-skip, until playback succeeds or recovery ends. */
+    val autoSkipRecovery: AutoSkipRecoveryState? = null,
 )

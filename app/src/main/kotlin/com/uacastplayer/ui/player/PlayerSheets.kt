@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +25,11 @@ import com.uacastplayer.player.SelectableTrack
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.SleepTimerDialog
 import com.uacastplayer.ui.epg.EpgGuideSheet
+import com.uacastplayer.ui.theme.BodyText
+import com.uacastplayer.ui.theme.ButtonLabel
+import com.uacastplayer.ui.theme.Caption
+import com.uacastplayer.ui.theme.Title
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** The player's five independent dialogs/sheets (sleep timer, audio/subtitle track pickers,
@@ -73,7 +77,7 @@ internal fun PlayerDialogs(
         TrackPickerDialog(
             title = stringResource(R.string.player_audio_track),
             tracks = uiState.audioTracks,
-            onSelect = { viewModel.selectAudioTrack(it); onDismissAudioDialog() },
+            onSelect = { viewModel.tracks.selectAudio(it); onDismissAudioDialog() },
             onDismiss = onDismissAudioDialog,
         )
     }
@@ -83,8 +87,8 @@ internal fun PlayerDialogs(
             title = stringResource(R.string.player_subtitle_track),
             tracks = uiState.textTracks,
             offLabel = stringResource(R.string.player_subtitle_off),
-            onSelectOff = { viewModel.clearTextTrack(); onDismissSubtitleDialog() },
-            onSelect = { viewModel.selectTextTrack(it); onDismissSubtitleDialog() },
+            onSelectOff = { viewModel.tracks.clearText(); onDismissSubtitleDialog() },
+            onSelect = { viewModel.tracks.selectText(it); onDismissSubtitleDialog() },
             onDismiss = onDismissSubtitleDialog,
         )
     }
@@ -92,10 +96,22 @@ internal fun PlayerDialogs(
     if (showQualityDialog) {
         AlertDialog(
             onDismissRequest = onDismissQualityDialog,
-            title = { Text(stringResource(R.string.player_quality)) },
+            title = {
+                Text(
+                    stringResource(R.string.player_quality),
+                    style = Title,
+                    color = UaTheme.palette.labelPrimary,
+                )
+            },
             text = { QualityDetails(uiState.badges) },
             confirmButton = {
-                TextButton(onClick = onDismissQualityDialog) { Text(stringResource(R.string.common_back)) }
+                TextButton(onClick = onDismissQualityDialog) {
+                    Text(
+                        stringResource(R.string.common_back),
+                        style = ButtonLabel,
+                        color = UaTheme.palette.azure,
+                    )
+                }
             },
         )
     }
@@ -121,14 +137,15 @@ internal fun TrackPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, style = Title, color = UaTheme.palette.labelPrimary) },
         text = {
             Column {
                 if (offLabel != null && onSelectOff != null) {
                     val isOffSelected = tracks.none { it.isSelected }
                     Text(
                         text = offLabel,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = BodyText,
+                        color = UaTheme.palette.labelPrimary,
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(selected = isOffSelected, onClick = onSelectOff, role = Role.RadioButton)
@@ -148,17 +165,17 @@ internal fun TrackPickerDialog(
                     ) {
                         Text(
                             text = track.label,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = BodyText,
                             color = if (track.isSelected) {
                                 UaTheme.palette.azure
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                UaTheme.palette.labelPrimary
                             },
                         )
                         trackDetailLabel(track)?.let { detail ->
                             Text(
                                 text = detail,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = Caption,
                                 color = UaTheme.palette.labelSecondary,
                             )
                         }
@@ -167,7 +184,13 @@ internal fun TrackPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_back)) }
+            TextButton(onClick = onDismiss) {
+                Text(
+                    stringResource(R.string.common_back),
+                    style = ButtonLabel,
+                    color = UaTheme.palette.azure,
+                )
+            }
         },
     )
 }
@@ -219,15 +242,20 @@ internal fun QualityDetails(badges: PlaybackBadgesState) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = videoParts.joinToString(" · ").ifBlank { stringResource(R.string.player_quality_unknown) },
-            style = MaterialTheme.typography.bodyLarge,
+            style = BodyText,
+            color = UaTheme.palette.labelPrimary,
         )
         if (audioParts.isNotEmpty()) {
             Text(
                 text = stringResource(R.string.player_quality_audio_section),
-                style = MaterialTheme.typography.labelMedium,
+                style = Caption,
                 color = UaTheme.palette.labelSecondary,
             )
-            Text(text = audioParts.joinToString(" · "), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = audioParts.joinToString(" · "),
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+            )
         }
     }
 }
@@ -248,5 +276,5 @@ private fun formatKhz(hz: Int): String {
     // An on-screen label in the track sheet, never parsed or persisted - so a locale's own decimal
     // separator ("44,1" in uk or de) is the right thing to show here, not a defect to stamp out.
     if (khz == khz.toInt().toFloat()) return khz.toInt().toString()
-    return "%.1f".format(khz) // locale-ok: human-read label only, see above
+    return String.format(Locale.getDefault(), "%.1f", khz)
 }

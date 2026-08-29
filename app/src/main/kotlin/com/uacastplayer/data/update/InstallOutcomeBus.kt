@@ -1,6 +1,7 @@
 package com.uacastplayer.data.update
 
 import com.uacastplayer.update.InstallSessionOutcome
+import com.uacastplayer.update.InstallSessionResult
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -26,14 +27,14 @@ import kotlinx.coroutines.flow.asSharedFlow
  */
 object InstallOutcomeBus {
 
-    private val _outcomes = MutableSharedFlow<InstallSessionOutcome>(
+    private val _outcomes = MutableSharedFlow<InstallSessionResult>(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    val outcomes: SharedFlow<InstallSessionOutcome> = _outcomes.asSharedFlow()
+    val outcomes: SharedFlow<InstallSessionResult> = _outcomes.asSharedFlow()
 
-    fun report(outcome: InstallSessionOutcome) {
-        _outcomes.tryEmit(outcome)
+    fun report(sessionId: Int, outcome: InstallSessionOutcome) {
+        _outcomes.tryEmit(InstallSessionResult(sessionId, outcome))
     }
 }

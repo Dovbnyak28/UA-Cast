@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.log.AppLog
 import java.io.File
 import java.io.IOException
@@ -17,7 +18,7 @@ sealed interface InstallLaunch {
 
     /** Handed to the system package installer. Whether it then asks the user is the platform's
      * decision - see [ApkInstaller.install]. */
-    data object Started : InstallLaunch
+    data class Started(val sessionId: Int) : InstallLaunch
 
     /** The user has not allowed this app to install packages. Recoverable, and the UI's job: send
      * them to the "install unknown apps" screen for this app. */
@@ -56,8 +57,6 @@ sealed interface InstallLaunch {
 object ApkInstaller {
 
     private const val SESSION_ENTRY = "uacast-update.apk"
-    private const val REQUEST_CODE = 0x0DA7E
-
     fun install(context: Context, file: File): InstallLaunch = when {
         // Signature first, before the permission: an APK this app will refuse anyway is refused
         // without sending the user off to a Settings screen for nothing.
@@ -88,7 +87,7 @@ object ApkInstaller {
                 session.commit(statusIntent(context, sessionId).intentSender)
             }
             AppLog.d(TAG) { "Update session $sessionId committed" }
-            InstallLaunch.Started
+            InstallLaunch.Started(sessionId)
         } catch (e: IOException) {
             AppLog.w(TAG) { "Could not stage the update: ${e.javaClass.simpleName}" }
             abandon(installer, sessionId)
@@ -117,7 +116,7 @@ object ApkInstaller {
         if (sessionId < 0) return
         // A session left open holds the staged copy of the APK on disk until the system decides to
         // reclaim it, which is the same wasted tens of megabytes the download sweep exists for.
-        runCatching { installer.abandonSession(sessionId) }
+        runCatchingNonFatal { installer.abandonSession(sessionId) }
     }
 
     /**
@@ -134,6 +133,8 @@ object ApkInstaller {
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
-        return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
+        // A distinct PendingIntent per session. Reusing one request code with FLAG_UPDATE_CURRENT
+        // lets a later session replace the extras held by an earlier session's callback.
+        return PendingIntent.getBroadcast(context, sessionId, intent, flags)
     }
 }

@@ -1,6 +1,7 @@
 package com.uacastplayer.data.playlist
 
 import com.uacastplayer.playlist.PlaylistError
+import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 
 private const val ACTIVE_PLAYLIST_ID_LENGTH = 8
@@ -19,6 +20,7 @@ object PlaylistOutcomeReducer {
         outcome: PlaylistOutcome,
         fromCache: Boolean,
         displayName: String?,
+        loadedChannels: List<M3uChannel>? = null,
     ): PlaylistUiState = when (outcome) {
         // Read successfully, and empty. Kept apart from the Loaded branch below rather than folded
         // into it: everything downstream treats "no groups" as "no playlist yet", which is the
@@ -27,6 +29,7 @@ object PlaylistOutcomeReducer {
             current.copy(isLoading = false, error = PlaylistError.Empty)
         is PlaylistOutcome.Loaded -> PlaylistUiState(
             groups = outcome.groups,
+            channels = loadedChannels ?: outcome.groups.flatMap { it.channels },
             isLoading = false,
             skippedLineCount = outcome.skippedLineCount,
             error = null,

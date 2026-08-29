@@ -3,6 +3,8 @@ package com.uacastplayer.ui.premium
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -14,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.GapL
+import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaTheme
 
 /**
@@ -41,8 +45,9 @@ fun PremiumBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ScreenHPadding)
+                .padding(bottom = GapL),
         ) {
             Text(
                 text = stringResource(R.string.premium_open),

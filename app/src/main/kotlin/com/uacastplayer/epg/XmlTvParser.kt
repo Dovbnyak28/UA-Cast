@@ -26,6 +26,9 @@ data class XmlTvParseResult(
 object XmlTvParser {
 
     const val MAX_CHANNELS = 25_000
+    /** Bounds distinct channel-id strings even when a feed invents one id per programme. */
+    const val MAX_CHANNEL_ID_POOL = MAX_CHANNELS + 1_024
+    private const val CANCELLATION_CHECK_INTERVAL_EVENTS = 256
 
     /**
      * The ceiling on retained programmes, after [EpgRetentionPolicy] has dropped the ones that
@@ -79,18 +82,32 @@ object XmlTvParser {
         keepFromMillis: Long = 0L,
         keepUntilMillis: Long = Long.MAX_VALUE,
         maxProgrammes: Int = MAX_PROGRAMMES,
+        checkCancellation: () -> Unit = {},
     ): XmlTvParseResult {
+        checkCancellation()
         val factory = SAXParserFactory.newInstance()
         trySetFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true)
 
         val reader = factory.newSAXParser().xmlReader
         trySetFeature(reader, "http://xml.org/sax/features/external-general-entities", false)
         trySetFeature(reader, "http://xml.org/sax/features/external-parameter-entities", false)
+        // Xerces honours these limits while Android's Expat parser may not expose the
+        // properties. They are deliberately best-effort: external entities are disabled above,
+        // and unsupported parser implementations still get bounded text/programme retention.
+        trySetProperty(reader, "http://www.oracle.com/xml/jaxp/properties/entityExpansionLimit", "1024")
+        trySetProperty(reader, "http://www.oracle.com/xml/jaxp/properties/totalEntitySizeLimit", "1048576")
         reader.entityResolver = EntityResolver { _, _ -> InputSource(StringReader("")) }
 
-        val handler = XmlTvHandler(keepFromMillis, keepUntilMillis, maxProgrammes)
+        val handler = XmlTvHandler(
+            keepFromMillis,
+            keepUntilMillis,
+            maxProgrammes,
+            CANCELLATION_CHECK_INTERVAL_EVENTS,
+            checkCancellation,
+        )
         reader.contentHandler = handler
         reader.parse(InputSource(input))
+        checkCancellation()
         return handler.result()
     }
 
@@ -109,12 +126,22 @@ object XmlTvParser {
             // Feature unsupported by this platform's parser implementation; skip it.
         }
     }
+
+    private fun trySetProperty(reader: XMLReader, name: String, value: String) {
+        try {
+            reader.setProperty(name, value)
+        } catch (_: Exception) {
+            // Property unsupported by this platform's parser implementation; skip it.
+        }
+    }
 }
 
 private class XmlTvHandler(
     private val keepFromMillis: Long,
     private val keepUntilMillis: Long,
     private val maxProgrammes: Int,
+    private val cancellationCheckInterval: Int,
+    private val checkCancellation: () -> Unit,
 ) : DefaultHandler() {
 
     private val channels = mutableListOf<EpgChannel>()
@@ -123,7 +150,7 @@ private class XmlTvHandler(
     private var programmeLimitExceeded = false
 
     private var currentChannelId: String? = null
-    private var currentDisplayNames: MutableList<String>? = null
+    private var currentDisplayNames: List<String>? = null
     private var currentIconUrl: String? = null
 
     private var currentProgrammeChannelId: String? = null
@@ -140,21 +167,31 @@ private class XmlTvHandler(
     private var skippingProgramme = false
 
     private var textTarget: StringBuilder? = null
+    private var eventsUntilCancellationCheck = cancellationCheckInterval
 
     // A channel id arrives as a fresh String from every single attribute lookup, and there is one
-    // per <programme> - up to MAX_PROGRAMMES of them, all held for as long as the schedule is. The
-    // distinct values are bounded by the channel count instead (a few thousand at most), so pooling
-    // them collapses ~250k Strings into that. getOrPut keeps the first instance seen and hands it
-    // back for every later occurrence of the same id.
+    // per <programme>. Normal feeds repeat a few thousand declared ids, so pooling collapses those
+    // allocations. A hostile feed can instead put a unique id on every programme; the pool is
+    // bounded independently of MAX_PROGRAMMES so that input cannot turn this optimisation into an
+    // unbounded retention point. The cap still leaves room for programme-first feeds where channel
+    // declarations appear later in the document.
     private val channelIdPool = HashMap<String, String>()
 
-    private fun internChannelId(id: String): String = channelIdPool.getOrPut(id) { id }
+    private fun internChannelId(id: String): String? {
+        return channelIdPool[id] ?: if (channelIdPool.size < XmlTvParser.MAX_CHANNEL_ID_POOL) {
+            channelIdPool[id] = id
+            id
+        } else {
+            null
+        }
+    }
 
     override fun startElement(uri: String?, localName: String?, qName: String, attributes: Attributes) {
+        periodicallyCheckCancellation()
         when (qName) {
             "channel" -> {
                 currentChannelId = attributes.getValue("id")?.let(::internChannelId)
-                currentDisplayNames = mutableListOf()
+                currentDisplayNames = emptyList()
                 currentIconUrl = null
             }
             "display-name" -> textTarget = StringBuilder()
@@ -187,6 +224,7 @@ private class XmlTvHandler(
     }
 
     override fun characters(ch: CharArray, start: Int, length: Int) {
+        periodicallyCheckCancellation()
         val target = textTarget ?: return
         val remaining = XmlTvParser.MAX_TEXT_LENGTH - target.length
         if (remaining <= 0) return
@@ -202,7 +240,9 @@ private class XmlTvHandler(
             // recording "null" as the channel's name. Blank names are dropped too: they match
             // nothing useful in EpgIndex and only add an empty key to its name map.
             "display-name" -> {
-                textTarget?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { currentDisplayNames?.add(it) }
+                textTarget?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { name ->
+                    currentDisplayNames = currentDisplayNames?.plus(name)
+                }
                 textTarget = null
             }
             "channel" -> {
@@ -252,4 +292,12 @@ private class XmlTvHandler(
     }
 
     fun result() = XmlTvParseResult(channels, programmes, channelLimitExceeded, programmeLimitExceeded)
+
+    private fun periodicallyCheckCancellation() {
+        eventsUntilCancellationCheck--
+        if (eventsUntilCancellationCheck == 0) {
+            checkCancellation()
+            eventsUntilCancellationCheck = cancellationCheckInterval
+        }
+    }
 }

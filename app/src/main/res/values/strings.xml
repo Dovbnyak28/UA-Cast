@@ -16,6 +16,7 @@
     <string name="nav_channels">Channels</string>
     <string name="nav_favorites">Favorites</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_settings_compact">Settings</string>
 
     <!-- Home screen -->
     <string name="home_subtitle">Your TV</string>
@@ -54,12 +55,10 @@
     <string name="add_playlist_title">Add playlist</string>
     <string name="add_playlist_name_hint">Playlist name</string>
     <string name="add_playlist_url_hint">Playlist URL</string>
+    <string name="add_playlist_url_error">Enter a complete http:// or https:// address</string>
     <string name="add_playlist_helper">M3U, M3U8, and TXT playlists are supported. The URL must start with http:// or https://.</string>
     <string name="add_playlist_status_label">Status</string>
-    <string name="add_playlist_status_empty">Paste an M3U or M3U8 playlist URL</string>
-    <string name="add_playlist_status_empty_xtream">Enter the server address, login, and password</string>
     <string name="add_playlist_status_loading">Loading…</string>
-    <string name="add_playlist_status_ready">Ready to load</string>
     <string name="add_playlist_status_no_channels">Loaded, but no channels were found - check the link</string>
     <string name="add_playlist_save_button">Download and save</string>
     <string name="add_playlist_file_button">Load from file</string>
@@ -68,12 +67,18 @@
     <string name="add_playlist_type_file">File</string>
     <string name="add_playlist_type_xtream">Xtream</string>
     <string name="add_playlist_xtream_server_hint">Server address (with port)</string>
+    <string name="add_playlist_server_error">Enter a server URL or host:port</string>
     <string name="add_playlist_xtream_username_hint">Username</string>
     <string name="add_playlist_xtream_password_hint">Password</string>
+    <string name="add_playlist_password_show">Show</string>
+    <string name="add_playlist_password_hide">Hide</string>
+    <string name="add_playlist_xtream_cleartext_warning">This server uses unencrypted HTTP. Your username, password, and stream links can be read or changed in transit. Use https:// when your provider supports it.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">No channels yet</string>
-    <string name="channels_empty_subtitle">Add a playlist in Settings to see channels here</string>
+    <string name="channels_empty_subtitle">Add a playlist to see channels here</string>
+    <string name="channels_error_subtitle">Check the source and connection, then try again</string>
+    <string name="common_retry">Try again</string>
     <string name="channels_search_hint">Search channels</string>
     <string name="channels_groups_title">Channel groups</string>
     <string name="channels_no_search_results">No channels match "%1$s"</string>
@@ -129,9 +134,19 @@
     <string name="favorites_sort_alphabetical">Alphabetical</string>
     <string name="favorites_sort_recently_added">Recently added</string>
     <string name="favorites_sort_manual">Custom order</string>
+    <string name="favorites_manual_hint">Press and hold a channel to drag it into a new position.</string>
 
     <!-- Settings screen -->
     <string name="settings_section_general">General</string>
+    <string name="settings_back_to_overview">All settings</string>
+    <string name="settings_page_general_summary">Language, theme, TV guide, and battery behavior</string>
+    <string name="settings_page_playlist_access">Playlist &amp; access</string>
+    <string name="settings_page_playlist_summary">Sources, hidden groups, and parental control</string>
+    <string name="settings_page_playback_summary">Channel layout, icons, buffer, and navigation</string>
+    <string name="settings_page_data_storage">Data &amp; storage</string>
+    <string name="settings_page_data_summary">Cache, backup, import, and export</string>
+    <string name="settings_page_help_about">Help &amp; about</string>
+    <string name="settings_page_help_summary">Updates, tutorial, diagnostics, and legal information</string>
     <string name="settings_section_playlist">Playlist</string>
     <string name="settings_theme_label">Theme</string>
     <string name="theme_name_azure">Classic</string>
@@ -171,6 +186,7 @@
     <string name="settings_icon_sources_remove">Remove source</string>
     <string name="settings_icon_sources_error_invalid">Enter a full http(s) URL</string>
     <string name="settings_icon_sources_error_duplicate">That source is already added</string>
+    <string name="settings_icon_sources_error_limit">You can add up to 16 icon sources</string>
     <string name="settings_section_parental_control">Parental control</string>
     <string name="parental_control_set_up">Set up PIN lock</string>
     <string name="parental_control_manage_locked">Locked channels (%1$d)</string>
@@ -188,10 +204,15 @@
     <string name="settings_section_playback">Playback</string>
     <string name="settings_section_cache">Cache</string>
     <string name="settings_section_data">Data</string>
-    <string name="settings_data_hint">Back up your saved playlists, favorites, and key settings to a file, or restore them on another device. Caches are never included.</string>
+    <string name="settings_data_hint">Back up saved playlists, favorites, and key settings. The file is not encrypted and may contain provider credentials and private stream links.</string>
     <string name="settings_data_export">Export</string>
+    <string name="settings_data_export_warning_title">Export sensitive data?</string>
+    <string name="settings_data_export_warning_message">This backup is not encrypted. It can contain IPTV usernames, passwords, access tokens, and private stream links. Store and share it like a password.</string>
+    <string name="settings_data_export_confirm">Export anyway</string>
     <string name="settings_data_import">Import</string>
     <string name="settings_data_import_summary">Imported: %1$d playlists, %2$d favorites</string>
+    <string name="settings_data_export_success">Backup exported successfully</string>
+    <string name="settings_data_export_failure">Could not export the backup. Check storage access and try again.</string>
     <string name="cache_playlist_label">Playlist cache</string>
     <string name="cache_epg_label">TV guide cache</string>
     <string name="cache_icons_label">Channel logo cache</string>
@@ -246,7 +267,7 @@
     <string name="help_cast_errors_body">The phone and the receiver do not decode the same formats. «… video isn\'t supported» or «… audio isn\'t supported» names the format your device refused - AC-3 audio and MPEG-2 or HEVC video are the usual ones. The app cannot convert them: it relays the stream, it does not re-encode it. Look for the same channel in another quality, which often carries different audio. «Couldn\'t cast this channel» with no format named means the receiver rejected the stream for some other reason. «Backup streaming isn\'t available on this network» means the Wi-Fi gave your phone no IPv4 address, so the relay cannot run. In every one of these cases the channel keeps playing on the phone.</string>
     <string name="help_send_diagnostics_button">Send diagnostics</string>
     <string name="diagnostics_preview_title">Diagnostics report</string>
-    <string name="diagnostics_preview_body_hint">This report contains technical device data and a recent activity log — no playlists, no logins, no addresses. Read it below; it opens in your mail app addressed to the developer, and nothing is sent until you press send there.</string>
+    <string name="diagnostics_preview_body_hint">This report contains technical device data and a recent activity log. Playlist URLs, login credentials, and access tokens are redacted, but the report may still include provider host names, local network addresses, channel names, and device details. Read it below; Android will open a mail/share chooser, pre-addressed where supported, and nothing is sent until you choose an app and press send there.</string>
     <string name="diagnostics_preview_send">Send</string>
     <string name="diagnostics_preview_cancel">Cancel</string>
     <string name="diagnostics_share_chooser_title">Send diagnostics report via</string>
@@ -290,6 +311,8 @@
     <string name="player_subtitle_track">Subtitles</string>
     <string name="player_subtitle_off">Off</string>
     <string name="player_fatal_error">This channel isn\'t available right now</string>
+    <string name="player_retry">Retry this channel</string>
+    <string name="player_auto_skip_progress">Channel unavailable — trying the next one (%1$d/%2$d)</string>
     <string name="audio_layout_mono">Mono</string>
     <string name="audio_layout_stereo">Stereo</string>
     <string name="audio_layout_surround_5_1">5.1 surround</string>

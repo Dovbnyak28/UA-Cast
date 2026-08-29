@@ -19,10 +19,11 @@ package com.uacastplayer.proxy
  *
  * MPEG-TS is a packet stream with no file header, so segments of one HLS variant concatenate into a
  * valid stream by construction - which is exactly what makes the reverse operation (this app's
- * [TsSegmenter]) possible. Three cases break that, and each is refused rather than served badly:
+ * [TsSegmenter]) possible. Four cases break that, and each is refused rather than served badly:
  *
  * - **encrypted segments** would need a key this app does not fetch, so the bytes are noise;
  * - **fragmented MP4** (`#EXT-X-MAP`) is not a packet stream and does not concatenate at all;
+ * - **byte-range segments** need a distinct Range request per entry, not whole-object downloads;
  * - **a master playlist** lists variants, not media, so one has to be chosen first.
  *
  * Refusing means falling back to serving the manifest - no worse than today, and still correct for
@@ -43,9 +44,11 @@ object HlsFlattenPolicy {
     }
 
     fun verdictFor(playlist: HlsMediaPlaylist): Verdict = when {
+        !playlist.hasPlaylistHeader -> Verdict.Unsupported("missing #EXTM3U playlist header")
         playlist.isMaster -> Verdict.NeedsVariant
         playlist.hasEncryptedSegments -> Verdict.Unsupported("segments are encrypted")
         playlist.hasInitSegment -> Verdict.Unsupported("fragmented MP4, not MPEG-TS")
+        playlist.hasByteRanges -> Verdict.Unsupported("byte-range segments require Range requests")
         playlist.segmentUris.isEmpty() -> Verdict.Unsupported("no segments listed")
         else -> Verdict.Ok
     }

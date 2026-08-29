@@ -1,7 +1,5 @@
 package com.uacastplayer.ui.nav
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -90,7 +88,6 @@ class RootTopBarLayoutTest {
             UaCastTheme(AppTheme.CINEMA) {
                 RootTopBar(
                     title = "UA Cast Player",
-                    castConnected = false,
                     iconPrefetchState = IconPrefetchUiState(
                         isRunning = state.value,
                         completed = 42,
@@ -109,10 +106,6 @@ class RootTopBarLayoutTest {
                         onDismissBanner = {},
                         onOutcomeShown = {},
                     ),
-                    // Stands in for CastButton, which goes through Play Services' CastButtonFactory
-                    // and cannot be composed here. Given a size so the title row's height still
-                    // depends on something other than the text alone.
-                    trailing = { Box(Modifier.size(40.dp)) },
                 )
             }
         }

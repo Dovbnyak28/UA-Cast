@@ -1,22 +1,25 @@
 package com.uacastplayer.data.epg
 
 import androidx.annotation.VisibleForTesting
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedFileCopyResult
+import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.playlist.HttpRetryPolicy
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-sealed class EpgDownloadResult {
-    data class Success(val documentFile: File) : EpgDownloadResult()
-    data object SizeLimitExceeded : EpgDownloadResult()
-    data class HttpError(val code: Int) : EpgDownloadResult()
+sealed interface EpgDownloadResult {
+    data class Success(val documentFile: File) : EpgDownloadResult
+    data object SizeLimitExceeded : EpgDownloadResult
+    data class HttpError(val code: Int) : EpgDownloadResult
     /**
      * @param cause the exception's *class name*, never its message. An OkHttp IOException's message
      *   routinely carries the URL it failed on - and for an Xtream feed that URL has the user's
@@ -26,7 +29,7 @@ sealed class EpgDownloadResult {
      *   SSLHandshakeException are three different problems with three different answers, and the
      *   class name is what tells them apart.
      */
-    data class ReadError(val cause: String?) : EpgDownloadResult()
+    data class ReadError(val cause: String?) : EpgDownloadResult
 }
 
 /**
@@ -36,9 +39,13 @@ sealed class EpgDownloadResult {
  * a single in-memory ByteArray that size is wasteful on top of whatever else is loaded at once.
  * Callers own the returned [EpgDownloadResult.Success.documentFile] and must delete it once done.
  */
-class EpgDownloader(private val client: OkHttpClient, private val tempDir: File) {
+class EpgDownloader(
+    private val client: OkHttpClient,
+    private val tempDir: File,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
-    suspend fun download(url: String): EpgDownloadResult = withContext(Dispatchers.IO) {
+    suspend fun download(url: String): EpgDownloadResult = withContext(ioDispatcher) {
         deleteStaleDownloads()
         var attempt = 0
         var result: EpgDownloadResult
@@ -77,7 +84,7 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
                 file.lastModified() < cutoff
         } ?: return
         for (file in stale) {
-            runCatching { file.delete() }
+            runCatchingNonFatal { file.delete() }
         }
     }
 
@@ -88,28 +95,37 @@ class EpgDownloader(private val client: OkHttpClient, private val tempDir: File)
         else -> false
     }
 
-    private fun attemptOnce(url: String): EpgDownloadResult {
+    private suspend fun attemptOnce(url: String): EpgDownloadResult {
         // Tracked separately from the temp file created inside the response block below, so the
         // catch clauses can clean up a partially-written file regardless of where the failure hit.
         var tempFile: File? = null
         return try {
             val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return EpgDownloadResult.HttpError(response.code)
-                val body = response.body ?: return EpgDownloadResult.HttpError(response.code)
-                val file = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, tempDir)
-                tempFile = file
-                when (BoundedByteReader.copyToFile(body.byteStream(), file, MAX_EPG_BYTES)) {
-                    is BoundedFileCopyResult.Success -> EpgDownloadResult.Success(file)
-                    BoundedFileCopyResult.SizeLimitExceeded -> {
-                        file.delete()
-                        EpgDownloadResult.SizeLimitExceeded
+            client.newCall(request).executeCancellable { response ->
+                if (!response.isSuccessful) {
+                    EpgDownloadResult.HttpError(response.code)
+                } else {
+                    val body = response.body
+                    val file = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, tempDir)
+                    tempFile = file
+                    when (BoundedByteReader.copyToFile(body.byteStream(), file, MAX_EPG_BYTES)) {
+                        is BoundedFileCopyResult.Success -> EpgDownloadResult.Success(file)
+                        BoundedFileCopyResult.SizeLimitExceeded -> {
+                            file.delete()
+                            EpgDownloadResult.SizeLimitExceeded
+                        }
                     }
                 }
             }
         } catch (e: CancellationException) {
             tempFile?.delete()
             throw e
+        } catch (e: IllegalArgumentException) {
+            // Imported backups and playlist-provided XMLTV metadata bypass the settings-screen
+            // validator. OkHttp rejects a malformed/non-HTTP URL while building the Request,
+            // before there is any IOException to map into the domain result.
+            tempFile?.delete()
+            EpgDownloadResult.ReadError(e.javaClass.simpleName)
         } catch (e: IOException) {
             tempFile?.delete()
             EpgDownloadResult.ReadError(e.javaClass.simpleName)

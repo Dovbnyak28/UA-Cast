@@ -3,6 +3,7 @@ package com.uacastplayer.app
 import com.uacastplayer.data.update.InstallLaunch
 import com.uacastplayer.data.update.UpdateDownload
 import com.uacastplayer.update.InstallSessionOutcome
+import com.uacastplayer.update.InstallSessionResult
 import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateInstallState
 import java.io.File
@@ -40,11 +41,11 @@ class UpdateInstallControllerTest {
 
     /** What [com.uacastplayer.data.update.UpdateInstallReceiver] publishes in production, so a test
      * can be the system reporting back without a device or a broadcast. */
-    private val outcomes = MutableSharedFlow<InstallSessionOutcome>(extraBufferCapacity = 1)
+    private val outcomes = MutableSharedFlow<InstallSessionResult>(extraBufferCapacity = 1)
 
     private fun controller(
         result: UpdateDownload = UpdateDownload.Ready(file),
-        launch: InstallLaunch = InstallLaunch.Started,
+        launch: InstallLaunch = InstallLaunch.Started(SESSION_ID),
     ) = UpdateInstallController(
         scope = scope,
         download = { _, _ -> downloadCalls++; result },
@@ -71,7 +72,7 @@ class UpdateInstallControllerTest {
                 onProgress(400L, 1000L)
                 held.await()
             },
-            install = { InstallLaunch.Started },
+            install = { InstallLaunch.Started(SESSION_ID) },
         )
 
         controller.downloadAndInstall(apk)
@@ -92,7 +93,7 @@ class UpdateInstallControllerTest {
         val controller = UpdateInstallController(
             scope = scope,
             download = { _, _ -> downloadCalls++; held.await() },
-            install = { InstallLaunch.Started },
+            install = { InstallLaunch.Started(SESSION_ID) },
         )
 
         controller.downloadAndInstall(apk)
@@ -158,6 +159,35 @@ class UpdateInstallControllerTest {
     }
 
     @Test
+    fun `an unexpected downloader exception becomes a retryable failure`() {
+        val controller = UpdateInstallController(
+            scope = scope,
+            download = { _, _ -> throw IllegalStateException("provider failed") },
+            install = { installCalls++; InstallLaunch.Started(SESSION_ID) },
+            outcomes = outcomes,
+        )
+
+        controller.downloadAndInstall(apk)
+
+        assertEquals(UpdateInstallState.Failed, controller.state.value)
+        assertEquals(0, installCalls)
+    }
+
+    @Test
+    fun `an unexpected installer exception becomes a retryable failure`() {
+        val controller = UpdateInstallController(
+            scope = scope,
+            download = { _, _ -> UpdateDownload.Ready(file) },
+            install = { throw SecurityException("installer unavailable") },
+            outcomes = outcomes,
+        )
+
+        controller.downloadAndInstall(apk)
+
+        assertEquals(UpdateInstallState.Failed, controller.state.value)
+    }
+
+    @Test
     fun `a read outcome is cleared so the row goes back to offering the install`() {
         val controller = controller(launch = InstallLaunch.NeedsPermission)
         controller.downloadAndInstall(apk)
@@ -177,7 +207,7 @@ class UpdateInstallControllerTest {
         val controller = UpdateInstallController(
             scope = scope,
             download = { _, onProgress -> onProgress(100L, 1000L); held.await() },
-            install = { InstallLaunch.Started },
+            install = { InstallLaunch.Started(SESSION_ID) },
         )
         controller.downloadAndInstall(apk)
 
@@ -185,6 +215,28 @@ class UpdateInstallControllerTest {
 
         assertEquals(UpdateInstallState.Downloading(100L, 1000L), controller.state.value)
         held.complete(UpdateDownload.Ready(file))
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+    }
+
+    @Test
+    fun `leaving settings cannot hide an active installer session`() {
+        val controller = controller()
+        controller.downloadAndInstall(apk)
+
+        controller.clearOutcome()
+
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+    }
+
+    @Test
+    fun `repeated install request is ignored while package installer owns active session`() {
+        val controller = controller()
+        controller.downloadAndInstall(apk)
+
+        controller.downloadAndInstall(apk)
+
+        assertEquals(1, downloadCalls)
+        assertEquals(1, installCalls)
         assertEquals(UpdateInstallState.Launching, controller.state.value)
     }
 
@@ -198,7 +250,7 @@ class UpdateInstallControllerTest {
         val controller = UpdateInstallController(
             scope = scope,
             download = { _, onProgress -> late = onProgress; UpdateDownload.Ready(file) },
-            install = { InstallLaunch.Started },
+            install = { InstallLaunch.Started(SESSION_ID) },
         )
         controller.downloadAndInstall(apk)
         assertEquals(UpdateInstallState.Launching, controller.state.value)
@@ -234,7 +286,7 @@ class UpdateInstallControllerTest {
         controller.downloadAndInstall(apk)
         assertEquals(UpdateInstallState.Launching, controller.state.value)
 
-        outcomes.tryEmit(InstallSessionOutcome.Failed)
+        outcomes.tryEmit(InstallSessionResult(SESSION_ID, InstallSessionOutcome.Failed))
 
         assertEquals(UpdateInstallState.Failed, controller.state.value)
     }
@@ -247,7 +299,7 @@ class UpdateInstallControllerTest {
         val controller = controller()
         controller.downloadAndInstall(apk)
 
-        outcomes.tryEmit(InstallSessionOutcome.AwaitingUser)
+        outcomes.tryEmit(InstallSessionResult(SESSION_ID, InstallSessionOutcome.AwaitingUser))
 
         assertEquals(UpdateInstallState.Launching, controller.state.value)
     }
@@ -259,7 +311,7 @@ class UpdateInstallControllerTest {
         val controller = controller()
         controller.downloadAndInstall(apk)
 
-        outcomes.tryEmit(InstallSessionOutcome.Installed)
+        outcomes.tryEmit(InstallSessionResult(SESSION_ID, InstallSessionOutcome.Installed))
 
         assertEquals(UpdateInstallState.Launching, controller.state.value)
     }
@@ -277,15 +329,46 @@ class UpdateInstallControllerTest {
         val controller = UpdateInstallController(
             scope = scope,
             download = { _, onProgress -> onProgress(10L, 1000L); held.await() },
-            install = { InstallLaunch.Started },
+            install = { InstallLaunch.Started(SESSION_ID) },
             outcomes = outcomes,
         )
         controller.downloadAndInstall(apk)
         assertEquals(UpdateInstallState.Downloading(10L, 1000L), controller.state.value)
 
-        outcomes.tryEmit(InstallSessionOutcome.Failed)
+        outcomes.tryEmit(InstallSessionResult(SESSION_ID, InstallSessionOutcome.Failed))
 
         assertEquals(UpdateInstallState.Downloading(10L, 1000L), controller.state.value)
         held.complete(UpdateDownload.Ready(file))
+    }
+
+    @Test
+    fun `a late failure from an older launched session cannot fail the current launched session`() {
+        var nextSessionId = SESSION_ID
+        val controller = UpdateInstallController(
+            scope = scope,
+            download = { _, _ -> UpdateDownload.Ready(file) },
+            install = { InstallLaunch.Started(nextSessionId++) },
+            outcomes = outcomes,
+        )
+
+        controller.downloadAndInstall(apk)
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+        outcomes.tryEmit(InstallSessionResult(SESSION_ID, InstallSessionOutcome.Failed))
+        assertEquals(UpdateInstallState.Failed, controller.state.value)
+        controller.downloadAndInstall(apk)
+        assertEquals(UpdateInstallState.Launching, controller.state.value)
+
+        // A duplicate broadcast from the previous session can arrive after the retry was launched.
+        outcomes.tryEmit(InstallSessionResult(SESSION_ID, InstallSessionOutcome.Failed))
+
+        assertEquals(
+            "session $SESSION_ID is stale; session ${SESSION_ID + 1} is still waiting on the installer",
+            UpdateInstallState.Launching,
+            controller.state.value,
+        )
+    }
+
+    private companion object {
+        const val SESSION_ID = 41
     }
 }

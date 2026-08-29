@@ -82,7 +82,7 @@ class GitHubReleaseParserTest {
           "state": "uploaded",
           "size": 41234567,
           "content_type": "application/vnd.android.package-archive",
-          "browser_download_url": "https://github.com/x/y/releases/download/v1.2.0/uacast-1.2.0.apk",
+          "browser_download_url": "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.2.0/uacast-1.2.0.apk",
           "digest": "sha256:${"b".repeat(64)}"
         }
     """.trimIndent()
@@ -92,7 +92,10 @@ class GitHubReleaseParserTest {
         val apk = GitHubReleaseParser.parse(releaseWithAssets(apkAsset))?.apk
 
         assertNotNull(apk)
-        assertEquals("https://github.com/x/y/releases/download/v1.2.0/uacast-1.2.0.apk", apk!!.downloadUrl)
+        assertEquals(
+            "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.2.0/uacast-1.2.0.apk",
+            apk!!.downloadUrl,
+        )
         assertEquals(41_234_567L, apk.sizeBytes)
         assertEquals("b".repeat(64), apk.sha256)
     }
@@ -126,7 +129,11 @@ class GitHubReleaseParserTest {
     fun anAssetWithNoDigestStillYieldsAnApk() {
         val apk = GitHubReleaseParser.parse(
             releaseWithAssets(
-                """{"name":"a.apk","state":"uploaded","size":9,"browser_download_url":"u","digest":null}""",
+                """{
+                    "name":"a.apk","state":"uploaded","size":9,
+                    "browser_download_url":"https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.2.0/a.apk",
+                    "digest":null
+                }""".trimIndent(),
             ),
         )?.apk
 
@@ -141,6 +148,47 @@ class GitHubReleaseParserTest {
 
         assertNotNull(parsed)
         assertEquals("b".repeat(64), parsed!!.apk?.sha256)
+    }
+
+    @Test
+    fun aReleasePageOutsideThisRepositoryIsIgnored() {
+        assertNull(
+            GitHubReleaseParser.parse(
+                release(htmlUrl = "https://github.com/attacker/UA-Cast/releases/tag/v1.2.0"),
+            ),
+        )
+        assertNull(
+            GitHubReleaseParser.parse(
+                release(htmlUrl = "http://github.com/Dovbnyak28/UA-Cast/releases/tag/v1.2.0"),
+            ),
+        )
+    }
+
+    @Test
+    fun anAssetOutsideThisRepositoryIsNotDownloadable() {
+        val externalAsset = apkAsset.replace(
+            "https://github.com/Dovbnyak28/UA-Cast/releases/download/",
+            "https://github.com/attacker/other/releases/download/",
+        )
+
+        val parsed = GitHubReleaseParser.parse(releaseWithAssets(externalAsset))
+
+        assertNotNull(parsed)
+        assertNull(parsed!!.apk)
+    }
+
+    @Test
+    fun githubUrlsWithUserInfoOrTraversalAreRejected() {
+        assertNull(
+            GitHubReleaseParser.parse(
+                release(htmlUrl = "https://user:password@github.com/Dovbnyak28/UA-Cast/releases/tag/v1.2.0"),
+            ),
+        )
+        assertNull(
+            GitHubReleaseParser.parse(
+                release(htmlUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/../attacker"),
+            ),
+        )
     }
 
     /**

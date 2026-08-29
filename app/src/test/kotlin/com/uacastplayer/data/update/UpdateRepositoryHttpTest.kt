@@ -161,4 +161,13 @@ class UpdateRepositoryHttpTest {
 
         assertEquals(ReleaseLookup.Failed, lookup)
     }
+
+    @Test
+    fun `a malformed endpoint is a failure rather than an uncaught exception`() {
+        val lookup = runBlocking {
+            UpdateRepository(releasesUrl = "not a valid release endpoint").fetchLatestRelease()
+        }
+
+        assertEquals(ReleaseLookup.Failed, lookup)
+    }
 }

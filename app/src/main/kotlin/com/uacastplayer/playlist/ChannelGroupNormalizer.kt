@@ -14,7 +14,10 @@ object ChannelGroupNormalizer {
         put(ChannelGroup.KEY_SERIES, "series|сериалы|сериал|серіали|serie")
         put(ChannelGroup.KEY_NEWS, "news|новости|новини|noticias")
         put(ChannelGroup.KEY_SPORTS, "sports|sport|спорт|deportes|deporte")
-        put(ChannelGroup.KEY_KIDS, "kids|cartoons|дети|детские|дитячі|діти|мультфильмы|мультфільми|infantil|niños|ninos")
+        put(
+            ChannelGroup.KEY_KIDS,
+            "kids|cartoons|дети|детские|дитячі|діти|мультфильмы|мультфільми|infantil|niños|ninos",
+        )
         put(ChannelGroup.KEY_MUSIC, "music|музыка|музика|musica|música")
         put(
             ChannelGroup.KEY_DOCUMENTARY,

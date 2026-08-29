@@ -1,6 +1,10 @@
 package com.uacastplayer.backup
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.favorites.FavoriteChannel
+import com.uacastplayer.favorites.FavoriteKey
+import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceAddResult
 import com.uacastplayer.playlist.PlaylistSourcePolicy
@@ -33,9 +37,12 @@ object BackupMergePolicy {
         var importedSourceCount = 0
         var sourceLimitExceededCount = 0
         for (backupSource in importedSources) {
-            val type = runCatching { PlaylistSourceType.valueOf(backupSource.type) }.getOrNull() ?: continue
+            val type = runCatchingNonFatal { PlaylistSourceType.valueOf(backupSource.type) }.getOrNull() ?: continue
             val candidate = PlaylistSource(
-                id = backupSource.id,
+                // The id is redundant portable data, not an authority. Rebuilding it prevents a
+                // hand-edited/third-party backup from replacing an unrelated saved source by
+                // borrowing its id, and restores PlaylistSource's location-derived invariant.
+                id = Fingerprint.of(backupSource.location),
                 type = type,
                 location = backupSource.location,
                 displayName = backupSource.displayName,
@@ -51,9 +58,27 @@ object BackupMergePolicy {
         }
 
         val existingKeys = existingFavorites.mapTo(mutableSetOf()) { it.key }
-        val newFavorites = importedFavorites
-            .filter { existingKeys.add(it.key) } // add() returns false for a key already present.
-            .map { FavoriteChannel(it.key, it.displayName, it.streamUrl, it.tvgId, it.groupTitle, it.addedAtMillis) }
+        val newFavorites = importedFavorites.mapNotNull { imported ->
+            val key = FavoriteKey.of(
+                M3uChannel(
+                    displayName = imported.displayName,
+                    streamUrl = imported.streamUrl,
+                    tvgId = imported.tvgId,
+                    groupTitle = imported.groupTitle,
+                ),
+            )
+            // Same rule as sources: a serialized key may come from an edited or third-party file.
+            // Deriving it from the channel fields keeps toggle/remove identity stable after import.
+            if (!existingKeys.add(key)) return@mapNotNull null
+            FavoriteChannel(
+                key,
+                imported.displayName,
+                imported.streamUrl,
+                imported.tvgId,
+                imported.groupTitle,
+                imported.addedAtMillis,
+            )
+        }
 
         return MergeResult(
             sources = sources,

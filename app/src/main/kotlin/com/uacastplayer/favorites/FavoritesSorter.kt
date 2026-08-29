@@ -1,6 +1,5 @@
 package com.uacastplayer.favorites
 
-import com.uacastplayer.data.prefs.FavoritesSortOrder
 import java.text.Collator
 import java.util.Locale
 

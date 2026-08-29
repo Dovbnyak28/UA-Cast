@@ -1,7 +1,8 @@
 package com.uacastplayer.cast
 
-import com.uacastplayer.player.StreamMimeClassifier
-import com.uacastplayer.player.StreamType
+import com.uacastplayer.core.cast.TsSourceKind
+import com.uacastplayer.core.media.StreamMimeClassifier
+import com.uacastplayer.core.media.StreamType
 
 /**
  * Content-type for a Cast load request. Our own proxy/remux URL (`/hls/...`, see
@@ -12,7 +13,7 @@ import com.uacastplayer.player.StreamType
  * (an HLS mime type on a bare TS URL is exactly the kind of receiver-side "Invalid Request" this
  * exists to avoid), HLS needs `application/x-mpegurl`. A null/[TsSourceKind.Unknown] sourceKind
  * (no diagnostic result yet, or PAT/PMT not found in the probe window) falls back to the existing
- * URL-token guess used for local playback ([StreamMimeClassifier]).
+ * URL-token guess shared with local playback ([StreamMimeClassifier]).
  */
 object CastContentType {
 

@@ -1,6 +1,6 @@
 package com.uacastplayer.proxy
 
-import com.uacastplayer.cast.TsProgramInfoParser
+import com.uacastplayer.core.cast.TsProgramInfoParser
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull

@@ -12,6 +12,12 @@ object IconFailurePolicy {
     const val PERMANENT_TTL_MILLIS = 7L * 24 * 3_600_000L
     const val TRANSIENT_TTL_MILLIS = 3_600_000L
 
+    private const val HTTP_BAD_REQUEST = 400
+    private const val HTTP_UNAUTHORIZED = 401
+    private const val HTTP_FORBIDDEN = 403
+    private const val HTTP_NOT_FOUND = 404
+    private const val HTTP_GONE = 410
+
     fun isPermanentFailure(httpStatusCode: Int?, isNetworkError: Boolean): Boolean {
         if (isNetworkError || httpStatusCode == null) return false
         return httpStatusCode in PERMANENT_STATUS_CODES
@@ -25,5 +31,11 @@ object IconFailurePolicy {
     fun shouldSkip(record: FailureRecord?, nowMillis: Long): Boolean =
         record != null && !isExpired(record, nowMillis)
 
-    private val PERMANENT_STATUS_CODES = setOf(400, 401, 403, 404, 410)
+    private val PERMANENT_STATUS_CODES = setOf(
+        HTTP_BAD_REQUEST,
+        HTTP_UNAUTHORIZED,
+        HTTP_FORBIDDEN,
+        HTTP_NOT_FOUND,
+        HTTP_GONE,
+    )
 }

@@ -1,5 +1,8 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.VideoCodec
+
 enum class CastLoadPhase { IDLE, LOADING, LOADED, FAILED }
 
 /** Mirrors the receiver's actual playback state, plus a synthetic DISCONNECTED for session loss. */
@@ -7,13 +10,14 @@ enum class ReceiverStatus { BUFFERING, PLAYING, PAUSED, IDLE, DISCONNECTED }
 
 enum class IdleReason { NONE, FINISHED, ERROR, CANCELLED, INTERRUPTED }
 
-/** Surfaced when [CastCompatibilityPolicy] finds a codec that hard-blocks casting (MPEG-2 video
+/** Surfaced when [com.uacastplayer.core.cast.CastCompatibilityPolicy] finds a codec that
+ * hard-blocks casting (MPEG-2 video
  * only, see [CastCompatibilityVerdict.IncompatibleVideo]) - proxy fallback would not help (it
  * re-serves the same codecs, see docs/PROXY_RULES.md), so this is shown to the user - naming the
  * actual codec (see [CodecDisplayName]) rather than a vague "not supported" - instead of silently
  * retrying. Cleared whenever a new channel starts casting. */
-sealed class CodecIncompatibility {
-    data class Video(val codec: VideoCodec) : CodecIncompatibility()
+sealed interface CodecIncompatibility {
+    data class Video(val codec: VideoCodec) : CodecIncompatibility
 }
 
 data class CastPlaybackState(
@@ -52,21 +56,21 @@ data class CastPlaybackState(
     val proxyUnavailableIpv4Only: Boolean = false,
 )
 
-sealed class CastLoadResult {
-    data object Success : CastLoadResult()
-    data class Failure(val reason: String) : CastLoadResult()
+sealed interface CastLoadResult {
+    data object Success : CastLoadResult
+    data class Failure(val reason: String) : CastLoadResult
 }
 
 /**
  * Signals for the caller to act on; the reducers themselves never touch the player, disk, or
  * network directly.
  */
-sealed class CastSideEffect {
-    data object PauseLocalPlayer : CastSideEffect()
-    data object ResumeLocalPlayer : CastSideEffect()
-    data class RecordIncompatibility(val reason: String) : CastSideEffect()
-    data object CloseProxySession : CastSideEffect()
-    data class ApplyPendingChannelSwitch(val index: Int) : CastSideEffect()
+sealed interface CastSideEffect {
+    data object PauseLocalPlayer : CastSideEffect
+    data object ResumeLocalPlayer : CastSideEffect
+    data class RecordIncompatibility(val reason: String) : CastSideEffect
+    data object CloseProxySession : CastSideEffect
+    data class ApplyPendingChannelSwitch(val index: Int) : CastSideEffect
 }
 
 data class CastReducerResult(val state: CastPlaybackState, val effects: List<CastSideEffect> = emptyList())

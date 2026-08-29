@@ -16,6 +16,7 @@
     <string name="nav_channels">Canales</string>
     <string name="nav_favorites">Favoritos</string>
     <string name="nav_settings">Ajustes</string>
+    <string name="nav_settings_compact">Ajustes</string>
 
     <!-- Home screen -->
     <string name="home_subtitle">Tu televisión</string>
@@ -54,12 +55,10 @@
     <string name="add_playlist_title">Añadir lista de reproducción</string>
     <string name="add_playlist_name_hint">Nombre de la lista</string>
     <string name="add_playlist_url_hint">URL de la lista</string>
+    <string name="add_playlist_url_error">Introduce una dirección completa con http:// o https://</string>
     <string name="add_playlist_helper">Se admiten listas M3U, M3U8 y TXT. La URL debe empezar por http:// o https://.</string>
     <string name="add_playlist_status_label">Estado</string>
-    <string name="add_playlist_status_empty">Pega una URL de lista M3U o M3U8</string>
-    <string name="add_playlist_status_empty_xtream">Introduce la dirección del servidor, el usuario y la contraseña</string>
     <string name="add_playlist_status_loading">Cargando…</string>
-    <string name="add_playlist_status_ready">Listo para cargar</string>
     <string name="add_playlist_status_no_channels">Se cargó, pero no se encontraron canales: comprueba el enlace</string>
     <string name="add_playlist_save_button">Descargar y guardar</string>
     <string name="add_playlist_file_button">Cargar desde archivo</string>
@@ -68,12 +67,18 @@
     <string name="add_playlist_type_file">Archivo</string>
     <string name="add_playlist_type_xtream">Xtream</string>
     <string name="add_playlist_xtream_server_hint">Dirección del servidor (con puerto)</string>
+    <string name="add_playlist_server_error">Introduce la URL del servidor o host:puerto</string>
     <string name="add_playlist_xtream_username_hint">Usuario</string>
     <string name="add_playlist_xtream_password_hint">Contraseña</string>
+    <string name="add_playlist_password_show">Mostrar</string>
+    <string name="add_playlist_password_hide">Ocultar</string>
+    <string name="add_playlist_xtream_cleartext_warning">Este servidor usa HTTP sin cifrar. El usuario, la contraseña y los enlaces pueden leerse o modificarse durante la transmisión. Usa https:// si tu proveedor lo admite.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Todavía no hay canales</string>
-    <string name="channels_empty_subtitle">Añade una lista en Ajustes para ver los canales aquí</string>
+    <string name="channels_empty_subtitle">Añade una lista para ver los canales aquí</string>
+    <string name="channels_error_subtitle">Comprueba la fuente y la conexión e inténtalo de nuevo</string>
+    <string name="common_retry">Intentar de nuevo</string>
     <string name="channels_search_hint">Buscar canales</string>
     <string name="channels_groups_title">Grupos de canales</string>
     <string name="channels_no_search_results">Ningún canal coincide con "%1$s"</string>
@@ -131,9 +136,19 @@
     <string name="favorites_sort_alphabetical">Alfabético</string>
     <string name="favorites_sort_recently_added">Añadidos recientemente</string>
     <string name="favorites_sort_manual">Orden personalizado</string>
+    <string name="favorites_manual_hint">Mantén pulsado un canal para arrastrarlo a otra posición.</string>
 
     <!-- Settings screen -->
     <string name="settings_section_general">General</string>
+    <string name="settings_back_to_overview">Todos los ajustes</string>
+    <string name="settings_page_general_summary">Idioma, tema, guía de TV y uso de batería</string>
+    <string name="settings_page_playlist_access">Lista y acceso</string>
+    <string name="settings_page_playlist_summary">Fuentes, grupos ocultos y control parental</string>
+    <string name="settings_page_playback_summary">Diseño de canales, iconos, búfer y navegación</string>
+    <string name="settings_page_data_storage">Datos y almacenamiento</string>
+    <string name="settings_page_data_summary">Caché, copia de seguridad, importación y exportación</string>
+    <string name="settings_page_help_about">Ayuda y acerca de</string>
+    <string name="settings_page_help_summary">Actualizaciones, tutorial, diagnóstico e información legal</string>
     <string name="settings_section_playlist">Lista de reproducción</string>
     <string name="settings_theme_label">Tema</string>
     <string name="theme_name_azure">Clásico</string>
@@ -173,6 +188,7 @@
     <string name="settings_icon_sources_remove">Quitar fuente</string>
     <string name="settings_icon_sources_error_invalid">Introduce una URL http(s) completa</string>
     <string name="settings_icon_sources_error_duplicate">Esa fuente ya está añadida</string>
+    <string name="settings_icon_sources_error_limit">Puedes añadir hasta 16 fuentes de iconos</string>
     <string name="settings_section_parental_control">Control parental</string>
     <string name="parental_control_set_up">Configurar PIN</string>
     <string name="parental_control_manage_locked">Canales bloqueados (%1$d)</string>
@@ -190,10 +206,15 @@
     <string name="settings_section_playback">Reproducción</string>
     <string name="settings_section_cache">Caché</string>
     <string name="settings_section_data">Datos</string>
-    <string name="settings_data_hint">Guarda tus listas guardadas, favoritos y ajustes clave en un archivo, o restáuralos en otro dispositivo. Las cachés nunca se incluyen.</string>
+    <string name="settings_data_hint">Guarda listas, favoritos y ajustes clave. El archivo no está cifrado y puede contener credenciales del proveedor y enlaces privados.</string>
     <string name="settings_data_export">Exportar</string>
+    <string name="settings_data_export_warning_title">¿Exportar datos confidenciales?</string>
+    <string name="settings_data_export_warning_message">Esta copia no está cifrada. Puede contener usuarios, contraseñas y tokens de IPTV, además de enlaces privados. Guárdala y compártela como una contraseña.</string>
+    <string name="settings_data_export_confirm">Exportar de todos modos</string>
     <string name="settings_data_import">Importar</string>
     <string name="settings_data_import_summary">Importado: %1$d listas, %2$d favoritos</string>
+    <string name="settings_data_export_success">Copia de seguridad exportada correctamente</string>
+    <string name="settings_data_export_failure">No se pudo exportar la copia de seguridad. Comprueba el acceso al almacenamiento e inténtalo de nuevo.</string>
     <string name="cache_playlist_label">Caché de la lista</string>
     <string name="cache_epg_label">Caché de la guía TV</string>
     <string name="cache_icons_label">Caché de logotipos</string>
@@ -246,7 +267,7 @@
     <string name="help_cast_errors_body">El teléfono y el receptor no decodifican los mismos formatos. «el video … no es compatible» o «el audio … no es compatible» nombra el formato que rechazó tu dispositivo: lo habitual son el audio AC-3 y el vídeo MPEG-2 o HEVC. La aplicación no puede convertirlos: retransmite el flujo, no lo recodifica. Busca el mismo canal en otra calidad, que a menudo lleva otro audio. «No se pudo transmitir este canal» sin nombrar un formato significa que el receptor lo rechazó por otro motivo. «La retransmisión de respaldo no está disponible en esta red» significa que la Wi-Fi no dio al teléfono una dirección IPv4 y el relevo no puede funcionar. En todos estos casos el canal sigue reproduciéndose en el teléfono.</string>
     <string name="help_send_diagnostics_button">Enviar diagnóstico</string>
     <string name="diagnostics_preview_title">Informe de diagnóstico</string>
-    <string name="diagnostics_preview_body_hint">El informe contiene datos técnicos del dispositivo y un registro de actividad reciente: sin listas, sin credenciales, sin direcciones. Léelo abajo; se abre en tu aplicación de correo dirigido al desarrollador, y no se envía nada hasta que pulses enviar allí.</string>
+    <string name="diagnostics_preview_body_hint">El informe contiene datos técnicos del dispositivo y un registro de actividad reciente. Las URL de listas, las credenciales y los tokens de acceso se ocultan, pero el informe puede incluir nombres de servidores de proveedores, direcciones de red local, nombres de canales y datos del dispositivo. Léelo abajo; Android abrirá un selector de correo o de otras aplicaciones para compartirlo, con el desarrollador como destinatario cuando sea posible, y no se envía nada hasta que elijas una aplicación y pulses enviar allí.</string>
     <string name="diagnostics_preview_send">Enviar</string>
     <string name="diagnostics_preview_cancel">Cancelar</string>
     <string name="diagnostics_share_chooser_title">Enviar informe de diagnóstico mediante</string>
@@ -290,6 +311,8 @@
     <string name="player_subtitle_track">Subtítulos</string>
     <string name="player_subtitle_off">Desactivados</string>
     <string name="player_fatal_error">Este canal no está disponible ahora</string>
+    <string name="player_retry">Reintentar este canal</string>
+    <string name="player_auto_skip_progress">Canal no disponible — probando el siguiente (%1$d/%2$d)</string>
     <string name="audio_layout_mono">Mono</string>
     <string name="audio_layout_stereo">Estéreo</string>
     <string name="audio_layout_surround_5_1">Sonido envolvente 5.1</string>

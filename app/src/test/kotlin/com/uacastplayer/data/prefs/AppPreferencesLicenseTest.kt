@@ -2,8 +2,8 @@ package com.uacastplayer.data.prefs
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.uacastplayer.core.security.LicenseIntegrity
 import com.uacastplayer.core.security.LicenseRecordCodec
+import com.uacastplayer.data.security.LicenseIntegrity
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseTier
 import org.junit.Assert.assertEquals

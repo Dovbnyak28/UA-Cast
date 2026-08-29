@@ -4,7 +4,6 @@ import com.uacastplayer.ui.theme.UaTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -42,7 +41,7 @@ import com.uacastplayer.ui.theme.UaCastTheme
 @Composable
 fun IconTierBanner(onEnableIcons: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(16.dp)
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
@@ -51,37 +50,31 @@ fun IconTierBanner(onEnableIcons: () -> Unit, onDismiss: () -> Unit, modifier: M
                 shape = shape,
             )
             .border(1.dp, UaTheme.palette.hairline, shape)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.channels_icon_tier_banner_title),
-                color = UaTheme.palette.labelPrimary,
-                style = TabLabel,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    imageVector = AppIcons.Close,
-                    contentDescription = stringResource(R.string.download_banner_dismiss),
-                    tint = UaTheme.palette.labelSecondary,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
+        Text(
+            text = stringResource(R.string.channels_icon_tier_banner_title),
+            color = UaTheme.palette.labelPrimary,
+            style = TabLabel,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         TextButton(
             onClick = onEnableIcons,
             colors = ButtonDefaults.textButtonColors(contentColor = UaTheme.palette.azure),
-            modifier = Modifier.align(Alignment.End),
         ) {
             Text(stringResource(R.string.channels_icon_tier_banner_action))
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                imageVector = AppIcons.Close,
+                contentDescription = stringResource(R.string.download_banner_dismiss),
+                tint = UaTheme.palette.labelSecondary,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -23,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
@@ -35,18 +35,20 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.FavoritesSortOrder
+import com.uacastplayer.favorites.FavoritesSortOrder
+import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.favorites.FavoriteChannel
-import com.uacastplayer.favorites.FavoriteKey
-import com.uacastplayer.core.i18n.currentAppLanguage
+import com.uacastplayer.favorites.FavoritesPlaylistPositions
+import com.uacastplayer.data.prefs.currentAppLanguage
 import com.uacastplayer.favorites.FavoritesSorter
 import com.uacastplayer.favorites.ReorderPolicy
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.ChannelIcon
+import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.theme.BodyText
-import com.uacastplayer.ui.theme.CardPadding
-import com.uacastplayer.ui.theme.GapL
+import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.ItemPadding
 import com.uacastplayer.ui.theme.RadiusCard
@@ -71,40 +73,29 @@ fun FavoritesScreen(
     modifier: Modifier = Modifier,
 ) {
     if (favorites.isEmpty()) {
-        Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding, vertical = GapM)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = GapL)
-                    .raisedSurface(
-                        RoundedCornerShape(RadiusCard),
-                        UaTheme.palette.surface1,
-                        edgeColor = UaTheme.palette.hairline,
-                        shadow = true,
-                    )
-                    .padding(CardPadding),
-            ) {
-                Text(
-                    text = stringResource(R.string.favorites_empty_message),
-                    style = Title,
-                    color = UaTheme.palette.labelPrimary,
-                )
-                Text(
-                    text = stringResource(R.string.favorites_empty_subtitle),
-                    style = BodyText,
-                    color = UaTheme.palette.labelSecondary,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Button(onClick = onOpenChannels, modifier = Modifier.fillMaxWidth().padding(top = GapL)) {
-                    Text(stringResource(R.string.favorites_go_to_channels))
-                }
-            }
-        }
+        EmptyState(
+            icon = AppIcons.Favorites,
+            title = stringResource(R.string.favorites_empty_message),
+            subtitle = stringResource(R.string.favorites_empty_subtitle),
+            primaryActionLabel = stringResource(R.string.favorites_go_to_channels),
+            onPrimaryAction = onOpenChannels,
+            modifier = modifier,
+        )
         return
     }
 
-    val playlistIndexByKey = remember(playlistChannels) {
-        playlistChannels.withIndex().associate { (index, channel) -> FavoriteKey.of(channel) to index }
+    val favoriteKeys = remember(favorites) { favorites.mapTo(LinkedHashSet(favorites.size)) { it.key } }
+    val playlistIndexByKey by produceState<Map<String, Int>>(
+        initialValue = emptyMap(),
+        playlistChannels,
+        favoriteKeys,
+        sortOrder,
+    ) {
+        value = if (sortOrder == FavoritesSortOrder.PLAYLIST_ORDER) {
+            withPlaylistCpu { FavoritesPlaylistPositions.resolve(playlistChannels, favoriteKeys) }
+        } else {
+            emptyMap()
+        }
     }
     // The language chosen in this app, not the device's - see AppLanguage.toLocale for why those
     // differ here. Keyed into the remember so switching language re-sorts rather than keeping the
@@ -128,10 +119,18 @@ fun FavoritesScreen(
     var rowHeightPx by remember { mutableFloatStateOf(0f) }
     var dragState by remember { mutableStateOf<FavoriteDragState?>(null) }
 
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding, vertical = GapM)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f))
             FavoritesSortMenu(selected = sortOrder, onSelect = onSortOrderSelected)
+        }
+        if (sortOrder == FavoritesSortOrder.MANUAL) {
+            Text(
+                text = stringResource(R.string.favorites_manual_hint),
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             itemsIndexed(orderedFavorites, key = { _, favorite -> favorite.key }) { index, favorite ->
@@ -164,9 +163,14 @@ fun FavoritesScreen(
                                             val state = dragState ?: return@detectDragGesturesAfterLongPress
                                             val newOffsetY = state.offsetY + dragAmount.y
                                             val delta = ReorderPolicy.indexDelta(newOffsetY, rowHeightPx)
-                                            val targetIndex = (state.draggedIndex + delta).coerceIn(orderedFavorites.indices)
+                                            val targetIndex = (state.draggedIndex + delta)
+                                                .coerceIn(orderedFavorites.indices)
                                             if (delta != 0 && targetIndex != state.draggedIndex) {
-                                                val moved = ReorderPolicy.move(orderedFavorites.toList(), state.draggedIndex, targetIndex)
+                                                val moved = ReorderPolicy.move(
+                                                    orderedFavorites.toList(),
+                                                    state.draggedIndex,
+                                                    targetIndex,
+                                                )
                                                 orderedFavorites.clear()
                                                 orderedFavorites.addAll(moved)
                                                 val consumedOffset = (targetIndex - state.draggedIndex) * rowHeightPx
@@ -189,6 +193,8 @@ fun FavoritesScreen(
                         text = favorite.displayName,
                         style = BodyText,
                         color = UaTheme.palette.labelPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f).padding(start = 12.dp),
                     )
                     IconButton(onClick = { onRemove(favorite.key) }) {

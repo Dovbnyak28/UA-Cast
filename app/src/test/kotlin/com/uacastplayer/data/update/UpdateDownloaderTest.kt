@@ -178,6 +178,18 @@ class UpdateDownloaderTest {
         }
     }
 
+    @Test
+    fun `a malformed release asset url is a failure rather than an uncaught exception`() {
+        val malformed = ReleaseApk(
+            downloadUrl = "not a valid APK URL",
+            sizeBytes = payload.size.toLong(),
+            sha256 = payloadHash,
+        )
+
+        assertEquals(UpdateDownload.Failed, download(malformed))
+        assertTrue(apksInCache().isEmpty())
+    }
+
     /**
      * The cap. Declared as a size the release does not honour, so this is the *streaming* bound
      * being exercised - a downloader that trusted Content-Length would sail past it.

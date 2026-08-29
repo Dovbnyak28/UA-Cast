@@ -1,5 +1,6 @@
 package com.uacastplayer.data.premium
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.License
@@ -7,6 +8,7 @@ import com.uacastplayer.premium.LicenseStorage
 import com.uacastplayer.premium.LicenseTier
 import com.uacastplayer.premium.TrialEligibilityPolicy
 import com.uacastplayer.premium.billing.BillingConnectionState
+import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.BillingProvider
 import com.uacastplayer.premium.billing.PurchaseRecord
 import com.uacastplayer.premium.billing.PurchaseResult
@@ -131,17 +133,32 @@ class PremiumRepository(
      */
     private fun observeProvider() {
         observeJob?.cancel()
+        // One observer belongs to one provider instance. Reading the mutable field again from a
+        // suspended collector can otherwise mix an old provider's purchase flow with a replacement
+        // provider's catalogue/acknowledgement API during a fast debug-store switch.
+        val observedProvider = provider
         observeJob = scope.launch {
-            provider.connect()
-            combine(provider.connection, provider.purchases) { state, purchases -> state to purchases }
+            val connected = runCatchingNonFatal { observedProvider.connect() }
+                .onFailure { error ->
+                    _connection.value = BillingConnectionState.DISCONNECTED
+                    AppLog.w(TAG) { "Store connection boundary failed: ${error.javaClass.simpleName}" }
+                }
+                .isSuccess
+            if (!connected) return@launch
+            combine(observedProvider.connection, observedProvider.purchases) { state, purchases -> state to purchases }
                 .collect { (state, purchases) ->
-                    _connection.value = state
-                    // Only a *connected* store is allowed to speak about what is owned. An empty set
-                    // from a store that is not connected is the absence of an answer, not the answer
-                    // "you own nothing" - acting on it would revoke a paid feature offline.
-                    if (state == BillingConnectionState.CONNECTED) {
-                        noteWhetherAnythingIsForSale()
-                        applyPurchases(purchases)
+                    runCatchingNonFatal {
+                        _connection.value = state
+                        // Only a *connected* store is allowed to speak about what is owned. An empty set
+                        // from a store that is not connected is the absence of an answer, not the answer
+                        // "you own nothing" - acting on it would revoke a paid feature offline.
+                        if (state == BillingConnectionState.CONNECTED) {
+                            noteWhetherAnythingIsForSale(observedProvider)
+                            applyPurchases(purchases, observedProvider)
+                        }
+                    }.onFailure { error ->
+                        // A single SDK/storage callback must not retire the permanent observer.
+                        AppLog.w(TAG) { "Store state boundary failed: ${error.javaClass.simpleName}" }
                     }
                 }
         }
@@ -155,22 +172,27 @@ class PremiumRepository(
      * still runs into the locks, and a check that only happens when the paywall is opened would let
      * a mis-configured catalogue take features away from everyone who never went looking for it.
      */
-    private suspend fun noteWhetherAnythingIsForSale() {
+    private suspend fun noteWhetherAnythingIsForSale(observedProvider: BillingProvider) {
         if (_storeCanSell.value) return
-        if (provider.products().isEmpty()) {
-            AppLog.d(TAG) { "store is connected but sells nothing: gates stay open" }
-            return
+        val products = runCatchingNonFatal { observedProvider.products() }.onFailure { error ->
+            AppLog.w(TAG) { "Store catalogue boundary failed: ${error.javaClass.simpleName}" }
+        }.getOrNull()
+        when {
+            products == null -> Unit
+            products.isEmpty() -> AppLog.d(TAG) { "store is connected but sells nothing: gates stay open" }
+            else -> {
+                storage.storeHasEverOfferedProducts = true
+                _storeCanSell.value = true
+            }
         }
-        storage.storeHasEverOfferedProducts = true
-        _storeCanSell.value = true
     }
 
-    private fun applyPurchases(purchases: Set<PurchaseRecord>) {
+    private fun applyPurchases(purchases: Set<PurchaseRecord>, observedProvider: BillingProvider) {
         // Before the licence is decided, and outside every branch below. Whether a purchase is the
         // one this app grants access from is a different question from whether the store is still
         // waiting to be told it happened, and the early return below would otherwise skip it for a
         // set whose entries have all expired.
-        acknowledgeAll(purchases)
+        acknowledgeAll(purchases, observedProvider)
         val best = bestOf(purchases)
         if (best == null) {
             // The store is connected and says nothing is owned. If the device is holding a paid
@@ -209,28 +231,50 @@ class PremiumRepository(
      * connection and every refresh - so a failed attempt is retried on the next launch, well inside
      * three days.
      */
-    private fun acknowledgeAll(purchases: Set<PurchaseRecord>) {
+    private fun acknowledgeAll(purchases: Set<PurchaseRecord>, observedProvider: BillingProvider) {
         val owed = purchases.filter { it.needsAcknowledgement }
         if (owed.isEmpty()) return
-        scope.launch { owed.forEach { provider.acknowledge(it) } }
+        scope.launch {
+            owed.forEach { purchase ->
+                runCatchingNonFatal { observedProvider.acknowledge(purchase) }
+                    .onFailure { error ->
+                        // Each purchase has its own three-day acknowledgement deadline. One SDK
+                        // failure must not prevent the remaining purchases from being attempted.
+                        AppLog.w(TAG) { "Purchase acknowledgement failed: ${error.javaClass.simpleName}" }
+                    }
+            }
+        }
     }
 
     /** Buys [productId]; the resulting entitlement is published through [entitlements] like any
      * other, so the caller does not have to do anything with the result but report it. */
     suspend fun purchase(productId: String, launchContext: Any?): PurchaseResult {
-        val product = provider.products().firstOrNull { it.id == productId }
-            ?: return PurchaseResult.Unavailable
-        return provider.purchase(product, launchContext).also { result ->
-            if (result is PurchaseResult.Success) applyPurchases(setOf(result.purchase))
+        val activeProvider = provider
+        return runCatchingNonFatal {
+            val product = activeProvider.products().firstOrNull { it.id == productId }
+                ?: return@runCatchingNonFatal PurchaseResult.Unavailable
+            activeProvider.purchase(product, launchContext).also { result ->
+                if (result is PurchaseResult.Success) applyPurchases(setOf(result.purchase), activeProvider)
+            }
+        }.getOrElse { error ->
+            AppLog.w(TAG) { "Purchase boundary failed: ${error.javaClass.simpleName}" }
+            PurchaseResult.Failed(reason = null)
         }
     }
 
     /** "I already paid, on my other phone." Google Play requires every app that sells anything to
      * offer this. */
-    suspend fun restore(): PurchaseResult = provider.restore()
+    suspend fun restore(): PurchaseResult = runCatchingNonFatal { provider.restore() }.getOrElse { error ->
+        AppLog.w(TAG) { "Restore boundary failed: ${error.javaClass.simpleName}" }
+        PurchaseResult.Failed(reason = null)
+    }
 
     /** What can be bought, priced by the store in the user's own currency. */
-    suspend fun products() = provider.products()
+    suspend fun products(): List<BillingProduct> =
+        runCatchingNonFatal { provider.products() }.getOrElse { error ->
+            AppLog.w(TAG) { "Store catalogue boundary failed: ${error.javaClass.simpleName}" }
+            emptyList()
+        }
 
     /**
      * Swaps the store. Used on the day Google Play Billing arrives, and by the debug-only developer

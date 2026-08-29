@@ -6,6 +6,7 @@ import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -176,7 +177,7 @@ class DlnaClientInstrumentedTest {
      */
     @Test
     fun aDescriptionDocumentYieldsBothControlUrlsResolvedAbsolute() {
-        val renderer = FakeRenderer().also { this.renderer = it }
+        val renderer = FakeRenderer().also { this@DlnaClientInstrumentedTest.renderer = it }
 
         val device = fetchDescription(renderer)
 
@@ -188,8 +189,8 @@ class DlnaClientInstrumentedTest {
 
     /** The ordinary cast: hand over the URL, then start it. */
     @Test
-    fun aRendererThatAcceptsIsHandedTheUrlAndThenPlayed() {
-        val renderer = FakeRenderer().also { this.renderer = it }
+    fun aRendererThatAcceptsIsHandedTheUrlAndThenPlayed() = runBlocking {
+        val renderer = FakeRenderer().also { this@DlnaClientInstrumentedTest.renderer = it }
         val device = checkNotNull(fetchDescription(renderer))
         val transport = AvTransportClient(client)
 
@@ -208,12 +209,14 @@ class DlnaClientInstrumentedTest {
      * tears the proxy down under a TV that had already accepted the new URL and begun fetching it -
      * which was the error on screen. Measured on a Samsung UE40KU6000: three refusals over ~2.4s.
      *
-     * Timed here as well as counted, because the retry is a real `Thread.sleep` on a real device
+     * Timed here as well as counted, because the retry is a real cancellable delay on a real device
      * and a budget that quietly stopped being spent would pass a call-count assertion perfectly.
      */
     @Test
-    fun playRetriesThroughATransitioningRendererRatherThanGivingUp() {
-        val renderer = FakeRenderer(refusePlayTimes = SAMSUNG_REFUSALS).also { this.renderer = it }
+    fun playRetriesThroughATransitioningRendererRatherThanGivingUp() = runBlocking {
+        val renderer = FakeRenderer(refusePlayTimes = SAMSUNG_REFUSALS).also {
+            this@DlnaClientInstrumentedTest.renderer = it
+        }
         val device = checkNotNull(fetchDescription(renderer))
 
         val startedAt = System.nanoTime()
@@ -230,10 +233,12 @@ class DlnaClientInstrumentedTest {
      * transition, so it must fail at once rather than burn the retry budget on it. This is the
      * answer the Hisense gave the flattened-stream work, and telling the two faults apart is the
      * whole reason [UpnpFault] is parsed instead of the HTTP status alone.
-     */
+    */
     @Test
-    fun aRendererThatCannotFetchTheUrlFailsImmediately() {
-        val renderer = FakeRenderer(failSetUriWith = CANNOT_FETCH_RESOURCE).also { this.renderer = it }
+    fun aRendererThatCannotFetchTheUrlFailsImmediately() = runBlocking {
+        val renderer = FakeRenderer(failSetUriWith = CANNOT_FETCH_RESOURCE).also {
+            this@DlnaClientInstrumentedTest.renderer = it
+        }
         val device = checkNotNull(fetchDescription(renderer))
 
         val accepted = AvTransportClient(client).setAvTransportUri(device.controlUrl, "http://127.0.0.1:1/x.ts", "C")
@@ -246,8 +251,8 @@ class DlnaClientInstrumentedTest {
      * a renderer that cannot be read has to produce: a muted slider on a TV playing at normal
      * volume is a lie the user would act on. */
     @Test
-    fun volumeIsReadFromTheRenderingControlServiceAndNullWhenUnreadable() {
-        val renderer = FakeRenderer().also { this.renderer = it }
+    fun volumeIsReadFromTheRenderingControlServiceAndNullWhenUnreadable() = runBlocking {
+        val renderer = FakeRenderer().also { this@DlnaClientInstrumentedTest.renderer = it }
         val device = checkNotNull(fetchDescription(renderer))
         val rendering = RenderingControlClient(client)
 
@@ -264,8 +269,8 @@ class DlnaClientInstrumentedTest {
      * the fast half of this; the slow half is covered by the caller's own timeouts.
      */
     @Test
-    fun anUnreachableRendererFailsEveryActionWithoutThrowing() {
-        val renderer = FakeRenderer().also { this.renderer = it }
+    fun anUnreachableRendererFailsEveryActionWithoutThrowing() = runBlocking {
+        val renderer = FakeRenderer().also { this@DlnaClientInstrumentedTest.renderer = it }
         val device = checkNotNull(fetchDescription(renderer))
         renderer.close()
         val transport = AvTransportClient(client)

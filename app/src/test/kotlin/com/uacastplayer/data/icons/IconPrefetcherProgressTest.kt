@@ -10,6 +10,7 @@ import java.util.concurrent.Executors
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,8 +21,8 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
 /**
  * The progress counter shown while icons prefetch, under real concurrency.
  *
- * [IconPrefetcher.prefetch] fans a channel list out across up to six concurrent coroutines (see
- * [MAX_CONCURRENT_FETCHES]) and reports progress as each one finishes. That report is read by
+ * [IconPrefetcher.prefetch] drains a bounded queue through up to six worker coroutines and reports
+ * progress as each unique resolution finishes. That report is read by
  * `IconController`, which publishes it to a StateFlow the settings screen renders as "N / total".
  *
  * `completed` was a plain `var Int`, incremented outside the semaphore that limits *fetches* -
@@ -34,15 +35,9 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
  * plateau and jump rather than counting up one at a time - cosmetic, but on the one number this
  * feature has to get right, since it is the only feedback a user watching a long prefetch gets.
  *
- * This test forces real OS-thread parallelism (a fixed thread pool, not `Dispatchers.Unconfined`
- * or a single-threaded one - either would serialize the coroutines by accident and prove nothing)
- * and enough channels that the race window is crossed many times per run. A race is inherently
- * probabilistic to observe from outside; the case against the old code is the static one stated
- * above - non-atomic shared mutable state, mutated from multiple real threads, with nothing
- * ordering the two - and this test corroborates it rather than being the only evidence for it.
- * Every channel resolves with no candidates at all (no tvg-logo, no tvg-id), so the real
- * [IconRepository] does no disk or network I/O and the loop runs fast enough to fit many channels
- * into one test.
+ * This test forces real OS-thread parallelism. Every channel intentionally has the same empty
+ * resolution key, so it also proves that a deduplicated work item advances progress by its full
+ * weight and still reaches the original input total.
  */
 @RunWith(RobolectricTestRunner::class)
 class IconPrefetcherProgressTest {
@@ -102,6 +97,37 @@ class IconPrefetcherProgressTest {
         } finally {
             threadPool.shutdown()
         }
+    }
+
+    @Test
+    fun `work queue deduplicates equal icon candidates but preserves progress weight`() {
+        val shared = M3uChannel(
+            displayName = "Shared",
+            streamUrl = "https://example.test/stream.ts",
+            tvgId = "shared-id",
+            tvgLogo = "https://example.test/logo.png",
+        )
+
+        val work = iconPrefetchWork(
+            channels = listOf(shared, shared.copy(displayName = "Alias"), channel(3)),
+            epgIconUrlFor = { null },
+        )
+
+        assertEquals(2, work.size)
+        assertEquals(3, work.sumOf(IconPrefetchWork::progressWeight))
+    }
+
+    @Test
+    fun `a metered network does not report a wifi-only pass as executed`() = runBlocking {
+        val prefetcher = IconPrefetcher(application, IconRepository(application))
+        var progressCallbacks = 0
+
+        val executed = prefetcher.prefetch(listOf(channel(1)), wifiOnly = true) {
+            progressCallbacks++
+        }
+
+        assertFalse(executed)
+        assertEquals(0, progressCallbacks)
     }
 
     private companion object {

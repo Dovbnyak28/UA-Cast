@@ -247,6 +247,11 @@ class ProxyRendererProfileTest {
             tsBytes(SEGMENT_PACKETS).size * 2,
             body.toByteArray(Charsets.ISO_8859_1).size,
         )
+        assertEquals(
+            "flattened media must advance the watchdog's delivered-byte signal",
+            tsBytes(SEGMENT_PACKETS).size.toLong() * 2,
+            proxy!!.bytesServedToReceiver(),
+        )
     }
 
     /**
@@ -331,6 +336,23 @@ class ProxyRendererProfileTest {
         assertEquals("application/vnd.apple.mpegurl", headContentType(origin.urlFor("/live.m3u8")))
     }
 
+    @Test
+    fun `a head on an HLS-labelled error body does not promise MPEG TS`() {
+        val origin = Origin(mutableMapOf()).also { this.origin = it }
+        origin.addRoute(
+            "/live.m3u8",
+            "application/vnd.apple.mpegurl",
+            "Access denied".toByteArray(),
+        )
+
+        assertEquals("application/vnd.apple.mpegurl", headContentType(origin.urlFor("/live.m3u8")))
+        assertEquals(
+            "an error body must not be resolved and fetched as a segment",
+            0,
+            origin.hitsFor("/Access%20denied"),
+        )
+    }
+
     /** The control, and what stops the assertion above from being satisfied by a HEAD that simply
      * never announces a stream: a channel that can be flattened still says so. */
     @Test
@@ -358,6 +380,39 @@ class ProxyRendererProfileTest {
         val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
 
         assertEquals("video/mp2t", contentType)
+        assertEquals(1, origin.hitsFor("/a.ts"))
+    }
+
+    /**
+     * A master preference is not a compatibility guarantee. The first variant can be fMP4 (or
+     * encrypted/unreachable) while a later one is ordinary MPEG-TS; falling back to the manifest at
+     * the first refusal recreates the exact shape the Hisense rejects.
+     */
+    @Test
+    fun `a master skips an unsupported first variant and replays a compatible fallback`() {
+        val origin = hlsOrigin(listOf("/a.ts"))
+        val unsupported = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-TARGETDURATION:4")
+            appendLine("#EXT-X-MAP:URI=\"init.mp4\"")
+            appendLine("#EXTINF:4,")
+            appendLine("part.m4s")
+        }
+        origin.addRoute("/modern.m3u8", "application/vnd.apple.mpegurl", unsupported.toByteArray())
+        val master = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-STREAM-INF:BANDWIDTH=3000000")
+            appendLine(origin.urlFor("/modern.m3u8"))
+            appendLine("#EXT-X-STREAM-INF:BANDWIDTH=800000")
+            appendLine(origin.urlFor("/live.m3u8"))
+        }
+        origin.addRoute("/master.m3u8", "application/vnd.apple.mpegurl", master.toByteArray())
+
+        val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
+
+        assertEquals("video/mp2t", contentType)
+        assertEquals(1, origin.hitsFor("/modern.m3u8"))
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
         assertEquals(1, origin.hitsFor("/a.ts"))
     }
 

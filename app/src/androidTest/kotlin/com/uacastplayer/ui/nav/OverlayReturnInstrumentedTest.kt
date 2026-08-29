@@ -3,10 +3,11 @@ package com.uacastplayer.ui.nav
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.espresso.Espresso
@@ -54,10 +55,19 @@ class OverlayReturnInstrumentedTest {
     fun returningFromHelp_landsBackOnSettingsRatherThanHome() {
         val activity = composeTestRule.activity
         val helpLabel = activity.getString(R.string.settings_open_help)
+        val supportPageLabel = activity.getString(R.string.settings_page_help_about)
 
         openSettingsTab()
-        // The row is well down a long scrolling column on a phone-sized screen.
-        composeTestRule.onNodeWithText(helpLabel).performScrollTo()
+        val supportPage = composeTestRule.onNodeWithText(supportPageLabel)
+        supportPage.performScrollTo()
+        supportPage.performClick()
+        composeTestRule.waitForIdle()
+        // The row is inside the Help & About subpage and may still be below the viewport.
+        val helpRow = composeTestRule.onNodeWithText(helpLabel)
+        composeTestRule.waitUntil(OPEN_SUPPORT_PAGE_TIMEOUT_MILLIS) {
+            composeTestRule.onAllNodesWithText(helpLabel).fetchSemanticsNodes().isNotEmpty()
+        }
+        helpRow.performScrollTo()
         composeTestRule.waitForIdle()
 
         // By tag, because nothing else points at this button: its own label is the generic,
@@ -80,10 +90,17 @@ class OverlayReturnInstrumentedTest {
     }
 
     private fun openSettingsTab() {
-        composeTestRule.onNode(
-            hasText(composeTestRule.activity.getString(R.string.nav_settings)) and
-                SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab),
-        ).performClick()
+        val settingsTab = hasContentDescription(composeTestRule.activity.getString(R.string.nav_settings)) and
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+        composeTestRule.waitUntil(OPEN_SETTINGS_TAB_TIMEOUT_MILLIS) {
+            composeTestRule.onAllNodes(settingsTab).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNode(settingsTab).performClick()
         composeTestRule.waitForIdle()
+    }
+
+    private companion object {
+        const val OPEN_SETTINGS_TAB_TIMEOUT_MILLIS = 5_000L
+        const val OPEN_SUPPORT_PAGE_TIMEOUT_MILLIS = 2_000L
     }
 }

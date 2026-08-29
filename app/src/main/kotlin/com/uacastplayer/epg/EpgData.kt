@@ -40,8 +40,7 @@ data class EpgTruncation(
 /** Looks up the current/next programme for an M3U channel, resolving it against the EPG index first. */
 object EpgLookup {
     fun currentAndNext(data: EpgData, channel: M3uChannel, nowMillis: Long): CurrentNextProgrammes? {
-        val epgChannel = data.index.match(channel) ?: return null
-        val programmes = data.programmesByChannelId[epgChannel.id] ?: return null
-        return ProgrammeLookup.currentAndNext(programmes, nowMillis)
+        val programmes = data.index.match(channel)?.let { data.programmesByChannelId[it.id] }
+        return programmes?.let { ProgrammeLookup.currentAndNext(it, nowMillis) }
     }
 }

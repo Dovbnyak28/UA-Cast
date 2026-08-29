@@ -72,7 +72,7 @@ data class UaPalette(
     /** Near-opaque tint behind the frosted-glass tab bar - unlike the scrim colors above this is
      * theme chrome, not a video overlay, so it follows the theme's background warmth. */
     val glassTone: Color,
-    /** Serif in Cinema, the platform default elsewhere - see Type.kt DisplayTitle/DisplayName. */
+    /** Display family selected per theme - see Type.kt DisplayTitle/DisplayName. */
     val displayFontFamily: FontFamily,
     /** Edge-highlight tone for [raisedSurface]'s border - the default, used on ordinary raised
      * chrome (round buttons, cards). Warm/ivory-tinted in Cinema rather than pure white - see
@@ -114,7 +114,9 @@ val AzureUaPalette = UaPalette(
     accentGradientTop = Azure,
     accentGradientBottom = Azure2,
     accentGradient = AzureGradient,
-    accentOnFill = Color.White,
+    // Azure2 is intentionally bright; a deep navy foreground keeps play buttons and selected
+    // navigation pills readable across both gradient endpoints (white only passed the darker top).
+    accentOnFill = Color(0xFF001B36),
     accentText = Azure,
     routeGreen = RouteGreen,
     routeAmber = RouteAmber,

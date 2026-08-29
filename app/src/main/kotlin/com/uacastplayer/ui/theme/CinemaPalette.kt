@@ -34,7 +34,7 @@ private val CinemaEdgeHighlightAccent = Color(0x73D4B780)
 private val CinemaShadowSoft = Color(0x66000000)
 
 /**
- * Warm, "premium cinema" palette: charcoal background, champagne-gold accent, serif display type,
+ * Warm, "premium cinema" palette: charcoal background, champagne-gold accent, bold sans display type,
  * pill-shaped buttons, and a radial vignette background - see docs/DESIGN_SYSTEM.md "Themes".
  */
 val CinemaUaPalette = UaPalette(
@@ -67,13 +67,9 @@ val CinemaUaPalette = UaPalette(
     scrimBackground = Color(0x66000000),
     overlayHighlight = Color(0x33FFFFFF),
     glassTone = Color(0xE6141210),
-    // A real bundled OFL font would be more distinctive, but no tool available in this session can
-    // produce an actual font binary, and the downloadable-fonts alternative (Google Play Services
-    // Fonts provider) was confirmed on-device to silently fail on de-Googled ROMs (e.g. LineageOS +
-    // microG) - see docs/DESIGN_SYSTEM.md "Themes". FontFamily.Serif is the generic system serif
-    // alias: no assets, no network, works everywhere, and still reads as distinctly "premium"
-    // against Azure's default sans-serif.
-    displayFontFamily = FontFamily.Serif,
+    // One explicit offline family across body and display text avoids OEM-dependent serif metrics
+    // changing wrapping and golden screenshots. Cinema keeps its identity through palette/depth.
+    displayFontFamily = FontFamily.SansSerif,
     edgeHighlightNeutral = CinemaEdgeHighlightNeutral,
     edgeHighlightStrong = CinemaEdgeHighlightStrong,
     edgeHighlightAccent = CinemaEdgeHighlightAccent,

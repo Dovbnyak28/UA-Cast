@@ -11,6 +11,7 @@ import com.uacastplayer.playlist.M3uChannel
 import java.time.Duration
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -70,7 +71,7 @@ class PlayerPendingSwitchStalenessTest {
 
         // Requested against the two-channel list above, index 1 ("B") - still inside its debounce,
         // not applied yet.
-        player.requestSwitch(1)
+        player.navigation.requestSwitch(1)
 
         // A fresh playlist replaces the channel list before that debounce has fired.
         player.start(listOf(channel("X"), channel("Y"), channel("Z")), startIndex = 0)
@@ -84,5 +85,19 @@ class PlayerPendingSwitchStalenessTest {
             "X",
             player.uiState.value.currentChannel?.displayName,
         )
+    }
+
+    @Test
+    fun `an empty replacement releases the previous playback session`() {
+        val player = player()
+        player.start(listOf(channel("A")), startIndex = 0)
+        assertEquals("A", player.uiState.value.currentChannel?.displayName)
+        assertEquals(1, player.player.mediaItemCount)
+
+        player.start(emptyList(), startIndex = 0)
+        settle()
+
+        assertNull(player.uiState.value.currentChannel)
+        assertEquals(0, player.player.mediaItemCount)
     }
 }

@@ -32,6 +32,10 @@ enum class InstallSessionOutcome {
     Failed,
 }
 
+/** A PackageInstaller verdict names the session it belongs to. Without this identity, a delayed
+ * failure from an abandoned session can overwrite a newer session that has already launched. */
+data class InstallSessionResult(val sessionId: Int, val outcome: InstallSessionOutcome)
+
 /**
  * Reads a `PackageInstaller.EXTRA_STATUS` value.
  *
@@ -60,9 +64,15 @@ object InstallStatusPolicy {
      * failure "installed" leaves the user with no way forward, while calling a real success
      * "failed" is corrected the moment the app relaunches as the new version.
      */
-    fun outcomeFor(status: Int): InstallSessionOutcome = when (status) {
+    fun outcomeFor(status: Int, userActionLaunched: Boolean = true): InstallSessionOutcome = when (status) {
         STATUS_SUCCESS -> InstallSessionOutcome.Installed
-        STATUS_PENDING_USER_ACTION -> InstallSessionOutcome.AwaitingUser
+        STATUS_PENDING_USER_ACTION -> if (userActionLaunched) {
+            InstallSessionOutcome.AwaitingUser
+        } else {
+            // A pending session without a launchable confirmation intent cannot make progress.
+            // Calling it AwaitingUser leaves the UI on an instruction with no dialog behind it.
+            InstallSessionOutcome.Failed
+        }
         else -> InstallSessionOutcome.Failed
     }
 }

@@ -33,13 +33,19 @@ object ChannelNavigator {
         wrapAround: Boolean,
         isDead: (Int) -> Boolean,
     ): Int? {
-        if (count == 0) return null
+        var result: Int? = null
         var index = currentIndex
-        repeat(count) {
-            val candidate = nextIndex(index, count, wrapAround) ?: return null
-            if (!isDead(candidate)) return candidate
-            index = candidate
+        var checked = 0
+        while (checked < count && result == null) {
+            val candidate = nextIndex(index, count, wrapAround)
+            if (candidate == null) {
+                checked = count
+            } else {
+                if (!isDead(candidate)) result = candidate
+                index = candidate
+                checked++
+            }
         }
-        return null
+        return result
     }
 }

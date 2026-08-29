@@ -1,6 +1,9 @@
 package com.uacastplayer.dlna
 
+import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.log.AppLog
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -20,7 +23,7 @@ class AvTransportClient(
     private val setUriHttpClient: OkHttpClient = httpClient,
 ) {
 
-    fun setAvTransportUri(controlUrl: String, mediaUrl: String, title: String): Boolean {
+    suspend fun setAvTransportUri(controlUrl: String, mediaUrl: String, title: String): Boolean {
         val envelope = AvTransportSoapBuilder.setAvTransportUriEnvelope(mediaUrl, title)
         return postSoapAction(controlUrl, "SetAVTransportURI", envelope, setUriHttpClient) == SoapOutcome.OK
     }
@@ -34,18 +37,18 @@ class AvTransportClient(
      * tear the whole proxy down, which pulls the stream out from under a TV that had already
      * accepted the new url and started fetching it. That teardown was the error on screen.
      */
-    fun play(controlUrl: String): Boolean {
+    suspend fun play(controlUrl: String): Boolean {
         var outcome = SoapOutcome.TRANSITIONING
         var attempt = 0
         while (outcome == SoapOutcome.TRANSITIONING && attempt < PLAY_ATTEMPTS) {
-            if (attempt > 0) Thread.sleep(PLAY_RETRY_DELAY_MILLIS)
+            if (attempt > 0) delay(PLAY_RETRY_DELAY_MILLIS)
             outcome = postSoapAction(controlUrl, "Play", AvTransportSoapBuilder.playEnvelope())
             attempt++
         }
         return outcome == SoapOutcome.OK
     }
 
-    fun stop(controlUrl: String): Boolean =
+    suspend fun stop(controlUrl: String): Boolean =
         postSoapAction(controlUrl, "Stop", AvTransportSoapBuilder.stopEnvelope()) == SoapOutcome.OK
 
     /** Only [TRANSITIONING] is worth telling apart from a plain failure - it is the one refusal
@@ -57,20 +60,22 @@ class AvTransportClient(
      * much as a renderer answering with something OkHttp cannot even parse as a response, so
      * narrowing this would only turn one class of unreachable-renderer into a crash. */
     @Suppress("TooGenericExceptionCaught")
-    private fun postSoapAction(
+    private suspend fun postSoapAction(
         controlUrl: String,
         action: String,
         envelope: String,
         client: OkHttpClient = httpClient,
     ): SoapOutcome {
-        val request = Request.Builder()
-            .url(controlUrl)
-            .addHeader("SOAPACTION", AvTransportSoapBuilder.soapAction(action))
-            .addHeader("User-Agent", DLNA_USER_AGENT)
-            .post(envelope.toRequestBody(SOAP_MEDIA_TYPE))
-            .build()
         return try {
-            client.newCall(request).execute().use { response ->
+            // Request construction belongs inside the same boundary as execution: OkHttp rejects
+            // a malformed device-provided control URL synchronously, before a Call exists.
+            val request = Request.Builder()
+                .url(controlUrl)
+                .addHeader("SOAPACTION", AvTransportSoapBuilder.soapAction(action))
+                .addHeader("User-Agent", DLNA_USER_AGENT)
+                .post(envelope.toRequestBody(SOAP_MEDIA_TYPE))
+                .build()
+            client.newCall(request).executeCancellable { response ->
                 // A renderer that *refuses* an action answers HTTP 500 with a UPnP fault in the
                 // body - no exception is thrown, so until this was here a rejected action produced
                 // no log line at all and was indistinguishable from one that worked. The error code
@@ -78,13 +83,15 @@ class AvTransportClient(
                 // it, 701 means the action was illegal from its current transport state, 705 means
                 // another controller holds the transport. Reading the body is safe - a UPnP fault is
                 // a small fixed document.
-                if (response.isSuccessful) return@use SoapOutcome.OK
+                if (response.isSuccessful) return@executeCancellable SoapOutcome.OK
                 // peekBody, not body.string(): the fault is a small document, but it comes from a
                 // device on the LAN that nobody here wrote - see MAX_SOAP_RESPONSE_BYTES.
                 val fault = UpnpFault.parse(response.peekBody(MAX_SOAP_RESPONSE_BYTES).string())
                 AppLog.w(TAG) { "SOAP $action refused: HTTP ${response.code} $fault" }
                 if (fault.isTransitionNotAvailable) SoapOutcome.TRANSITIONING else SoapOutcome.FAILED
             }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (e: Exception) {
             // The control URL is deliberately not interpolated. LogSanitizer would redact it to a
             // scheme/host/port marker anyway, so almost nothing survives into a shared diagnostics

@@ -1,5 +1,6 @@
 package com.uacastplayer.backup
 
+import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourcePolicy
@@ -11,9 +12,19 @@ import org.junit.Test
 class BackupMergePolicyTest {
 
     private fun favorite(key: String) = FavoriteChannel(key, "Channel $key", "http://x/$key", null, null, 0L)
-    private fun backupFavorite(key: String) = BackupFavorite(key, "Channel $key", "http://x/$key", null, null, 0L)
-    private fun source(id: String) = PlaylistSource(id, PlaylistSourceType.URL, "http://$id", "S$id", 0L)
-    private fun backupSource(id: String) = BackupPlaylistSource(id, "URL", "http://$id", "S$id", 0L)
+    private fun backupFavorite(key: String) = BackupFavorite(key, "Channel $key", "http://x/$key", key, null, 0L)
+    private fun source(name: String): PlaylistSource {
+        val location = "http://$name"
+        return PlaylistSource(Fingerprint.of(location), PlaylistSourceType.URL, location, "S$name", 0L)
+    }
+
+    private fun backupSource(name: String) = BackupPlaylistSource(
+        Fingerprint.of("http://$name"),
+        "URL",
+        "http://$name",
+        "S$name",
+        0L,
+    )
 
     @Test
     fun `imported favorites not already present are added`() {
@@ -73,7 +84,7 @@ class BackupMergePolicyTest {
             importedSources = listOf(backupSource("b"), backupSource("c")),
             importedFavorites = emptyList(),
         )
-        assertEquals(setOf("a", "b", "c"), result.sources.map { it.id }.toSet())
+        assertEquals(setOf(source("a").id, source("b").id, source("c").id), result.sources.map { it.id }.toSet())
         assertEquals(2, result.importedSourceCount)
         assertEquals(0, result.sourceLimitExceededCount)
     }
@@ -101,5 +112,50 @@ class BackupMergePolicyTest {
         )
         assertEquals(1, result.sources.size)
         assertEquals("Renamed", result.sources[0].displayName)
+    }
+
+    @Test
+    fun `a forged source id cannot replace an unrelated saved source`() {
+        val existing = source("trusted")
+        val importedLocation = "http://different"
+        val forged = BackupPlaylistSource(
+            id = existing.id,
+            type = "URL",
+            location = importedLocation,
+            displayName = "Different",
+            addedAtEpochMillis = 1L,
+        )
+
+        val result = BackupMergePolicy.merge(
+            existingSources = listOf(existing),
+            existingFavorites = emptyList(),
+            importedSources = listOf(forged),
+            importedFavorites = emptyList(),
+        )
+
+        assertEquals(2, result.sources.size)
+        assertEquals(existing, result.sources.first())
+        assertEquals(Fingerprint.of(importedLocation), result.sources.last().id)
+    }
+
+    @Test
+    fun `favorite identity is rebuilt from channel fields rather than a forged key`() {
+        val imported = BackupFavorite(
+            key = "borrowed-key",
+            displayName = "News",
+            streamUrl = "http://example.test/news",
+            tvgId = "real-tvg-id",
+            groupTitle = "News",
+            addedAtMillis = 1L,
+        )
+
+        val result = BackupMergePolicy.merge(
+            existingSources = emptyList(),
+            existingFavorites = emptyList(),
+            importedSources = emptyList(),
+            importedFavorites = listOf(imported),
+        )
+
+        assertEquals("real-tvg-id", result.favorites.single().key)
     }
 }

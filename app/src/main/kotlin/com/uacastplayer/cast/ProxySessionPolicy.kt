@@ -4,9 +4,9 @@ package com.uacastplayer.cast
 enum class ProxyLifecycleEvent { STARTED, STOPPED }
 
 /** Commands for the foreground service that keeps the process (and the proxy it hosts) alive. */
-sealed class ProxyServiceCommand {
-    data object StartForeground : ProxyServiceCommand()
-    data object StopForeground : ProxyServiceCommand()
+sealed interface ProxyServiceCommand {
+    data object StartForeground : ProxyServiceCommand
+    data object StopForeground : ProxyServiceCommand
 }
 
 /**

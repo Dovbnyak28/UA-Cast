@@ -2,18 +2,30 @@ package com.uacastplayer.ui.nav
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,24 +45,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.uacastplayer.R
 import com.uacastplayer.backup.BackupImportSummary
-import com.uacastplayer.cast.CastPlaybackState
+import com.uacastplayer.backup.BackupExportResult
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.core.nav.BottomNavEvent
 import com.uacastplayer.core.nav.BottomNavState
 import com.uacastplayer.core.nav.NavBackStackReducer
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.ChannelLayout
-import com.uacastplayer.data.prefs.FavoritesSortOrder
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.favorites.FavoritesSortOrder
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.guidedtour.GuidedTourSectionState
-import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
@@ -58,13 +69,14 @@ import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.UiTestTags
-import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.components.DownloadStatusBanner
 import com.uacastplayer.ui.components.UpdateBanner
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.GlassTabBar
+import com.uacastplayer.ui.components.GlassNavigationRail
 import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.favorites.FavoritesScreen
 import com.uacastplayer.ui.home.HomeContentState
@@ -73,6 +85,7 @@ import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.settings.SettingsScreen
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.DisplayTitle
+import com.uacastplayer.ui.theme.DUR_NAV
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.appBackground
@@ -119,7 +132,6 @@ fun RootScaffold(
     iconPrefetchState: IconPrefetchUiState,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
-    castState: CastPlaybackState,
     settingsState: SettingsUiState,
     onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
     onDismissIconTierBanner: () -> Unit,
@@ -132,6 +144,8 @@ fun RootScaffold(
     onClearCache: (CacheKind) -> Unit,
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
+    backupExportResult: BackupExportResult?,
+    onDismissBackupExportResult: () -> Unit,
     backupImportSummary: BackupImportSummary?,
     onDismissBackupImportSummary: () -> Unit,
     favorites: List<FavoriteChannel>,
@@ -178,49 +192,74 @@ fun RootScaffold(
         if (result.shouldExitApp) onExitApp() else navState = result.state
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize().appBackground(),
-        containerColor = Color.Transparent,
-        topBar = {
-            RootTopBar(
-                title = stringResource(navState.current.labelRes()),
-                castConnected = castState.isSessionConnected,
-                iconPrefetchState = iconPrefetchState,
-                epgState = epgState,
-                updateSection = updateSection,
-            )
-        },
-        bottomBar = {
-            GlassTabBar(
-                items = BottomDestination.entries.map { destination ->
-                    TabBarItem(
-                        label = stringResource(destination.labelRes()),
-                        icon = destination.icon(),
-                        selected = destination == navState.current,
-                        tourKey = destination.tourKey(),
-                        onClick = {
-                            navState = NavBackStackReducer.reduce(
-                                navState,
-                                BottomNavEvent.Select(destination),
-                            ).state
-                        },
-                    )
-                },
-            )
-        },
-    ) { innerPadding ->
-        Crossfade(
-            targetState = navState.current,
-            // Same easing curve as the rest of the app's motion (see ui/theme/Motion.kt) instead
-            // of Crossfade's default linear-ish fade - duration is left at tween()'s own default
-            // (300ms) since a bottom-tab switch is one of the most frequent interactions in the
-            // app and shouldn't feel any slower than it already does.
-            animationSpec = tween(easing = EaseSpring),
-            label = "bottomNavContent",
-        ) { destination ->
-        stateHolder.SaveableStateProvider(destination) {
-            val content = Modifier.padding(innerPadding)
-            when (destination) {
+    val navigationItems = BottomDestination.entries.map { destination ->
+        TabBarItem(
+            label = stringResource(destination.tabLabelRes()),
+            icon = destination.icon(),
+            selected = destination == navState.current,
+            tourKey = destination.tourKey(),
+            contentDescription = stringResource(destination.labelRes()),
+            onClick = {
+                navState = NavBackStackReducer.reduce(
+                    navState,
+                    BottomNavEvent.Select(destination),
+                ).state
+            },
+        )
+    }
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize().appBackground()) {
+        val widthDp = maxWidth.value.toInt()
+        val navigationMode = AdaptiveRootLayout.navigationModeFor(widthDp)
+        val expanded = AdaptiveRootLayout.isExpanded(widthDp)
+        val navAnimationsAllowed = animationsAllowed()
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            topBar = {
+                RootTopBar(
+                    // Home already carries the product identity in its content. Keep one
+                    // authoritative branded title in the global chrome instead of rendering a
+                    // second, competing heading inside HomeScreen.
+                    title = if (navState.current == BottomDestination.HOME) {
+                        stringResource(R.string.app_name)
+                    } else {
+                        stringResource(navState.current.labelRes())
+                    },
+                    iconPrefetchState = iconPrefetchState,
+                    epgState = epgState,
+                    updateSection = updateSection,
+                )
+            },
+            bottomBar = {
+                if (navigationMode == RootNavigationMode.BOTTOM_BAR) {
+                    GlassTabBar(items = navigationItems)
+                }
+            },
+        ) { innerPadding ->
+            Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                if (navigationMode == RootNavigationMode.NAVIGATION_RAIL) {
+                    GlassNavigationRail(items = navigationItems)
+                }
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    AnimatedContent(
+                        targetState = navState.current,
+                        transitionSpec = { navigationTransition(navAnimationsAllowed) },
+                        label = "adaptiveNavContent",
+                        modifier = Modifier.fillMaxSize(),
+                    ) { destination ->
+                        val contentMaxWidth = if (expanded && destination == BottomDestination.CHANNELS) {
+                            1_200.dp
+                        } else {
+                            840.dp
+                        }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                            stateHolder.SaveableStateProvider(destination) {
+                                val content = Modifier.widthIn(max = contentMaxWidth).fillMaxSize()
+                                when (destination) {
                 BottomDestination.HOME -> HomeScreen(
                     content = HomeContentState(
                         playlistState = playlistState,
@@ -270,11 +309,12 @@ fun RootScaffold(
                     onPinGroup = onPinGroup,
                     onHideGroup = onHideGroup,
                     onClearGroupOverride = onRestoreGroup,
+                    onOpenAddPlaylist = onOpenAddPlaylist,
                     modifier = content,
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(
                     favorites = favorites,
-                    playlistChannels = playlistState.groups.flatMap { it.channels },
+                    playlistChannels = playlistState.channels,
                     sortOrder = settingsState.favoritesSortOrder,
                     onSortOrderSelected = onFavoritesSortOrderSelected,
                     onChannelSelected = onChannelSelected,
@@ -311,6 +351,8 @@ fun RootScaffold(
                     onClearCache = onClearCache,
                     onExportBackup = onExportBackup,
                     onImportBackup = onImportBackup,
+                    backupExportResult = backupExportResult,
+                    onDismissBackupExportResult = onDismissBackupExportResult,
                     backupImportSummary = backupImportSummary,
                     onDismissBackupImportSummary = onDismissBackupImportSummary,
                     onOpenBatteryOptimizationHint = onOpenBatteryOptimizationHint,
@@ -336,14 +378,18 @@ fun RootScaffold(
                     requireParentalControlUnlock = requireParentalControlUnlock,
                     modifier = content,
                 )
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        }
         }
     }
 }
 
 /**
- * The screen title, the cast button, and - above them - the background-download banner.
+ * The screen title and background-download/update banners.
  *
  * The banner belongs *here*, as part of the measured top bar, and not in an overlay Box stacked on
  * top of the whole scaffold, which is where it used to live. As an overlay it was simply drawn over
@@ -358,19 +404,17 @@ fun RootScaffold(
  * background is applied before the inset padding, so it still fills the status bar area.
  *
  * Extracted from the `topBar` lambda so the no-overlap property can be asserted directly; composing
- * the whole of [RootScaffold] in a test would mean supplying sixty-odd parameters. [trailing] is a
- * slot for the same reason: [CastButton] goes through `CastButtonFactory`, which needs Play
- * Services and so cannot be composed under Robolectric.
+ * the whole of [RootScaffold] in a test would mean supplying sixty-odd parameters. Cast controls
+ * intentionally live in the player overlay, where a video stream is active, rather than in this
+ * global navigation chrome.
  */
 @Composable
 internal fun RootTopBar(
     title: String,
-    castConnected: Boolean,
     iconPrefetchState: IconPrefetchUiState,
     epgState: EpgUiState,
     updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
-    trailing: @Composable () -> Unit = { CastButton() },
 ) {
     Column(
         modifier = modifier
@@ -399,19 +443,6 @@ internal fun RootTopBar(
                     style = DisplayTitle,
                     color = UaTheme.palette.labelPrimary,
                 )
-                if (castConnected) {
-                    Text(
-                        text = stringResource(R.string.cast_status_connected),
-                        style = com.uacastplayer.ui.theme.Caption,
-                        color = UaTheme.palette.accentText,
-                    )
-                }
-            }
-            // Boxed only so the tour has something to measure: the cast button itself comes from
-            // CastButtonFactory and is a slot here, so this is the one place that can name it
-            // without the top bar knowing what is inside.
-            Box(modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON)) {
-                trailing()
             }
         }
     }
@@ -422,6 +453,11 @@ private fun BottomDestination.labelRes(): Int = when (this) {
     BottomDestination.CHANNELS -> R.string.nav_channels
     BottomDestination.FAVORITES -> R.string.nav_favorites
     BottomDestination.SETTINGS -> R.string.nav_settings
+}
+
+private fun BottomDestination.tabLabelRes(): Int = when (this) {
+    BottomDestination.SETTINGS -> R.string.nav_settings_compact
+    else -> labelRes()
 }
 
 /** Two tabs are tour targets; the other steps point at things inside a screen rather than at the
@@ -437,4 +473,30 @@ private fun BottomDestination.icon() = when (this) {
     BottomDestination.CHANNELS -> com.uacastplayer.ui.theme.AppIcons.Channels
     BottomDestination.FAVORITES -> com.uacastplayer.ui.theme.AppIcons.Favorites
     BottomDestination.SETTINGS -> com.uacastplayer.ui.theme.AppIcons.Settings
+}
+
+private fun AnimatedContentTransitionScope<BottomDestination>.navigationTransition(
+    animationsAllowed: Boolean,
+): ContentTransform {
+    if (!animationsAllowed) return EnterTransition.None togetherWith ExitTransition.None
+
+    val movingForward = targetState.ordinal > initialState.ordinal
+    val enterOffset = if (movingForward) {
+        { width: Int -> width / 10 }
+    } else {
+        { width: Int -> -width / 10 }
+    }
+    val exitOffset = if (movingForward) {
+        { width: Int -> -width / 10 }
+    } else {
+        { width: Int -> width / 10 }
+    }
+    return (slideInHorizontally(
+        initialOffsetX = enterOffset,
+        animationSpec = tween(DUR_NAV, easing = EaseSpring),
+    ) + fadeIn(tween(DUR_NAV, easing = EaseSpring))) togetherWith
+        (slideOutHorizontally(
+            targetOffsetX = exitOffset,
+            animationSpec = tween(DUR_NAV, easing = EaseSpring),
+        ) + fadeOut(tween(DUR_NAV, easing = EaseSpring)))
 }

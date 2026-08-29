@@ -2,7 +2,7 @@ package com.uacastplayer.data.cache
 
 import java.io.File
 
-/** Mirrors the literal path segments each cache store already uses under `filesDir`, kept in one place for cache-management UI. */
+/** Mirrors the cache stores' literal path segments under `filesDir` for cache-management UI. */
 object CachePaths {
 
     /**

@@ -31,7 +31,7 @@ object LogcatReader {
      * file nobody opens. A stalled stream retrying logs a few lines a second. */
     private const val MAX_LINES = 4_000
 
-    /** A second bound, on bytes rather than lines: one stack trace or one dumped manifest can be
+    /** A second bound, on characters rather than lines: one stack trace or one dumped manifest can be
      * longer than everything around it. */
     private const val MAX_CHARS = 512 * 1024
 
@@ -42,33 +42,35 @@ object LogcatReader {
      * without it exists - so the caller keeps whatever else it had rather than failing the report.
      */
     @Suppress("TooGenericExceptionCaught")
-    fun read(): String? = try {
-        val process = ProcessBuilder("logcat", "-d", "-v", "time", "--pid=${Process.myPid()}")
-            .redirectErrorStream(true)
-            .start()
-        var noiseDropped = 0
-        val lines = process.inputStream.bufferedReader().use { reader ->
-            reader.lineSequence()
-                // Before the budget, not after: dropping these afterwards would leave the same 23
-                // seconds of log, just shorter. See LogcatNoisePolicy for what was measured.
-                .filterNot { line ->
-                    val noise = LogcatNoisePolicy.isNoise(line)
-                    if (noise) noiseDropped++
-                    noise
+    fun read(): String? {
+        var process: java.lang.Process? = null
+        return try {
+            val runningProcess = ProcessBuilder("logcat", "-d", "-v", "time", "--pid=${Process.myPid()}")
+                .redirectErrorStream(true)
+                .start()
+            process = runningProcess
+            var noiseDropped = 0
+            val tail = BoundedLogTail(MAX_LINES, MAX_CHARS)
+            runningProcess.inputStream.bufferedReader().use { reader ->
+                reader.forEachLine { line ->
+                    // Before the budget, not after: dropping these afterwards would leave the same
+                    // 23 seconds of log, just shorter. See LogcatNoisePolicy for what was measured.
+                    if (LogcatNoisePolicy.isNoise(line)) {
+                        noiseDropped++
+                    } else {
+                        tail.add(LogSanitizer.sanitize(line))
+                    }
                 }
-                .map(LogSanitizer::sanitize)
-                .toList()
+            }
+            val body = tail.contentOrNull()
+            // Said at the top, before anything is read: a reader who finds a gap must be able to tell
+            // "the app removed this" from "the device never recorded it". Only the second is a problem.
+            body?.let { if (noiseDropped == 0) it else "($noiseDropped lines of device noise omitted)\n$it" }
+        } catch (e: Exception) {
+            AppLog.w("LogcatReader") { "Cannot read this process's log: ${e.javaClass.simpleName}" }
+            null
+        } finally {
+            process?.destroy()
         }
-        process.destroy()
-        val body = lines.takeLast(MAX_LINES)
-            .joinToString("\n")
-            .takeLast(MAX_CHARS)
-            .ifBlank { null }
-        // Said at the top, before anything is read: a reader who finds a gap must be able to tell
-        // "the app removed this" from "the device never recorded it". Only the second is a problem.
-        body?.let { if (noiseDropped == 0) it else "($noiseDropped lines of device noise omitted)\n$it" }
-    } catch (e: Exception) {
-        AppLog.w("LogcatReader") { "Cannot read this process's log: ${e.javaClass.simpleName}" }
-        null
     }
 }

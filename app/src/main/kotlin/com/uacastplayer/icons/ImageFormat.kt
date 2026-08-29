@@ -1,6 +1,6 @@
 package com.uacastplayer.icons
 
-enum class ImageFormat { PNG, JPEG, WEBP, GIF, SVG, ICO, BMP }
+enum class ImageFormat { PNG, JPEG, WEBP, GIF, SVG, ICO, BMP, AVIF }
 
 /**
  * Validates icon bytes by magic number rather than trusting a URL's extension or a server's
@@ -8,14 +8,41 @@ enum class ImageFormat { PNG, JPEG, WEBP, GIF, SVG, ICO, BMP }
  */
 object ImageFormatDetector {
 
-    private val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
-    private val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
+    private const val PNG_LEADING_BYTE = 0x89
+    private const val PNG_SUBSTITUTE_BYTE = 0x1A
+    private const val JPEG_MARKER_BYTE = 0xFF
+    private const val JPEG_START_OF_IMAGE_BYTE = 0xD8
+    private const val ICO_IMAGE_TYPE_BYTE = 0x01
+    private const val WEBP_MIN_HEADER_BYTES = 12
+    private const val WEBP_FORMAT_OFFSET = 8
+    private const val AVIF_MIN_HEADER_BYTES = 16
+    private const val AVIF_FTYP_OFFSET = 4
+    private const val AVIF_MAJOR_BRAND_OFFSET = 8
+    private const val AVIF_COMPATIBLE_BRANDS_OFFSET = 16
+
+    private val png = byteArrayOf(
+        PNG_LEADING_BYTE.toByte(),
+        'P'.code.toByte(),
+        'N'.code.toByte(),
+        'G'.code.toByte(),
+        '\r'.code.toByte(),
+        '\n'.code.toByte(),
+        PNG_SUBSTITUTE_BYTE.toByte(),
+        '\n'.code.toByte(),
+    )
+    private val jpeg = byteArrayOf(
+        JPEG_MARKER_BYTE.toByte(),
+        JPEG_START_OF_IMAGE_BYTE.toByte(),
+        JPEG_MARKER_BYTE.toByte(),
+    )
     private val gif87 = "GIF87a".toByteArray(Charsets.US_ASCII)
     private val gif89 = "GIF89a".toByteArray(Charsets.US_ASCII)
     private val bmp = "BM".toByteArray(Charsets.US_ASCII)
-    private val ico = byteArrayOf(0x00, 0x00, 0x01, 0x00)
+    private val ico = byteArrayOf(0x00, 0x00, ICO_IMAGE_TYPE_BYTE.toByte(), 0x00)
     private val riff = "RIFF".toByteArray(Charsets.US_ASCII)
     private val webp = "WEBP".toByteArray(Charsets.US_ASCII)
+    private val ftyp = "ftyp".toByteArray(Charsets.US_ASCII)
+    private val avifBrands = setOf("avif", "avis")
 
     private const val SVG_SNIFF_WINDOW = 512
 
@@ -25,7 +52,10 @@ object ImageFormatDetector {
         bytes.startsWith(gif87) || bytes.startsWith(gif89) -> ImageFormat.GIF
         bytes.startsWith(bmp) -> ImageFormat.BMP
         bytes.startsWith(ico) -> ImageFormat.ICO
-        bytes.size >= 12 && bytes.startsWith(riff) && regionMatches(bytes, 8, webp) -> ImageFormat.WEBP
+        bytes.size >= WEBP_MIN_HEADER_BYTES &&
+            bytes.startsWith(riff) &&
+            regionMatches(bytes, WEBP_FORMAT_OFFSET, webp) -> ImageFormat.WEBP
+        isAvif(bytes) -> ImageFormat.AVIF
         looksLikeSvg(bytes) -> ImageFormat.SVG
         else -> null
     }
@@ -35,13 +65,33 @@ object ImageFormatDetector {
         return prefix.contains("<svg", ignoreCase = true)
     }
 
+    /** AVIF is an ISO-BMFF container: `....ftyp` followed by an avif/avis brand. */
+    private fun isAvif(bytes: ByteArray): Boolean {
+        val hasHeader = bytes.size >= AVIF_MIN_HEADER_BYTES &&
+            regionMatches(bytes, AVIF_FTYP_OFFSET, ftyp)
+        var offset = AVIF_MAJOR_BRAND_OFFSET
+        var foundBrand = false
+        while (hasHeader && offset + BRAND_LENGTH <= bytes.size && offset < MAX_FTYP_SCAN_BYTES) {
+            if (brandAt(bytes, offset) in avifBrands) {
+                foundBrand = true
+                break
+            }
+            offset += BRAND_LENGTH
+        }
+        return foundBrand
+    }
+
+    private fun brandAt(bytes: ByteArray, offset: Int): String =
+        String(bytes, offset, BRAND_LENGTH, Charsets.US_ASCII)
+
     private fun ByteArray.startsWith(prefix: ByteArray): Boolean = regionMatches(this, 0, prefix)
 
     private fun regionMatches(bytes: ByteArray, offset: Int, needle: ByteArray): Boolean {
-        if (bytes.size < offset + needle.size) return false
-        for (i in needle.indices) {
-            if (bytes[offset + i] != needle[i]) return false
+        return bytes.size >= offset + needle.size && needle.indices.all { index ->
+            bytes[offset + index] == needle[index]
         }
-        return true
     }
+
+    private const val BRAND_LENGTH = 4
+    private const val MAX_FTYP_SCAN_BYTES = 256
 }

@@ -1,17 +1,16 @@
 package com.uacastplayer.app
 
 import com.uacastplayer.data.prefs.AppPreferences
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.ChannelLayout
-import com.uacastplayer.data.prefs.FavoritesSortOrder
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.favorites.FavoritesSortOrder
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.performance.HeapBudget
 import com.uacastplayer.performance.DeviceTierDefaults
 import com.uacastplayer.settings.CacheSizes
 import com.uacastplayer.settings.IconPlaceholdersBannerPolicy
-import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.settings.SettingsUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,14 +19,14 @@ import kotlinx.coroutines.flow.update
 
 /**
  * Owns [SettingsUiState] - moved out of [com.uacastplayer.AppViewModel] as a move-only split (see
- * B1 in the consolidated fix plan); behavior is unchanged. Depends on [iconController] for custom
- * icon sources (there's no separate icon-settings state, it's just [SettingsUiState] fields), but
- * doesn't depend on playlist/EPG - [recomputeDeviceTierDefaults] takes their content counts as
- * plain parameters instead, so this stays a one-way dependency.
+ * B1 in the consolidated fix plan); behavior is unchanged. Custom icon-source editing is delegated
+ * to [customIcons], while its result remains part of this single [SettingsUiState]. Playlist/EPG
+ * stay outside this class: [recomputeDeviceTierDefaults] takes their content counts as plain
+ * parameters, preserving a one-way dependency.
  */
 class SettingsController(
     private val preferences: AppPreferences,
-    private val iconController: IconController,
+    iconSources: IconSourceController,
     private val baseDeviceTier: DeviceTier,
 ) {
     private val _settingsState = MutableStateFlow(
@@ -39,13 +38,14 @@ class SettingsController(
             channelLayout = preferences.channelLayout,
             bufferSize = preferences.effectiveBufferSize,
             favoritesSortOrder = preferences.favoritesSortOrder,
-            customIconSources = iconController.customIconSources(),
+            customIconSources = iconSources.urls(),
             wrapAroundEnabled = preferences.wrapAroundEnabled,
             autoSkipDeadEnabled = preferences.autoSkipDeadEnabled,
             deviceTier = baseDeviceTier,
         )
     )
     val settingsState: StateFlow<SettingsUiState> = _settingsState.asStateFlow()
+    val customIcons = CustomIconSettingsController(iconSources, _settingsState)
 
     fun setIconDisplayMode(mode: IconDisplayMode) {
         preferences.iconDisplayMode = mode
@@ -113,33 +113,6 @@ class SettingsController(
     fun setFavoritesSortOrder(order: FavoritesSortOrder) {
         preferences.favoritesSortOrder = order
         _settingsState.update { it.copy(favoritesSortOrder = order) }
-    }
-
-    fun addCustomIconSource(rawUrl: String) {
-        val url = rawUrl.trim()
-        val isHttpUrl = url.startsWith("http://") || url.startsWith("https://")
-        val error = when {
-            !isHttpUrl -> IconSourceAddError.INVALID_URL
-            url in iconController.customIconSources() -> IconSourceAddError.ALREADY_ADDED
-            else -> null
-        }
-        if (error != null) {
-            _settingsState.update { it.copy(iconSourceAddError = error) }
-            return
-        }
-        iconController.addCustomIconSource(url)
-        _settingsState.update {
-            it.copy(customIconSources = iconController.customIconSources(), iconSourceAddError = null)
-        }
-    }
-
-    fun removeCustomIconSource(url: String) {
-        iconController.removeCustomIconSource(url)
-        _settingsState.update { it.copy(customIconSources = iconController.customIconSources()) }
-    }
-
-    fun dismissIconSourceError() {
-        _settingsState.update { it.copy(iconSourceAddError = null) }
     }
 
     fun setWrapAroundEnabled(enabled: Boolean) {

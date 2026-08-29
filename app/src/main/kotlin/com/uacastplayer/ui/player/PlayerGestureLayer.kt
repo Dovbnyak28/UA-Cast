@@ -1,5 +1,4 @@
 package com.uacastplayer.ui.player
-import com.uacastplayer.ui.theme.UaTheme
 
 import android.app.Activity
 import android.app.PictureInPictureParams
@@ -11,8 +10,8 @@ import android.provider.Settings
 import android.util.Rational
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import androidx.media3.common.VideoSize
-import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,24 +33,29 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.player.BrightnessGestureStart
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.RadiusField
+import com.uacastplayer.ui.theme.UaTheme
+import kotlin.math.roundToInt
 
 private const val TAG = "PlayerGestureLayer"
+private const val MIN_WINDOW_BRIGHTNESS = 0.01f
 
 internal const val DEFAULT_BRIGHTNESS_LEVEL = 0.5f
 
 internal enum class GestureIndicatorKind { BRIGHTNESS, VOLUME }
 
 internal fun AudioManager?.currentVolumeFraction(): Float {
-    if (this == null) return DEFAULT_BRIGHTNESS_LEVEL
-    val max = getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-    if (max <= 0) return DEFAULT_BRIGHTNESS_LEVEL
-    return getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max.toFloat()
+    return this?.let { manager ->
+        val max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        max.takeIf { it > 0 }?.let {
+            manager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / it.toFloat()
+        }
+    } ?: DEFAULT_BRIGHTNESS_LEVEL
 }
 
 internal fun applyWindowBrightness(activity: Activity, level: Float) {
     val window = activity.window
     val params = window.attributes
-    params.screenBrightness = level.coerceIn(0.01f, 1f)
+    params.screenBrightness = level.coerceIn(MIN_WINDOW_BRIGHTNESS, 1f)
     window.attributes = params
 }
 
@@ -187,11 +191,13 @@ internal object PipController {
      */
     private const val MIN_SCALED_ASPECT = 419
     private const val MAX_SCALED_ASPECT = 2390
+    private const val FALLBACK_ASPECT_WIDTH = 16
+    private const val FALLBACK_ASPECT_HEIGHT = 9
 
     /** Used when the stream has not reported a size yet (nothing decoded, or an audio-only
      * channel). 16:9 is the right guess for "unknown TV channel"; it is wrong as a *constant*,
      * which is what it used to be. */
-    private val FALLBACK_ASPECT = Rational(16, 9)
+    private val FALLBACK_ASPECT = Rational(FALLBACK_ASPECT_WIDTH, FALLBACK_ASPECT_HEIGHT)
 
     /**
      * Display aspect ratio for [width] x [height] sample dimensions with pixel aspect
@@ -239,7 +245,7 @@ internal object PipController {
      */
     fun syncParams(activity: Activity, videoSize: VideoSize, sourceRectHint: Rect?, autoEnter: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        runCatching {
+        runCatchingNonFatal {
             activity.setPictureInPictureParams(buildParams(videoSize, sourceRectHint, autoEnter))
         }
     }

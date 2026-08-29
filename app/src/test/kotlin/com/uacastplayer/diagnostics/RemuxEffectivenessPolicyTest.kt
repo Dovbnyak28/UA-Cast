@@ -1,8 +1,9 @@
 package com.uacastplayer.diagnostics
 
-import com.uacastplayer.diagnostics.CastRouteKind.DIRECT
-import com.uacastplayer.diagnostics.CastRouteKind.PROXY_REMUX
-import com.uacastplayer.diagnostics.CastRouteKind.PROXY_REWRITE
+import com.uacastplayer.core.cast.CastRouteKind
+import com.uacastplayer.core.cast.CastRouteKind.DIRECT
+import com.uacastplayer.core.cast.CastRouteKind.PROXY_REMUX
+import com.uacastplayer.core.cast.CastRouteKind.PROXY_REWRITE
 import com.uacastplayer.diagnostics.CastRouteOutcome.ATTEMPTED
 import com.uacastplayer.diagnostics.CastRouteOutcome.FAILED
 import com.uacastplayer.diagnostics.CastRouteOutcome.REACHED_PLAYING

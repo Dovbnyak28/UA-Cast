@@ -53,6 +53,8 @@ class PremiumRepositoryTest {
         val connectionFlow = MutableStateFlow(BillingConnectionState.DISCONNECTED)
         val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
         var acknowledged = mutableListOf<PurchaseRecord>()
+        var acknowledgementAttempts = mutableListOf<PurchaseRecord>()
+        var acknowledgementFailures = emptySet<String>()
         var catalogueQueries = 0
 
         override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
@@ -65,8 +67,27 @@ class PremiumRepositoryTest {
         override suspend fun purchase(product: BillingProduct, launchContext: Any?) = PurchaseResult.Unavailable
         override suspend fun restore() = PurchaseResult.Unavailable
         override suspend fun acknowledge(purchase: PurchaseRecord) {
+            acknowledgementAttempts += purchase
+            if (purchase.productId in acknowledgementFailures) {
+                throw IllegalStateException("billing acknowledgement failed")
+            }
             acknowledged += purchase
         }
+    }
+
+    private class FailingProvider : BillingProvider {
+        private val connectionFlow = MutableStateFlow(BillingConnectionState.DISCONNECTED)
+        private val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
+
+        override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
+        override val purchases: StateFlow<Set<PurchaseRecord>> = purchasesFlow.asStateFlow()
+        override suspend fun connect(): Unit = throw IllegalStateException("connect failed")
+        override suspend fun products(): List<BillingProduct> = throw IllegalStateException("catalogue failed")
+        override suspend fun purchase(product: BillingProduct, launchContext: Any?): PurchaseResult =
+            throw IllegalStateException("purchase failed")
+        override suspend fun restore(): PurchaseResult = throw IllegalStateException("restore failed")
+        override suspend fun acknowledge(purchase: PurchaseRecord): Unit =
+            throw IllegalStateException("acknowledge failed")
     }
 
     private fun purchase(
@@ -250,6 +271,22 @@ class PremiumRepositoryTest {
         )
     }
 
+    @Test
+    fun oneFailedAcknowledgementDoesNotPreventTheRemainingPurchaseFromBeingAttempted() = runTest {
+        val provider = StubProvider().apply { acknowledgementFailures = setOf("first") }
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = linkedSetOf(
+            purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "first", needsAck = true),
+            purchase(LicenseTier.LIFETIME, id = "second", needsAck = true),
+        )
+
+        assertEquals(listOf("first", "second"), provider.acknowledgementAttempts.map { it.productId })
+        assertEquals(listOf("second"), provider.acknowledged.map { it.productId })
+    }
+
     /** The control: an acknowledgement already given must not be sent again on every store update -
      * `applyPurchases` runs on each connection and each refresh. */
     @Test
@@ -414,5 +451,19 @@ class PremiumRepositoryTest {
         assertTrue(provider.purchases.value.isEmpty())
         assertTrue(provider.products().isEmpty())
         assertEquals(PurchaseResult.Unavailable, provider.restore())
+    }
+
+    @Test
+    fun unexpectedProviderFailuresStayInsideTheRepositoryBoundary() = runTest {
+        val stored = License(LicenseTier.LIFETIME, expiresAtMillis = null, source = "lifetime")
+        val repository = PremiumRepository(FailingProvider(), FakeStorage(stored), scope) { now }
+
+        repository.loadInitial()
+
+        assertEquals(BillingConnectionState.DISCONNECTED, repository.connection.value)
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
+        assertTrue(repository.products().isEmpty())
+        assertTrue(repository.purchase("premium_monthly", null) is PurchaseResult.Failed)
+        assertTrue(repository.restore() is PurchaseResult.Failed)
     }
 }

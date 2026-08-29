@@ -48,7 +48,9 @@ class IconFetchFailureTest {
         // single test method under Robolectric.
         application.getSharedPreferences("uacast_icon_failures", android.content.Context.MODE_PRIVATE)
             .edit().clear().commit()
-        java.io.File(application.filesDir, "icon_cache").deleteRecursively()
+        application.getSharedPreferences("custom_icon_sources", android.content.Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        java.io.File(application.filesDir, "icon_cache").listFiles()?.forEach { it.delete() }
     }
 
     @After
@@ -111,6 +113,23 @@ class IconFetchFailureTest {
         return first to second
     }
 
+    @Test
+    fun `malformed provider icon URL degrades to a cached miss instead of throwing`() {
+        val repository = IconRepository(application)
+        val malformed = "not a valid http url"
+
+        val first = runBlocking {
+            repository.resolveIconFile(tvgLogo = malformed, epgIconUrl = null, tvgId = null)
+        }
+        repository.invalidateMemoryCache()
+        val second = runBlocking {
+            repository.resolveIconFile(tvgLogo = malformed, epgIconUrl = null, tvgId = null)
+        }
+
+        assertNull(first)
+        assertNull(second)
+    }
+
     /** The bug: hotlink protection answering 200 with a page instead of a picture. */
     @Test
     fun `a 200 that is not an image is not fetched again`() {
@@ -152,5 +171,55 @@ class IconFetchFailureTest {
         assertNotNull("a real PNG must resolve", first)
         assertNotNull(second)
         assertEquals("the second resolve must come from disk", 1, origin.requests.get())
+    }
+
+    @Test
+    fun `transient failures can be cleared for a retry after connectivity recovery`() {
+        val repository = IconRepository(application)
+        // Use a local origin that returns a valid HTTP response with HTML: this records a
+        // transient invalid-image failure without depending on the public network.
+        val origin = Origin("text/html", "temporary outage".toByteArray()).also { this.origin = it }
+        val transientUrl = origin.urlFor("/logo.png")
+        assertNull(runBlocking { repository.resolveIconFile(transientUrl, null, null) })
+        repository.retryTransientFailures()
+
+        // A retry is allowed to contact the origin again; the response is still invalid, so it is
+        // recorded anew rather than being served from the negative memory cache.
+        repository.invalidateMemoryCache()
+        assertNull(runBlocking { repository.resolveIconFile(transientUrl, null, null) })
+        assertEquals("clearing a transient failure must permit a new request", 2, origin.requests.get())
+    }
+
+    @Test
+    fun `adding a custom source invalidates a cached miss`() {
+        val origin = Origin("image/png", pngBytes()).also { this.origin = it }
+        val repository = IconRepository(application)
+
+        // With only the built-in CDN fallback, the channel has no disk icon and must resolve to a
+        // negative memory-cache entry. Adding a user source must make the same key try that source
+        // immediately; otherwise this channel would remain blank until the next process launch.
+        assertNull(runBlocking { repository.resolveIconFile(null, null, "channel-1") })
+        repository.addCustomIconSource(origin.urlFor("/logos"))
+
+        val resolved = runBlocking { repository.resolveIconFile(null, null, "channel-1") }
+
+        assertNotNull("a newly added source must be consulted after a cached miss", resolved)
+        assertEquals(1, origin.requests.get())
+    }
+
+    @Test
+    fun `trimming invalidates memory entries whose files disappeared`() {
+        val origin = Origin("image/png", pngBytes()).also { this.origin = it }
+        val repository = IconRepository(application)
+        val url = origin.urlFor("/logo.png")
+
+        assertNotNull(runBlocking { repository.resolveIconFile(url, null, null) })
+        java.io.File(application.filesDir, "icon_cache").listFiles()?.forEach { it.delete() }
+
+        runBlocking { repository.trimCache() }
+        val resolvedAgain = runBlocking { repository.resolveIconFile(url, null, null) }
+
+        assertNotNull("trim must not leave a stale in-memory file reference", resolvedAgain)
+        assertEquals("the missing file must be fetched again", 2, origin.requests.get())
     }
 }

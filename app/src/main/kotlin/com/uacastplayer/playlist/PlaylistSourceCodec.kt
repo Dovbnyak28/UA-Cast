@@ -1,5 +1,6 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.io.presizeFor
 import com.uacastplayer.core.io.readCountField
 import java.io.DataInputStream
@@ -73,7 +74,8 @@ object PlaylistSourceCodec {
         val sources = ArrayList<PlaylistSource>(presizeFor(count))
         repeat(count) {
             val id = input.readUTF()
-            val type = runCatching { PlaylistSourceType.valueOf(input.readUTF()) }.getOrDefault(PlaylistSourceType.URL)
+            val type = runCatchingNonFatal { PlaylistSourceType.valueOf(input.readUTF()) }
+                .getOrDefault(PlaylistSourceType.URL)
             val location = input.readUTF()
             val displayName = input.readNullableUTF()
             val addedAtEpochMillis = input.readLong()

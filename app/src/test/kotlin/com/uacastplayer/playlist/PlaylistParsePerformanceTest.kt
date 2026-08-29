@@ -14,31 +14,46 @@ import kotlin.system.measureTimeMillis
  */
 class PlaylistParsePerformanceTest {
 
+    private fun playlist(channelCount: Int): String = buildString {
+        appendLine("#EXTM3U")
+        val groups = listOf("News", "Movies", "Sports", "Kids", "Music")
+        repeat(channelCount) { index ->
+            val group = groups[index % groups.size]
+            appendLine(
+                """#EXTINF:-1 tvg-id="ch$index" tvg-logo="http://cdn.example.com/$index.png" """ +
+                    """group-title="$group",Channel $index""",
+            )
+            appendLine("http://example.com/stream$index.m3u8")
+        }
+    }
+
+    private fun parseAndGroup(playlist: String, expectedChannels: Int): Long = measureTimeMillis {
+        val parsed = M3uParser.parse(playlist)
+        val grouped = ChannelGrouper.group(parsed.channels)
+        assertEquals(expectedChannels, parsed.channels.size)
+        assertTrue(grouped.isNotEmpty())
+    }
+
     @Test
     fun `parsing and grouping 3000 channels stays well under a slow-UI budget`() {
-        val playlist = buildString {
-            appendLine("#EXTM3U")
-            val groups = listOf("News", "Movies", "Sports", "Kids", "Music")
-            repeat(3000) { i ->
-                val group = groups[i % groups.size]
-                appendLine(
-                    """#EXTINF:-1 tvg-id="ch$i" tvg-logo="http://cdn.example.com/$i.png" """ +
-                        """group-title="$group",Channel $i""",
-                )
-                appendLine("http://example.com/stream$i.m3u8")
-            }
-        }
-
-        val elapsedMillis = measureTimeMillis {
-            val parsed = M3uParser.parse(playlist)
-            val grouped = ChannelGrouper.group(parsed.channels)
-            assertEquals(3000, parsed.channels.size)
-            assertTrue(grouped.isNotEmpty())
-        }
+        val elapsedMillis = parseAndGroup(playlist(3_000), expectedChannels = 3_000)
 
         assertTrue(
             "Parsing+grouping 3000 channels took ${elapsedMillis}ms - expected well under 2000ms",
             elapsedMillis < 2000,
+        )
+    }
+
+    /** Provider-scale guard: catches accidental quadratic parsing/grouping before a 40k-channel
+     * playlist reaches a low-end phone. Loose enough for shared CI runners, strict enough that a
+     * UI-visible multi-second regression fails loudly. */
+    @Test
+    fun `parsing and grouping 40000 channels stays within provider scale budget`() {
+        val elapsedMillis = parseAndGroup(playlist(40_000), expectedChannels = 40_000)
+
+        assertTrue(
+            "Parsing+grouping 40000 channels took ${elapsedMillis}ms - expected under 8000ms",
+            elapsedMillis < 8_000,
         )
     }
 }

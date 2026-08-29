@@ -13,11 +13,11 @@ import java.io.OutputStream
  * What came back off disk: either the parsed guide (v2, the format written today) or the raw XMLTV
  * document a previous version cached (v1).
  */
-sealed class DecodedEpgSnapshot {
-    abstract val header: EpgSnapshotHeader
+sealed interface DecodedEpgSnapshot {
+    val header: EpgSnapshotHeader
 
     /** Ready to use as-is - no XML, no gzip, no parse. */
-    data class Parsed(override val header: EpgSnapshotHeader, val data: EpgData) : DecodedEpgSnapshot()
+    data class Parsed(override val header: EpgSnapshotHeader, val data: EpgData) : DecodedEpgSnapshot
 
     /**
      * A v1 snapshot. [documentStream] is the decode input itself, left positioned right after the
@@ -27,7 +27,7 @@ sealed class DecodedEpgSnapshot {
     data class Document(
         override val header: EpgSnapshotHeader,
         val documentStream: InputStream,
-    ) : DecodedEpgSnapshot()
+    ) : DecodedEpgSnapshot
 }
 
 /**

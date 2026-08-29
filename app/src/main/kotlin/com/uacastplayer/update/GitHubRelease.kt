@@ -1,6 +1,8 @@
 package com.uacastplayer.update
 
-import org.json.JSONException
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import java.net.URI
+import java.util.Locale
 import org.json.JSONObject
 
 /**
@@ -32,31 +34,27 @@ data class GitHubRelease(
  */
 object GitHubReleaseParser {
 
-    // One guard per field that can be missing or wrong, and the JSONException is the "this is not
-    // JSON" signal itself rather than an error with anything more to say - a captive portal's login
-    // page reaching here is ordinary, not exceptional.
-    @Suppress("ReturnCount", "SwallowedException")
-    fun parse(json: String, supportedAbis: List<String> = emptyList()): GitHubRelease? {
-        val obj = try {
-            JSONObject(json)
-        } catch (e: JSONException) {
-            return null
+    fun parse(json: String, supportedAbis: List<String> = emptyList()): GitHubRelease? =
+        runCatchingNonFatal { JSONObject(json) }
+            .getOrNull()
+            ?.takeUnless { obj -> obj.optBoolean("draft", false) || obj.optBoolean("prerelease", false) }
+            ?.let { obj -> releaseFrom(obj, supportedAbis) }
+
+    private fun releaseFrom(obj: JSONObject, supportedAbis: List<String>): GitHubRelease? {
+        val tagName = obj.stringOrNull("tag_name")
+        val version = tagName?.let(AppVersion::parse)
+        val releaseUrl = obj.stringOrNull("html_url")?.takeIf(::isTrustedReleaseUrl)
+        return if (tagName != null && version != null && releaseUrl != null) {
+            GitHubRelease(
+                version = version,
+                tagName = tagName,
+                releaseUrl = releaseUrl,
+                // Mechanical: which attached file to install is [ReleaseApkPolicy]'s decision.
+                apk = ReleaseApkPolicy.pick(readAssets(obj), supportedAbis),
+            )
+        } else {
+            null
         }
-
-        if (obj.optBoolean("draft", false) || obj.optBoolean("prerelease", false)) return null
-
-        val tagName = obj.stringOrNull("tag_name") ?: return null
-        val version = AppVersion.parse(tagName) ?: return null
-        val releaseUrl = obj.stringOrNull("html_url") ?: return null
-
-        return GitHubRelease(
-            version = version,
-            tagName = tagName,
-            releaseUrl = releaseUrl,
-            // Mechanical: which of the attached files is the one to install is [ReleaseApkPolicy]'s
-            // decision, kept out of here so it can be tested without a JSON document around it.
-            apk = ReleaseApkPolicy.pick(readAssets(obj), supportedAbis),
-        )
     }
 
     /**
@@ -72,7 +70,9 @@ object GitHubReleaseParser {
         return (0 until array.length()).mapNotNull { index ->
             val asset = array.optJSONObject(index) ?: return@mapNotNull null
             val name = asset.stringOrNull("name") ?: return@mapNotNull null
-            val url = asset.stringOrNull("browser_download_url") ?: return@mapNotNull null
+            val url = asset.stringOrNull("browser_download_url")
+                ?.takeIf(::isTrustedDownloadUrl)
+                ?: return@mapNotNull null
             ReleaseAsset(
                 name = name,
                 state = asset.stringOrNull("state").orEmpty(),
@@ -110,4 +110,36 @@ object GitHubReleaseParser {
      */
     private fun JSONObject.stringOrNull(name: String): String? =
         if (isNull(name)) null else optString(name).ifBlank { null }
+
+    /**
+     * The release document is network input, even though it came from the expected API endpoint.
+     * Keep a compromised/misconfigured response from turning the update banner into a link to a
+     * phishing page. The repository path is part of the trust boundary: a link to another
+     * github.com project is still not this app's release page.
+     */
+    private fun isTrustedReleaseUrl(value: String): Boolean =
+        isTrustedGithubUrl(value, pathPrefix = "$REPOSITORY_PATH/releases/")
+
+    /**
+     * Only GitHub's release-asset path is accepted. OkHttp may follow GitHub's normal HTTPS
+     * redirect to its asset CDN after this check; an arbitrary HTTP/external URL never reaches it.
+     */
+    private fun isTrustedDownloadUrl(value: String): Boolean =
+        isTrustedGithubUrl(value, pathPrefix = "$REPOSITORY_PATH/releases/download/")
+
+    private fun isTrustedGithubUrl(value: String, pathPrefix: String): Boolean = runCatchingNonFatal {
+        val uri = URI(value)
+        val path = uri.path ?: return@runCatchingNonFatal false
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals(GITHUB_HOST, ignoreCase = true) &&
+            uri.port == -1 &&
+            uri.userInfo == null &&
+            uri.query == null &&
+            uri.fragment == null &&
+            uri.normalize().path == path &&
+            path.lowercase(Locale.ROOT).startsWith(pathPrefix)
+    }.getOrDefault(false)
+
+    private const val GITHUB_HOST = "github.com"
+    private const val REPOSITORY_PATH = "/dovbnyak28/ua-cast"
 }

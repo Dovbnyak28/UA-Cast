@@ -18,12 +18,12 @@ class ApkTrustPolicyTest {
 
     @Test
     fun `the same signer is an update`() {
-        assertTrue(ApkTrustPolicy.isSameSigner(ours, ours))
+        assertTrue(ApkTrustPolicy.isTrustedUpdate(ours, ours, ours))
     }
 
     @Test
     fun `a different signer is not`() {
-        assertFalse(ApkTrustPolicy.isSameSigner(ours, theirs))
+        assertFalse(ApkTrustPolicy.isTrustedUpdate(ours, theirs, theirs))
     }
 
     /**
@@ -33,9 +33,9 @@ class ApkTrustPolicyTest {
      */
     @Test
     fun `an unreadable signature is refused, not waved through`() {
-        assertFalse("nothing in the file", ApkTrustPolicy.isSameSigner(ours, emptySet()))
-        assertFalse("nothing installed", ApkTrustPolicy.isSameSigner(emptySet(), ours))
-        assertFalse("nothing either side", ApkTrustPolicy.isSameSigner(emptySet(), emptySet()))
+        assertFalse("nothing in the file", ApkTrustPolicy.isTrustedUpdate(ours, emptySet(), emptySet()))
+        assertFalse("nothing installed", ApkTrustPolicy.isTrustedUpdate(emptySet(), ours, ours))
+        assertFalse("nothing either side", ApkTrustPolicy.isTrustedUpdate(emptySet(), emptySet(), emptySet()))
     }
 
     /**
@@ -45,14 +45,35 @@ class ApkTrustPolicyTest {
      */
     @Test
     fun `an extra signer beside ours is still someone else`() {
-        assertFalse(ApkTrustPolicy.isSameSigner(ours, ours + theirs))
-        assertFalse(ApkTrustPolicy.isSameSigner(ours + theirs, ours))
+        assertFalse(ApkTrustPolicy.isTrustedUpdate(ours, ours + theirs, ours + theirs))
+        assertFalse(ApkTrustPolicy.isTrustedUpdate(ours + theirs, ours, ours + theirs))
     }
 
     /** Order is not part of the answer - two signers are the same two whichever way they were read
      * out of the archive. */
     @Test
     fun `multiple signers match regardless of the order they were read in`() {
-        assertTrue(ApkTrustPolicy.isSameSigner(setOf("aa11", "bb22"), setOf("bb22", "aa11")))
+        assertTrue(
+            ApkTrustPolicy.isTrustedUpdate(
+                setOf("aa11", "bb22"),
+                setOf("bb22", "aa11"),
+                setOf("bb22", "aa11"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a platform verified key rotation is an update`() {
+        assertTrue(ApkTrustPolicy.isTrustedUpdate(ours, theirs, ours + theirs))
+    }
+
+    @Test
+    fun `a new signer without the installed signer in its lineage is refused`() {
+        assertFalse(ApkTrustPolicy.isTrustedUpdate(ours, theirs, theirs))
+    }
+
+    @Test
+    fun `rotation never relaxes multi signer equality`() {
+        assertFalse(ApkTrustPolicy.isTrustedUpdate(ours + theirs, setOf("cc33"), ours + theirs + "cc33"))
     }
 }

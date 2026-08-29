@@ -37,22 +37,25 @@ class IconFailureStore(context: Context) {
 
     fun shouldSkip(url: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
         val key = Fingerprint.of(url)
-
         val permanentAt = if (prefs.contains(key)) prefs.getLong(key, 0L) else null
-        if (permanentAt != null) {
-            val record = FailureRecord(permanentAt, isPermanent = true)
-            if (!IconFailurePolicy.isExpired(record, nowMillis)) return true
-            prefs.edit { remove(key) }
-        }
-
         val transientAt = transientFailures[key]
-        if (transientAt != null) {
-            val record = FailureRecord(transientAt, isPermanent = false)
-            if (!IconFailurePolicy.isExpired(record, nowMillis)) return true
+        return storedFailureShouldSkip(permanentAt, isPermanent = true, nowMillis) {
+            prefs.edit { remove(key) }
+        } || storedFailureShouldSkip(transientAt, isPermanent = false, nowMillis) {
             transientFailures.remove(key)
         }
+    }
 
-        return false
+    private inline fun storedFailureShouldSkip(
+        recordedAt: Long?,
+        isPermanent: Boolean,
+        nowMillis: Long,
+        onExpired: () -> Unit,
+    ): Boolean {
+        if (recordedAt == null) return false
+        val isActive = !IconFailurePolicy.isExpired(FailureRecord(recordedAt, isPermanent), nowMillis)
+        if (!isActive) onExpired()
+        return isActive
     }
 
     fun recordFailure(url: String, isPermanent: Boolean, nowMillis: Long = System.currentTimeMillis()) {
@@ -62,6 +65,14 @@ class IconFailureStore(context: Context) {
         } else {
             transientFailures[key] = nowMillis
         }
+    }
+
+    /**
+     * Allows a fresh attempt after connectivity recovery. Permanent HTTP failures stay on disk;
+     * only in-memory network/error records are reset because their origin may be healthy again.
+     */
+    fun clearTransientFailures() {
+        transientFailures.clear()
     }
 
     /**

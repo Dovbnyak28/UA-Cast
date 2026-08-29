@@ -206,6 +206,49 @@ class PlayerCastHandbackTest {
         }
     }
 
+    /** Regression for the production wiring, not the pure policy: lifecycle used to pass only the
+     * Chromecast flag into [BackgroundPlaybackPolicy], so DLNA was treated as local playback. */
+    @Test
+    fun `backgrounding does not mutate local playback intent under an active dlna session`() {
+        CountingOrigin().use { origin ->
+            val player = playerWatching(origin)
+            // This is the state handleDlnaStateChange creates: the local player is stopped without
+            // clearing playWhenReady, while the renderer owns the stream.
+            player.player.stop()
+            player.setRemoteCastingForLifecycleTest(chromecast = false, dlna = true)
+            assertTrue(player.player.playWhenReady)
+
+            player.onEnterBackground(isInPictureInPicture = false)
+            settle()
+
+            assertTrue(
+                "DLNA ownership must be treated like Chromecast, not paused as local playback",
+                player.player.playWhenReady,
+            )
+            player.onReturnToForeground()
+            settle()
+            assertTrue(player.player.playWhenReady)
+        }
+    }
+
+    @Test
+    fun `closing local player keeps prefetch gated while a receiver is active`() {
+        val player = player()
+        player.setRemoteCastingForLifecycleTest(chromecast = true, dlna = false)
+        PlaybackActivity.setActive(true)
+
+        player.releasePlayback()
+
+        assertTrue(
+            "closing PlayerHost must not advertise an active receiver as idle",
+            PlaybackActivity.isActive.value,
+        )
+        assertTrue(
+            "reopening the player must still render its Chromecast state",
+            player.uiState.value.isCasting,
+        )
+    }
+
     private companion object {
         const val EMPTY_OK = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         const val SETTLE_MILLIS = 200L

@@ -102,7 +102,7 @@
              MediaSessionLegacyStub registers its own in-process receiver for ACTION_MEDIA_BUTTON,
              which is exactly the "works while the app is alive" behaviour this app wants. -->
 
-        <!-- Locale storage is handled by our own AppPreferences (see core.i18n.LocalizedContext),
+        <!-- Locale storage is handled by our own AppPreferences (see data.prefs.LocalizedPreferencesContext),
              not AppCompat's auto-store, so this stays disabled per the per-app-language docs. -->
         <service
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"

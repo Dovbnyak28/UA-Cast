@@ -44,5 +44,8 @@ data class BackupData(
     val settings: BackupSettings,
 )
 
+/** One-shot user-visible outcome of writing a backup through Android's document provider. */
+enum class BackupExportResult { SUCCESS, FAILURE }
+
 /** Shown to the user after a successful import (see AppViewModel.importBackupFrom). */
 data class BackupImportSummary(val importedSourceCount: Int, val importedFavoriteCount: Int)

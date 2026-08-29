@@ -34,9 +34,10 @@ happens at the lowest level that actually does the blocking/CPU work, once, not 
   in the same `withContext(Dispatchers.IO)` block - not a UI freeze (IO isn't the main thread either),
   but the wrong dispatcher for CPU work. Split into its own `Dispatchers.Default` hop for consistency.
 
-See `PlaylistParsePerformanceTest` for a regression guard: parsing+grouping 3000 channels is asserted
-to complete in well under 2 seconds, so a future accidental main-thread reintroduction (or an O(n)→O(n²)
-regression) shows up as a slow/failing test, not just as a support complaint.
+See `PlaylistParsePerformanceTest` for two regression guards: 3000 channels stay well under the
+interactive budget, and a provider-scale 40,000-channel fixture must parse and group within a loose
+8-second shared-runner ceiling. The second test is intentionally large enough to expose O(n²)
+behaviour while remaining stable in the ordinary unit-test gate.
 
 ## Background prefetch isn't exempt either
 
@@ -49,6 +50,40 @@ likely to be seen soon (favorites, last-watched, first group - see its doc comme
 entirely while something is actually playing/casting (`PlaybackActivity`), and skipped altogether on
 `DeviceTier.LOW_END`. Anything outside that selection still gets its icon lazily, one row at a time,
 the first time it's actually scrolled into view - that path was already correct.
+
+The selected pass is drained by a fixed six-worker queue. Equal icon candidate chains are collapsed
+before any coroutine is launched, with each unique item carrying a progress weight, so a 40k-channel
+playlist cannot create 40k suspended `async` objects or fetch the same logo repeatedly. A pass that
+the connectivity/Wi-Fi-only gate refuses reports a distinct not-executed outcome: the controller
+clears the transient progress state but does not advance `completedRuns`, update the last-prefetch
+timestamp, or dismiss the refresh reminder for work that never happened.
+
+## Diagnostics stay inside a fixed memory budget
+
+`LogcatReader` streams the process log into a bounded tail instead of materialising the complete
+`logcat -d` output and trimming it afterwards. At most 4,000 complete lines and 512K characters are
+retained while reading; an oversized individual line is clipped to its newest tail. This matters on
+low-memory devices because diagnostics are commonly generated immediately after a playback failure,
+when Media3 and proxy logging are at their busiest and the player still owns its buffers.
+
+## Device benchmarks
+
+The `:baselineprofile` module contains the profile generator plus deterministic device
+Macrobenchmarks. They require an API 33+ connected device or emulator:
+
+```bash
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark
+```
+
+Startup results belong in release evidence rather than unit-test timing: Macrobenchmark controls
+process state and compilation mode on the target device, which a desktop JVM test cannot emulate.
+`CriticalJourneysBenchmark` adds peak-memory/frame measurements for a 40,000-channel restore/open,
+first player launch, fullscreen and EPG guide. `EpgParseBenchmark` runs the production SAX +
+retention + heap-budget + index pipeline over 350,000 synthetic programmes and reports both peak
+memory and the `UaCastEpgParseAndIndex` trace duration. The fixture is credential-free and compiled
+only into `benchmarkRelease`/`nonMinifiedRelease`; exact commands and the destructive-data warning
+are in `docs/RELEASING.md`.
 
 ## The EPG snapshot no longer stores XML
 
@@ -89,8 +124,10 @@ here reproduces - hence the end-to-end device measurement above.
 
 ### Note the caps while you are here
 
-That feed hits `XmlTvParser.MAX_PROGRAMMES` (250,000) *exactly*, which is not a coincidence - it is
-being cut off. XMLTV is normally ordered by channel, so the cap does not thin the guide out evenly,
-it leaves the last channels in the file with nothing. The parser had always computed
-`programmeLimitExceeded` and nothing anywhere read it; it now reaches `EpgData.truncation`, gets
-logged, and is shown in Settings under the source picker.
+The original field run hit the then-current 250,000-programme cap *exactly*, which was not a
+coincidence: the feed was being cut off. XMLTV is normally ordered by channel, so a cap does not
+thin the guide evenly; it leaves later channels with nothing. The hard safety backstop is now
+400,000, but production first applies the three-day retention window and then
+`HeapBudget.maxProgrammes(Runtime.maxMemory())`, so a 128MB heap deliberately keeps far less than a
+roomy device. Any real truncation reaches `EpgData.truncation`, is logged, and is shown in Settings
+under the source picker. `EpgParseBenchmark` exercises that exact device-specific decision.

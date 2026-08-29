@@ -1,5 +1,6 @@
 package com.uacastplayer.data.prefs
 
+import com.uacastplayer.core.settings.BufferSize
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.performance.HeapBudget

@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,7 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerUiState
@@ -68,6 +69,7 @@ internal fun PillButton(
 ) {
     Row(
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
@@ -95,7 +97,7 @@ internal fun PillButton(
 }
 
 /** Shown while casting has some reason it isn't reaching the receiver - either a codec
- * [com.uacastplayer.cast.CastCompatibilityPolicy] flagged as incompatible, or the receiver
+ * [com.uacastplayer.core.cast.CastCompatibilityPolicy] flagged as incompatible, or the receiver
  * rejecting/erroring on the proxy fallback for any other reason. Local playback keeps playing
  * regardless, this only explains why the receiver isn't. Clears itself once the relevant
  * [PlayerUiState] field goes back to its default (new channel, cast disconnect, or - for a codec
@@ -195,31 +197,31 @@ internal fun QuickSettingsRow(
             )
         }
         QuickSettingItem(
-            AppIcons.Storage,
+            AppIcons.AudioTrack,
             stringResource(R.string.player_audio_track),
             onAudioClick,
             modifier = Modifier.weight(1f),
         )
         QuickSettingItem(
-            AppIcons.HelpCircle,
+            AppIcons.Subtitles,
             stringResource(R.string.player_subtitle_track),
             onSubtitlesClick,
             modifier = Modifier.weight(1f),
         )
         QuickSettingItem(
-            AppIcons.Image,
+            AppIcons.Quality,
             stringResource(R.string.player_quality),
             onQualityClick,
             modifier = Modifier.weight(1f),
         )
         QuickSettingItem(
-            AppIcons.Fullscreen,
+            AppIcons.AspectRatio,
             stringResource(R.string.player_aspect_ratio),
             onAspectRatioClick,
             modifier = Modifier.weight(1f),
         )
         QuickSettingItem(
-            AppIcons.Tv,
+            AppIcons.Guide,
             stringResource(R.string.player_tv_guide),
             onGuideClick,
             modifier = Modifier.weight(1f),
@@ -331,7 +333,7 @@ internal fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifi
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Fullscreen, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Icon(AppIcons.AspectRatio, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
         Text(
             text = stringResource(ResizeModeCycle.labelRes(mode)),
             color = Color.White,

@@ -9,10 +9,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import com.uacastplayer.ui.theme.DurEnter
+import com.uacastplayer.ui.theme.DUR_ENTER
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.EntryLift
-import com.uacastplayer.ui.theme.StaggerMs
+import com.uacastplayer.ui.theme.STAGGER_MS
 import kotlinx.coroutines.delay
 
 /** How many items get a delay before the wave flattens out - see [EntryStagger]. */
@@ -57,17 +57,20 @@ class EntryStagger internal constructor() {
  */
 @Composable
 fun Modifier.staggeredEntry(stagger: EntryStagger, key: Any, index: Int): Modifier {
+    val animate = animationsAllowed()
     // Read once per composition of this item: if it has played before (a scroll-back), the item
     // starts fully visible and no animation is scheduled at all.
     val alreadyPlayed = remember(stagger, key) { stagger.hasPlayed(key) }
-    val progress = remember(stagger, key) { Animatable(if (alreadyPlayed) 1f else 0f) }
+    val progress = remember(stagger, key, animate) {
+        Animatable(if (alreadyPlayed || !animate) 1f else 0f)
+    }
     val lift = with(LocalDensity.current) { EntryLift.toPx() }
 
     LaunchedEffect(stagger, key) {
-        if (alreadyPlayed) return@LaunchedEffect
+        if (alreadyPlayed || !animate) return@LaunchedEffect
         stagger.markPlayed(key)
-        delay(minOf(index, MAX_STAGGERED_ITEMS).toLong() * StaggerMs)
-        progress.animateTo(1f, tween(DurEnter, easing = EaseSpring))
+        delay(minOf(index, MAX_STAGGERED_ITEMS).toLong() * STAGGER_MS)
+        progress.animateTo(1f, tween(DUR_ENTER, easing = EaseSpring))
     }
 
     // graphicsLayer's lambda form: the animated value is read at draw time, so each frame of this

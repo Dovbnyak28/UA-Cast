@@ -59,8 +59,36 @@ class HlsFlattenPolicyTest {
     }
 
     @Test
+    fun `byte-range segments are refused because whole-object fetches would corrupt the stream`() {
+        val verdict = HlsFlattenPolicy.verdictFor(
+            playlist(listOf("shared.ts")).copy(hasByteRanges = true),
+        )
+
+        assertTrue(verdict is HlsFlattenPolicy.Verdict.Unsupported)
+    }
+
+    @Test
     fun `a playlist with no segments is refused`() {
         assertTrue(HlsFlattenPolicy.verdictFor(playlist(emptyList())) is HlsFlattenPolicy.Verdict.Unsupported)
+    }
+
+    @Test
+    fun `a 200 error body without EXTM3U is not accepted as a media playlist`() {
+        val parsed = HlsMediaPlaylistParser.parse("Access denied")
+
+        assertFalse(parsed.hasPlaylistHeader)
+        assertTrue(HlsFlattenPolicy.verdictFor(parsed) is HlsFlattenPolicy.Verdict.Unsupported)
+    }
+
+    @Test
+    fun `a UTF-8 BOM before EXTM3U is normalized`() {
+        val parsed = HlsMediaPlaylistParser.parse(
+            "\uFEFF#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n",
+        )
+
+        assertTrue(parsed.hasPlaylistHeader)
+        assertEquals(listOf("a.ts"), parsed.segmentUris)
+        assertEquals(HlsFlattenPolicy.Verdict.Ok, HlsFlattenPolicy.verdictFor(parsed))
     }
 
     // ---- which segments come next ----
@@ -131,11 +159,75 @@ class HlsFlattenPolicyTest {
     }
 
     @Test
+    fun `one stale CDN window does not rewind a live replay`() {
+        val cursor = HlsReplayCursor(nextSequence = 103)
+        val stale = playlist(listOf("90.ts", "91.ts"), mediaSequence = 90)
+
+        val selection = cursor.select(stale)
+
+        assertEquals(emptyList<String>(), selection.segmentUris)
+        assertFalse(selection.resetDetected)
+        assertEquals(103, selection.cursor.nextSequence)
+        assertEquals(1, selection.cursor.rollbackObservations)
+    }
+
+    @Test
+    fun `three consecutive rollback windows recover after an encoder sequence reset`() {
+        val resetWindows = listOf(
+            playlist(listOf("0.ts", "1.ts"), mediaSequence = 0),
+            playlist(listOf("1.ts", "2.ts"), mediaSequence = 1),
+            playlist(listOf("2.ts", "3.ts"), mediaSequence = 2),
+        )
+        var cursor = HlsReplayCursor(nextSequence = 103)
+
+        val selections = resetWindows.map { window ->
+            cursor.select(window).also { cursor = it.cursor.afterServing(window) }
+        }
+
+        assertEquals(emptyList<String>(), selections[0].segmentUris)
+        assertEquals(emptyList<String>(), selections[1].segmentUris)
+        assertEquals(listOf("2.ts", "3.ts"), selections[2].segmentUris)
+        assertTrue(selections[2].resetDetected)
+        assertEquals(4, cursor.nextSequence)
+        assertEquals(0, cursor.rollbackObservations)
+    }
+
+    @Test
+    fun `a current window between stale responses clears rollback evidence`() {
+        val initial = HlsReplayCursor(nextSequence = 103)
+        val stale = playlist(listOf("90.ts"), mediaSequence = 90)
+        val current = playlist(listOf("103.ts"), mediaSequence = 103)
+
+        val afterStale = initial.select(stale).cursor.afterServing(stale)
+        val recovered = afterStale.select(current)
+
+        assertEquals(listOf("103.ts"), recovered.segmentUris)
+        assertEquals(0, recovered.cursor.rollbackObservations)
+        assertFalse(recovered.resetDetected)
+    }
+
+    @Test
     fun `a playlist with no media sequence tag starts at zero`() {
         val parsed = HlsMediaPlaylistParser.parse("#EXTM3U\n#EXT-X-TARGETDURATION:8\n#EXTINF:8,\na.ts\n")
 
         assertEquals(0, parsed.mediaSequence)
         assertEquals(listOf("a.ts"), HlsFlattenPolicy.segmentsToServe(parsed, 0))
+    }
+
+    @Test
+    fun `invalid negative media sequence is normalized to the spec default`() {
+        val parsed = HlsMediaPlaylistParser.parse(
+            "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:-5\n#EXTINF:4,\na.ts\n",
+        )
+
+        assertEquals(0, parsed.mediaSequence)
+    }
+
+    @Test
+    fun `sequence end saturates instead of overflowing`() {
+        val parsed = playlist(listOf("a.ts", "b.ts"), mediaSequence = Long.MAX_VALUE)
+
+        assertEquals(Long.MAX_VALUE, parsed.nextSequenceAfter)
     }
 
     // ---- refresh pacing ----
@@ -223,6 +315,15 @@ class HlsMediaPlaylistParserTest {
         assertTrue(fmp4.hasInitSegment)
     }
 
+    @Test
+    fun `a byte-range playlist is spotted`() {
+        val parsed = HlsMediaPlaylistParser.parse(
+            "#EXTM3U\n#EXT-X-BYTERANGE:75232@0\n#EXTINF:4,\nshared.ts\n",
+        )
+
+        assertTrue(parsed.hasByteRanges)
+    }
+
     /** `METHOD=NONE` is the spec's way of switching encryption off partway through, and is not an
      * obstacle - reading it as one would refuse a stream that plays perfectly well. */
     @Test
@@ -231,6 +332,19 @@ class HlsMediaPlaylistParserTest {
 
         assertFalse(parsed.hasEncryptedSegments)
         assertEquals(HlsFlattenPolicy.Verdict.Ok, HlsFlattenPolicy.verdictFor(parsed))
+    }
+
+    @Test
+    fun `only an exact NONE key method disables encryption`() {
+        val malformed = HlsMediaPlaylistParser.parse(
+            "#EXTM3U\n#EXT-X-KEY:METHOD=NONE-SUCH\n#EXTINF:4,\na.ts\n",
+        )
+        val similarlyNamedTag = HlsMediaPlaylistParser.parse(
+            "#EXTM3U\n#EXT-X-KEYFORMAT:METHOD=AES-128\n#EXTINF:4,\na.ts\n",
+        )
+
+        assertTrue(malformed.hasEncryptedSegments)
+        assertFalse(similarlyNamedTag.hasEncryptedSegments)
     }
 
     /** A decimal target duration is against the spec but does occur - taking the whole part beats

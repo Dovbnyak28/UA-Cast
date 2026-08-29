@@ -1,9 +1,9 @@
 package com.uacastplayer.playlist
 
-sealed class PlaylistLoadResult {
-    data class Success(val text: String) : PlaylistLoadResult()
-    data object SizeLimitExceeded : PlaylistLoadResult()
-    data class HttpError(val code: Int) : PlaylistLoadResult()
+sealed interface PlaylistLoadResult {
+    data class Success(val text: String) : PlaylistLoadResult
+    data object SizeLimitExceeded : PlaylistLoadResult
+    data class HttpError(val code: Int) : PlaylistLoadResult
 
     /**
      * @param message the failing exception's class name (`e.javaClass.simpleName`), never
@@ -15,5 +15,5 @@ sealed class PlaylistLoadResult {
      *   value type is not the place to store a credential-bearing string on the strength of "nobody
      *   reads it yet".
      */
-    data class ReadError(val message: String?) : PlaylistLoadResult()
+    data class ReadError(val message: String?) : PlaylistLoadResult
 }

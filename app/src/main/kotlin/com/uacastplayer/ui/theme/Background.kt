@@ -12,11 +12,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.uacastplayer.R
 
-// How strongly the wallpaper texture shows through under the theme-color gradient - low enough
-// that card surfaces and text (drawn on top by every screen) keep the same contrast as the old
-// flat gradient; this only textures the empty space around them.
+// Keep the dark texture opaque enough to retain its own black levels, then mute it with the
+// theme-coloured overlay below. Lowering the image alpha itself reveals a much lighter intermediate
+// layer on some renderers, which is the opposite of the subdued form background we need.
 private const val WALLPAPER_ALPHA = 0.85f
-private const val OVERLAY_ALPHA = 0.3f
+private const val OVERLAY_ALPHA = 0.55f
 
 /**
  * The screen background: a decorative wallpaper image (soft ambient glow + grain, see

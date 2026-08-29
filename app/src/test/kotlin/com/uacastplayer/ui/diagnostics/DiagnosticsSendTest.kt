@@ -2,6 +2,7 @@ package com.uacastplayer.ui.diagnostics
 
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.IntentCompat
 import com.uacastplayer.diagnostics.DiagnosticsEmail
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -100,7 +101,7 @@ class DiagnosticsSendTest {
         // The same file, not merely some URI: a clip pointing anywhere else would satisfy a
         // null-check and still leave the preview reading a URI it has no grant for.
         assertEquals(attachment, clip.getItemAt(0).uri)
-        assertEquals(attachment, intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+        assertEquals(attachment, IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
     }
 
     /** The grant flag is what the clip data carries; without it the clip is a URI nobody may open. */
@@ -121,6 +122,6 @@ class DiagnosticsSendTest {
         val intent = diagnosticsEmailIntent(report)
 
         assertEquals(null, intent.clipData)
-        assertEquals(null, intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+        assertEquals(null, IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
     }
 }

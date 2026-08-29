@@ -11,7 +11,8 @@ package com.uacastplayer.core.security
  * tampering should land.
  *
  * It does not make the record unforgeable to somebody holding the key. The key lives in the Android
- * Keystore and cannot be extracted (see [LicenseIntegrity]), so it cannot be forged *offline* - but
+ * Keystore and cannot be extracted (see [com.uacastplayer.data.security.LicenseIntegrity]), so it
+ * cannot be forged *offline* - but
  * the same person can patch the check out of the APK, which the security audit records as UAC-05
  * and no client-side measure answers. This raises the cost of the easy attack; it does not claim to
  * end the argument.

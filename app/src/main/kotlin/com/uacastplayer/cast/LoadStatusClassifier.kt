@@ -12,13 +12,13 @@ package com.uacastplayer.cast
  * got it; anything else unrecognized here (15 LOAD_FAILED, 2100 FAILED, or any other code) is a
  * generic failure worth surfacing the same way.
  */
-sealed class LoadStatusOutcome {
-    abstract val statusCode: Int
-    abstract val statusName: String
+sealed interface LoadStatusOutcome {
+    val statusCode: Int
+    val statusName: String
 
-    data class Superseded(override val statusCode: Int, override val statusName: String) : LoadStatusOutcome()
-    data class Rejected(override val statusCode: Int, override val statusName: String) : LoadStatusOutcome()
-    data class Failed(override val statusCode: Int, override val statusName: String) : LoadStatusOutcome()
+    data class Superseded(override val statusCode: Int, override val statusName: String) : LoadStatusOutcome
+    data class Rejected(override val statusCode: Int, override val statusName: String) : LoadStatusOutcome
+    data class Failed(override val statusCode: Int, override val statusName: String) : LoadStatusOutcome
 }
 
 object LoadStatusClassifier {

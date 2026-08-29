@@ -9,7 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
-import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.channels.GroupsSkeletonGrid
 import com.uacastplayer.ui.theme.AppTheme

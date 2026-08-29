@@ -5,13 +5,18 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.i18n.LanguageResolver
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.guidedtour.GuidedTourStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import com.uacastplayer.performance.HeapBudget
-import com.uacastplayer.ui.theme.AppTheme
-import com.uacastplayer.core.security.LicenseIntegrity
 import com.uacastplayer.core.security.LicenseRecordCodec
+import com.uacastplayer.data.security.LicenseIntegrity
+import com.uacastplayer.favorites.FavoritesSortOrder
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseStorage
@@ -52,10 +57,11 @@ class AppPreferences(
         get() = LanguageResolver.fromStoredCode(prefs.getString(KEY_LANGUAGE, null))
         set(value) = prefs.edit { putString(KEY_LANGUAGE, value.code) }
 
-    /** Selectable visual style - see docs/DESIGN_SYSTEM.md "Themes". */
-    var appTheme: AppTheme
-        get() = AppTheme.fromId(prefs.getString(KEY_APP_THEME, null))
-        set(value) = prefs.edit { putString(KEY_APP_THEME, value.name) }
+    /** Persisted ID of the selected visual style. Mapping that ID to the UI's `AppTheme` belongs
+     * to `ui.theme.AppThemePreference`, so the data layer never depends on UI types. */
+    var appThemeId: String?
+        get() = prefs.getString(KEY_APP_THEME, null)
+        set(value) = prefs.edit { putString(KEY_APP_THEME, value) }
 
     val hasChosenLanguage: Boolean
         get() = prefs.contains(KEY_LANGUAGE)

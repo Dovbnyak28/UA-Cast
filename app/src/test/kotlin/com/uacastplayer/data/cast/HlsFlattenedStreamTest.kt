@@ -4,12 +4,21 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.LockSupport
+import kotlin.concurrent.thread
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,7 +55,12 @@ class HlsFlattenedStreamTest {
      * anything else gives a playlist whose segment this origin answers 404 to - a channel listed but
      * not deliverable, which is a real and common state for an IPTV origin.
      */
-    private class Origin(private val segmentPath: String = "/a.ts") : AutoCloseable {
+    private class Origin(
+        private val segmentPath: String = "/a.ts",
+        private val segmentBytes: Int = SEGMENT_BYTES,
+        private val segmentPayload: ByteArray? = null,
+        private val playlistOverride: String? = null,
+    ) : AutoCloseable {
         private val socket = ServerSocket(0)
         private val worker = Executors.newCachedThreadPool()
         private val hits = mutableMapOf<String, AtomicInteger>()
@@ -56,7 +70,7 @@ class HlsFlattenedStreamTest {
         fun hitsFor(path: String): Int = synchronized(hits) { hits[path]?.get() ?: 0 }
 
         /** No `#EXT-X-ENDLIST`: genuinely live, so a loop with nothing to stop it polls forever. */
-        private fun playlist() = buildString {
+        private fun playlist() = playlistOverride ?: buildString {
             appendLine("#EXTM3U")
             appendLine("#EXT-X-TARGETDURATION:1")
             appendLine("#EXT-X-MEDIA-SEQUENCE:1")
@@ -86,7 +100,11 @@ class HlsFlattenedStreamTest {
                 synchronized(hits) { hits.getOrPut(path) { AtomicInteger(0) }.incrementAndGet() }
                 val (status, type, body) = when (path) {
                     "/live.m3u8" -> Triple("200 OK", "application/vnd.apple.mpegurl", playlist().toByteArray())
-                    "/a.ts" -> Triple("200 OK", "video/mp2t", ByteArray(SEGMENT_BYTES) { 0x47 })
+                    "/a.ts" -> Triple(
+                        "200 OK",
+                        "video/mp2t",
+                        segmentPayload ?: ByteArray(segmentBytes) { 0x47 },
+                    )
                     else -> Triple("404 Not Found", "text/plain", ByteArray(0))
                 }
                 val out = it.getOutputStream()
@@ -176,6 +194,59 @@ class HlsFlattenedStreamTest {
         assertEquals("headers went out before a single byte was known to exist", 0, headers)
         assertEquals(0L, stream.bytesWritten)
         assertEquals("it should not have polled for a second pass", 1, origin.hitsFor("/live.m3u8"))
+    }
+
+    @Test
+    fun `an empty successful segment does not commit an empty flattened response`() {
+        val origin = Origin(segmentBytes = 0).also { this.origin = it }
+        var headers = 0
+        var passes = 0
+        val stream = streamFor(origin) { passes++ < ALIVE_PASSES }
+
+        val wrote = stream.writeTo(ByteArrayOutputStream()) { headers++ }
+
+        assertTrue("the empty HTTP 200 was treated as playable media", !wrote)
+        assertEquals("headers went out before a single byte existed", 0, headers)
+        assertEquals(0L, stream.bytesWritten)
+        assertEquals(1, origin.hitsFor("/a.ts"))
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
+    }
+
+    @Test
+    fun `an HTTP 200 error page does not commit a fake MPEG TS response`() {
+        val origin = Origin(segmentPayload = "<html>token expired</html>".toByteArray())
+            .also { this.origin = it }
+        var headers = 0
+        var passes = 0
+        val stream = streamFor(origin) { passes++ < ALIVE_PASSES }
+
+        val wrote = stream.writeTo(ByteArrayOutputStream()) { headers++ }
+
+        assertFalse("an arbitrary 200 body was advertised as MPEG-TS", wrote)
+        assertEquals(0, headers)
+        assertEquals(0L, stream.bytesWritten)
+        assertEquals(1, origin.hitsFor("/a.ts"))
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
+    }
+
+    @Test
+    fun `an oversized playlist is rejected before it can commit the flattened route`() {
+        val origin = Origin(playlistOverride = "#EXTM3U\n" + "x".repeat(TEST_PLAYLIST_LIMIT_BYTES))
+            .also { this.origin = it }
+        val stream = HlsFlattenedStream(
+            httpClient = client,
+            playlistUrl = origin.urlFor("/live.m3u8"),
+            userAgent = "test",
+            referrer = null,
+            isRunning = { true },
+            maxPlaylistBytes = TEST_PLAYLIST_LIMIT_BYTES,
+        )
+
+        val wrote = stream.writeTo(ByteArrayOutputStream()) { }
+
+        assertFalse("an oversized manifest was accepted into the replay route", wrote)
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
+        assertEquals(0, origin.hitsFor("/a.ts"))
     }
 
     /**
@@ -284,8 +355,61 @@ class HlsFlattenedStreamTest {
         assertEquals(SEGMENT_BYTES.toLong(), stream.bytesWritten)
     }
 
+    @Test
+    fun `stop cancels an upstream segment call blocked on its response`() {
+        val segmentStarted = CountDownLatch(1)
+        val segmentCancelled = CountDownLatch(1)
+        val playlist = """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:1
+            #EXT-X-MEDIA-SEQUENCE:1
+            #EXTINF:1.0,
+            https://origin.example/a.ts
+        """.trimIndent()
+        val blockingClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (chain.request().url.encodedPath.endsWith(".m3u8")) {
+                    Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(playlist.toResponseBody("application/vnd.apple.mpegurl".toMediaType()))
+                        .build()
+                } else {
+                    segmentStarted.countDown()
+                    while (!chain.call().isCanceled()) {
+                        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10))
+                    }
+                    segmentCancelled.countDown()
+                    throw IOException("cancelled segment")
+                }
+            }
+            .build()
+        val stream = HlsFlattenedStream(
+            httpClient = blockingClient,
+            playlistUrl = "https://origin.example/live.m3u8",
+            userAgent = "test",
+            referrer = null,
+            isRunning = { true },
+        )
+        val result = AtomicReference<Boolean?>()
+        val worker = thread(name = "flattened-stream-cancellation-test") {
+            result.set(stream.writeTo(ByteArrayOutputStream()) { })
+        }
+
+        assertTrue("segment request never started", segmentStarted.await(3, TimeUnit.SECONDS))
+        stream.stop()
+
+        assertTrue("stop left the upstream Call active", segmentCancelled.await(1, TimeUnit.SECONDS))
+        worker.join(TimeUnit.SECONDS.toMillis(1))
+        assertFalse("flattened replay worker did not exit", worker.isAlive)
+        assertEquals(false, result.get())
+    }
+
     private companion object {
         const val SEGMENT_BYTES = 188 * 4
+        const val TEST_PLAYLIST_LIMIT_BYTES = 64
 
         /** Enough passes to prove the loop came back for more, short enough to keep the test quick
          * at the 500ms refresh floor. */

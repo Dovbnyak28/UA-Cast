@@ -17,7 +17,7 @@ class FingerprintTest {
 
     @Test
     fun `output stays plain ASCII hex under a non-ASCII-digit default locale`() {
-        Locale.setDefault(Locale("ar"))
+        Locale.setDefault(Locale.forLanguageTag("ar"))
         val digest = Fingerprint.of("http://example.com/playlist.m3u")
         assertEquals(64, digest.length)
         assertEquals(true, digest.all { it in "0123456789abcdef" })
@@ -34,7 +34,10 @@ class FingerprintTest {
 
     @Test
     fun `is deterministic for the same input`() {
-        assertEquals(Fingerprint.of("http://example.com/playlist.m3u"), Fingerprint.of("http://example.com/playlist.m3u"))
+        assertEquals(
+            Fingerprint.of("http://example.com/playlist.m3u"),
+            Fingerprint.of("http://example.com/playlist.m3u"),
+        )
     }
 
     @Test

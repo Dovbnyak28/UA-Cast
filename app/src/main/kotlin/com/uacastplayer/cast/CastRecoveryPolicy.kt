@@ -2,10 +2,10 @@ package com.uacastplayer.cast
 
 /** What to do about a receiver that went IDLE (ERROR, or FINISHED - which for this app's
  * exclusively-live channels always means an unexpected drop, never a legitimate end of content). */
-sealed class CastRecoveryDecision {
-    data class Reload(val attempt: Int, val backoffMillis: Long) : CastRecoveryDecision()
-    data object GiveUp : CastRecoveryDecision()
-    data object Ignore : CastRecoveryDecision()
+sealed interface CastRecoveryDecision {
+    data class Reload(val attempt: Int, val backoffMillis: Long) : CastRecoveryDecision
+    data object GiveUp : CastRecoveryDecision
+    data object Ignore : CastRecoveryDecision
 }
 
 /**

@@ -215,6 +215,31 @@ class PlaylistControllerRemovalTest {
         }
     }
 
+    @Test
+    fun `leaving add flow cancels unsaved source and leaves no orphan snapshot`() {
+        HeldServer().use { server ->
+            val loads = Loads()
+            val controller = controllerFor(loads)
+
+            controller.loadPlaylistFromUrl(server.url)
+            assertTrue(
+                "the pending source should have reached its server",
+                server.requestReceived.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
+
+            controller.cancelPendingSourceAdd()
+            server.release()
+
+            assertFalse(
+                "an abandoned add must not leave a snapshot no saved source can name",
+                awaitFile(snapshotFileFor(server.url), ABSENCE_WAIT_MILLIS),
+            )
+            assertFalse(controller.playlistState.value.isLoading)
+            assertEquals(0, loads.loaded.get())
+            assertTrue(controller.playlistSources.value.isEmpty())
+        }
+    }
+
     private companion object {
         const val HOLD_TIMEOUT_SECONDS = 10L
 

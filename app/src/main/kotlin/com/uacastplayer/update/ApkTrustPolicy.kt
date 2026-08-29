@@ -14,12 +14,10 @@ package com.uacastplayer.update
  * the user's playlist and their purchase. A signer mismatch there is not a curiosity to report and
  * carry on from - it is the point at which the file stops being an update.
  *
- * **Set equality, not overlap, and deliberately strict about one case.** An app signed by a
- * rotated key reports its *current* signer, on both sides, so an ordinary update compares equal.
- * A key rotation itself would not: the new APK would carry the new signer while the installed copy
- * still carries the old, and this refuses it. That is the safe direction and the honest one - a
- * rotation is a thing to do deliberately, through a release note and a manual install, not
- * something an automatic updater should wave through because the certificates were "related".
+ * Multi-signer APKs require exact current-signer equality. A single-signer APK may rotate its key:
+ * Android verifies the proof-of-rotation embedded in the candidate and exposes the authenticated
+ * chain through `SigningInfo.signingCertificateHistory`. The old installed signer must occur in
+ * that chain; mere overlap between two unauthenticated sets is never enough.
  *
  * Empty on either side is refused rather than treated as "nothing to compare". An APK whose
  * signature could not be read is not one to install, and an installed copy with no readable signer
@@ -27,7 +25,15 @@ package com.uacastplayer.update
  */
 object ApkTrustPolicy {
 
-    /** [installed] and [candidate] are the SHA-256 digests of each side's signing certificates. */
-    fun isSameSigner(installed: Set<String>, candidate: Set<String>): Boolean =
-        installed.isNotEmpty() && installed == candidate
+    /** All values are SHA-256 digests of signing certificates. [candidateHistory] must be the
+     * platform-verified proof-of-rotation history, not a list assembled from untrusted metadata. */
+    fun isTrustedUpdate(
+        installedCurrent: Set<String>,
+        candidateCurrent: Set<String>,
+        candidateHistory: Set<String>,
+    ): Boolean = installedCurrent.isNotEmpty() && candidateCurrent.isNotEmpty() &&
+        (installedCurrent == candidateCurrent ||
+            (installedCurrent.size == 1 && candidateCurrent.size == 1 &&
+                candidateHistory.containsAll(installedCurrent) &&
+                candidateHistory.containsAll(candidateCurrent)))
 }

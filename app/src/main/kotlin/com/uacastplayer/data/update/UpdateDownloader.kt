@@ -2,7 +2,10 @@ package com.uacastplayer.data.update
 
 import android.content.Context
 import androidx.annotation.VisibleForTesting
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.net.AppHttp
+import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.core.security.FileDigest
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.core.security.Hex
@@ -13,9 +16,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -70,6 +71,7 @@ class UpdateDownloader(
      * proving the real 300MB one would measure the disk rather than the rule. Every caller in the
      * app takes the default. */
     private val maxBytes: Long = MAX_APK_BYTES,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
     private val appContext = context.applicationContext
 
@@ -86,7 +88,7 @@ class UpdateDownloader(
      *   rather than as a percentage of nothing.
      */
     suspend fun download(apk: ReleaseApk, onProgress: (Long, Long) -> Unit = { _, _ -> }): UpdateDownload =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             deleteStaleDownloads()
             if (!directory.isDirectory && !directory.mkdirs()) {
                 AppLog.w(TAG) { "Cannot create the update cache directory" }
@@ -108,19 +110,27 @@ class UpdateDownloader(
     private suspend fun fetch(apk: ReleaseApk, destination: File, onProgress: (Long, Long) -> Unit): UpdateDownload {
         val partial = File(destination.parentFile, destination.name + PART_SUFFIX)
         return try {
-            httpClient.newCall(Request.Builder().url(apk.downloadUrl).build()).execute().use { response ->
+            httpClient.newCall(Request.Builder().url(apk.downloadUrl).build()).executeCancellable { response ->
                 if (!response.isSuccessful) {
                     AppLog.w(TAG) { "Update download refused: HTTP ${response.code}" }
-                    return UpdateDownload.Failed
-                }
-                when (val copied = copyHashing(response.body.byteStream(), partial, apk.sizeBytes, onProgress)) {
-                    null -> UpdateDownload.TooLarge
-                    else -> publish(apk, partial, destination, copied)
+                    UpdateDownload.Failed
+                } else {
+                    when (val copied = copyHashing(response.body.byteStream(), partial, apk.sizeBytes, onProgress)) {
+                        null -> UpdateDownload.TooLarge
+                        else -> publish(apk, partial, destination, copied)
+                    }
                 }
             }
         } catch (e: CancellationException) {
             partial.delete()
             throw e
+        } catch (e: IllegalArgumentException) {
+            // Release metadata is external input. A malformed asset URL fails while OkHttp builds
+            // the request, before a network IOException exists; it is an ordinary failed update,
+            // not an uncaught exception in the controller's coroutine.
+            AppLog.w(TAG) { "Update download URL rejected: ${e.javaClass.simpleName}" }
+            partial.delete()
+            UpdateDownload.Failed
         } catch (e: IOException) {
             AppLog.w(TAG) { "Update download failed: ${e.javaClass.simpleName}" }
             partial.delete()
@@ -179,7 +189,7 @@ class UpdateDownloader(
 
     /** Bytes written, or null once past the cap - at which point the partial file is the caller's
      * to delete, which [fetch]'s `finally` does. */
-    private suspend fun copyHashing(
+    private fun copyHashing(
         input: InputStream,
         destination: File,
         declaredTotal: Long,
@@ -190,10 +200,8 @@ class UpdateDownloader(
         var total = 0L
         destination.outputStream().use { out ->
             while (true) {
-                // Cancelling a coroutine does not interrupt a thread inside a socket read, but it
-                // does stop this from reading the *next* chunk - which is what makes a download the
-                // user walked away from stop within one chunk instead of running to completion.
-                if (!currentCoroutineContext().isActive) throw CancellationException("Update download cancelled")
+                // executeCancellable owns the Call around this loop, so cancellation closes the
+                // socket even while this read itself is waiting for the next network packet.
                 val read = input.read(chunk)
                 if (read == -1) break
                 total += read
@@ -223,7 +231,7 @@ class UpdateDownloader(
                 file.lastModified() < cutoff
         } ?: return
         for (file in stale) {
-            runCatching { file.delete() }
+            runCatchingNonFatal { file.delete() }
         }
     }
 

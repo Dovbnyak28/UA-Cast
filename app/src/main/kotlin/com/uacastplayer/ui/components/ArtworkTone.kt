@@ -1,6 +1,7 @@
 package com.uacastplayer.ui.components
 
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -10,11 +11,13 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.icons.ArtworkTonePolicy
 import com.uacastplayer.playlist.M3uChannel
 import java.io.File
-import kotlinx.coroutines.Dispatchers
+import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 /** Longest edge the logo is decoded down to before its pixels are counted. */
@@ -40,14 +43,37 @@ private const val TONE_MAX_SATURATION = 0.55f
  * near-black for one channel and glaring for the next.
  */
 @Composable
-fun rememberArtworkTone(channel: M3uChannel, resolveIcon: suspend (M3uChannel) -> File?): Color? {
+fun rememberArtworkTone(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+): Color? {
     val tone by produceState<Color?>(initialValue = null, key1 = channel.streamUrl) {
-        value = withContext(Dispatchers.IO) {
-            val file = runCatching { resolveIcon(channel) }.getOrNull() ?: return@withContext null
+        value = withContext(ioDispatcher) {
+            val file = resolveArtworkToneFile(channel, resolveIcon) ?: return@withContext null
             sampleTone(file)
         }
     }
     return tone
+}
+
+/**
+ * Resolves the file without turning coroutine cancellation into "there is no colour".
+ *
+ * `runCatching` used to sit here, but it catches every [Throwable], including
+ * `CancellationException`. When Compose replaced the producer on a quick channel switch, the old
+ * producer could therefore continue into bitmap decoding and publish a stale result. The icon
+ * repository already converts expected network failures to null; this last boundary only keeps a
+ * defensive [IOException] from an alternative resolver from taking down the player UI.
+ */
+internal suspend fun resolveArtworkToneFile(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+): File? = try {
+    resolveIcon(channel)
+} catch (e: IOException) {
+    AppLog.w(TAG) { "Artwork file resolution failed: ${e.javaClass.simpleName}" }
+    null
 }
 
 private fun sampleTone(file: File): Color? {
@@ -64,21 +90,34 @@ private fun sampleTone(file: File): Color? {
  * A corrupt or half-written cache file throws out of the decoder rather than returning null, and
  * this runs on every channel change - one bad file must not take the player down with it.
  */
-private fun samplePixels(file: File): IntArray? = runCatching {
+private fun samplePixels(file: File): IntArray? = try {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(file.path, bounds)
     val longestEdge = maxOf(bounds.outWidth, bounds.outHeight)
-    if (longestEdge <= 0) return@runCatching null
+    if (longestEdge <= 0) {
+        null
+    } else {
+        decodeSampledBitmap(file, longestEdge)?.let(::copyPixelsAndRecycle)
+    }
+} catch (e: IllegalArgumentException) {
+    AppLog.w(TAG) { "Artwork bitmap sampling failed: ${e.javaClass.simpleName}" }
+    null
+}
 
+private fun decodeSampledBitmap(file: File, longestEdge: Int): Bitmap? {
     val options = BitmapFactory.Options().apply {
         inSampleSize = maxOf(1, longestEdge / TONE_SAMPLE_EDGE)
     }
-    val bitmap = BitmapFactory.decodeFile(file.path, options) ?: return@runCatching null
+    return BitmapFactory.decodeFile(file.path, options)
+}
+
+private fun copyPixelsAndRecycle(bitmap: Bitmap): IntArray = try {
     IntArray(bitmap.width * bitmap.height).also { pixels ->
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        bitmap.recycle()
     }
-}.getOrNull()
+} finally {
+    bitmap.recycle()
+}
 
 private const val TAG = "ArtworkTone"
 

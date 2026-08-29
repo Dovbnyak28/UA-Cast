@@ -3,6 +3,7 @@ package com.uacastplayer.app
 import com.uacastplayer.core.security.PinHasher
 import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -17,11 +18,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-private class FakeLockedChannelsStorage(initial: Set<String> = emptySet()) : LockedChannelsStorage {
+private class FakeLockedChannelsStorage(
+    initial: Set<String> = emptySet(),
+    private val loadGate: CompletableDeferred<Unit>? = null,
+) : LockedChannelsStorage {
     var saved: Set<String> = initial
         private set
 
-    override suspend fun load(): Set<String> = saved
+    override suspend fun load(): Set<String> {
+        val snapshot = saved
+        loadGate?.await()
+        return snapshot
+    }
 
     override suspend fun save(keys: Set<String>) {
         saved = keys
@@ -48,6 +56,20 @@ class ParentalControlControllerTest {
         storage: LockedChannelsStorage = FakeLockedChannelsStorage(),
         pins: ParentalControlPinStorage = FakePinStorage(),
     ) = ParentalControlController(storage, pins, TestScope(dispatcher), hashingDispatcher = dispatcher)
+
+    @Test
+    fun `late initial read cannot overwrite a lock made while disk IO was pending`() = runTest(dispatcher) {
+        val loadGate = CompletableDeferred<Unit>()
+        val storage = FakeLockedChannelsStorage(initial = setOf("old"), loadGate = loadGate)
+        val controller = controller(storage)
+        controller.loadInitial()
+
+        controller.lockChannel("new")
+        loadGate.complete(Unit)
+
+        assertEquals(setOf("old", "new"), controller.lockedKeys.value)
+        assertEquals(setOf("old", "new"), storage.saved)
+    }
 
     @Test
     fun `locking a channel needs no PIN and persists immediately`() = runTest(dispatcher) {

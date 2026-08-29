@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,10 +46,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
-import com.uacastplayer.data.prefs.ChannelLayout
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.epg.CurrentNextProgrammes
 import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
@@ -70,11 +72,11 @@ import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.ItemPadding
-import com.uacastplayer.ui.theme.PressScaleRound
+import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
 import com.uacastplayer.ui.theme.RadiusField
 import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.Title
@@ -103,11 +105,15 @@ internal fun SingleGroupChannelList(
 ) {
     var query by rememberSaveable(groupDisplayKey(grouped.group)) { mutableStateOf("") }
     val trimmedQuery = rememberDebounced(query.trim())
-    val filteredChannels = remember(grouped.channels, trimmedQuery) {
-        if (trimmedQuery.isEmpty()) {
+    val filteredChannels by produceState(grouped.channels, grouped.channels, trimmedQuery) {
+        value = if (trimmedQuery.isEmpty()) {
             grouped.channels
         } else {
-            grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
+            // One provider can put every channel in a single group. Filtering that list belongs
+            // beside whole-playlist search, not in the composition that draws the text field.
+            withPlaylistCpu {
+                grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
+            }
         }
     }
     // Replays when the filter changes: a search that narrows 400 rows to 3 is new content arriving,
@@ -219,7 +225,11 @@ internal fun SingleGroupChannelList(
                 }
             }
         } else {
-            val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth
+            val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) {
+                ChannelTileMinWidthLarge
+            } else {
+                ChannelTileMinWidth
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(tileMinWidth),
                 modifier = Modifier.fillMaxSize().padding(top = GapM),
@@ -318,8 +328,8 @@ private fun ChannelRow(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScaleRound else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed) PRESS_SCALE_ROUND else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "channelRowScale",
     )
     Row(
@@ -392,12 +402,6 @@ private fun ChannelRow(
                 tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
             )
         }
-        Icon(
-            AppIcons.ChevronDown,
-            contentDescription = null,
-            tint = UaTheme.palette.labelSecondary,
-            modifier = Modifier.size(16.dp).padding(start = 2.dp),
-        )
     }
 }
 

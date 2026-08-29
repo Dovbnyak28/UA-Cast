@@ -200,6 +200,10 @@ class PlayBillingProvider(
 
     private fun toProduct(details: ProductDetails): BillingProduct? {
         val tier = PremiumProducts.tierFor(details.productId) ?: return null
+        val selectedOffer = details.subscriptionOfferDetails
+            ?.firstOrNull { offer ->
+                offer.pricingPhases.pricingPhaseList.lastOrNull()?.formattedPrice?.isNotBlank() == true
+            }
         val price = details.oneTimePurchaseOfferDetails?.formattedPrice
             // The *last* pricing phase, not the first. A base plan with an introductory offer -
             // a free first month, a discounted first year, both of which Play pushes hard - arrives
@@ -207,14 +211,15 @@ class PlayBillingProvider(
             // print "0,00 ₴" as the price of a monthly subscription: technically what they pay
             // today, and a lie about what they are agreeing to. Never formatted here - Play has
             // already applied the user's currency and regional pricing.
-            ?: details.subscriptionOfferDetails
-                ?.firstOrNull()
-                ?.pricingPhases
-                ?.pricingPhaseList
-                ?.lastOrNull()
-                ?.formattedPrice
+            ?: selectedOffer?.pricingPhases?.pricingPhaseList?.lastOrNull()?.formattedPrice
             ?: return null
-        return BillingProduct(id = details.productId, tier = tier, title = details.title, formattedPrice = price)
+        return BillingProduct(
+            id = details.productId,
+            tier = tier,
+            title = details.title,
+            formattedPrice = price,
+            offerToken = selectedOffer?.offerToken,
+        )
     }
 
     override suspend fun purchase(product: BillingProduct, launchContext: Any?): PurchaseResult {
@@ -223,7 +228,8 @@ class PlayBillingProvider(
         val paramsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details)
         // Subscriptions are bought as a specific offer; one-time products have none and setting a
         // token on them is rejected.
-        details.subscriptionOfferDetails?.firstOrNull()?.offerToken?.let(paramsBuilder::setOfferToken)
+        (product.offerToken ?: details.subscriptionOfferDetails?.firstOrNull()?.offerToken)
+            ?.let(paramsBuilder::setOfferToken)
         val flow = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(paramsBuilder.build()))
             .build()

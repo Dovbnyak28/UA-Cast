@@ -1,11 +1,10 @@
 package com.uacastplayer.diagnostics
 
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.IconDisplayMode
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.log.LogEntry
 import com.uacastplayer.log.LogLevel
 import com.uacastplayer.performance.DeviceTier
-import com.uacastplayer.ui.theme.AppTheme
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,7 +18,7 @@ class DiagnosticsReportBuilderTest {
         deviceTier = DeviceTier.MID_RANGE,
         bufferSize = BufferSize.MEDIUM,
         iconDisplayMode = IconDisplayMode.CACHE,
-        appTheme = AppTheme.AZURE,
+        appThemeId = "AZURE",
         usedMemoryBytes = 100L * 1024 * 1024,
         totalMemoryBytes = 200L * 1024 * 1024,
         maxMemoryBytes = 512L * 1024 * 1024,

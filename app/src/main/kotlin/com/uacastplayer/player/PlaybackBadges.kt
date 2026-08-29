@@ -5,13 +5,23 @@ enum class AudioChannelLayout { MONO, STEREO, SURROUND_5_1, SURROUND_7_1, OTHER 
 /** Badges derived from the actively playing track's *measured* format - never guessed. */
 object PlaybackBadges {
 
+    private const val UHD_HEIGHT = 2160
+    private const val QHD_HEIGHT = 1440
+    private const val FULL_HD_HEIGHT = 1080
+    private const val HD_HEIGHT = 720
+    private const val SD_HEIGHT = 480
+    private const val MONO_CHANNEL_COUNT = 1
+    private const val STEREO_CHANNEL_COUNT = 2
+    private const val SURROUND_5_1_CHANNEL_COUNT = 6
+    private const val SURROUND_7_1_CHANNEL_COUNT = 8
+
     fun qualityLabel(height: Int): String? = when {
         height <= 0 -> null
-        height >= 2160 -> "4K"
-        height >= 1440 -> "1440p"
-        height >= 1080 -> "1080p"
-        height >= 720 -> "720p"
-        height >= 480 -> "480p"
+        height >= UHD_HEIGHT -> "4K"
+        height >= QHD_HEIGHT -> "1440p"
+        height >= FULL_HD_HEIGHT -> "1080p"
+        height >= HD_HEIGHT -> "720p"
+        height >= SD_HEIGHT -> "480p"
         else -> "${height}p"
     }
 
@@ -53,10 +63,10 @@ object PlaybackBadges {
     }
 
     fun channelLayout(channelCount: Int): AudioChannelLayout = when (channelCount) {
-        1 -> AudioChannelLayout.MONO
-        2 -> AudioChannelLayout.STEREO
-        6 -> AudioChannelLayout.SURROUND_5_1
-        8 -> AudioChannelLayout.SURROUND_7_1
+        MONO_CHANNEL_COUNT -> AudioChannelLayout.MONO
+        STEREO_CHANNEL_COUNT -> AudioChannelLayout.STEREO
+        SURROUND_5_1_CHANNEL_COUNT -> AudioChannelLayout.SURROUND_5_1
+        SURROUND_7_1_CHANNEL_COUNT -> AudioChannelLayout.SURROUND_7_1
         else -> AudioChannelLayout.OTHER
     }
 }
