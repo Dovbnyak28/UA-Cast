@@ -1,9 +1,33 @@
 # Changelog
 
-Versions are marked in two places, which must move together: the local defaults in
-`app/build.gradle.kts` and `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`. CI appends
-its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.2.<run>` with a
-`versionCode` of the run number - the values below are what a local build produces.
+Versions are marked in three places, which must move together: the local defaults in
+`app/build.gradle.kts`, `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
+changelog. CI appends its run number to both build values (see `docs/RELEASING.md`), so a CI
+artifact reads `0.9.3.<run>` with a `versionCode` of the run number - the values below are what a
+local build produces.
+
+## 0.9.3
+
+`versionCode` 12. Patch fixes after v0.9.2; no new user-facing capability is introduced.
+
+### Fixed
+
+- **Cast recovery could reload after the receiver had already recovered.** Scheduled recovery is
+  now tied to the active session identity, so a stale callback cannot interrupt healthy playback.
+- **A debounced channel switch could target an old playlist.** Pending work is invalidated when
+  the playlist changes, preventing a late switch from opening the wrong stream.
+- **Playlist failures could retain credentials in diagnostic state.** Network error details now
+  keep only the exception type rather than the provider URL and its query parameters.
+- **Icon prefetch progress could lose increments under real concurrency.** Progress updates are
+  atomic, and equivalent resolver candidates are deduplicated before work starts.
+- **Logo cache state could outlive custom-source changes or disk trimming.** Memory entries are
+  invalidated whenever the underlying source or disk cache changes.
+
+### Changed
+
+- The full Android CI gate now runs successfully across unit, screenshot, quality, release and
+  API 24/30/36 instrumentation jobs. A manual `workflow_dispatch` entry point is available for
+  release-candidate verification.
 
 ## 0.9.2
 

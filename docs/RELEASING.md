@@ -129,7 +129,7 @@ means nothing about content.
 
 ### What 1.0.0 waits for
 
-The current version is 0.9.2 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
+The current version is 0.9.3 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
 
 1. **The app has run on hardware nobody here chose.** Every device it has been verified on - one
    Xiaomi phone, one Samsung UE40KU6000, one Chromecast 4th gen - belongs to its author. A first
