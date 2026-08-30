@@ -83,7 +83,10 @@ object ApkSignatureGate {
 
     @Suppress("DEPRECATION")
     private fun signingFlags(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        PackageManager.GET_SIGNING_CERTIFICATES
+        // Some OEM PackageManager implementations populate only the legacy `signatures` field
+        // for an archive (even on P+). Request both representations so the compatibility fallback
+        // below can still verify a same-key update; the modern signingInfo path remains preferred.
+        PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
     } else {
         PackageManager.GET_SIGNATURES
     }
@@ -96,7 +99,7 @@ object ApkSignatureGate {
     @Suppress("DEPRECATION")
     private fun digestsOf(info: PackageInfo): Set<String> {
         val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.signingInfo?.apkContentsSigners
+            info.signingInfo?.apkContentsSigners?.takeIf { it.isNotEmpty() } ?: info.signatures
         } else {
             info.signatures
         }
@@ -111,10 +114,11 @@ object ApkSignatureGate {
     private fun signingHistoryOf(info: PackageInfo): Set<String> {
         val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val signingInfo = info.signingInfo
-            if (signingInfo?.hasMultipleSigners() == true) {
-                signingInfo.apkContentsSigners
-            } else {
-                signingInfo?.signingCertificateHistory
+            when {
+                signingInfo == null -> info.signatures
+                signingInfo.hasMultipleSigners() -> signingInfo.apkContentsSigners
+                !signingInfo.signingCertificateHistory.isNullOrEmpty() -> signingInfo.signingCertificateHistory
+                else -> info.signatures
             }
         } else {
             info.signatures

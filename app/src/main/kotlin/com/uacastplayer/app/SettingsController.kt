@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.update
 class SettingsController(
     private val preferences: AppPreferences,
     iconSources: IconSourceController,
-    private val baseDeviceTier: DeviceTier,
+    baseDeviceTier: DeviceTier,
 ) {
     private val _settingsState = MutableStateFlow(
         SettingsUiState(

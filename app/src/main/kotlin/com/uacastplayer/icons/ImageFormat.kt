@@ -18,7 +18,6 @@ object ImageFormatDetector {
     private const val AVIF_MIN_HEADER_BYTES = 16
     private const val AVIF_FTYP_OFFSET = 4
     private const val AVIF_MAJOR_BRAND_OFFSET = 8
-    private const val AVIF_COMPATIBLE_BRANDS_OFFSET = 16
 
     private val png = byteArrayOf(
         PNG_LEADING_BYTE.toByte(),

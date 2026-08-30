@@ -25,20 +25,27 @@ RUNNER="$PACKAGE.test/androidx.test.runner.AndroidJUnitRunner"
 APP_APK="app/build/outputs/apk/debug/app-universal-debug.apk"
 TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 
-if [ -z "$(adb devices | sed '1d' | grep -w device || true)" ]; then
-    echo "run-instrumented-tests: no device or emulator attached" >&2
+mapfile -t authorized_devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+if [ "${#authorized_devices[@]}" -eq 0 ]; then
+    echo "run-instrumented-tests: no authorized device or emulator attached" >&2
     exit 1
 fi
+if [ "${#authorized_devices[@]}" -gt 1 ]; then
+    printf 'run-instrumented-tests: expected one authorized device, found: %s\n' \
+        "${authorized_devices[*]}" >&2
+    exit 1
+fi
+DEVICE_SERIAL="${authorized_devices[0]}"
 
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
 
 # The debug variant is split per ABI (see the splits block in app/build.gradle.kts), so there is no
 # plain app-debug.apk - the universal one is the only build that fits any device.
-adb install -r "$APP_APK"
-adb install -r "$TEST_APK"
+adb -s "$DEVICE_SERIAL" install -r "$APP_APK"
+adb -s "$DEVICE_SERIAL" install -r "$TEST_APK"
 
 echo "Running $RUNNER"
-output=$(adb shell am instrument -w "$RUNNER" 2>&1)
+output=$(adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1)
 echo "$output"
 
 if printf '%s' "$output" | grep -q "FAILURES!!!"; then
