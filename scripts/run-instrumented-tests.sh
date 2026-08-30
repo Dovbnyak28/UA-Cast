@@ -30,12 +30,23 @@ if [ "${#authorized_devices[@]}" -eq 0 ]; then
     echo "run-instrumented-tests: no authorized device or emulator attached" >&2
     exit 1
 fi
-if [ "${#authorized_devices[@]}" -gt 1 ]; then
+if [ -n "${ADB_SERIAL:-}" ]; then
+    if ! printf '%s\n' "${authorized_devices[@]}" | grep -Fxq "$ADB_SERIAL"; then
+        printf 'run-instrumented-tests: ADB_SERIAL is not an authorized device: %s\n' \
+            "$ADB_SERIAL" >&2
+        printf 'run-instrumented-tests: authorized devices: %s\n' \
+            "${authorized_devices[*]}" >&2
+        exit 1
+    fi
+    DEVICE_SERIAL="$ADB_SERIAL"
+elif [ "${#authorized_devices[@]}" -gt 1 ]; then
     printf 'run-instrumented-tests: expected one authorized device, found: %s\n' \
         "${authorized_devices[*]}" >&2
+    echo "run-instrumented-tests: set ADB_SERIAL to choose one" >&2
     exit 1
+else
+    DEVICE_SERIAL="${authorized_devices[0]}"
 fi
-DEVICE_SERIAL="${authorized_devices[0]}"
 
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
 
