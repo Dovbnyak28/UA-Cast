@@ -27,12 +27,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.cast.CastStatusMessage
-import com.uacastplayer.cast.CodecDisplayName
+import com.uacastplayer.player.PlayerCastStatusMessage
+import com.uacastplayer.core.cast.CodecDisplayName
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.CastPeerIconGlyphSize
 import com.uacastplayer.ui.components.SecondaryButton
@@ -142,7 +143,10 @@ private fun InlinePlayerHeader(
             SmallRoundIconButton(
                 icon = AppIcons.Favorites,
                 onClick = { actions.onToggleFavorite(channel) },
-                contentDescription = stringResource(R.string.favorites_title),
+                contentDescription = stringResource(
+                    if (actions.isFavorite(channel)) R.string.channels_channel_remove_favorite
+                    else R.string.channels_channel_add_favorite,
+                ),
                 tint = if (actions.isFavorite(channel)) {
                     UaTheme.palette.azure
                 } else {
@@ -154,7 +158,9 @@ private fun InlinePlayerHeader(
         SmallRoundIconButton(
             icon = AppIcons.CastToTv,
             onClick = { transientState.showDlnaSheet = true },
-            contentDescription = stringResource(R.string.player_dlna_cast),
+            contentDescription = stringResource(
+                if (dlnaConnected) R.string.player_dlna_connected else R.string.player_dlna_cast,
+            ),
             tint = if (dlnaConnected) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
             iconSize = CastPeerIconGlyphSize,
             modifier = Modifier.liveRing(active = dlnaConnected, color = UaTheme.palette.azure),
@@ -184,6 +190,8 @@ private fun InlineVideoPanel(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.player_toggle_controls),
                 onClick = { transientState.controlsVisible = !transientState.controlsVisible },
             ),
     ) {
@@ -240,24 +248,25 @@ private fun InlineVideoPanel(
 }
 
 @Composable
-private fun CastStatusBanner(status: CastStatusMessage?) {
+private fun CastStatusBanner(status: PlayerCastStatusMessage?) {
     val message = when (status) {
         null -> null
-        is CastStatusMessage.IncompatibleVideo -> stringResource(
+        is PlayerCastStatusMessage.IncompatibleVideo -> stringResource(
             R.string.cast_incompatible_video_message,
             CodecDisplayName.of(status.codec),
         )
-        CastStatusMessage.Recovering -> stringResource(R.string.cast_recovering_message)
-        CastStatusMessage.ProxyUnavailableIpv4Only -> stringResource(R.string.cast_proxy_ipv4_unavailable_message)
-        is CastStatusMessage.LikelyIncompatibleVideo -> stringResource(
+        PlayerCastStatusMessage.Recovering -> stringResource(R.string.cast_recovering_message)
+        PlayerCastStatusMessage.ProxyUnavailableIpv4Only ->
+            stringResource(R.string.cast_proxy_ipv4_unavailable_message)
+        is PlayerCastStatusMessage.LikelyIncompatibleVideo -> stringResource(
             R.string.cast_likely_incompatible_video_message,
             CodecDisplayName.of(status.codec),
         )
-        is CastStatusMessage.LikelyIncompatibleAudio -> stringResource(
+        is PlayerCastStatusMessage.LikelyIncompatibleAudio -> stringResource(
             R.string.cast_likely_incompatible_audio_message,
             CodecDisplayName.of(status.codec),
         )
-        CastStatusMessage.ReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
+        PlayerCastStatusMessage.ReceiverLoadFailed -> stringResource(R.string.cast_receiver_load_failed_message)
     }
     message?.let {
         CastIncompatibilityBanner(

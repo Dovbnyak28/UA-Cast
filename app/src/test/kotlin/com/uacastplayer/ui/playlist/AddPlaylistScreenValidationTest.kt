@@ -71,6 +71,30 @@ class AddPlaylistScreenValidationTest {
     }
 
     @Test
+    fun directHttpUrlExplainsTheCleartextRisk() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                AddPlaylistScreen(
+                    playlistState = PlaylistUiState(),
+                    onSetDisplayName = {},
+                    onLoadUrl = {},
+                    onPickFile = {},
+                    onLoadXtream = { _, _, _ -> },
+                    onBackClick = {},
+                    onPlaylistLoaded = {},
+                )
+            }
+        }
+
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("http://provider.example/list.m3u")
+        composeRule.onNodeWithText(
+            "Цей плейлист використовує незашифрований HTTP. Його адресу, вбудовані дані доступу " +
+                "та завантажений вміст можуть прочитати або змінити під час передавання. " +
+                "Використовуйте HTTPS, якщо провайдер його підтримує.",
+        ).assertExists()
+    }
+
+    @Test
     fun loadFeedback_isProgressiveRatherThanDuplicatingEmptyFieldGuidance() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {

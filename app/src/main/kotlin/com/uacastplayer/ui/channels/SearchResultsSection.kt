@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -116,7 +117,14 @@ private fun ChannelSearchResultRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(ItemPadding),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClickLabel = result.channel.displayName,
+                onClick = onClick,
+            )
+            .padding(ItemPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ChannelIcon(result.channel, resolveIcon, refreshKey = iconRefreshKey)
@@ -138,7 +146,10 @@ private fun ChannelSearchResultRow(
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 AppIcons.Favorites,
-                contentDescription = stringResource(R.string.favorites_title),
+                contentDescription = stringResource(
+                    if (isFavorite) R.string.channels_channel_remove_favorite
+                    else R.string.channels_channel_add_favorite,
+                ),
                 tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
             )
         }

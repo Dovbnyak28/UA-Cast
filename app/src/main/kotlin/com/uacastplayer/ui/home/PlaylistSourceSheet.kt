@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -89,13 +90,13 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
                 if (isActive) UaTheme.palette.accentGradientTop.copy(alpha = 0.10f)
                 else UaTheme.palette.surface1,
             )
-            .clickable(onClick = onSelect)
+            .clickable(role = Role.RadioButton, onClickLabel = source.displayName, onClick = onSelect)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(
             selected = isActive,
-            onClick = onSelect,
+            onClick = null,
             colors = RadioButtonDefaults.colors(
                 selectedColor = UaTheme.palette.azure,
                 unselectedColor = UaTheme.palette.labelSecondary,

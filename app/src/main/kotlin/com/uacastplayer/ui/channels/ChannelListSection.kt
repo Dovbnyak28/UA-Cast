@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.data.playlist.withPlaylistCpu
@@ -339,6 +340,9 @@ private fun ChannelRow(
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = channel.displayName,
+                onLongClickLabel = stringResource(R.string.channels_more_actions),
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
@@ -398,7 +402,10 @@ private fun ChannelRow(
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 AppIcons.Favorites,
-                contentDescription = stringResource(R.string.favorites_title),
+                contentDescription = stringResource(
+                    if (isFavorite) R.string.channels_channel_remove_favorite
+                    else R.string.channels_channel_add_favorite,
+                ),
                 tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
             )
         }
@@ -423,7 +430,13 @@ private fun ChannelTile(
             .fillMaxWidth()
             // Inside a LazyVerticalGrid - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
             .raisedSurface(tileShape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                role = Role.Button,
+                onClickLabel = channel.displayName,
+                onLongClickLabel = stringResource(R.string.channels_more_actions),
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(12.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
+import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
@@ -17,6 +19,7 @@ import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateUiState
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -81,8 +84,30 @@ class RootTopBarLayoutTest {
         )
     }
 
+    @Test
+    fun guideWorkWithoutAPlaylist_doesNotCoverTheEmptyStateWithAChannelBanner() {
+        setTopBar(downloading = true, showDownloadStatus = false)
+
+        composeRule.onNodeWithTag(UiTestTags.DOWNLOAD_STATUS_BANNER).assertDoesNotExist()
+        composeRule.onNodeWithTag(UiTestTags.ROOT_TOP_BAR_TITLE).assertIsDisplayed()
+    }
+
+    @Test
+    fun downloadStatusRequiresPlaylistContentOrAnActivePlaylistLoad() {
+        assertFalse(shouldShowDownloadStatus(PlaylistUiState()))
+        assertTrue(shouldShowDownloadStatus(PlaylistUiState(isLoading = true)))
+        assertTrue(
+            shouldShowDownloadStatus(
+                PlaylistUiState(channels = listOf(M3uChannel("Channel", "https://example.test/live"))),
+            ),
+        )
+    }
+
     /** Returns the flag driving the banner so a test can switch the download off mid-composition. */
-    private fun setTopBar(downloading: Boolean): MutableState<Boolean> {
+    private fun setTopBar(
+        downloading: Boolean,
+        showDownloadStatus: Boolean = true,
+    ): MutableState<Boolean> {
         val state = mutableStateOf(downloading)
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
@@ -94,6 +119,7 @@ class RootTopBarLayoutTest {
                         total = 120,
                     ),
                     epgState = EpgUiState(isLoading = state.value),
+                    showDownloadStatus = showDownloadStatus,
                     // No update to announce: this test is about the download banner's effect on
                     // the title row's height, and a second banner would change what it measures.
                     updateSection = UpdateSectionState(

@@ -1,9 +1,9 @@
 # Modularization plan
 
-A proposal, not a commitment: splitting the single `:app` module is a large, risky refactor with no
-functional payoff on its own (build-time/incremental-build wins only), so it should stay a plan
-until there's a concrete reason to spend the time (build times becoming painful, or a second app
-target that wants to reuse `:core`/`:data`). Nothing in this document has been executed.
+A proposal for the remaining split: the project is still one production `:app` module, but several
+pure seams have already been extracted (`PlayerSessionStateMachine`, cast watchdog/recovery
+policies, and proxy response serving). The full Gradle split remains a deliberate, risky refactor
+with build-time/incremental-build payoff rather than a user-facing feature.
 
 ## Proposed modules
 
@@ -26,55 +26,38 @@ cross a proposed module boundary in the *wrong* direction (a lower-layer module 
 higher one) or that create a cycle. Everything else (e.g. `ui -> playlist`, `data -> log`) already
 respects the proposed dependency direction and needs no work.
 
-1. **`cast` <-> `player` cycle** (blocks `:feature-cast`/`:feature-player` being separate modules
-   at all, in either dependency direction):
-   - `cast/CastContentType.kt` imports `player.StreamMimeClassifier`/`player.StreamType` (cast
-     needs player's codec/container classification to build a Cast `MediaInfo`).
-   - `player/PlayerModels.kt` and `player/PlayerViewModel.kt` import from `cast` (the player needs
-     `CastPlaybackState`/`CastSessionRepository` to react to an active cast session).
-   - Fix: extract the shared piece (`StreamMimeClassifier`/`StreamType`, which is pure
-     classification with no player-runtime dependency) into `:data` or `:core`, so both `cast` and
-     `player` depend downward on it instead of on each other.
+1. **Resolved:** the player feature now owns a narrow `PlayerCastPort` contract. The app
+   composition root connects it to `CastSessionRepository` through `PlayerCastAdapter`; neither
+   `player/` nor `ui/player/` imports the Cast feature. Codec display names live beside the pure
+   codec models under `core.cast`, so the UI does not need a Cast dependency for formatting.
 
-2. **`data/prefs/AppPreferences.kt` imports `ui.theme.AppTheme`** - a `:data` file depending on
-   `:core`'s design-system enum for a single stored preference value. Fix: either move `AppTheme`
-   itself down into `:core`'s non-UI layer (it's just an enum, no Compose dependency) so this
-   becomes a legitimate `:data -> :core` edge, or store the preference as a plain string/id in
-   `:data` and let the `:app`/UI layer map it to `AppTheme`.
+2. **Resolved:** `data/prefs/AppPreferences.kt` no longer imports the UI theme enum. Keep the
+   preference value as a data-layer representation and preserve this boundary in future changes.
 
-3. **`data/prefs/LocalizedPreferencesContext.kt` imports `data.prefs.AppPreferences`** - the locale
-   adapter was moved beside its preference source, so `:core` is meant to be
-   the foundation everything else depends on, but this file reads the user's saved language
-   preference directly from `:data`. Fix: pass the resolved `AppLanguage` in as a parameter from the
-   call site instead of reading prefs from inside `:core`, or move language storage itself into
-   `:core` (it's a strong candidate either way, being needed before most of `:data` is relevant).
+3. **Resolved:** the Android locale adapter now lives beside `AppPreferences` under `data/prefs`.
+   Pure language matching stays in `core/i18n`, so `:core` does not read settings and the adapter
+   can move with `:data` without creating a reverse dependency.
 
-4. **`data/cast/ProxyServer.kt` imports `diagnostics.CastRouteKind`** (introduced by the routing
-   effectiveness counters) - a `:data` file depending on an `:app`-layer type for one callback
-   parameter. Fix: move `CastRouteKind`/`CastRouteOutcome` (currently in `diagnostics/`) down into
-   `:data` alongside `RemuxEffectivenessStore`, since they're really cast-routing vocabulary, not
-   report-formatting vocabulary - `diagnostics/DiagnosticsReportBuilder` would then depend on
-   `:data` for them like everything else there already does.
+4. **Resolved:** cast routing vocabulary now lives under `core.cast`, so `ProxyServer` does not
+   depend on the diagnostics/reporting layer.
 
-5. **`diagnostics/DiagnosticsReportBuilder.kt` imports `ui.theme.AppTheme`** - same root cause as
-   #2 (the report includes the current theme by name); resolved the same way once `AppTheme` moves.
+5. **Resolved:** the diagnostics report no longer imports the UI theme enum.
 
-6. **`player/PlayerViewModel.kt` and `cast/CastProxyService.kt` import `MainActivity`** (both for
-   a `PendingIntent`/notification tap target back into the app) - a feature module reaching into
-   `:app`'s root activity is backwards. Fix: pass the target `Class<*>`/`PendingIntent` in from
-   `:app` at construction time instead of each feature hardcoding `MainActivity::class`.
+6. **Resolved:** player media-session and cast notifications now resolve the launch activity
+   through `PackageManager` at runtime. Neither feature package imports `MainActivity`, so the
+   future `:feature-player`/`:feature-cast` modules no longer reach upward into `:app` for a
+   notification tap target. Keep this lookup in the feature adapter; the composition root should
+   not be reintroduced as a dependency.
 
 ## Migration order
 
 Do this one module at a time, each its own PR, green build gate after each step - never split
 everything at once:
 
-1. `:core` first (smallest, fewest inbound edges once #3 above is fixed) - it only needs #3
-   resolved before extraction.
-2. `:data` next, after #2 and #4 are resolved - everything else already depends downward on it
-   correctly.
-3. `:feature-player` and `:feature-cast` together (since #1 requires touching both), after the
-   `StreamMimeClassifier`/`StreamType` extraction and #6.
+1. `:core` first (smallest); the former locale-preference edge in #3 is already resolved.
+2. `:data` next; the former theme and cast-routing edges are already resolved.
+3. `:feature-player` and `:feature-cast`; their former direct dependency and `MainActivity`
+   reach-through are already removed, and the architecture gate now preserves both boundaries.
 4. `:app` last - by this point it's whatever doesn't fit anywhere else, and the module boundary is
    just "what's left," not a design decision.
 

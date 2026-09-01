@@ -19,6 +19,7 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.legal.HelpScreen
+import com.uacastplayer.ui.legal.PrivacyPolicyScreen
 import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.permissions.NotificationPermissionGate
@@ -40,14 +41,17 @@ internal fun ScaffoldZone(
     onExitApp: () -> Unit,
     showHelp: Boolean,
     showTerms: Boolean,
+    showPrivacyPolicy: Boolean,
     showAddPlaylist: Boolean,
     focusChannelsToken: Int,
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     onOpenAddPlaylist: () -> Unit,
     onCloseHelp: () -> Unit,
     onCloseTerms: () -> Unit,
+    onClosePrivacyPolicy: () -> Unit,
     onCloseAddPlaylist: () -> Unit,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     onPlaylistLoaded: () -> Unit,
@@ -150,6 +154,10 @@ internal fun ScaffoldZone(
             TermsScreen(onBackClick = onCloseTerms)
         }
 
+        showPrivacyPolicy -> {
+            PrivacyPolicyScreen(onBackClick = onClosePrivacyPolicy)
+        }
+
         showAddPlaylist -> {
             val cancelAndClose = {
                 viewModel.cancelPendingPlaylistAdd()
@@ -250,6 +258,7 @@ internal fun ScaffoldZone(
                 onDismissIconSourceError = viewModel::dismissIconSourceError,
                 onOpenHelp = onOpenHelp,
                 onOpenTerms = onOpenTerms,
+                onOpenPrivacyPolicy = onOpenPrivacyPolicy,
                 onBuildDiagnosticsReport = onBuildDiagnosticsReport,
                 remuxEffectiveness = remuxEffectiveness,
                 updateSection = updateSection,

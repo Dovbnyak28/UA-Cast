@@ -3,6 +3,7 @@ package com.uacastplayer.epg
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -81,6 +82,39 @@ class DayScheduleBuilderTest {
         val schedule = DayScheduleBuilder.build(emptyList(), dayStart, zone)
 
         assertEquals(emptyList<EpgProgramme>(), schedule.past)
+        assertNull(schedule.current)
+        assertEquals(emptyList<EpgProgramme>(), schedule.upcoming)
+    }
+
+    @Test
+    fun `explicit date exposes tomorrow without changing the clock`() {
+        val tomorrow = programme("tomorrow", dayStart + 25 * hour, dayStart + 26 * hour)
+        val todayNow = dayStart + 2 * hour
+
+        val schedule = DayScheduleBuilder.build(
+            listOf(tomorrow),
+            todayNow,
+            zone,
+            LocalDate.of(2026, 1, 2),
+        )
+
+        assertEquals(listOf(tomorrow), schedule.upcoming)
+        assertNull(schedule.current)
+    }
+
+    @Test
+    fun `explicit historical date never marks an overnight listing as current`() {
+        val overnight = programme("overnight", dayStart - hour, dayStart + hour)
+        val todayNow = dayStart + 2 * hour
+
+        val schedule = DayScheduleBuilder.build(
+            listOf(overnight),
+            todayNow,
+            zone,
+            LocalDate.of(2025, 12, 31),
+        )
+
+        assertEquals(listOf(overnight), schedule.past)
         assertNull(schedule.current)
         assertEquals(emptyList<EpgProgramme>(), schedule.upcoming)
     }

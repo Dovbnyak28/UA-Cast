@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -293,7 +294,7 @@ private fun DlnaDeviceRow(device: DlnaDevice, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusItem))
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = device.friendlyName, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(GapS),
         verticalAlignment = Alignment.CenterVertically,

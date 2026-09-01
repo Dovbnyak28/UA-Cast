@@ -98,8 +98,11 @@ class PlayBillingProvider(
         if (records.isNotEmpty()) {
             _purchases.value = _purchases.value + records
         }
-        pendingPurchase?.complete(outcomeOf(result, records.firstOrNull()))
-        pendingPurchase = null
+        val pending = pendingPurchase
+        pending?.complete(outcomeOf(result, records.firstOrNull()))
+        // A late callback can race with a newer purchase attempt after the timeout path. Only
+        // clear the exact deferred this callback completed; never discard the replacement slot.
+        if (pendingPurchase === pending) pendingPurchase = null
     }
 
     private fun onReconnected() {
@@ -245,10 +248,15 @@ class PlayBillingProvider(
         pendingPurchase = deferred
         val launch = client.launchBillingFlow(activity, flow)
         if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
-            pendingPurchase = null
+            if (pendingPurchase === deferred) pendingPurchase = null
             return outcomeOf(launch, null)
         }
-        return deferred.await()
+        val result = PurchaseCallbackTimeoutPolicy.await(deferred)
+        // A timed-out Play callback may still arrive later and refresh _purchases. Do not leave a
+        // completed purchase slot behind for the next attempt, but never clear a newer attempt
+        // that raced with this one.
+        if (pendingPurchase === deferred) pendingPurchase = null
+        return result
     }
 
     override suspend fun restore(): PurchaseResult {

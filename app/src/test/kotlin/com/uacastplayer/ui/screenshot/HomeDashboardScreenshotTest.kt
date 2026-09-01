@@ -129,4 +129,28 @@ class HomeDashboardScreenshotTest {
     @Test
     @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
     fun homeDashboard_midnight() = capture("home_dashboard_midnight", AppTheme.MIDNIGHT)
+
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun homeDashboard_newUser_explainsFavoritesNextStep() {
+        val newUserContent = content.copy(favorites = emptyList())
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Box(
+                    Modifier
+                        .size(width = 411.dp, height = 891.dp)
+                        .background(UaTheme.palette.void),
+                ) {
+                    HomeScreen(
+                        content = newUserContent,
+                        source = source,
+                        resolveIcon = { null },
+                        onChannelSelected = { _, _ -> },
+                        onOpenChannels = {},
+                    )
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/home_dashboard_personalization_uk.png")
+    }
 }

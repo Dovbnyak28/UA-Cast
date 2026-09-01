@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.annotation.OptIn
@@ -82,7 +83,11 @@ fun MiniPlayerBar(
             .fillMaxWidth()
             .height(MiniPlayerBarHeight)
             .raisedSurface(RoundedCornerShape(16.dp), UaTheme.palette.surface1, shadow = true)
-            .clickable(onClick = onTap)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.player_fullscreen),
+                onClick = onTap,
+            )
             .testTag(UiTestTags.MINI_PLAYER_BAR)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

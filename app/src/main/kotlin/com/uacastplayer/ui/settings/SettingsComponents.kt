@@ -92,7 +92,7 @@ internal fun PlaylistActionRow(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -130,7 +130,7 @@ internal fun SettingsNavigationRow(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = false,
             )
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

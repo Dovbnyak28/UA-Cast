@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -175,7 +176,7 @@ internal fun GroupsOverviewGrid(
                     IconButton(onClick = { query = "" }) {
                         Icon(
                             AppIcons.Close,
-                            contentDescription = stringResource(R.string.cache_clear_button),
+                            contentDescription = stringResource(R.string.channels_clear_search),
                             tint = UaTheme.palette.labelSecondary,
                         )
                     }
@@ -325,6 +326,9 @@ private fun GroupCard(
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = groupLabel(grouped.group),
+                onLongClickLabel = stringResource(R.string.channels_more_actions),
                 onClick = onClick,
                 onLongClick = onLongClick,
             )

@@ -10,6 +10,7 @@ import com.uacastplayer.epg.EpgSourceAutoDetect
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.log.AppLog
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -59,15 +60,21 @@ class EpgController(
      * [startTicking] is deliberately not routed through here - it is a permanent loop, not a load.
      */
     private var loadJob: Job? = null
+    private val initialLoadStarted = AtomicBoolean(false)
 
     private fun launchLoad(block: suspend () -> Unit) {
         loadJob?.cancel()
         loadJob = scope.launch { block() }
     }
 
-    /** Restores the cached snapshot at startup, or does an initial fetch if there isn't one -
-     * called once from AppViewModel.init. */
+    /**
+     * Restores the cached snapshot once a playlist is actually available, or does an initial fetch
+     * if there isn't one. The idempotent guard matters because every successful playlist switch
+     * reaches this method; a fresh install with no playlist must not download and parse a large TV
+     * guide that cannot yet be used.
+     */
     fun loadInitial() {
+        if (!initialLoadStarted.compareAndSet(false, true)) return
         launchLoad {
             // Before anything else, and regardless of whether this run downloads at all: a process
             // killed mid-download or mid-parse leaves a full feed behind in filesDir, where nothing
@@ -138,6 +145,7 @@ class EpgController(
     }
 
     fun selectEpgSource(source: EpgSource) {
+        initialLoadStarted.set(true)
         preferences.epgSource = source
         preferences.customEpgUrl = null
         preferences.hasChosenEpgSource = true
@@ -157,6 +165,7 @@ class EpgController(
     }
 
     fun applyCustomEpgUrl(url: String, markChosen: Boolean) {
+        initialLoadStarted.set(true)
         preferences.customEpgUrl = url
         if (markChosen) preferences.hasChosenEpgSource = true
         _epgState.update { it.copy(customUrl = url, suggestedUrl = null, isLoading = true, hasError = false) }

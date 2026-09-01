@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.uacastplayer.MainActivity
 import com.uacastplayer.R
 import com.uacastplayer.testsupport.skipOnboarding
+import com.uacastplayer.testsupport.awaitComposeHierarchy
 import com.uacastplayer.ui.UiTestTags
 import org.junit.Before
 import org.junit.Rule
@@ -90,6 +91,7 @@ class OverlayReturnInstrumentedTest {
     }
 
     private fun openSettingsTab() {
+        composeTestRule.awaitComposeHierarchy()
         val settingsTab = hasContentDescription(composeTestRule.activity.getString(R.string.nav_settings)) and
             SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
         composeTestRule.waitUntil(OPEN_SETTINGS_TAB_TIMEOUT_MILLIS) {

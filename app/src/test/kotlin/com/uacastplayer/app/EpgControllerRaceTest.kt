@@ -200,6 +200,30 @@ class EpgControllerRaceTest {
         }
     }
 
+    @Test
+    fun `initial guide loading is idempotent across playlist switches`() {
+        XmlTvServer("initial").use { server ->
+            val preferences = AppPreferences(application).apply { customEpgUrl = server.url }
+            val controller = EpgController(
+                preferences = preferences,
+                epgRepository = EpgRepository(application),
+                scope = scope,
+                onLoaded = { applied.incrementAndGet() },
+            )
+
+            controller.loadInitial()
+            assertTrue(
+                "the initial guide should load",
+                controller.awaitChannels(listOf("initial"), LOAD_WAIT_MILLIS),
+            )
+
+            controller.loadInitial()
+            Thread.sleep(POLL_INTERVAL_MILLIS * 5)
+
+            assertEquals("a second playlist must not restart the initial guide load", 1, applied.get())
+        }
+    }
+
     private companion object {
         const val HOLD_TIMEOUT_SECONDS = 10L
         const val LOAD_WAIT_MILLIS = 10_000L

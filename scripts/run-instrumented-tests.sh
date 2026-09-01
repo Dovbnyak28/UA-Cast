@@ -55,16 +55,28 @@ fi
 adb -s "$DEVICE_SERIAL" install -r "$APP_APK"
 adb -s "$DEVICE_SERIAL" install -r "$TEST_APK"
 
+# A locked or sleeping OEM handset can keep MainActivity resumed while hiding its window. That
+# makes Compose tests time out without telling us anything about the app. Wake the display and
+# dismiss only a non-secure keyguard; a secure lock is left untouched and the runner will report
+# the actionable timeout instead of changing the user's lock settings. Stop both packages so a
+# previous failed runner cannot leave a hidden Activity window behind.
+adb -s "$DEVICE_SERIAL" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+adb -s "$DEVICE_SERIAL" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
+adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE.test" >/dev/null 2>&1 || true
+
 echo "Running $RUNNER"
 output=$(adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1)
 echo "$output"
 
-if printf '%s' "$output" | grep -q "FAILURES!!!"; then
+# Do not use grep -q with pipefail: grep may exit early on a long runner output, causing the
+# producer to receive SIGPIPE and making a real failure look like a non-match.
+if printf '%s' "$output" | grep "FAILURES!!!" >/dev/null; then
     echo "run-instrumented-tests: the suite reported failures" >&2
     exit 1
 fi
 
-if ! printf '%s' "$output" | grep -qE "OK \([0-9]+ tests?\)"; then
+if ! printf '%s' "$output" | grep -E "OK \([0-9]+ tests?\)" >/dev/null; then
     echo "run-instrumented-tests: the runner never reported a passing result - treating as failure" >&2
     exit 1
 fi

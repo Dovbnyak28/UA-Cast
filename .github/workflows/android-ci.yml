@@ -2,7 +2,9 @@ name: Android CI
 
 on:
   push:
-    branches: [master, main]
+    # Run the same gate on feature branches too. A green manual dispatch is useful for diagnosis,
+    # but it must not be the only signal before a pull request is opened.
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 
@@ -41,11 +43,17 @@ jobs:
       - name: Assemble debug
         run: ./gradlew :app:assembleDebug --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
 
+      - name: Verify legal documents are packaged
+        run: bash scripts/check-legal-assets.sh app/build/outputs/apk/debug
+
       - name: Debug unit tests and screenshot verification
         run: ./gradlew :app:verifyRoborazziDebug --stacktrace
 
       - name: Release unit tests
         run: ./gradlew :app:testReleaseUnitTest --stacktrace
+
+      - name: Play-distribution unit tests
+        run: ./gradlew :app:testPlayUnitTest --stacktrace
 
       - name: Compile instrumentation tests
         run: ./gradlew :app:assembleDebugAndroidTest --stacktrace
@@ -101,10 +109,13 @@ jobs:
         uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
 
       - name: Android lint
-        run: ./gradlew :app:lintDebug :app:lintRelease --stacktrace
+        run: ./gradlew :app:lintDebug :app:lintRelease :app:lintPlay --stacktrace
 
       - name: Detekt
         run: ./gradlew :app:detekt --stacktrace
+
+      - name: Detekt baseline stays empty
+        run: bash scripts/check-detekt-baseline.sh
 
       - name: Architecture dependency boundaries
         run: bash scripts/check-architecture-boundaries.sh
@@ -143,7 +154,10 @@ jobs:
           retention-days: 14
 
   release:
-    name: Release APK, AAB and diagnostics
+    # These artifacts deliberately have no production key. They prove that shrinking/packaging
+    # works, but are not distribution candidates; signed-release.yml owns that separate trust
+    # boundary and refuses to build without protected signing secrets.
+    name: Unsigned packaging diagnostics
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -164,6 +178,9 @@ jobs:
       - name: Assemble release
         run: ./gradlew :app:assembleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
 
+      - name: Verify legal documents are packaged
+        run: bash scripts/check-legal-assets.sh app/build/outputs/apk/release
+
       - name: Version code ordering
         run: bash scripts/check-version-code-ordering.sh
 
@@ -172,6 +189,14 @@ jobs:
 
       - name: Bundle Play distribution
         run: ./gradlew :app:bundlePlay --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+
+      - name: Verify Play distribution policy surface
+        run: bash scripts/check-play-distribution.sh
+
+      - name: Verify legal documents are packaged in bundles
+        run: |
+          bash scripts/check-legal-assets.sh app/build/outputs/bundle/release
+          bash scripts/check-legal-assets.sh app/build/outputs/bundle/play
 
       - name: Generate dependency report
         run: |
@@ -198,7 +223,7 @@ jobs:
           mkdir -p app/build/reports/release-diagnostics/previous
           previous_run=$(gh run list --workflow android-ci.yml --branch "${{ github.ref_name }}" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$previous_run" ]; then
-            gh run download "$previous_run" --name app-release-unsigned --dir app/build/reports/release-diagnostics/previous || true
+            gh run download "$previous_run" --name diagnostic-sideload-apks-unsigned --dir app/build/reports/release-diagnostics/previous || true
           fi
           current=$(find app/build/outputs/apk/release -name '*.apk' -printf '%s\n' | awk '{s+=$1} END {print s+0}')
           previous=$(find app/build/reports/release-diagnostics/previous -name '*.apk' -printf '%s\n' | awk '{s+=$1} END {print s+0}')
@@ -208,24 +233,24 @@ jobs:
             if [ "$previous" -gt 0 ]; then printf 'diff_bytes=%s\n' "$((current-previous))"; fi
           } > app/build/reports/release-diagnostics/size-diff.txt
 
-      - name: Upload release APK
+      - name: Upload unsigned sideload APK diagnostics
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: app-release-unsigned
+          name: diagnostic-sideload-apks-unsigned
           path: app/build/outputs/apk/release/*.apk
           retention-days: 14
 
-      - name: Upload release bundle
+      - name: Upload unsigned sideload bundle diagnostic
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: app-release-bundle-unsigned
+          name: diagnostic-sideload-bundle-unsigned
           path: app/build/outputs/bundle/release/*.aab
           retention-days: 14
 
-      - name: Upload Play bundle
+      - name: Upload unsigned Play bundle diagnostic
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: app-play-bundle-unsigned
+          name: diagnostic-play-bundle-unsigned-do-not-publish
           path: app/build/outputs/bundle/play/*.aab
           retention-days: 14
 

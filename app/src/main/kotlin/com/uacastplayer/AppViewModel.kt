@@ -143,6 +143,9 @@ class AppViewModel @JvmOverloads constructor(
         playlistRepository = playlistRepository,
         scope = viewModelScope,
         onLoaded = { channels, groups, epgUrls, fromCache ->
+            // Do not download/parse an EPG on a fresh install that has no channels to match it to.
+            // This is idempotent, so later playlist switches keep the already selected guide.
+            epgController.loadInitial()
             recomputeDeviceTierDefaults(channels)
             iconController.triggerPrefetch(
                 channels,
@@ -325,7 +328,6 @@ class AppViewModel @JvmOverloads constructor(
 
     init {
         playlistController.loadInitialSource()
-        epgController.loadInitial()
         epgController.startTicking()
         groupVisibilityController.loadInitial()
         parentalControlController.loadInitial()

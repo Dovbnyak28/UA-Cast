@@ -307,7 +307,7 @@ private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
                 IconButton(onClick = { onUrlChange("") }) {
                     Icon(
                         AppIcons.Close,
-                        contentDescription = stringResource(R.string.cache_clear_button),
+                        contentDescription = stringResource(R.string.add_playlist_clear_url),
                         tint = UaTheme.palette.labelSecondary,
                     )
                 }
@@ -325,6 +325,14 @@ private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
         color = UaTheme.palette.labelSecondary,
         modifier = Modifier.padding(top = 8.dp),
     )
+    if (CleartextCredentialPolicy.isCleartextPlaylistUrl(url)) {
+        Text(
+            text = stringResource(R.string.add_playlist_url_cleartext_warning),
+            style = Caption,
+            color = UaTheme.palette.routeRed,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
 }
 
 @Composable

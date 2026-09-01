@@ -5,10 +5,9 @@
 # ("OK (1 test)", profile stable after 5 iterations) - this file's top section was pulled directly
 # from the device via `adb shell am instrument` + `adb pull` instead of Gradle's own copy-back.
 #
-# The generator's scripted flow only drives language picker -> Terms -> onboarding -> Home, so it
-# never touches actual channel playback - the wildcard rules below (the previous hand-authored
-# profile's entire content) are kept as a safety net specifically for media3/ExoPlayer and any
-# uacastplayer code this generator run didn't reach, rather than losing that coverage outright.
+# The generator drives language picker -> Terms -> guided tour -> Home, then the isolated fixture's
+# Channels, player, fullscreen and EPG journeys. The wildcard rules below remain a safety net for
+# media3/ExoPlayer and any uacastplayer code a particular device run did not reach.
 Landroidx/activity/ActivityFlags;
 SPLandroidx/activity/ActivityFlags;-><clinit>()V
 SPLandroidx/activity/ActivityFlags;-><init>()V
@@ -20569,7 +20568,6 @@ SPLcom/uacastplayer/MainActivityKt;->ScaffoldZone$lambda$6(Landroidx/compose/run
 SPLcom/uacastplayer/MainActivityKt;->ScaffoldZone$lambda$7(Landroidx/compose/runtime/State;)Lcom/uacastplayer/icons/IconPrefetchUiState;
 SPLcom/uacastplayer/MainActivityKt;->ScaffoldZone$lambda$8(Landroidx/compose/runtime/State;)Lcom/uacastplayer/cast/CastPlaybackState;
 SPLcom/uacastplayer/MainActivityKt;->ScaffoldZone$lambda$9(Landroidx/compose/runtime/State;)Lcom/uacastplayer/settings/SettingsUiState;
-SPLcom/uacastplayer/MainActivityKt;->ScaffoldZone(Lcom/uacastplayer/AppViewModel;Lcom/uacastplayer/playlist/PlaylistUiState;Lcom/uacastplayer/core/i18n/AppLanguage;Lcom/uacastplayer/ui/theme/AppTheme;Lkotlin/jvm/functions/Function0;ZZZILkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;III)V
 SPLcom/uacastplayer/MainActivityKt;->access$MainAppContent$lambda$11(Landroidx/compose/runtime/MutableState;)Lcom/uacastplayer/SavedPlayerRequest;
 SPLcom/uacastplayer/MainActivityKt;->access$MainAppContent$lambda$12(Landroidx/compose/runtime/MutableState;Lcom/uacastplayer/SavedPlayerRequest;)V
 SPLcom/uacastplayer/MainActivityKt;->access$MainAppContent$lambda$5(Landroidx/compose/runtime/MutableState;)Lcom/uacastplayer/PlayerRequest;

@@ -16,4 +16,13 @@ class CleartextCredentialPolicyTest {
 
     @Test fun `an empty field is not warned before the user enters a server`() =
         assertFalse(CleartextCredentialPolicy.exposesCredentials("  "))
+
+    @Test fun `direct http playlist is reported as cleartext`() =
+        assertTrue(CleartextCredentialPolicy.isCleartextPlaylistUrl(" HTTP://provider.example/list.m3u "))
+
+    @Test fun `direct https playlist is not reported as cleartext`() =
+        assertFalse(CleartextCredentialPolicy.isCleartextPlaylistUrl("https://provider.example/list.m3u"))
+
+    @Test fun `bare direct playlist input is left to the URL validator`() =
+        assertFalse(CleartextCredentialPolicy.isCleartextPlaylistUrl("provider.example/list.m3u"))
 }

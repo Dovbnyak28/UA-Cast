@@ -160,6 +160,7 @@ fun RootScaffold(
     onDismissIconSourceError: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     remuxEffectiveness: RemuxEffectivenessCounts,
     updateSection: UpdateSectionState,
@@ -228,6 +229,7 @@ fun RootScaffold(
                     },
                     iconPrefetchState = iconPrefetchState,
                     epgState = epgState,
+                    showDownloadStatus = shouldShowDownloadStatus(playlistState),
                     updateSection = updateSection,
                 )
             },
@@ -361,6 +363,7 @@ fun RootScaffold(
                     onDismissIconSourceError = onDismissIconSourceError,
                     onOpenHelp = onOpenHelp,
                     onOpenTerms = onOpenTerms,
+                    onOpenPrivacyPolicy = onOpenPrivacyPolicy,
                     onBuildDiagnosticsReport = onBuildDiagnosticsReport,
                     remuxEffectiveness = remuxEffectiveness,
                     updateSection = updateSection,
@@ -388,6 +391,9 @@ fun RootScaffold(
     }
 }
 
+internal fun shouldShowDownloadStatus(playlistState: PlaylistUiState): Boolean =
+    playlistState.hasChannels || playlistState.isLoading
+
 /**
  * The screen title and background-download/update banners.
  *
@@ -413,6 +419,7 @@ internal fun RootTopBar(
     title: String,
     iconPrefetchState: IconPrefetchUiState,
     epgState: EpgUiState,
+    showDownloadStatus: Boolean,
     updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
 ) {
@@ -422,7 +429,9 @@ internal fun RootTopBar(
             .background(UaTheme.palette.void)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState)
+        if (showDownloadStatus) {
+            DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState)
+        }
         UpdateBanner(
             release = updateSection.state.availableRelease,
             installState = updateSection.installState,

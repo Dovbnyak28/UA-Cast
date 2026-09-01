@@ -12,7 +12,6 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import com.uacastplayer.MainActivity
 import com.uacastplayer.R
 import com.uacastplayer.data.prefs.withAppLocale
 import com.uacastplayer.data.cast.CastWakeLocks
@@ -149,30 +148,33 @@ class CastProxyService : Service() {
         receiverName: String,
         target: CastProxyTarget,
     ): Notification {
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).setFlags(
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP,
-            ),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
+        // Resolve the launcher activity by package so this cast-layer service does not depend on
+        // the app-root MainActivity. The launcher intent is explicit and therefore remains
+        // resolvable on API 30+ even with package-visibility restrictions.
+        val contentIntent = packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+            PendingIntent.getActivity(
+                this,
+                0,
+                intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
         val stopPendingIntent = PendingIntent.getService(
             this,
             target.ordinal + 1,
             endSessionIntent(this, target),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_cast)
             .setContentTitle(channelTitle.ifEmpty { localizedContext.getString(R.string.app_name) })
             .setContentText(localizedContext.getString(R.string.cast_session_notification_text, receiverName))
-            .setContentIntent(contentIntent)
             .addAction(0, localizedContext.getString(R.string.cast_session_stop_action), stopPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        if (contentIntent != null) builder.setContentIntent(contentIntent)
+        return builder.build()
     }
 
     companion object {

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
@@ -25,7 +26,21 @@ import com.uacastplayer.removePlaylistSource
 import com.uacastplayer.selectLanguage
 import com.uacastplayer.data.prefs.AppPreferences
 
-private typealias MainActivityComposeRule = AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+internal typealias MainActivityComposeRule = AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+
+/** Waits for the Activity's first Compose tree, not merely for the test clock to go idle. The
+ * Samsung J3's cold start can exceed 15 seconds while ART compiles the large channels screen, so
+ * keep this gate generous enough for the slowest supported test handset without changing any
+ * functional assertion timeout. */
+fun MainActivityComposeRule.awaitComposeHierarchy(timeoutMillis: Long = DEFAULT_COMPOSE_TIMEOUT_MILLIS) {
+    waitUntil(timeoutMillis) {
+        runCatching {
+            onRoot().fetchSemanticsNode()
+            true
+        }.getOrDefault(false)
+    }
+    waitForIdle()
+}
 
 /** The same [AppViewModel] instance Compose is using, fetched the same way `by viewModels()`
  * would - both resolve against the Activity's own [androidx.lifecycle.ViewModelStore] via the
@@ -136,7 +151,7 @@ fun MainActivityComposeRule.waitForChannelsLoaded(
 fun MainActivityComposeRule.openChannelsTab() {
     // A state update (e.g. playlist load) can complete before the corresponding tab has been
     // composed on a cold device. Synchronize the first semantics query with that composition.
-    waitForIdle()
+    awaitComposeHierarchy()
     onNode(
         hasText(activity.getString(R.string.nav_channels)) and
             SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
@@ -196,3 +211,4 @@ fun MainActivityComposeRule.tapChannelRow(channelName: String) {
 /** Generous next to the 200ms search debounce - this is a "did it ever appear" bound, not a
  * performance assertion, and a cold first search also pays for the initial filter pass. */
 private const val SEARCH_RESULT_TIMEOUT_MILLIS = 5_000L
+private const val DEFAULT_COMPOSE_TIMEOUT_MILLIS = 30_000L

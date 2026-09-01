@@ -44,6 +44,7 @@ Coil and Compose ship their own profiles inside their AARs and are merged automa
 ./gradlew :app:lintDebug            # lint
 ./gradlew :app:assembleDebug        # debug APK
 ./gradlew :app:assembleRelease      # release APK (unsigned unless signing env vars are set)
+./gradlew :app:bundlePlay           # Play-specific AAB; self-updater permissions/code disabled
 ```
 
 Release signing is read only from environment variables / Gradle properties, never committed:
@@ -83,13 +84,16 @@ See `docs/` for the design rules behind the trickier subsystems:
   those third-party services and should be included in release smoke testing.
 - Built and verified via `gradlew` command-line builds, plus manual on-device testing (language
   picker, all four tabs, EPG source download for both the gzip and plain-XML variants) on a Xiaomi
-  Mi A2 (Android 11). Cast hardware, PiP, and orientation changes haven't been exercised on a real
-  receiver/device yet.
+  Mi A2 (Android 11). Proxy/DLNA control paths have also been exercised on a ZTE Blade A34, but a
+  real Hisense VIDAA regression, Chromecast session, PiP and orientation matrix still need an
+  external-hardware run before claiming receiver compatibility.
 
 ## CI
 
-`.github/workflows/android-ci.yml` runs `assembleDebug` → `testDebugUnitTest` → `lintDebug` →
-`assembleRelease` (unsigned) on every push/PR, plus Gradle wrapper validation and
-`gradle/actions/setup-gradle` caching. `versionCode`/`versionName` for the CI-built APKs are
-derived from the workflow run number (`-Puacast.versionCode`/`-Puacast.versionName`), not the
-hand-edited defaults in `app/build.gradle.kts`.
+`.github/workflows/android-ci.yml` runs unit/screenshot tests, lint/detekt and architecture guards,
+unsigned packaging diagnostics, plus API 24/30/36 instrumentation on every push/PR. Those unsigned
+artifacts are explicitly named as diagnostics and must not be published. A separate manually
+dispatched `.github/workflows/signed-release.yml` builds the production-key-signed Play AAB behind
+the protected `production` environment and fails if signing secrets, updater exclusions or legal
+assets are missing. `versionCode`/`versionName` for ordinary CI diagnostics come from the workflow
+run number, not the hand-edited defaults in `app/build.gradle.kts`.

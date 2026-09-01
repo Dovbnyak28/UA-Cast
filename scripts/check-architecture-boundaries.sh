@@ -36,18 +36,12 @@ core_to_app_or_data=$(grep -RHnE --include='*.kt' \
 report_imports "core must not import app or data:" "$core_to_app_or_data"
 
 player_to_cast=$(grep -RHn --include='*.kt' \
-    '^import com\.uacastplayer\.cast\.' "$SRC_ROOT/player" || true)
+    '^import com\.uacastplayer\.cast\.' "$SRC_ROOT/player" "$SRC_ROOT/ui/player" || true)
+report_imports "player feature must use PlayerCastPort instead of importing cast:" "$player_to_cast"
+
 cast_to_player=$(grep -RHn --include='*.kt' \
     '^import com\.uacastplayer\.player\.' "$SRC_ROOT/cast" || true)
-if [ -n "$player_to_cast" ] && [ -n "$cast_to_player" ]; then
-    echo "player and cast must not form a dependency cycle." >&2
-    echo "player -> cast:" >&2
-    echo "$player_to_cast" >&2
-    echo "cast -> player:" >&2
-    echo "$cast_to_player" >&2
-    echo >&2
-    failed=1
-fi
+report_imports "cast feature must not import player:" "$cast_to_player"
 
 ui_to_proxy_server=$(grep -RHn --include='*.kt' \
     'com\.uacastplayer\.data\.cast\.ProxyServer' "$SRC_ROOT/ui" || true)

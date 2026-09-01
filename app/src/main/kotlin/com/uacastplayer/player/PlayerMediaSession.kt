@@ -2,12 +2,10 @@ package com.uacastplayer.player
 
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
-import com.uacastplayer.MainActivity
 import com.uacastplayer.log.AppLog
 
 private const val TAG = "PlayerMediaSession"
@@ -25,16 +23,21 @@ internal object PlayerMediaSessionFactory {
         MediaSession.Builder(context, player)
             .setId(PLAYER_SESSION_ID)
             .setCallback(PlayerMediaSessionCallback(onNext, onPrevious))
-            // Use an explicit component. Media3's implicit fallback can be unresolvable on API 30+
-            // because of package-visibility restrictions.
-            .setSessionActivity(
-                PendingIntent.getActivity(
-                    context,
-                    0,
-                    Intent(context, MainActivity::class.java),
-                    PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
+            .apply {
+                // Resolve the app's launcher activity through PackageManager instead of importing
+                // the app-root Activity. This keeps the player feature independent from :app and
+                // remains explicit on API 30+, where an implicit package intent may be hidden.
+                context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+                    setSessionActivity(
+                        PendingIntent.getActivity(
+                            context,
+                            0,
+                            intent,
+                            PendingIntent.FLAG_IMMUTABLE,
+                        ),
+                    )
+                }
+            }
             .build()
     } catch (e: IllegalStateException) {
         AppLog.w(TAG) { "MediaSession creation failed, continuing without system media controls: ${e.message}" }

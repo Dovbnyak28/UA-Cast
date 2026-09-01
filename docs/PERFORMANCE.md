@@ -116,6 +116,10 @@ v1 snapshots stay readable, parsed once and immediately rewritten as v2, so upgr
 away a guide the user already has. That one launch still pays the 53 seconds; every launch after it
 pays 6.6.
 
+Guide initialization is also deferred until a playlist is actually available. An empty fresh
+install therefore pays neither the initial XMLTV download nor the parse/restore cost; selecting or
+restoring a playlist starts the one idempotent initial guide load.
+
 `EpgSnapshotSizeTest` guards the decode-vs-parse margin. It deliberately asserts **nothing about file
 size**: synthetic titles are near-identical, so gzip crushes a generated XMLTV document about
 eighteenfold (41KB against 737KB for the binary) and such a test measures the fixture, not the

@@ -1,6 +1,7 @@
 package com.uacastplayer.cast
 
 import com.uacastplayer.core.cast.AudioCodec
+import com.uacastplayer.core.cast.CodecDisplayName
 import com.uacastplayer.core.cast.VideoCodec
 import org.junit.Assert.assertEquals
 import org.junit.Test

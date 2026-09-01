@@ -2,9 +2,6 @@ package com.uacastplayer.player
 
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.VideoSize
-import com.uacastplayer.core.cast.CastCompatibilityVerdict
-import com.uacastplayer.cast.CastStatusMessage
-import com.uacastplayer.cast.CodecIncompatibility
 import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.playlist.M3uChannel
 
@@ -70,13 +67,13 @@ data class PlayerUiState(
     val isCasting: Boolean = false,
     /**
      * What to tell the user about a cast that is not playing, already resolved - see
-     * [com.uacastplayer.cast.CastStatusMessagePolicy].
+     * by the cast adapter before it crosses [PlayerCastPort].
      *
      * One field rather than the five pieces of cast state it is derived from. Those were mirrored
      * here individually and combined by a `when` in the composable, which is where their precedence
      * silently went wrong; nothing else on this screen ever read them separately.
      */
-    val castStatusMessage: CastStatusMessage? = null,
+    val castStatusMessage: PlayerCastStatusMessage? = null,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */

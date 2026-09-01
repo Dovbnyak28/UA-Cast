@@ -106,6 +106,7 @@ internal fun MainAppContent(
     }
     var showHelp by remember { mutableStateOf(false) }
     var showTerms by remember { mutableStateOf(false) }
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showAddPlaylist by remember { mutableStateOf(false) }
     val guidedTourState by viewModel.guidedTourState.collectAsStateWithLifecycle()
 
@@ -182,121 +183,133 @@ internal fun MainAppContent(
         onSkip = viewModel::guidedTourSkip,
         onComplete = viewModel::guidedTourComplete,
     ) {
-    val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
-    val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
-    // The store's purchase flow needs an Activity to show its own UI over; findActivity() is
-    // this project's existing way of reaching one from a composable.
-    val activity = LocalContext.current.findActivity()
+        val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
+        val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
+        // The store's purchase flow needs an Activity to show its own UI over; findActivity() is
+        // this project's existing way of reaching one from a composable.
+        val activity = LocalContext.current.findActivity()
 
-    // Asked for when a premium surface is about to be shown rather than at startup: an app whose
-    // user never opens the premium screen should not be talking to a store at all.
-    LaunchedEffect(Unit) { viewModel.refreshPremiumProducts() }
+        // Asked for when a premium surface is about to be shown rather than at startup: an app whose
+        // user never opens the premium screen should not be talking to a store at all.
+        LaunchedEffect(Unit) { viewModel.refreshPremiumProducts() }
 
-    // remember, not a plain construction: this holder carries a Set and lambdas, so Compose treats
-    // it as unstable and compares it by identity. Built fresh on every pass it is never equal to the
-    // previous one, and since ScaffoldZone recomposes whenever any of its flows emits - the EPG
-    // clock ticks twice a minute on its own - that would stop SettingsScreen from ever skipping.
-    // Keyed on the values it actually derives from.
-    //
-    // Built here rather than inside ScaffoldZone because two things need it now: the Settings
-    // section, and the gate below, which is provided above every screen.
-    val premiumOutcome by viewModel.lastPurchaseOutcome.collectAsStateWithLifecycle()
-    val premiumPurchasing by viewModel.isPurchasing.collectAsStateWithLifecycle()
-    val premiumConnection by viewModel.premiumConnection.collectAsStateWithLifecycle()
-    val premiumSection = remember(
-        entitlements,
-        premiumProducts,
-        activity,
-        premiumOutcome,
-        premiumPurchasing,
-        premiumConnection,
-    ) {
-        PremiumSectionState(
-            entitlements = entitlements,
-            products = premiumProducts,
-            onPurchase = { product -> viewModel.purchasePremium(product, activity) },
-            onRestore = viewModel::restorePremiumPurchases,
-            lastOutcome = premiumOutcome,
-            isPurchasing = premiumPurchasing,
-            connection = premiumConnection,
-            // Fixed for the lifetime of the process: filled in by the debug Application before any
-            // composition runs, and empty forever in a release build.
-            developerStates = viewModel.developerLicenseStates,
-            onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
+        // remember, not a plain construction: this holder carries a Set and lambdas, so Compose treats
+        // it as unstable and compares it by identity. Built fresh on every pass it is never equal to the
+        // previous one, and since ScaffoldZone recomposes whenever any of its flows emits - the EPG
+        // clock ticks twice a minute on its own - that would stop SettingsScreen from ever skipping.
+        // Keyed on the values it actually derives from.
+        //
+        // Built here rather than inside ScaffoldZone because two things need it now: the Settings
+        // section, and the gate below, which is provided above every screen.
+        val premiumOutcome by viewModel.lastPurchaseOutcome.collectAsStateWithLifecycle()
+        val premiumPurchasing by viewModel.isPurchasing.collectAsStateWithLifecycle()
+        val premiumConnection by viewModel.premiumConnection.collectAsStateWithLifecycle()
+        val premiumSection = remember(
+            entitlements,
+            premiumProducts,
+            activity,
+            premiumOutcome,
+            premiumPurchasing,
+            premiumConnection,
+        ) {
+            PremiumSectionState(
+                entitlements = entitlements,
+                products = premiumProducts,
+                onPurchase = { product -> viewModel.purchasePremium(product, activity) },
+                onRestore = viewModel::restorePremiumPurchases,
+                lastOutcome = premiumOutcome,
+                isPurchasing = premiumPurchasing,
+                connection = premiumConnection,
+                // Fixed for the lifetime of the process: filled in by the debug Application before any
+                // composition runs, and empty forever in a release build.
+                developerStates = viewModel.developerLicenseStates,
+                onDeveloperStateSelected = viewModel::applyDeveloperLicenseState,
+            )
+        }
+
+        // Provided here, above every screen, for the reason FeatureGate's own doc gives: an offer point
+        // exists in Settings, in the playlist screens and in the cast sheet, and passing this down would
+        // add two parameters to each of the signatures in between. Its surfaces are drawn as the last
+        // sibling in the Box below, so the paywall lands over whatever refused the tap.
+        val premiumUi = rememberFeatureGate(
+            featureManager = viewModel.featureManager,
+            section = premiumSection,
         )
-    }
+        CompositionLocalProvider(
+            LocalFeatureGate provides premiumUi.gate,
+            LocalPremiumNotice provides premiumUi.notice,
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                ScaffoldZone(
+                    viewModel = viewModel,
+                    playlistState = playlistState,
+                    guidedTourDestination = guidedTourState.currentStep?.destination,
+                    currentLanguage = currentLanguage,
+                    currentAppTheme = currentAppTheme,
+                    onExitApp = onFinish,
+                    showHelp = showHelp,
+                    showTerms = showTerms,
+                    showPrivacyPolicy = showPrivacyPolicy,
+                    showAddPlaylist = showAddPlaylist,
+                    focusChannelsToken = focusChannelsToken,
+                    onOpenHelp = { showHelp = true },
+                    onOpenTerms = { showTerms = true },
+                    onOpenPrivacyPolicy = { showPrivacyPolicy = true },
+                    onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport,
+                    onOpenAddPlaylist = { showAddPlaylist = true },
+                    onCloseHelp = { showHelp = false },
+                    onCloseTerms = { showTerms = false },
+                    onClosePrivacyPolicy = { showPrivacyPolicy = false },
+                    onCloseAddPlaylist = { showAddPlaylist = false },
+                    onChannelSelected = openPlayer,
+                    onPlaylistLoaded = {
+                        showAddPlaylist = false
+                        focusChannelsToken++
+                    },
+                    // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
+                    // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
+                    pickPlaylistFile = {
+                        pickPlaylistFile.launchOrLogAbsence(
+                            arrayOf("audio/x-mpegurl", "*/*"),
+                            "pick a playlist",
+                        )
+                    },
+                    exportBackupFile = {
+                        exportBackupFile.launchOrLogAbsence(
+                            "ua-cast-backup-${LocalDate.now()}.json",
+                            "export a backup",
+                        )
+                    },
+                    importBackupFile = {
+                        importBackupFile.launchOrLogAbsence(
+                            arrayOf("application/json", "*/*"),
+                            "import a backup",
+                        )
+                    },
+                    requireParentalControlUnlock = requireParentalControlUnlock,
+                    premiumSection = premiumSection,
+                )
 
-    // Provided here, above every screen, for the reason FeatureGate's own doc gives: an offer point
-    // exists in Settings, in the playlist screens and in the cast sheet, and passing this down would
-    // add two parameters to each of the signatures in between. Its surfaces are drawn as the last
-    // sibling in the Box below, so the paywall lands over whatever refused the tap.
-    val premiumUi = rememberFeatureGate(
-        featureManager = viewModel.featureManager,
-        section = premiumSection,
-    )
-    CompositionLocalProvider(
-        LocalFeatureGate provides premiumUi.gate,
-        LocalPremiumNotice provides premiumUi.notice,
-    ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        ScaffoldZone(
-            viewModel = viewModel,
-            playlistState = playlistState,
-            guidedTourDestination = guidedTourState.currentStep?.destination,
-            currentLanguage = currentLanguage,
-            currentAppTheme = currentAppTheme,
-            onExitApp = onFinish,
-            showHelp = showHelp,
-            showTerms = showTerms,
-            showAddPlaylist = showAddPlaylist,
-            focusChannelsToken = focusChannelsToken,
-            onOpenHelp = { showHelp = true },
-            onOpenTerms = { showTerms = true },
-            onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport,
-            onOpenAddPlaylist = { showAddPlaylist = true },
-            onCloseHelp = { showHelp = false },
-            onCloseTerms = { showTerms = false },
-            onCloseAddPlaylist = { showAddPlaylist = false },
-            onChannelSelected = openPlayer,
-            onPlaylistLoaded = {
-                showAddPlaylist = false
-                focusChannelsToken++
-            },
-            // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
-            // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
-            pickPlaylistFile = {
-                pickPlaylistFile.launchOrLogAbsence(arrayOf("audio/x-mpegurl", "*/*"), "pick a playlist")
-            },
-            exportBackupFile = {
-                exportBackupFile.launchOrLogAbsence("ua-cast-backup-${LocalDate.now()}.json", "export a backup")
-            },
-            importBackupFile = {
-                importBackupFile.launchOrLogAbsence(arrayOf("application/json", "*/*"), "import a backup")
-            },
-            requireParentalControlUnlock = requireParentalControlUnlock,
-            premiumSection = premiumSection,
-        )
+                // A single stable PlayerHost call site, always composed whenever a channel is loaded
+                // regardless of layout, drawn as a later sibling so it overlays whatever ScaffoldZone is
+                // showing - this must never be duplicated into a second call site (e.g. one per branch),
+                // since PlayerHost owns its own NavHost/PlayerViewModel/ExoPlayer and a second call site
+                // would mean a second, independent instance of all three.
+                PlayerZone(
+                    viewModel = viewModel,
+                    playerRequest = playerRequest,
+                    playerContainerState = playerContainerState,
+                    onPlayerContainerStateChange = { playerContainerState = it },
+                    onClosePlayer = closePlayer,
+                    backHandlerBlocked = showHelp || showTerms || showPrivacyPolicy || showAddPlaylist,
+                )
 
-        // A single stable PlayerHost call site, always composed whenever a channel is loaded
-        // regardless of layout, drawn as a later sibling so it overlays whatever ScaffoldZone is
-        // showing - this must never be duplicated into a second call site (e.g. one per branch),
-        // since PlayerHost owns its own NavHost/PlayerViewModel/ExoPlayer and a second call site
-        // would mean a second, independent instance of all three.
-        PlayerZone(
-            viewModel = viewModel,
-            playerRequest = playerRequest,
-            playerContainerState = playerContainerState,
-            onPlayerContainerStateChange = { playerContainerState = it },
-            onClosePlayer = closePlayer,
-            backHandlerBlocked = showHelp || showTerms || showAddPlaylist,
-        )
+                BatteryHintZone(viewModel = viewModel)
 
-        BatteryHintZone(viewModel = viewModel)
-
-        // Last, so the unlock dialog and the premium sheet sit over the screen that raised them -
-        // including over the player, which is itself an overlay.
-        premiumUi.overlays()
-    }
-    }
+                // Last, so the unlock dialog and the premium sheet sit over the screen that raised them -
+                // including over the player, which is itself an overlay.
+                premiumUi.overlays()
+            }
+        }
     }
 }

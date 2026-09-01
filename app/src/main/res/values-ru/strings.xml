@@ -76,6 +76,7 @@
     <string name="add_playlist_password_show">Показать</string>
     <string name="add_playlist_password_hide">Скрыть</string>
     <string name="add_playlist_xtream_cleartext_warning">Этот сервер использует незашифрованный HTTP. Логин, пароль и ссылки на потоки могут прочитать или изменить при передаче. Используйте https://, если провайдер его поддерживает.</string>
+    <string name="add_playlist_url_cleartext_warning">Этот плейлист использует незашифрованный HTTP. Его адрес, встроенные данные доступа и загруженное содержимое могут прочитать или изменить при передаче. Используйте HTTPS, если провайдер его поддерживает.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Пока нет каналов</string>
@@ -83,6 +84,7 @@
     <string name="channels_error_subtitle">Проверьте источник и соединение, затем повторите</string>
     <string name="common_retry">Попробовать снова</string>
     <string name="channels_search_hint">Поиск каналов</string>
+    <string name="channels_clear_search">Очистить поиск каналов</string>
     <string name="channels_groups_title">Группы каналов</string>
     <string name="channels_no_search_results">Нет каналов по запросу «%1$s»</string>
     <string name="channels_search_all_hint">Поиск по всем каналам</string>
@@ -93,6 +95,7 @@
     <string name="channels_channel_guide">Гид</string>
     <string name="channels_channel_add_favorite">Добавить в избранное</string>
     <string name="channels_channel_remove_favorite">Убрать из избранного</string>
+    <string name="channels_more_actions">Другие действия с каналом</string>
     <string name="channels_channel_lock">Заблокировать канал</string>
     <string name="channels_channel_unlock">Разблокировать канал</string>
     <string name="channels_channel_locked">Заблокировано - нажмите, чтобы ввести PIN</string>
@@ -145,7 +148,7 @@
 
     <!-- Settings screen -->
     <string name="settings_section_general">Общие</string>
-    <string name="settings_back_to_overview">Все настройки</string>
+    <string name="settings_back_to_overview">Вернуться ко всем настройкам</string>
     <string name="settings_page_general_summary">Язык, тема, телепрограмма и работа батареи</string>
     <string name="settings_page_playlist_access">Плейлист и доступ</string>
     <string name="settings_page_playlist_summary">Источники, скрытые группы и родительский контроль</string>
@@ -225,6 +228,7 @@
     <string name="cache_icons_label">Кеш логотипов</string>
     <string name="cache_coil_label">Кеш изображений</string>
     <string name="cache_clear_button">Очистить</string>
+    <string name="add_playlist_clear_url">Очистить URL плейлиста</string>
     <string name="settings_device_tier_label">Определённый уровень устройства</string>
     <string name="device_tier_low_end">Базовый</string>
     <string name="device_tier_mid_range">Стандартный</string>
@@ -234,6 +238,7 @@
     <string name="settings_help_body">UA Cast Player — это личный IPTV-плеер. Добавьте плейлист на вкладке «Каналы» (по ссылке или файлом), выберите источник телепрограммы и коснитесь любого канала. Кнопка Cast транслирует на Chromecast или Google TV; соседняя кнопка добирается до телевизоров, работающих через DLNA. Если поток не воспроизводится на устройстве напрямую, приложение повторяет попытку через промежуточный сервер на вашем телефоне.</string>
     <string name="settings_open_help">Подробная справка</string>
     <string name="settings_open_terms">Условия использования</string>
+    <string name="settings_open_privacy_policy">Политика конфиденциальности</string>
     <string name="settings_send_diagnostics">Отправить журнал работы разработчику</string>
     <string name="settings_send_button">Отправить</string>
     <string name="settings_diagnostics_routing_label">Эффективность трансляции (остаётся на этом устройстве)</string>
@@ -279,6 +284,7 @@
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Условия использования</string>
+    <string name="privacy_policy_title">Политика конфиденциальности</string>
     <string name="terms_intro">Устанавливая или используя UA Cast Player («приложение»), вы соглашаетесь с этими Условиями использования. Если вы не согласны — не используйте приложение.</string>
     <string name="terms_s1_title">1. Что такое это приложение</string>
     <string name="terms_s1_body">UA Cast Player — это универсальный плеер для M3U/M3U8 плейлистов, которые вы добавляете самостоятельно, и отправитель для Google Cast. Приложение не предоставляет, не продаёт, не подбирает и не проверяет никакой собственный канал, фильм или медиаконтент — каждый поток происходит из ссылки или файла, который вы указали сами.</string>
@@ -312,6 +318,8 @@
     <string name="player_mini_close">Закрыть плеер</string>
     <string name="player_mini_on_tv_badge">На ТВ</string>
     <string name="cast_status_connected">Трансляция</string>
+    <string name="player_chromecast_cast">Транслировать на Chromecast</string>
+    <string name="player_chromecast_connected">Подключено к Chromecast</string>
     <string name="player_audio_track">Аудио</string>
     <string name="player_subtitle_track">Субтитры</string>
     <string name="player_subtitle_off">Выключено</string>
@@ -330,6 +338,7 @@
     <string name="player_volume_decrease">Уменьшить громкость, сейчас %1$d процентов</string>
     <string name="player_volume_increase">Увеличить громкость, сейчас %1$d процентов</string>
     <string name="player_back_to_channels">Назад к каналам</string>
+    <string name="player_toggle_controls">Показать или скрыть элементы управления</string>
     <string name="player_next_channels_title">Следующие каналы</string>
     <string name="player_view_all">Смотреть все</string>
     <string name="player_quality">Качество видео</string>
@@ -389,6 +398,7 @@
     <string name="common_cancel">Отмена</string>
     <!-- DLNA casting -->
     <string name="player_dlna_cast">Транслировать на другое устройство (DLNA)</string>
+    <string name="player_dlna_connected">Подключено к телевизору через DLNA</string>
     <string name="dlna_sheet_title">Другие устройства (DLNA)</string>
     <string name="dlna_sheet_searching">Поиск устройств…</string>
     <string name="dlna_sheet_no_devices">Устройства не найдены</string>
@@ -420,6 +430,9 @@
     <string name="guided_tour_settings_body">Язык и тема, размер буфера, иконки каналов, родительский контроль, резервная копия и обновления. Здесь же живёт и это обучение, если захотите пройти ещё раз.</string>
 
     <string name="settings_section_tutorial">Обучение</string>
+    <string name="settings_search_hint">Поиск в настройках</string>
+    <string name="settings_search_clear">Очистить поиск настроек</string>
+    <string name="settings_search_no_results">Нет настроек по запросу «%1$s»</string>
     <string name="settings_tutorial_label">Интерактивный тур</string>
     <string name="settings_tutorial_button">Показать</string>
     <string name="settings_tutorial_hint_unseen">Краткий обзор основных возможностей.</string>
@@ -427,6 +440,14 @@
 
     <string name="dlna_volume">Громкость телевизора</string>
     <string name="dlna_volume_value">%1$d%%</string>
+    <string name="epg_today">Сегодня</string>
+    <string name="epg_previous_day">Назад</string>
+    <string name="epg_next_day">Далее</string>
+    <string name="epg_jump_today">Сегодня</string>
+    <string name="epg_timezone">Часовой пояс: %1$s</string>
+    <string name="home_make_it_yours_title">Настройте главный экран</string>
+    <string name="home_make_it_yours_body">Добавляйте часто просматриваемые каналы в избранное, чтобы открывать их одним нажатием.</string>
+    <string name="home_browse_channels_button">Открыть каналы</string>
 
     <string name="update_banner_title">Доступна новая версия</string>
     <string name="update_banner_message">Версию %1$s можно загрузить.</string>

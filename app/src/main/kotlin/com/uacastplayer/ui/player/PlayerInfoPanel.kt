@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -71,7 +72,7 @@ internal fun PillButton(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -236,7 +237,10 @@ private fun RowScope.QuickSettingItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.clickable(onClick = onClick)) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+    ) {
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -297,7 +301,11 @@ internal fun NextChannelsRail(
                     // Inside a LazyRow - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
                         .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-                        .clickable { onSelect(indexed) }
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = indexed.channel.displayName,
+                            onClick = { onSelect(indexed) },
+                        )
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {

@@ -53,8 +53,11 @@ config.
 ## Caching and refresh
 
 The parsed guide - not the XMLTV document it came from - is written to `epg_snapshot.bin`
-(`data/epg/EpgSnapshotStore.kt`, `epg/EpgSnapshotCodec.kt`) and restored at startup, which is what
-makes the guide available offline and instantly.
+(`data/epg/EpgSnapshotStore.kt`, `epg/EpgSnapshotCodec.kt`) and restored when the first playlist is
+available during startup, which is what makes the guide available offline and quickly. A fresh
+install with no playlist deliberately does not fetch or parse a guide: there are no channels to
+match it to, so that work would only consume network, CPU and heap while showing a misleading
+progress banner over the empty state.
 
 **A restored snapshot from an earlier day is refreshed in the background, on an unmetered network
 only** (`epg/EpgRefreshPolicy.kt`, `EpgController.refreshIfFromAnEarlierDay`). The header's

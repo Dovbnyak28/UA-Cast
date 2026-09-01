@@ -33,6 +33,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -201,6 +202,13 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth().padding(top = GapL),
             )
 
+            if (homeContent.continueWatching == null && favoriteChannels.isEmpty()) {
+                HomePersonalizationCard(
+                    onBrowseChannels = onOpenChannels,
+                    modifier = Modifier.padding(top = GapL, bottom = GapL),
+                )
+            }
+
             if (favoriteChannels.isNotEmpty()) {
                 HomeFavoritesRow(
                     channels = favoriteChannels,
@@ -236,6 +244,52 @@ fun HomeScreen(
                 onOpenAddPlaylist()
             },
             onDismiss = { showSourceSheet = false },
+        )
+    }
+}
+
+/** Fills the new-user Home state with a useful next step instead of leaving a tall blank canvas. */
+@Composable
+private fun HomePersonalizationCard(
+    onBrowseChannels: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = false,
+            )
+            .padding(CardPadding),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = AppIcons.Favorites,
+                contentDescription = null,
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                text = stringResource(R.string.home_make_it_yours_title),
+                style = CardTitle,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.padding(start = GapM),
+            )
+        }
+        Text(
+            text = stringResource(R.string.home_make_it_yours_body),
+            style = BodyText,
+            color = UaTheme.palette.labelSecondary,
+            modifier = Modifier.padding(top = GapS),
+        )
+        PrimaryButton(
+            text = stringResource(R.string.home_browse_channels_button),
+            onClick = onBrowseChannels,
+            leadingIcon = AppIcons.Channels,
+            modifier = Modifier.fillMaxWidth().padding(top = GapM),
         )
     }
 }
@@ -305,7 +359,11 @@ private fun PlaylistDashboardCard(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(onClick = onClick)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.home_active_playlist_label),
+                onClick = onClick,
+            )
             // The tour's "add a playlist" target for a user who already has one: this card is what
             // opens the source sheet, and adding another is what that sheet is for. The empty-state
             // button below registers the same name - the two branches are mutually exclusive, so
@@ -467,7 +525,11 @@ private fun ContinueWatchingCard(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(onClick = onClick)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.home_continue_watching_label),
+                onClick = onClick,
+            )
             .padding(CardPadding),
     ) {
         Text(
@@ -556,7 +618,9 @@ private fun HomeFavoriteItem(
     onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.width(NpLogoSize + GapM).clickable(onClick = onClick),
+        modifier = Modifier
+            .width(NpLogoSize + GapM)
+            .clickable(role = Role.Button, onClickLabel = channel.displayName, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ChannelIcon(channel, resolveIcon, size = NpLogoSize, refreshKey = iconRefreshKey)

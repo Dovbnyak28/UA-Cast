@@ -7,6 +7,7 @@ package com.uacastplayer.ui
  */
 object UiTestTags {
     const val MINI_PLAYER_BAR = "mini_player_bar"
+    const val SETTINGS_SEARCH = "settings_search"
 
     /** The root top bar's title row, matched by tag because the title itself is a localised,
      * per-destination string. See `RootTopBarLayoutTest`. */
@@ -35,6 +36,10 @@ object UiTestTags {
      * it. Position in that list would work until somebody adds a row above.
      */
     const val SETTINGS_OPEN_HELP_BUTTON = "settings_open_help_button"
+
+    /** The in-app Privacy Policy document body. */
+    const val PRIVACY_POLICY_BODY = "privacy_policy_body"
+    const val SETTINGS_OPEN_PRIVACY_BUTTON = "settings_open_privacy_button"
 
     /**
      * The scrolling body of the "Send diagnostics" preview dialog.

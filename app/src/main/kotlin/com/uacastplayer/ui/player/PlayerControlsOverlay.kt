@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -134,7 +135,9 @@ internal fun PlayerControlsOverlay(
             SmallRoundIconButton(
                 icon = AppIcons.CastToTv,
                 onClick = onOpenDlnaSheet,
-                contentDescription = stringResource(R.string.player_dlna_cast),
+                contentDescription = stringResource(
+                    if (isDlnaCasting) R.string.player_dlna_connected else R.string.player_dlna_cast,
+                ),
                 background = UaTheme.palette.scrimBackground,
                 tint = if (isDlnaCasting) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
                 modifier = Modifier.liveRing(active = isDlnaCasting, color = UaTheme.palette.azure),
@@ -173,7 +176,11 @@ internal fun PlayerControlsOverlay(
                             .clip(RoundedCornerShape(RadiusItem))
                             .background(UaTheme.palette.scrimBackground)
                             .border(1.dp, UaTheme.palette.overlayHighlight, RoundedCornerShape(RadiusItem))
-                            .clickable { onSelectPreview(indexed) }
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = indexed.channel.displayName,
+                                onClick = { onSelectPreview(indexed) },
+                            )
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
@@ -325,7 +332,11 @@ private fun SleepTimerButton(remainingMillis: State<Long?>, onClick: () -> Unit)
                 .height(IconButtonSize)
                 .clip(RoundedCornerShape(IconButtonSize / 2))
                 .background(UaTheme.palette.scrimBackground)
-                .clickable(onClick = onClick)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.player_sleep_timer),
+                    onClick = onClick,
+                )
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

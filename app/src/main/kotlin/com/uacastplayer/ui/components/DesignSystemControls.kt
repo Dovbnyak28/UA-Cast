@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -206,6 +207,7 @@ fun RoundIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    onClickLabel: String? = contentDescription,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -223,6 +225,8 @@ fun RoundIconButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = onClickLabel,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
@@ -243,6 +247,7 @@ fun SmallRoundIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    onClickLabel: String? = contentDescription,
     tint: Color = UaTheme.palette.labelPrimary,
     background: Color = UaTheme.palette.surface1,
     /** The glyph inside the circle. Raise it for an icon that has to hold its own beside the
@@ -266,6 +271,8 @@ fun SmallRoundIconButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = onClickLabel,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,

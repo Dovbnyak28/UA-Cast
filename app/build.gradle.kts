@@ -55,6 +55,15 @@ android {
         }
     }
 
+    // Package the reviewed legal documents in the APK as well as in the repository. The in-app
+    // Privacy Policy screen reads this same HTML, so the copy shown to users cannot silently drift
+    // away from the copy published for the store listing.
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(rootProject.file("legal"))
+        }
+    }
+
     // Native code is 78% of the release APK (22.6MB of 29.1MB), all of it the same FFmpeg decoders
     // built four times over. A per-ABI APK carries one of them: ~11.7MB for arm64-v8a against
     // 29.1MB before, i.e. what a phone actually downloads drops by well over half.
@@ -113,6 +122,18 @@ android {
             val releaseSigning = signingConfigs.getByName("release")
             if (releaseSigning.storeFile != null) {
                 signingConfig = releaseSigning
+            }
+            val signingMissing = releaseSigning.storeFile?.isFile != true ||
+                releaseSigning.storePassword.isNullOrBlank() ||
+                releaseSigning.keyAlias.isNullOrBlank() ||
+                releaseSigning.keyPassword.isNullOrBlank()
+            if (
+                (project.findProperty("uacast.requireSigning") as String?)?.toBoolean() == true &&
+                    signingMissing
+            ) {
+                throw GradleException(
+                    "Release signing is required but UACAST_STORE_FILE/UACAST_* credentials are missing",
+                )
             }
         }
         create("play") {
@@ -339,16 +360,17 @@ dependencies {
 }
 
 /**
- * Compose-rule tests can only run against the debug variant, so the release unit-test task skips
+ * Compose-rule tests can only run against the debug variant, so release-like unit-test tasks skip
  * them.
  *
  * `createComposeRule()` launches `androidx.activity.ComponentActivity`, declared solely by the
  * `compose-ui-test-manifest` artifact - a `debugImplementation` dependency, since it exists to host
  * tests and has no business in a release build. Its manifest entry is merged into the debug manifest
- * only, so under `testReleaseUnitTest` these fail at rule setup with "Unable to resolve activity for
- * Intent ... androidx.activity.ComponentActivity", which says nothing about variants and reads like
- * a broken test. CI runs `verifyRoborazziDebug` (the whole debug suite plus golden verification), so
- * nothing goes uncovered by excluding them here.
+ * only, so under `testReleaseUnitTest` or `testPlayUnitTest` these fail at rule setup with "Unable
+ * to resolve activity for Intent ... androidx.activity.ComponentActivity", which says nothing
+ * about variants and reads like a broken test. CI and the signed-release workflow run
+ * `verifyRoborazziDebug` (the whole debug suite plus golden verification), so nothing goes
+ * uncovered by excluding them from either release-like task.
  *
  * By category rather than class-name pattern so renaming or moving a test cannot quietly drop it
  * back into the release run - see [com.uacastplayer.testing.RequiresComposeTestManifest].
@@ -359,7 +381,7 @@ tasks.withType<Test>().configureEach {
     // Matched by name inside this lazy block rather than tasks.named("testReleaseUnitTest"): AGP
     // registers the per-variant test tasks itself, and they do not exist yet while this file is
     // being evaluated.
-    if (name == "testReleaseUnitTest") {
+    if (name == "testReleaseUnitTest" || name == "testPlayUnitTest") {
         useJUnit { excludeCategories(composeTestManifestCategory) }
     }
     // Resolved lazily through a provider so the 203MB artifact is only fetched when tests actually

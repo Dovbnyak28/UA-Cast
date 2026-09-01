@@ -12,10 +12,6 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.uacastplayer.BuildConfig
-import com.uacastplayer.cast.CastChannel
-import com.uacastplayer.cast.CastStatusMessagePolicy
-import com.uacastplayer.cast.CastSessionRepository
-import com.uacastplayer.cast.CastSideEffect
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.dlna.DlnaConnectionState
 import com.uacastplayer.dlna.DlnaSessionRepository
@@ -57,7 +53,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // local player - while casting, switchToIndexImmediate() keeps it stopped (see
     // LocalPlaybackPolicy) instead of playing, so it never holds focus and a focus loss elsewhere
     // has nothing local to pause; the cast receiver's playback state is owned entirely by
-    // CastSessionRepository and is unreachable from this player's focus/noisy callbacks.
+    // the Cast adapter and is unreachable from this player's focus/noisy callbacks.
     private val exoPlayer: ExoPlayer = PlayerEngineFactory.create(
         context = application,
         dataSourceFactory = dataSourceFactory,
@@ -75,7 +71,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     var autoSkipDeadEnabled: Boolean = preferences.autoSkipDeadEnabled
     private var autoSkipCancelledForSession: Boolean = false
 
-    private val castRepository = CastSessionRepository.getInstance(application)
+    private val castPort = (application as? PlayerCastPortOwner)?.playerCastPort ?: DisconnectedPlayerCastPort
     private var isCasting: Boolean = false
 
     // DLNA is a second, independent cast target (see dlna/DlnaSessionRepository) - a receiver only
@@ -174,12 +170,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         exoPlayer.playWhenReady = true
 
         viewModelScope.launch {
-            castRepository.state.collect { state ->
-                isCasting = state.isSessionConnected
+            castPort.state.collect { state ->
+                isCasting = state.isConnected
                 _uiState.update {
                     it.copy(
                         isCasting = isCasting,
-                        castStatusMessage = CastStatusMessagePolicy.messageFor(state),
+                        castStatusMessage = state.statusMessage,
                     )
                 }
                 updateSeekability()
@@ -187,7 +183,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         viewModelScope.launch {
-            castRepository.sideEffects.collect { effect -> handleCastSideEffect(effect) }
+            castPort.sideEffects.collect { effect -> handleCastSideEffect(effect) }
         }
         viewModelScope.launch {
             dlnaRepository.state.collect { state -> handleDlnaStateChange(state) }
@@ -205,7 +201,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * [handleCastSideEffect] and `docs/DLNA.md`), so local playback is driven straight off the
      * connected/disconnected edge instead.
      *
-     * stop(), not pause(), for exactly the reason [CastSideEffect.PauseLocalPlayer] gives: a paused
+     * stop(), not pause(), for exactly the reason [PlayerCastSideEffect.PauseLocalPlayer] gives: a paused
      * live stream keeps its upstream connection, and IPTV origins routinely allow one connection per
      * account - while the phone holds that slot the proxy feeding the renderer can never get its
      * own, so casting starves. The media item survives stop(), so prepare()+play() below restores
@@ -268,7 +264,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         exoPlayer.play()
     }
 
-    private fun handleCastSideEffect(effect: CastSideEffect) {
+    private fun handleCastSideEffect(effect: PlayerCastSideEffect) {
         when (effect) {
             // stop(), not pause(): a paused live stream keeps its upstream connection (and often
             // keeps buffering), and IPTV providers routinely enforce ONE connection per account -
@@ -276,11 +272,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             // proxy's remux reader can never get a working connection, so casting starves forever.
             // The media item survives stop(), and ResumeLocalPlayer's prepare()+play() below fully
             // recovers from it. sampleForStall can't fight this: it bails while isCasting.
-            CastSideEffect.PauseLocalPlayer -> {
+            PlayerCastSideEffect.PauseLocalPlayer -> {
                 cancelLocalRecoveryForRemotePlayback()
                 exoPlayer.stop()
             }
-            CastSideEffect.ResumeLocalPlayer -> if (
+            PlayerCastSideEffect.ResumeLocalPlayer -> if (
                 // A DLNA renderer can still be playing: the two targets are connected and dropped
                 // independently, so "the cast ended" is not "nothing is playing remotely". Resuming
                 // anyway puts the same stream on the phone and the renderer at once, and the phone
@@ -298,10 +294,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             ) {
                 resumeLocalPlayback()
             }
-            is CastSideEffect.ApplyPendingChannelSwitch -> switchToIndexImmediate(effect.index)
-            is CastSideEffect.RecordIncompatibility ->
+            is PlayerCastSideEffect.ApplyPendingChannelSwitch -> switchToIndexImmediate(effect.index)
+            is PlayerCastSideEffect.RecordIncompatibility ->
                 AppLog.d(TAG) { "Cast incompatibility recorded: ${effect.reason}" }
-            CastSideEffect.CloseProxySession -> Unit // CastSessionRepository owns and closes the proxy itself.
+            PlayerCastSideEffect.CloseProxySession -> Unit // The Cast adapter owns and closes the proxy itself.
         }
     }
 
@@ -373,8 +369,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             // it fresh once local playback resumes - just not prepared right now.
             exoPlayer.stop()
         }
-        castRepository.setActiveChannel(
-            CastChannel(
+        castPort.setActiveChannel(
+            PlayerCastChannel(
                 index = transition.index,
                 streamUrl = channel.streamUrl,
                 title = channel.displayName,

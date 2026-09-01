@@ -1,6 +1,7 @@
 package com.uacastplayer.cast
 
 import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.CodecDisplayName
 import com.uacastplayer.core.cast.VideoCodec
 
 enum class CastLoadPhase { IDLE, LOADING, LOADED, FAILED }

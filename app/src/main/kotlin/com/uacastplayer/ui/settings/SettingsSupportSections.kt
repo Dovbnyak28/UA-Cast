@@ -231,6 +231,7 @@ internal fun HelpSettingsSection(
     settingsState: SettingsUiState,
     onOpenHelp: () -> Unit,
     onOpenTerms: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     remuxEffectiveness: RemuxEffectivenessCounts,
     ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
@@ -266,6 +267,13 @@ internal fun HelpSettingsSection(
             buttonLabel = stringResource(R.string.settings_open_button),
             onClick = onOpenTerms,
             modifier = Modifier.padding(top = 8.dp),
+        )
+        LinkRow(
+            label = stringResource(R.string.settings_open_privacy_policy),
+            buttonLabel = stringResource(R.string.settings_open_button),
+            onClick = onOpenPrivacyPolicy,
+            modifier = Modifier.padding(top = 8.dp),
+            buttonTag = UiTestTags.SETTINGS_OPEN_PRIVACY_BUTTON,
         )
         SendDiagnosticsRow(
             onBuildReport = onBuildDiagnosticsReport,

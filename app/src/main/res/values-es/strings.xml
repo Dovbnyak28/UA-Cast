@@ -73,6 +73,7 @@
     <string name="add_playlist_password_show">Mostrar</string>
     <string name="add_playlist_password_hide">Ocultar</string>
     <string name="add_playlist_xtream_cleartext_warning">Este servidor usa HTTP sin cifrar. El usuario, la contraseña y los enlaces pueden leerse o modificarse durante la transmisión. Usa https:// si tu proveedor lo admite.</string>
+    <string name="add_playlist_url_cleartext_warning">Esta lista usa HTTP sin cifrar. Su dirección, las credenciales incluidas y el contenido descargado pueden leerse o modificarse durante la transmisión. Usa HTTPS si tu proveedor lo admite.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Todavía no hay canales</string>
@@ -80,6 +81,7 @@
     <string name="channels_error_subtitle">Comprueba la fuente y la conexión e inténtalo de nuevo</string>
     <string name="common_retry">Intentar de nuevo</string>
     <string name="channels_search_hint">Buscar canales</string>
+    <string name="channels_clear_search">Borrar búsqueda de canales</string>
     <string name="channels_groups_title">Grupos de canales</string>
     <string name="channels_no_search_results">Ningún canal coincide con "%1$s"</string>
     <string name="channels_search_all_hint">Buscar en todos los canales</string>
@@ -90,6 +92,7 @@
     <string name="channels_channel_guide">Guía</string>
     <string name="channels_channel_add_favorite">Añadir a favoritos</string>
     <string name="channels_channel_remove_favorite">Quitar de favoritos</string>
+    <string name="channels_more_actions">Más acciones del canal</string>
     <string name="channels_channel_lock">Bloquear canal</string>
     <string name="channels_channel_unlock">Desbloquear canal</string>
     <string name="channels_channel_locked">Bloqueado - toca para introducir el PIN</string>
@@ -140,7 +143,7 @@
 
     <!-- Settings screen -->
     <string name="settings_section_general">General</string>
-    <string name="settings_back_to_overview">Todos los ajustes</string>
+    <string name="settings_back_to_overview">Volver a todos los ajustes</string>
     <string name="settings_page_general_summary">Idioma, tema, guía de TV y uso de batería</string>
     <string name="settings_page_playlist_access">Lista y acceso</string>
     <string name="settings_page_playlist_summary">Fuentes, grupos ocultos y control parental</string>
@@ -220,6 +223,7 @@
     <string name="cache_icons_label">Caché de logotipos</string>
     <string name="cache_coil_label">Caché de imágenes</string>
     <string name="cache_clear_button">Vaciar</string>
+    <string name="add_playlist_clear_url">Borrar URL de la lista</string>
     <string name="settings_device_tier_label">Nivel de dispositivo detectado</string>
     <string name="device_tier_low_end">Básico</string>
     <string name="device_tier_mid_range">Estándar</string>
@@ -229,6 +233,7 @@
     <string name="settings_help_body">UA Cast Player es un reproductor IPTV personal. Importa una lista desde la pestaña Canales (por URL o archivo), elige una fuente de guía y toca cualquier canal para verlo. El botón Cast reproduce en un Chromecast o Google TV; el botón contiguo alcanza televisores que usan DLNA. Si un flujo no se reproduce directamente en el receptor, la aplicación lo reintenta a través de un relevo local en tu teléfono.</string>
     <string name="settings_open_help">Ayuda detallada</string>
     <string name="settings_open_terms">Términos de uso</string>
+    <string name="settings_open_privacy_policy">Política de privacidad</string>
     <string name="settings_send_diagnostics">Enviar un registro de actividad al desarrollador</string>
     <string name="settings_send_button">Enviar</string>
     <string name="settings_diagnostics_routing_label">Efectividad de la transmisión (no sale de este dispositivo)</string>
@@ -274,6 +279,7 @@
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Términos de uso</string>
+    <string name="privacy_policy_title">Política de privacidad</string>
     <string name="terms_intro">Al instalar o usar UA Cast Player («la app»), aceptas estos Términos de uso. Si no estás de acuerdo, no uses la app.</string>
     <string name="terms_s1_title">1. Qué es esta app</string>
     <string name="terms_s1_body">UA Cast Player es un reproductor de propósito general para listas M3U/M3U8 que tú proporcionas, y un emisor de Google Cast. No aloja, ofrece, vende, selecciona ni verifica ningún canal, película o contenido multimedia propio — cada transmisión proviene de un enlace o archivo que tú mismo suministras.</string>
@@ -307,6 +313,8 @@
     <string name="player_mini_close">Cerrar reproductor</string>
     <string name="player_mini_on_tv_badge">En la TV</string>
     <string name="cast_status_connected">Transmitiendo</string>
+    <string name="player_chromecast_cast">Transmitir a Chromecast</string>
+    <string name="player_chromecast_connected">Conectado a Chromecast</string>
     <string name="player_audio_track">Audio</string>
     <string name="player_subtitle_track">Subtítulos</string>
     <string name="player_subtitle_off">Desactivados</string>
@@ -325,6 +333,7 @@
     <string name="player_volume_decrease">Bajar volumen, actualmente %1$d por ciento</string>
     <string name="player_volume_increase">Subir volumen, actualmente %1$d por ciento</string>
     <string name="player_back_to_channels">Volver a los canales</string>
+    <string name="player_toggle_controls">Mostrar u ocultar controles del reproductor</string>
     <string name="player_next_channels_title">Próximos canales</string>
     <string name="player_view_all">Ver todos</string>
     <string name="player_quality">Calidad de vídeo</string>
@@ -382,6 +391,7 @@
     <string name="common_cancel">Cancelar</string>
     <!-- DLNA casting -->
     <string name="player_dlna_cast">Transmitir a otros dispositivos (DLNA)</string>
+    <string name="player_dlna_connected">Conectado al televisor mediante DLNA</string>
     <string name="dlna_sheet_title">Otros dispositivos (DLNA)</string>
     <string name="dlna_sheet_searching">Buscando dispositivos…</string>
     <string name="dlna_sheet_no_devices">No se encontraron dispositivos</string>
@@ -413,6 +423,9 @@
     <string name="guided_tour_settings_body">Idioma y tema, tamaño del búfer, iconos de canales, control parental, copia de seguridad y actualizaciones. El tutorial también vive aquí, por si quieres repetirlo.</string>
 
     <string name="settings_section_tutorial">Tutorial</string>
+    <string name="settings_search_hint">Buscar en ajustes</string>
+    <string name="settings_search_clear">Borrar búsqueda de ajustes</string>
+    <string name="settings_search_no_results">Ningún ajuste coincide con «%1$s»</string>
     <string name="settings_tutorial_label">Recorrido guiado</string>
     <string name="settings_tutorial_button">Mostrar</string>
     <string name="settings_tutorial_hint_unseen">Un repaso breve de las funciones principales.</string>
@@ -420,6 +433,14 @@
 
     <string name="dlna_volume">Volumen del televisor</string>
     <string name="dlna_volume_value">%1$d%%</string>
+    <string name="epg_today">Hoy</string>
+    <string name="epg_previous_day">Anterior</string>
+    <string name="epg_next_day">Siguiente</string>
+    <string name="epg_jump_today">Hoy</string>
+    <string name="epg_timezone">Zona horaria: %1$s</string>
+    <string name="home_make_it_yours_title">Personaliza tu inicio</string>
+    <string name="home_make_it_yours_body">Marca tus canales favoritos para tenerlos aquí y acceder a ellos con un toque.</string>
+    <string name="home_browse_channels_button">Ver canales</string>
 
     <string name="update_banner_title">Hay una nueva versión disponible</string>
     <string name="update_banner_message">La versión %1$s está lista para descargar.</string>

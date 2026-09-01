@@ -10,8 +10,11 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.svg.SvgDecoder
+import com.uacastplayer.app.PlayerCastAdapter
 import okio.Path.Companion.toOkioPath
 import com.uacastplayer.data.cache.CachePaths
+import com.uacastplayer.player.PlayerCastPort
+import com.uacastplayer.player.PlayerCastPortOwner
 import java.io.File
 
 private const val COIL_DISK_CACHE_MAX_BYTES = 128L * 1024 * 1024
@@ -28,7 +31,9 @@ private const val COIL_MEMORY_CACHE_PERCENT = 0.10
  * developer license menu (see `premium/DeveloperMode.kt`). That subclass exists only in
  * `src/debug`, so a release build both keeps this class as its Application and contains no code
  * capable of granting a license. */
-open class UaCastPlayerApp : Application(), SingletonImageLoader.Factory {
+open class UaCastPlayerApp : Application(), SingletonImageLoader.Factory, PlayerCastPortOwner {
+
+    override val playerCastPort: PlayerCastPort by lazy { PlayerCastAdapter(this) }
 
     override fun onCreate() {
         super.onCreate()

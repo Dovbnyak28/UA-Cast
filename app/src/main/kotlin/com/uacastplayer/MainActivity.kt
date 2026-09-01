@@ -35,7 +35,13 @@ internal data class SavedPlayerRequest(val channelKey: String, val startIndex: I
 internal val SavedPlayerRequestSaver: Saver<SavedPlayerRequest?, List<Any>> = Saver(
     save = { request -> request?.let { listOf(it.channelKey, it.startIndex) }.orEmpty() },
     restore = { saved ->
-        if (saved.isEmpty()) null else SavedPlayerRequest(saved[0] as String, saved[1] as Int)
+        val channelKey = saved.getOrNull(0) as? String
+        val startIndex = saved.getOrNull(1) as? Int
+        if (channelKey.isNullOrBlank() || startIndex == null || startIndex < 0) {
+            null
+        } else {
+            SavedPlayerRequest(channelKey, startIndex)
+        }
     },
 )
 

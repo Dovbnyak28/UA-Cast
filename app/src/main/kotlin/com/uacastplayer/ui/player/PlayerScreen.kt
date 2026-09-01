@@ -37,6 +37,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -222,7 +227,11 @@ internal fun RecoveringPlaybackIndicator(
                 modifier = Modifier
                     .padding(top = 6.dp)
                     .minimumInteractiveComponentSize()
-                    .clickable(onClick = onPickAnotherChannel)
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = stringResource(R.string.player_pick_another_channel),
+                        onClick = onPickAnotherChannel,
+                    )
                     .padding(horizontal = 8.dp),
             )
         }
@@ -267,7 +276,11 @@ internal fun AutoSkipRecoveryIndicator(
             modifier = Modifier
                 .padding(top = 6.dp)
                 .minimumInteractiveComponentSize()
-                .clickable(onClick = onCancel)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.common_cancel),
+                    onClick = onCancel,
+                )
                 .padding(horizontal = 8.dp),
         )
     }
@@ -311,7 +324,11 @@ internal fun PlaybackFailureCard(
             modifier = Modifier
                 .padding(top = 8.dp)
                 .minimumInteractiveComponentSize()
-                .clickable(onClick = onExit)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.player_back_to_channels),
+                    onClick = onExit,
+                )
                 .padding(horizontal = 8.dp),
         )
     }
@@ -323,6 +340,10 @@ internal fun PlayerCastButton(
     background: Color = UaTheme.palette.scrimBackground,
     isCasting: Boolean = false,
 ) {
+    val castDescription = stringResource(
+        if (isCasting) R.string.player_chromecast_connected else R.string.player_chromecast_cast,
+    )
+    val castStateDescription = stringResource(R.string.cast_status_connected)
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (pressed) PRESS_SCALE_ICON else 1f,
@@ -335,6 +356,11 @@ internal fun PlayerCastButton(
             .guidedTourTarget(GuidedTourKeys.CAST_BUTTON)
             .scale(scale)
             .liveRing(active = isCasting, color = UaTheme.palette.azure)
+            .semantics(mergeDescendants = true) {
+                contentDescription = castDescription
+                role = Role.Button
+                if (isCasting) stateDescription = castStateDescription
+            }
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {

@@ -41,8 +41,12 @@ half the size of the universal one. Hand out the universal APK for a plain downl
 the three per-ABI APKs together if a store accepts multiple APKs per release. 32-bit x86 is not
 built at all (see `ndk.abiFilters`).
 
-For Play Store specifically, prefer `./gradlew :app:bundleRelease` - Play performs the same split
-server-side from a single `.aab` and none of the above needs thinking about.
+For Play Store specifically, use `./gradlew :app:bundlePlay` - Play performs the same split
+server-side from a single `.aab`, while the `play` build type removes the sideload updater,
+`REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION`, and its install-result receiver.
+Never upload `bundleRelease`: that is the sideload distribution and intentionally keeps those
+capabilities. `scripts/check-play-distribution.sh` verifies the merged Play manifest and
+`BuildConfig` after packaging.
 
 Every APK of a release gets its own `versionCode` - base × 10 plus a per-ABI digit, see
 `abiVersionCodeOffsets` in `app/build.gradle.kts`. A store rejects multiple APKs sharing one
@@ -108,6 +112,32 @@ APK signed with a different one, and the only way out for the user is to uninsta
 playlist, their guide and their licence with it. `ApkSignatureGate` refuses such a file before the
 system dialog can, which is verified on a real device by
 `UpdateInstallChainInstrumentedTest`.
+
+Local diagnostic builds may still use the normal Gradle fallback signing configuration. For a
+production release, make the requirement explicit:
+
+```bash
+./gradlew :app:bundlePlay -Puacast.requireSigning=true
+```
+
+With that flag the build fails before packaging when the `UACAST_*` signing properties are absent.
+The ordinary `android-ci.yml` release job is deliberately an **unsigned packaging diagnostic** and
+names its artifacts accordingly. It is not a distribution source.
+
+For a signed Play artifact, manually dispatch `.github/workflows/signed-release.yml` with an
+explicit monotonically increasing `version_code` and the release `version_name`. Its `production`
+environment needs these protected secrets:
+
+- `UACAST_KEYSTORE_BASE64` - base64 of the PKCS#12 keystore;
+- `UACAST_STORE_PASSWORD`;
+- `UACAST_KEY_ALIAS`;
+- `UACAST_KEY_PASSWORD`.
+
+The workflow materializes the key only under the runner's temporary directory, passes
+`-Puacast.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
+the AAB signature, then uploads only the signed Play bundle. It does not publish to Play Console;
+that remains an explicit human release step. Never commit the keystore, passwords, generated
+`gradle.properties`, or a base64 copy of the key.
 
 ### Which digit moves
 
