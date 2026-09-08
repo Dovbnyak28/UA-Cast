@@ -234,11 +234,23 @@ class PlayerLifecycleInstrumentedTest {
             viewModel.sleepTimer.start(3.seconds)
         }
         Espresso.pressBack()
-        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
-        composeTestRule.waitUntil(8_000) { !wantsToPlay() }
-        composeTestRule.activityRule.scenario.onActivity { activity ->
-            assertEquals(null, ViewModelProvider(activity)[PlayerViewModel::class.java].sleepTimer.remainingMillis.value)
+        // System Back is dispatched outside Compose's idling resources. Observe its result;
+        // do not treat Espresso returning as proof that the collapsed tree is already mounted.
+        composeTestRule.waitUntil(8_000) {
+            composeTestRule.onAllNodes(androidx.compose.ui.test.hasTestTag(UiTestTags.MINI_PLAYER_BAR))
+                .fetchSemanticsNodes().size == 1
         }
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        // A synthetic stream can stop independently of the timer. Wait for the actual expiry,
+        // then assert its playback effect, rather than mistaking an unrelated stop for expiry.
+        composeTestRule.waitUntil(8_000) {
+            var expired = false
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                expired = ViewModelProvider(activity)[PlayerViewModel::class.java].sleepTimer.remainingMillis.value == null
+            }
+            expired
+        }
+        assertTrue(!wantsToPlay())
     }
 
     /**

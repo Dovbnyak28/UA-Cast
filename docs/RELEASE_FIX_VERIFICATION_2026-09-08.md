@@ -155,6 +155,17 @@ The emulator step has a 30-minute cap within the existing 45-minute job budget s
 partial reports can still upload on step timeout. The shutdown regression passed
 20 separate local JVM runs; all four runner-status contract cases passed.
 
+Run `34267309258` passed all 5,878 JVM checks (119 core, 2,063 debug,
+1,848 release and 1,848 Play), screenshot verification, quality, packaging,
+and API 24/30 instrumentation. API 36 reported one missing-mini-player assertion
+in `sleepTimerSurvivesCollapsingThePlayer`. The test asserted immediately after
+system Back, without observing its asynchronous UI result. It also used a stopped
+synthetic stream as a proxy for timer expiry, even though that stream can stop on
+its own. The fixture now waits for the mini-player node, observes the timer's own
+expiry state, and then verifies paused playback. It sends only one Back, keeps the
+three-second real timer, and retains an eight-second bound; no production behavior
+or retry-on-failure was added. A fresh full CI gate is still required.
+
 The four reproduced audit findings are fixed and covered by regressions. This is not
 a claim that no unknown bugs exist. Real Hisense VIDAA/Chromecast interoperability,
 Google Play purchase/restore flows, Play Console acceptance, and large-scale behavior
