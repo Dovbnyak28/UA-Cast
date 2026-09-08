@@ -7,6 +7,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class FakeOriginServer private constructor(
     private val serverSocket: ServerSocket,
     private val playlistBody: String,
+    private val beforeDispatch: () -> Unit,
 ) {
     private val executor = Executors.newFixedThreadPool(WORKER_COUNT)
     private val activeSockets = ConcurrentHashMap.newKeySet<Socket>()
@@ -50,7 +52,19 @@ class FakeOriginServer private constructor(
                     break
                 }
                 activeSockets += socket
-                executor.execute { handle(socket) }
+                if (!running) {
+                    closeClient(socket)
+                    break
+                }
+                beforeDispatch()
+                try {
+                    executor.execute { handle(socket) }
+                } catch (_: RejectedExecutionException) {
+                    // shutdown() can win after accept(), including after the running check.
+                    // Queued work no longer owns this socket, so release it on the accept thread.
+                    closeClient(socket)
+                    break
+                }
             }
         }
     }
@@ -58,6 +72,7 @@ class FakeOriginServer private constructor(
     private fun handle(socket: Socket) {
         try {
             socket.use { s ->
+                s.soTimeout = READ_TIMEOUT_MILLIS
                 val reader = BufferedReader(InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8))
                 val requestLine = reader.readLine() ?: return
                 while (true) {
@@ -80,20 +95,26 @@ class FakeOriginServer private constructor(
         } catch (_: Exception) {
             failedResponses.incrementAndGet()
         } finally {
-            activeSockets -= socket
+            closeClient(socket)
         }
     }
 
     fun shutdown() {
         running = false
         closeQuietly(serverSocket)
-        activeSockets.toList().forEach(::closeQuietly)
+        // Iterate the concurrent set directly: toList() can race a last-element removal.
+        activeSockets.forEach(::closeClient)
         executor.shutdownNow()
         try {
             executor.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
+    }
+
+    private fun closeClient(socket: Socket) {
+        activeSockets -= socket
+        closeQuietly(socket)
     }
 
     companion object {
@@ -108,6 +129,7 @@ class FakeOriginServer private constructor(
         """.trimIndent()
         private const val WORKER_COUNT = 4
         private const val SHUTDOWN_TIMEOUT_SECONDS = 2L
+        private const val READ_TIMEOUT_MILLIS = 5_000
 
         private fun closeQuietly(closeable: AutoCloseable) {
             try {
@@ -119,7 +141,7 @@ class FakeOriginServer private constructor(
 
         /** Starts a server on an ephemeral local port serving [channelCount] channels, each
          * named "Channel N" and pointed at this same server for its (fake) stream. */
-        fun startWithChannels(channelCount: Int): FakeOriginServer {
+        fun startWithChannels(channelCount: Int, beforeDispatch: () -> Unit = {}): FakeOriginServer {
             val serverSocket = ServerSocket(0)
             val port = serverSocket.localPort
             val playlist = buildString {
@@ -129,7 +151,7 @@ class FakeOriginServer private constructor(
                     appendLine("http://127.0.0.1:$port/stream${i + 1}.ts")
                 }
             }
-            val server = FakeOriginServer(serverSocket, playlist)
+            val server = FakeOriginServer(serverSocket, playlist, beforeDispatch)
             server.start()
             return server
         }

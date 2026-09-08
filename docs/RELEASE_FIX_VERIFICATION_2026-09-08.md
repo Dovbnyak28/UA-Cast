@@ -166,6 +166,18 @@ expiry state, and then verifies paused playback. It sends only one Back, keeps t
 three-second real timer, and retains an eight-second bound; no production behavior
 or retry-on-failure was added. A fresh full CI gate is still required.
 
+The corrected sleep scenario passed ten separate local Android 16 runs. The next
+full local suite exposed an unrelated **test-origin teardown crash**:
+`FakeOriginServer` accepted a socket concurrently with executor shutdown and let
+`RejectedExecutionException` escape its accept thread. The fixture now closes late
+or rejected sockets, drains its concurrent set without a racy `toList()` snapshot,
+and bounds incomplete header reads. `FakeOriginServerLifecycleTest` deterministically
+stops the fixture between accept and dispatch, asserting EOF and no retained sockets.
+These changes are confined to `androidTest`; the application's proxy was not changed.
+The subsequent full isolated Android 16 run completed in **120.516 seconds** with
+`OK (86 tests)`: 84 completed tests and the same two opt-in private-playlist skips,
+zero failures. Detekt, architecture boundaries, and fixture-isolation checks passed.
+
 The four reproduced audit findings are fixed and covered by regressions. This is not
 a claim that no unknown bugs exist. Real Hisense VIDAA/Chromecast interoperability,
 Google Play purchase/restore flows, Play Console acceptance, and large-scale behavior
