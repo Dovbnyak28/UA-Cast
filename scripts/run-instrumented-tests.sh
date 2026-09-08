@@ -75,8 +75,15 @@ adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
 adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE.test" >/dev/null 2>&1 || true
 
 echo "Running $RUNNER"
-output=$(adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1)
-echo "$output"
+report_dir="app/build/reports/instrumented"
+mkdir -p "$report_dir"
+runner_status=0
+output=$(adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1) || runner_status=$?
+printf '%s\n' "$output" | tee "$report_dir/runner.txt"
+if [ "$runner_status" -ne 0 ]; then
+    echo "run-instrumented-tests: adb runner command failed with status $runner_status" >&2
+    exit "$runner_status"
+fi
 
 # Do not use grep -q with pipefail: grep may exit early on a long runner output, causing the
 # producer to receive SIGPIPE and making a real failure look like a non-match.

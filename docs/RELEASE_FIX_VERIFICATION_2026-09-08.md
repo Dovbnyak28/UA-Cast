@@ -83,6 +83,36 @@ of every possible user database. Physical phones were not used or modified in th
 
 ## Boundaries of the verdict
 
+### Additional defects exposed by the first Linux CI run
+
+Run `34261141864` passed debug/screenshot, release/Play JVM, quality, packaging, API 30
+and API 36 jobs, but correctly rejected the release on API 24 with four failures:
+
+- **P1 production compatibility:** configuring the real parental PIN threw
+  `NoSuchAlgorithmException`: the platform `PBKDF2WithHmacSHA256` factory requires
+  API 26, while the application supports API 24. `PinHasher` now uses a fixed
+  256-bit PBKDF2-HMAC-SHA256 fallback only when that factory is unavailable. The
+  platform still provides the HMAC primitive; salt encoding, work factor, and saved
+  hash format are unchanged. Five added core tests independently match OpenSSL
+  vectors and the native Java factory, including UTF-8 and empty passwords.
+- **Test harness compatibility:** three UI measurement fixtures called the API 26
+  window PixelCopy path on API 24. They now use the older whole-screen automation
+  capture on API 24/25; measurements still run, rather than skipping those tests.
+- **Missing CI artifacts:** instrumentation only printed its output. The script
+  now saves that output under the existing artifact path before inspecting either
+  adb status or the JUnit outcome, including failures.
+
+Local core verification after these changes: **119 passed**, zero failures, with
+app/core Detekt and both debug APKs building successfully. The added device test
+checks an independently derived stored PIN hash on every CI Android version.
+These changes require a fresh full CI run; the rejected first run is not a release
+approval. See the final GitHub Release for the successful run and published commit.
+
+References: [Android SecretKeyFactory availability](https://developer.android.com/reference/javax/crypto/SecretKeyFactory.html),
+[Mac availability](https://developer.android.com/reference/javax/crypto/Mac),
+[PBKDF2 definition](https://www.rfc-editor.org/rfc/rfc8018#section-5.2),
+[PixelCopy API](https://developer.android.com/reference/android/view/PixelCopy).
+
 The four reproduced audit findings are fixed and covered by regressions. This is not
 a claim that no unknown bugs exist. Real Hisense VIDAA/Chromecast interoperability,
 Google Play purchase/restore flows, Play Console acceptance, and large-scale behavior

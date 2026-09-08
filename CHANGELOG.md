@@ -12,6 +12,9 @@ local build produces.
 
 ### Fixed
 
+- **Setting or verifying a parental PIN could crash on Android 7 (API 24/25).** Devices without
+  the platform PBKDF2-SHA256 factory now derive the identical hash using the supported HMAC
+  primitive, preserving the existing salt format and 120,000-iteration work factor.
 - **Backup import could replace favorites before their startup read completed.** Imports now
   wait for the initial favorites load before merging, retaining existing entries on slow storage.
 - **Player restoration could bypass channel restrictions.** Opening waits for parental-control
@@ -49,6 +52,8 @@ local build produces.
   jobs. A manual `workflow_dispatch` entry point is available for release-candidate verification.
 - Android-free policies now compile in the JVM `core` module, with dependency-direction checks
   and an empty Detekt baseline maintained by the quality gate.
+- Device UI audit captures support API 24/25, and instrumentation output is retained as a CI
+  artifact even when adb or the test runner reports a failure.
 
 ## 0.9.2
 

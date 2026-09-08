@@ -2,6 +2,7 @@ package com.uacastplayer.ui
 
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Debug
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -106,8 +107,13 @@ class PlayerControlsAuditInstrumentedTest {
         // Do not misrepresent this fixture as an idle CPU/FPS or video memory measurement.
         report.appendLine("fixtureTotalPssKb=${memory.totalPss}; excludes video decoder; not a peak measurement")
         File(directory, "$name.txt").writeText(report.toString())
-        // Synchronize with the Compose root's draw, not an unrelated window/startup frame.
-        val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+        // The Compose window PixelCopy overload needs API 26. API 24/25 still execute the
+        // measurements above and capture the whole fullscreen window via the API 18 tool.
+        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            rule.onRoot().captureToImage().asAndroidBitmap()
+        } else {
+            checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }

@@ -1,6 +1,7 @@
 package com.uacastplayer.core.security
 
 import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
 import java.security.SecureRandom
 import java.util.Locale
 import javax.crypto.SecretKeyFactory
@@ -29,9 +30,26 @@ object PinHasher {
     }
 
     fun hash(pin: String, salt: String): String {
-        val spec = PBEKeySpec(pin.toCharArray(), salt.toByteArray(Charsets.UTF_8), PBKDF2_ITERATIONS, PBKDF2_KEY_BITS)
-        val derived = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM).generateSecret(spec).encoded
-        return derived.toHex()
+        val saltBytes = salt.toByteArray(Charsets.UTF_8)
+        val password = pin.toCharArray()
+        val spec = PBEKeySpec(password, saltBytes, PBKDF2_ITERATIONS, PBKDF2_KEY_BITS)
+        password.fill('\u0000')
+        return try {
+            val derived = try {
+                SecretKeyFactory.getInstance(PBKDF2_ALGORITHM).generateSecret(spec).encoded
+            } catch (_: NoSuchAlgorithmException) {
+                // Android 24/25 has HmacSHA256 but not its PBKDF2 SecretKeyFactory (API 26+).
+                // Keep the SAME salt encoding, work factor and output so restored hashes work.
+                Pbkdf2HmacSha256.derive(pin, saltBytes, PBKDF2_ITERATIONS)
+            }
+            try {
+                derived.toHex()
+            } finally {
+                derived.fill(0)
+            }
+        } finally {
+            spec.clearPassword()
+        }
     }
 
     /** Constant-time comparison via [MessageDigest.isEqual] - no reason to leak timing information
