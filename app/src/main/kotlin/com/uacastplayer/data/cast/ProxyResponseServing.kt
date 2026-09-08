@@ -107,8 +107,17 @@ internal class ProxyResponseServing(
     }
 
     /** Null means an error response has already been written to [output]. */
-    fun readPlaylistText(response: Response, output: OutputStream): String? =
-        when (val bounded = BoundedTextReader.readText(response.body.byteStream(), MAX_HLS_PLAYLIST_BYTES)) {
+    fun readPlaylistText(response: Response, output: OutputStream): String? {
+        val bounded = try {
+            BoundedTextReader.readText(response.body.byteStream(), MAX_HLS_PLAYLIST_BYTES)
+        } catch (error: IOException) {
+            // No receiver headers have been sent yet. A reset/timeout while reading the
+            // manifest must be a protocol failure, not an empty, abruptly closed socket.
+            AppLog.w(TAG) { "Upstream playlist read failed: ${error.javaClass.simpleName}" }
+            httpServer.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
+            return null
+        }
+        return when (bounded) {
             is BoundedReadResult.Success -> if (HlsPlaylistBudget.accepts(bounded.text)) {
                 bounded.text
             } else {
@@ -122,6 +131,7 @@ internal class ProxyResponseServing(
                 null
             }
         }
+    }
 
     /** Records one successful rewritten playlist without filling the diagnostics ring per poll. */
     private fun recordRewrittenPlaylist(rewrittenCount: Int, byteCount: Int) {

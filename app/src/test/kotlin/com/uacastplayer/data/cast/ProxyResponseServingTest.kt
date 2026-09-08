@@ -6,10 +6,16 @@ import java.io.OutputStream
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import okio.Source
+import okio.Timeout
+import okio.buffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,6 +27,43 @@ class ProxyResponseServingTest {
         isRequestAuthorized = { true },
     )
     private val serving = ProxyResponseServing(httpServer)
+
+    @Test fun `failed manifest body read returns 502 before headers are committed`() {
+        assertFailedPlaylistResponse(partial = false)
+    }
+
+    @Test fun `partial manifest body never leaks as a successful playlist`() {
+        assertFailedPlaylistResponse(partial = true)
+    }
+
+    private fun assertFailedPlaylistResponse(partial: Boolean) {
+        var prefixPending = partial
+        val source = object : Source {
+            override fun read(sink: Buffer, byteCount: Long): Long {
+                if (!prefixPending) throw IOException("private provider detail")
+                prefixPending = false
+                sink.writeUtf8("#EXTM3U\n")
+                return 8
+            }
+            override fun timeout(): Timeout = Timeout.NONE
+            override fun close() = Unit
+        }.buffer()
+        val body = object : ResponseBody() {
+            override fun contentLength() = -1L
+            override fun contentType() = null
+            override fun source() = source
+        }
+        val upstream = response(body = byteArrayOf()).newBuilder().body(body).build()
+        val output = ByteArrayOutputStream()
+        upstream.use { assertNull(serving.readPlaylistText(it, output)) }
+        val response = output.toString(Charsets.UTF_8.name())
+        assertTrue(response.startsWith("HTTP/1.1 502 Bad Gateway\r\n"))
+        assertTrue(response.contains("Content-Length: 0"))
+        assertTrue(response.contains("Access-Control-Allow-Origin: *"))
+        assertFalse(response.contains("#EXTM3U"))
+        assertFalse(response.contains("private provider detail"))
+        assertEquals(0L, serving.bytesServedToReceiver())
+    }
 
     @Test
     fun `counted streaming body advances progress for every delivered write`() {

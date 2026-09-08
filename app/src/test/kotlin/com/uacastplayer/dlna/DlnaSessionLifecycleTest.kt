@@ -2,8 +2,8 @@ package com.uacastplayer.dlna
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +31,9 @@ import org.robolectric.RobolectricTestRunner
 class DlnaSessionLifecycleTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val device = DlnaDevice("Fixture TV", "https://renderer.example/control")
-    private val requests = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+    // Interceptors append on IO threads while the assertions iterate; synchronizedList only
+    // protects individual calls, not count/last iterators spanning a concurrent append.
+    private val requests = CopyOnWriteArrayList<Pair<String, String>>()
     private var repository: DlnaSessionRepository? = null
 
     @After fun close() {
@@ -121,7 +123,7 @@ class DlnaSessionLifecycleTest {
     }
 
     @Test fun `provider headers travel from DLNA request through real proxy to origin`() = runBlocking {
-        val upstreamRequests = Collections.synchronizedList(mutableListOf<Request>())
+        val upstreamRequests = CopyOnWriteArrayList<Request>()
         val upstream = OkHttpClient.Builder().addInterceptor { chain ->
             upstreamRequests += chain.request()
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")

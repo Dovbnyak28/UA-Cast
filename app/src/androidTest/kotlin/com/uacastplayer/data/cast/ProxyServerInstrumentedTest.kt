@@ -1,6 +1,8 @@
 package com.uacastplayer.data.cast
 
+import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
@@ -37,11 +39,16 @@ class ProxyServerInstrumentedTest {
         .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
+    private val upstreamClient = OkHttpClient()
 
     @After
     fun tearDown() {
         proxy?.stop()
         origin?.close()
+        listOf(client, upstreamClient).forEach {
+            it.connectionPool.evictAll()
+            it.dispatcher.executorService.shutdownNow()
+        }
     }
 
     /** Records the method, path and Range of everything asked of it, so what the proxy *forwarded*
@@ -78,9 +85,8 @@ class ProxyServerInstrumentedTest {
 
         private fun serve(client: Socket) {
             client.use {
-                val head = ByteArray(REQUEST_BUFFER_BYTES)
-                val read = it.getInputStream().read(head)
-                val request = String(head, 0, maxOf(read, 0))
+                it.soTimeout = TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS).toInt()
+                val request = readOriginHeaders(it.getInputStream())
                 val path = request.lineSequence().firstOrNull().orEmpty().split(' ').getOrNull(1).orEmpty()
                 synchronized(hits) { hits.getOrPut(path.substringBefore('?')) { AtomicInteger(0) }.incrementAndGet() }
                 Regex("(?im)^Range:\\s*([^\\r\\n]+)").find(request)?.let { m ->
@@ -89,14 +95,14 @@ class ProxyServerInstrumentedTest {
                 val entry = synchronized(routes) { routes[path.substringBefore('?')] }
                 val out = it.getOutputStream()
                 if (entry == null) {
-                    out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                    out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
                     out.flush()
                     return@use
                 }
                 val (type, body) = entry
                 out.write(
                     ("HTTP/1.1 200 OK\r\nContent-Type: $type\r\n" +
-                        "Content-Length: ${body.size}\r\n\r\n").toByteArray(),
+                        "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n").toByteArray(),
                 )
                 out.write(body)
                 out.flush()
@@ -113,7 +119,7 @@ class ProxyServerInstrumentedTest {
         ByteArray(packets * TS_PACKET_SIZE) { if (it % TS_PACKET_SIZE == 0) 0x47.toByte() else (it % 251).toByte() }
 
     private fun startProxy(remux: Boolean = false, unwrap: Boolean = true): ProxyServer {
-        val server = ProxyServer(OkHttpClient()).also { proxy = it }
+        val server = ProxyServer(upstreamClient).also { proxy = it }
         server.start(
             sessionToken = SESSION,
             host = "127.0.0.1",
@@ -252,6 +258,17 @@ class ProxyServerInstrumentedTest {
      * manifest cannot reach.
      */
     @Test
+    fun originFixtureReadsTheCompleteHeaderBlockAcrossPartialReads() {
+        val request = "GET /a.ts HTTP/1.1\r\nHost: localhost\r\nRange: bytes=376-751\r\n\r\n"
+        val fragmented = object : ByteArrayInputStream(request.toByteArray()) {
+            override fun read(bytes: ByteArray, offset: Int, length: Int): Int =
+                super.read(bytes, offset, minOf(length, 3))
+        }
+        assertEquals(request.removeSuffix("\r\n"), readOriginHeaders(fragmented))
+        assertEquals(0, fragmented.available())
+    }
+
+    @Test
     fun aRewrittenManifestsSegmentUrlsAreThemselvesServable() {
         val origin = Origin().also { this.origin = it }
         origin.route("/a.ts", "video/mp2t", tsBytes())
@@ -266,15 +283,19 @@ class ProxyServerInstrumentedTest {
         val server = startProxy()
         val url = server.buildLocalUrl(server.registerPlaylist(origin.urlFor("/media.m3u8")))
 
-        val manifest = client.newCall(Request.Builder().url(url).build()).execute().use { it.body.string() }
-
-        val segmentUrl = manifest.lines().first { it.startsWith("http://") && !it.startsWith("#") }
-        assertTrue("the segment was not rewritten back through the proxy: $segmentUrl", segmentUrl.contains("/hls/$SESSION/"))
-        client.newCall(Request.Builder().url(segmentUrl).build()).execute().use { response ->
-            assertEquals(HTTP_OK, response.code)
-            assertEquals(tsBytes().size, response.body.bytes().size)
+        repeat(MANIFEST_POLLS) {
+            val manifest = client.newCall(Request.Builder().url(url).build()).execute().use {
+                assertEquals("manifest request", HTTP_OK, it.code)
+                it.body.string()
+            }
+            val segmentUrl = manifest.lines().first { it.startsWith("http://") && !it.startsWith("#") }
+            assertTrue("segment must use the proxy", segmentUrl.contains("/hls/$SESSION/"))
+            client.newCall(Request.Builder().url(segmentUrl).build()).execute().use { response ->
+                assertEquals(HTTP_OK, response.code)
+                assertEquals(tsBytes().size, response.body.bytes().size)
+            }
         }
-        assertEquals(1, origin.hitsFor("/a.ts"))
+        assertEquals(MANIFEST_POLLS, origin.hitsFor("/a.ts"))
     }
 
     /**
@@ -304,12 +325,27 @@ class ProxyServerInstrumentedTest {
         const val SESSION = "instrumented"
         const val TS_PACKET_SIZE = 188
         const val TS_PACKETS = 40
-        const val REQUEST_BUFFER_BYTES = 4096
+        const val MANIFEST_POLLS = 20
         const val TIMEOUT_SECONDS = 15L
         const val CONCURRENT_REQUESTS = 8
         const val HTTP_OK = 200
         const val HTTP_NO_CONTENT = 204
         const val HTTP_NOT_FOUND = 404
         const val HTTP_METHOD_NOT_ALLOWED = 405
+    }
+}
+
+private const val ORIGIN_HEADER_LIMIT = 4096
+
+/** The fixture consumes the complete GET header block before replying/closing the socket. */
+private fun readOriginHeaders(input: InputStream): String {
+    val reader = input.bufferedReader(Charsets.ISO_8859_1)
+    return buildString {
+        while (true) {
+            val line = reader.readLine() ?: throw IOException("incomplete fixture request")
+            if (line.isEmpty()) break
+            append(line).append("\r\n")
+            check(length <= ORIGIN_HEADER_LIMIT) { "fixture request headers too large" }
+        }
     }
 }

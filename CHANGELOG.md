@@ -15,6 +15,8 @@ local build produces.
 - **Setting or verifying a parental PIN could crash on Android 7 (API 24/25).** Devices without
   the platform PBKDF2-SHA256 factory now derive the identical hash using the supported HMAC
   primitive, preserving the existing salt format and 120,000-iteration work factor.
+- **A reset or timeout while reading an HLS manifest could silently drop the receiver socket.**
+  The proxy now returns HTTP 502 before any success headers or partial playlist can be sent.
 - **Backup import could replace favorites before their startup read completed.** Imports now
   wait for the initial favorites load before merging, retaining existing entries on slow storage.
 - **Player restoration could bypass channel restrictions.** Opening waits for parental-control
@@ -54,6 +56,8 @@ local build produces.
   and an empty Detekt baseline maintained by the quality gate.
 - Device UI audit captures support API 24/25, and instrumentation output is retained as a CI
   artifact even when adb or the test runner reports a failure.
+- Network test fixtures consume complete HTTP headers and explicitly close connections; DLNA
+  request assertions use snapshot iteration while callback threads append new requests.
 
 ## 0.9.2
 

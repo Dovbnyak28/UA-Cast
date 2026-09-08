@@ -113,6 +113,33 @@ References: [Android SecretKeyFactory availability](https://developer.android.co
 [PBKDF2 definition](https://www.rfc-editor.org/rfc/rfc8018#section-5.2),
 [PixelCopy API](https://developer.android.com/reference/android/view/PixelCopy).
 
+### Follow-up network regression verification
+
+The second run, `34263315973`, confirmed that the PIN compatibility test and all
+three UI captures pass on API 24. It exposed two separate failures:
+
+- Release JVM: `ConcurrentModificationException` in the **DLNA test fixture**.
+  `Collections.synchronizedList` protected appends, but not the concurrent `count`
+  iterator used by the assertion. Both fixture journals now use snapshot iteration
+  through `CopyOnWriteArrayList`. No production DLNA behavior was weakened.
+- API 24: a connection reset while requesting a proxy manifest. Inspection found
+  that the test origin assumed a complete HTTP header block in one socket read and
+  advertised implicit keep-alive despite immediately closing each connection. It
+  now consumes the full header block, declares `Connection: close`, and has a bounded
+  read timeout. A new fixture test fragments headers into three-byte reads, and the
+  manifest/segment test now performs **20** consecutive polls.
+
+The same trace exposed a concrete production error-handling gap: an `IOException`
+while reading a manifest body escaped before any receiver headers were sent. Two
+new tests reproduced it (immediate failure and partial-body failure). Both failed
+before the change, then passed after `ProxyResponseServing` converted this early
+failure to HTTP 502 with no partial body, no false progress, and no provider detail.
+This does not change error handling after streaming response headers have committed.
+
+The targeted proxy/DLNA tests, Detekt and Android test compilation passed locally.
+The final CI run must validate the complete updated candidate; neither rejected
+run is presented as a passing release gate.
+
 The four reproduced audit findings are fixed and covered by regressions. This is not
 a claim that no unknown bugs exist. Real Hisense VIDAA/Chromecast interoperability,
 Google Play purchase/restore flows, Play Console acceptance, and large-scale behavior
