@@ -3,7 +3,6 @@ package com.uacastplayer.data.cast
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.cast.CastRouteKind
 import com.uacastplayer.log.AppLog
-import com.uacastplayer.proxy.M3u8Rewriter
 import com.uacastplayer.proxy.PlaylistUnwrapPolicy
 import com.uacastplayer.proxy.RemuxHandoffPolicy
 import java.io.IOException
@@ -146,6 +145,7 @@ class ProxyServer(
         this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
         this.flattenHlsToStream = flattenHlsToStream
         val port = httpServer.start()
+        resourceRegistry.openSession()
         synchronized(flattenedStreamsLock) { acceptingFlattenedStreams = true }
         synchronized(upstreamCallsLock) { acceptingUpstreamCalls = true }
         return port
@@ -604,10 +604,13 @@ class ProxyServer(
         parent: ResourceEntry,
     ) {
         var rewrittenCount = 0
-        val rewritten = M3u8Rewriter.rewrite(text, finalUrl) { absoluteUrl ->
+        val rewritten = resourceRegistry.rewriteManifest(text, finalUrl, parent) { resourceId ->
             rewrittenCount++
-            val type = if (looksLikePlaylist(absoluteUrl)) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_MEDIA
-            buildLocalUrl(resourceRegistry.register(type, absoluteUrl, parent.userAgent, parent.referrer))
+            buildLocalUrl(resourceId)
+        }
+        if (rewritten == null) {
+            responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Manifest resource budget exceeded")
+            return
         }
         // The remux path logs every playlist poll and segment; this one logged nothing at all, so an
         // ordinary HLS cast - the common case - left no trace of whether the receiver ever fetched
@@ -621,13 +624,6 @@ class ProxyServer(
         responseServing.writeRewrittenPlaylist(rewritten, rewrittenCount, method, output)
     }
 
-    /** Only a hint for how to pre-register a URL discovered inside a playlist, before it's ever
-     * been fetched - what actually gets served for it is decided from the real response by
-     * [PlaylistDetector] once that request comes in (see [serveRequest]). */
-    private fun looksLikePlaylist(url: String): Boolean {
-        val path = url.substringBefore('?').lowercase()
-        return path.endsWith(".m3u8") || path.endsWith(".m3u")
-    }
 }
 
 private data class TrackedUpstreamResponse(val call: Call, val response: Response)

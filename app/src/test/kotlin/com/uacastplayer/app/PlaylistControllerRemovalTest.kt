@@ -161,9 +161,7 @@ class PlaylistControllerRemovalTest {
             val controller = controllerFor(loads)
             val source = sourceFor(server.url, addedAtEpochMillis = 1L)
             controller.applyImportedSources(listOf(source))
-            controller.setActivePlaylistSourceId(source.id)
-
-            controller.refreshPlaylist()
+            controller.switchPlaylistSource(source)
             assertTrue(
                 "the load should have reached the server",
                 server.requestReceived.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS),
@@ -196,9 +194,7 @@ class PlaylistControllerRemovalTest {
             val active = sourceFor(server.url, addedAtEpochMillis = 2L)
             val other = sourceFor("http://127.0.0.1:1/other.m3u", addedAtEpochMillis = 1L)
             controller.applyImportedSources(listOf(active, other))
-            controller.setActivePlaylistSourceId(active.id)
-
-            controller.refreshPlaylist()
+            controller.switchPlaylistSource(active)
             assertTrue(
                 "the load should have reached the server",
                 server.requestReceived.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS),

@@ -10,6 +10,7 @@ local.properties
 .cxx
 *.hprof
 app/build/
+core/build/
 app/release/
 app/debug/
 baselineprofile/build/

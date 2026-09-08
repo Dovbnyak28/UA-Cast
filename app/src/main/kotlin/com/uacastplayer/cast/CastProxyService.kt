@@ -8,7 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -56,11 +58,17 @@ class CastProxyService : Service() {
 
     private val wakeLocks by lazy { CastWakeLocks(applicationContext) }
     private val localizedContext by lazy { applicationContext.withAppLocale() }
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var ownership = CastProxyOwnership()
     private val notificationDetails = mutableMapOf<CastProxyTarget, NotificationDetails>()
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        runningInstance = this
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // startForeground() must run before anything else in this method - the 5s ANR window
@@ -123,6 +131,8 @@ class CastProxyService : Service() {
     }
 
     override fun onDestroy() {
+        if (runningInstance === this) runningInstance = null
+        mainHandler.removeCallbacksAndMessages(null)
         ownership = CastProxyOwnership()
         notificationDetails.clear()
         wakeLocks.release()
@@ -213,12 +223,24 @@ class CastProxyService : Service() {
 
         /** Called 1:1 with [com.uacastplayer.data.cast.ProxyServer.stop] - tears down only this
          * service's own foreground/wake-lock lifetime, never the Cast session itself (see
-         * [ACTION_STOP_FOREGROUND]). */
+         * [ACTION_STOP_FOREGROUND]). When the service is already alive, dispatch directly to its
+         * main thread. Starting a foreground service just to deliver a stop command is forbidden
+         * from the background on Android 12+ and used to leave the wake locks running silently. */
         fun stop(
             context: Context,
             target: CastProxyTarget = CastProxyTarget.CHROMECAST,
         ) {
-            startForegroundServiceSafely(context, stopForegroundIntent(context, target))
+            val service = runningInstance
+            if (service != null) {
+                service.mainHandler.post {
+                    if (runningInstance === service) service.removeOwner(target)
+                }
+            } else {
+                // There is no owner to remove if the service has not been created (or was already
+                // destroyed). stopService is safe from the background and also cancels a pending
+                // start request without attempting another restricted FGS launch.
+                context.stopService(Intent(context, CastProxyService::class.java))
+            }
         }
 
         /**
@@ -237,6 +259,9 @@ class CastProxyService : Service() {
                 AppLog.w(TAG) { "Foreground service start not allowed: ${e.javaClass.simpleName}" }
             }
         }
+
+        @Volatile
+        private var runningInstance: CastProxyService? = null
     }
 
     private data class NotificationDetails(

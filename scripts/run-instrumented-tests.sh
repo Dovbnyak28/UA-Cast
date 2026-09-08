@@ -48,6 +48,15 @@ else
     DEVICE_SERIAL="${authorized_devices[0]}"
 fi
 
+# Fixtures replace saved sources. Never run them against real phone data by default.
+# The Windows helper moves files/preferences aside and restores them even on failure.
+device_is_emulator=$(adb -s "$DEVICE_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')
+if [ "$device_is_emulator" != "1" ] && [ "${ALLOW_DEVICE_DATA_REPLACEMENT:-0}" != "1" ]; then
+    echo "Physical-device fixtures replace playlists. Use scripts/run-preserved-device-tests.ps1." >&2
+    echo "Only for a disposable test device: explicitly set ALLOW_DEVICE_DATA_REPLACEMENT=1." >&2
+    exit 1
+fi
+
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
 
 # The debug variant is split per ABI (see the splits block in app/build.gradle.kts), so there is no

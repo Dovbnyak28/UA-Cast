@@ -47,7 +47,9 @@ fun rememberArtworkTone(
     channel: M3uChannel,
     resolveIcon: suspend (M3uChannel) -> File?,
     ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    enabled: Boolean = true,
 ): Color? {
+    if (!enabled) return null
     val tone by produceState<Color?>(initialValue = null, key1 = channel.streamUrl) {
         value = withContext(ioDispatcher) {
             val file = resolveArtworkToneFile(channel, resolveIcon) ?: return@withContext null

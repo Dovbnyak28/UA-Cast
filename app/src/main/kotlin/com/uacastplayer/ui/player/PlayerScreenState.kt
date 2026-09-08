@@ -23,7 +23,6 @@ import com.uacastplayer.playlist.M3uChannel
 import java.io.File
 import kotlinx.coroutines.delay
 
-private const val CONTROLS_AUTO_HIDE_MILLIS = 3_000L
 private const val GESTURE_INDICATOR_AUTO_HIDE_MILLIS = 900L
 
 internal data class PlayerScreenContent(
@@ -51,12 +50,22 @@ internal data class PlayerScreenEnvironment(
 @Stable
 internal class PlayerScreenTransientState(activity: Activity?, audioManager: AudioManager?) {
     var controlsVisible by mutableStateOf(true)
+    var controlsInteractionNonce by mutableIntStateOf(0)
+    var controlsPressed by mutableStateOf(false)
+    var controlsFocused by mutableStateOf(false)
     var showSleepTimerDialog by mutableStateOf(false)
     var showAudioDialog by mutableStateOf(false)
     var showSubtitleDialog by mutableStateOf(false)
     var showQualityDialog by mutableStateOf(false)
     var showGuideSheet by mutableStateOf(false)
     var showDlnaSheet by mutableStateOf(false)
+    var showDevicePicker by mutableStateOf(false)
+    var showActionsSheet by mutableStateOf(false)
+    var showChannelsSheet by mutableStateOf(false)
+    var showLevelsSheet by mutableStateOf(false)
+    val hasOpenSheet: Boolean get() = showSleepTimerDialog || showAudioDialog || showSubtitleDialog ||
+        showQualityDialog || showGuideSheet || showDlnaSheet || showDevicePicker || showActionsSheet ||
+        showChannelsSheet || showLevelsSheet
     var brightnessLevel by mutableFloatStateOf(
         activity?.let(::initialBrightnessLevel) ?: DEFAULT_BRIGHTNESS_LEVEL,
     )
@@ -107,7 +116,13 @@ internal fun PlayerScreenEffects(
         }
     }
     DisposableEffect(environment.activity) {
-        onDispose { environment.activity?.let(::restoreWindowBrightness) }
+        onDispose {
+            environment.activity?.let {
+                restoreWindowBrightness(it)
+                // The Activity survives when the player collapses into the mini bar.
+                PipController.disableAutoEnter(it)
+            }
+        }
     }
 
     val view = LocalView.current
@@ -115,10 +130,5 @@ internal fun PlayerScreenEffects(
         view.keepScreenOn = uiState.isPlaying && !uiState.isCasting
         onDispose { view.keepScreenOn = false }
     }
-    LaunchedEffect(transientState.controlsVisible, uiState.isPlaying) {
-        if (transientState.controlsVisible && uiState.isPlaying) {
-            delay(CONTROLS_AUTO_HIDE_MILLIS)
-            transientState.controlsVisible = false
-        }
-    }
+    PlayerControlsAutoHide(transientState, uiState.isPlaying)
 }

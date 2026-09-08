@@ -4,6 +4,7 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.BoundedReadResult
 import com.uacastplayer.playlist.BoundedTextReader
 import com.uacastplayer.proxy.MAX_HLS_PLAYLIST_BYTES
+import com.uacastplayer.proxy.HlsPlaylistBudget
 import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.ProxyServeRollup
 import java.io.IOException
@@ -108,7 +109,13 @@ internal class ProxyResponseServing(
     /** Null means an error response has already been written to [output]. */
     fun readPlaylistText(response: Response, output: OutputStream): String? =
         when (val bounded = BoundedTextReader.readText(response.body.byteStream(), MAX_HLS_PLAYLIST_BYTES)) {
-            is BoundedReadResult.Success -> bounded.text
+            is BoundedReadResult.Success -> if (HlsPlaylistBudget.accepts(bounded.text)) {
+                bounded.text
+            } else {
+                AppLog.w(TAG) { "Upstream playlist exceeded the structural budget; rejecting" }
+                httpServer.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
+                null
+            }
             BoundedReadResult.SizeLimitExceeded -> {
                 AppLog.w(TAG) { "Upstream playlist exceeded $MAX_HLS_PLAYLIST_BYTES bytes; rejecting" }
                 httpServer.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")

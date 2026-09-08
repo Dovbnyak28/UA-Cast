@@ -13,4 +13,6 @@ data class TabBarItem(
     /** Full destination name announced by accessibility services when the visible label must be
      * shortened to fit a compact phone navigation bar. */
     val contentDescription: String = label,
+    /** Short words at accessibility font sizes; the full name above remains the spoken label. */
+    val largeTextLabel: String = label,
 )

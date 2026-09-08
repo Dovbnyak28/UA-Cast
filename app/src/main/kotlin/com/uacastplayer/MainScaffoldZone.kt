@@ -35,6 +35,7 @@ import com.uacastplayer.update.UpdateSectionState
 @Suppress("LongParameterList") // glue for RootScaffold's own (out-of-scope-to-restructure) signature
 internal fun ScaffoldZone(
     viewModel: AppViewModel,
+    miniPlayerVisible: Boolean,
     playlistState: PlaylistUiState,
     currentLanguage: AppLanguage,
     currentAppTheme: AppTheme,
@@ -193,6 +194,7 @@ internal fun ScaffoldZone(
         else -> overlayStateHolder.SaveableStateProvider(ROOT_SCAFFOLD_STATE_KEY) {
             RootScaffold(
                 modifier = Modifier.fillMaxSize(),
+                miniPlayerVisible = miniPlayerVisible,
                 currentLanguage = currentLanguage,
                 onLanguageSelected = viewModel::selectLanguage,
                 currentAppTheme = currentAppTheme,
@@ -205,6 +207,7 @@ internal fun ScaffoldZone(
                 activePlaylistSourceId = activePlaylistSourceId,
                 onSwitchPlaylistSource = viewModel::switchPlaylistSource,
                 onRemovePlaylistSource = { viewModel.removePlaylistSource(it.id) },
+                onRetrySourceSave = viewModel.playlistController.sourcePersistence::retry,
                 pinnedGroupKeys = pinnedGroupKeys,
                 hiddenGroupKeys = hiddenGroupKeys,
                 onPinGroup = viewModel::pinGroup,

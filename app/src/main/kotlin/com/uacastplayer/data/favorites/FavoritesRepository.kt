@@ -2,6 +2,8 @@ package com.uacastplayer.data.favorites
 
 import android.content.Context
 import com.uacastplayer.core.concurrent.LatestValueWriter
+import com.uacastplayer.data.playlist.withPlaylistCpu
+import com.uacastplayer.favorites.FavoriteMetadata
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.log.AppLog
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 private const val TAG = "FavoritesRepository"
 
@@ -31,6 +34,8 @@ class FavoritesRepository internal constructor(
     private var initialLoadFinished = false
     private val pendingOverrides = linkedMapOf<String, FavoriteChannel?>()
     private var pendingReplacement: List<FavoriteChannel>? = null
+    private val initialLoadJob: Job
+    private var metadataJob: Job? = null
 
     private val _favorites = MutableStateFlow<List<FavoriteChannel>>(emptyList())
     val favorites: StateFlow<List<FavoriteChannel>> = _favorites.asStateFlow()
@@ -72,7 +77,7 @@ class FavoritesRepository internal constructor(
     }
 
     init {
-        scope.launch {
+        initialLoadJob = scope.launch {
             val loaded = store.load()
             val hadPendingMutation = pendingReplacement != null || pendingOverrides.isNotEmpty()
             val resolved = pendingReplacement ?: loaded.toMutableList().apply {
@@ -106,6 +111,10 @@ class FavoritesRepository internal constructor(
                 tvgId = channel.tvgId,
                 groupTitle = channel.groupTitle,
                 addedAtMillis = System.currentTimeMillis(),
+                tvgName = channel.tvgName,
+                tvgLogo = channel.tvgLogo,
+                userAgent = channel.userAgent,
+                referrer = channel.referrer,
             )
             current + added
         }
@@ -120,5 +129,25 @@ class FavoritesRepository internal constructor(
      * list order itself doubles as the stored order, so this just replaces it wholesale. */
     fun reorder(newOrder: List<FavoriteChannel>) {
         publishReplacement(newOrder)
+    }
+
+    /** A merge must read the durable initial list, not the loading placeholder. */
+    suspend fun awaitLoaded() = initialLoadJob.join()
+
+    suspend fun awaitPersistence(): Boolean {
+        awaitLoaded()
+        return writer.awaitPending()
+    }
+
+    fun refreshMetadata(channels: List<M3uChannel>) {
+        metadataJob?.cancel()
+        metadataJob = scope.launch {
+            initialLoadJob.join()
+            val previous = _favorites.value
+            val enriched = withPlaylistCpu { FavoriteMetadata.enrich(previous, channels) }
+            // A concurrent reorder/remove is newer user intent. Only apply this exact snapshot;
+            // newly added favorites already carry metadata directly from their playlist item.
+            if (_favorites.value == previous && enriched != previous) publishReplacement(enriched)
+        }
     }
 }

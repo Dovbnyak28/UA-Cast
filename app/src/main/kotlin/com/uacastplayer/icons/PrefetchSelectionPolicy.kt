@@ -29,21 +29,29 @@ object PrefetchSelectionPolicy {
         priority: PriorityChannels,
         limit: Int,
         isCached: (M3uChannel) -> Boolean = { false },
+        checkCancellation: () -> Unit = {},
     ): List<M3uChannel> {
         if (limit <= 0) return emptyList()
 
-        val lastWatched = priority.lastWatchedKey
-            ?.let { key -> channels.firstOrNull { FavoriteKey.of(it) == key } }
-        // Priority order: favorites, then the last-watched channel, then the first group - a channel
-        // appearing in more than one category is only fetched once, thanks to the dedupe below.
-        val ordered = channels.filter { FavoriteKey.of(it) in priority.favoriteKeys } +
-            listOfNotNull(lastWatched) +
-            priority.firstGroupChannels
-
+        checkCancellation()
+        val favorites = if (priority.favoriteKeys.isEmpty()) emptySequence() else channels.asSequence().filter {
+            checkCancellation()
+            FavoriteKey.of(it) in priority.favoriteKeys
+        }
+        // Lazy categories avoid even scanning last-watched once favorites fill the budget.
+        val lastWatched = sequence {
+            priority.lastWatchedKey?.let { key ->
+                channels.firstOrNull {
+                    checkCancellation()
+                    FavoriteKey.of(it) == key
+                }?.let { yield(it) }
+            }
+        }
         val seenKeys = HashSet<String>()
-        return ordered
-            .filter { seenKeys.add(FavoriteKey.of(it)) }
+        return (favorites + lastWatched + priority.firstGroupChannels.asSequence())
+            .filter { checkCancellation(); seenKeys.add(FavoriteKey.of(it)) }
             .filterNot(isCached)
             .take(limit)
+            .toList()
     }
 }

@@ -34,6 +34,7 @@ internal class PlayerSessionStateMachine {
     sealed interface StallEffect {
         data object None : StallEffect
         data object ClearRecoveryIndicator : StallEffect
+        data object GiveUp : StallEffect
         data class ScheduleRecovery(val delayMillis: Long, val attempt: Int) : StallEffect
     }
 
@@ -72,9 +73,11 @@ internal class PlayerSessionStateMachine {
 
     fun nextIndex(wrapAround: Boolean): Int? =
         ChannelNavigator.nextIndex(currentIndex, channels.size, wrapAround)
+            ?.takeIf { hasCurrentChannel && it != currentIndex }
 
     fun previousIndex(wrapAround: Boolean): Int? =
         ChannelNavigator.previousIndex(currentIndex, channels.size, wrapAround)
+            ?.takeIf { hasCurrentChannel && it != currentIndex }
 
     fun switchTo(index: Int, wrapAround: Boolean): ChannelSwitch? {
         if (index !in channels.indices) return null
@@ -97,11 +100,10 @@ internal class PlayerSessionStateMachine {
         liveWindowRecoveryHistory = emptyList()
     }
 
-    /** A pending stall recovery became obsolete because playback resumed, was paused, or moved to
-     * a remote receiver. It must restart at attempt one if local playback later stalls again. */
-    fun cancelStallRecovery() {
+    /** A brief READY callback cancels the delayed action but must not grant a fresh retry budget. */
+    fun cancelStallRecovery(resetBudget: Boolean = true) {
         stallState = StallDetectionPolicy.StallState.NONE
-        stallRetryState = StallRetryPolicy.State()
+        if (resetBudget) stallRetryState = StallRetryPolicy.State()
     }
 
     fun onPlaybackError(
@@ -134,21 +136,32 @@ internal class PlayerSessionStateMachine {
         tick: StallDetectionPolicy.Tick,
         thresholdMillis: Long,
     ): StallEffect {
+        val previousPosition = stallState.previousPositionMs
+        val isAdvancing = tick.playWhenReady && tick.phase == StallDetectionPolicy.PlaybackPhase.READY &&
+            previousPosition != null && tick.positionMs > previousPosition
+        stallRetryState = StallRetryPolicy.onPlaybackSample(tick.nowMillis, isAdvancing, stallRetryState)
         val result = StallDetectionPolicy.evaluate(tick, stallState, thresholdMillis)
         stallState = result.state
-        if (result.health != StallDetectionPolicy.Health.STALLED) {
-            return if (result.inGracePeriod) StallEffect.None else StallEffect.ClearRecoveryIndicator
+        return when {
+            isAdvancing -> {
+                stallState = stallState.copy(recoveryGraceUntilMillis = null)
+                StallEffect.ClearRecoveryIndicator
+            }
+            result.health != StallDetectionPolicy.Health.STALLED -> StallEffect.None
+            else -> when (val decision = StallRetryPolicy.onStall(stallRetryState)) {
+                StallRetryPolicy.Decision.GiveUp -> StallEffect.GiveUp
+                is StallRetryPolicy.Decision.Retry -> {
+                    stallRetryState = decision.newState
+                    // Cover both the delayed action and its subsequent prepare. Otherwise a 30s
+                    // backoff can outlive its grace and be replaced before it even executes.
+                    stallState = StallDetectionPolicy.afterRecovery(
+                        tick.nowMillis + decision.delayMillis,
+                        thresholdMillis,
+                    )
+                    StallEffect.ScheduleRecovery(decision.delayMillis, decision.newState.attempt)
+                }
+            }
         }
-
-        val decision = StallRetryPolicy.onStall(tick.nowMillis, stallRetryState)
-        stallRetryState = decision.newState
-        // Arm the grace period before the delayed effect is executed so subsequent samples cannot
-        // schedule overlapping recoveries for the same stalled interval.
-        stallState = StallDetectionPolicy.afterRecovery(tick.nowMillis, thresholdMillis)
-        return StallEffect.ScheduleRecovery(
-            delayMillis = decision.delayMillis,
-            attempt = decision.newState.attempt,
-        )
     }
 
     private fun onRetryBudgetExhausted(
@@ -179,6 +192,17 @@ internal class PlayerSessionStateMachine {
     }
 
     private fun channelSwitch(wrapAround: Boolean): ChannelSwitch {
+        return ChannelSwitch(
+            index = currentIndex,
+            channel = channels[currentIndex],
+            preview = nextPreview(wrapAround),
+            hasPreviousChannel = previousChannelIndex != null,
+        )
+    }
+
+    /** Pure projection: preference changes must not restart a channel or reset its recovery budget. */
+    fun nextPreview(wrapAround: Boolean): List<IndexedChannel> {
+        if (!hasCurrentChannel) return emptyList()
         val preview = mutableListOf<IndexedChannel>()
         var previewIndex = currentIndex
         repeat(minOf(MAX_PREVIEW_SIZE, channels.size - 1)) {
@@ -187,12 +211,7 @@ internal class PlayerSessionStateMachine {
             preview += IndexedChannel(next, channels[next])
             previewIndex = next
         }
-        return ChannelSwitch(
-            index = currentIndex,
-            channel = channels[currentIndex],
-            preview = preview,
-            hasPreviousChannel = previousChannelIndex != null,
-        )
+        return preview
     }
 
     private fun resetPerChannelRecovery() {

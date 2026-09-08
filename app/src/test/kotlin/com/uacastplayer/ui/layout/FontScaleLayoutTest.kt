@@ -163,12 +163,8 @@ class FontScaleLayoutTest(private val fontScale: Float) {
         }
 
         composeRule.onNodeWithContentDescription("Налаштування").assertIsDisplayed().assertHasClickAction()
-        if (fontScale >= 1.5f) {
-            composeRule.onNodeWithText("Налашт.").assertDoesNotExist()
-        } else {
-            composeRule.onNodeWithText("Налаштування").assertDoesNotExist()
-            assertFullyOnScreen("Налашт.")
-        }
+        composeRule.onNodeWithText("Налаштування").assertDoesNotExist()
+        assertFullyOnScreen("Налашт.")
     }
 
     @Test
@@ -188,11 +184,7 @@ class FontScaleLayoutTest(private val fontScale: Float) {
         }
 
         composeRule.onNodeWithContentDescription("Налаштування").assertIsDisplayed()
-        if (fontScale >= 1.5f) {
-            composeRule.onNodeWithText("Налашт.").assertDoesNotExist()
-        } else {
-            composeRule.onNodeWithText("Налашт.").assertIsDisplayed()
-        }
+        composeRule.onNodeWithText("Налашт.").assertIsDisplayed()
     }
 
     @Test

@@ -13,7 +13,6 @@ internal object CastProxyFailureReducer {
         ),
         // This is phone infrastructure failure, not evidence that the stream/receiver pair is
         // incompatible. In particular, do not emit RecordIncompatibility here.
-        effects = listOf(CastSideEffect.ResumeLocalPlayer),
+        effects = listOf(CastSideEffect.CloseProxySession, CastSideEffect.ResumeLocalPlayer),
     )
 }
-

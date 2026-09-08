@@ -3,6 +3,7 @@ package com.uacastplayer.data.playlist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.CancellationSignal
 import android.provider.OpenableColumns
 import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
@@ -16,6 +17,8 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 private const val TAG = "PlaylistFileLoader"
 
@@ -56,14 +59,21 @@ class PlaylistFileLoader(
      * Asked once, when the playlist is added, and stored - not looked up on every render. The
      * answer needs the read grant, and a saved playlist outlives grants (see [rememberAccess]).
      */
-    fun documentName(uri: Uri): String? = runCatchingNonFatal {
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { cursor ->
-                val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-            }
-            ?.takeIf { it.isNotBlank() }
-    }.getOrNull()
+    suspend fun documentName(uri: Uri): String? = withContext(ioDispatcher) {
+        suspendCancellableCoroutine { continuation ->
+            val signal = CancellationSignal()
+            continuation.invokeOnCancellation { signal.cancel() }
+            val name = runCatchingNonFatal {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null, signal)
+                    ?.use { cursor ->
+                        val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+                    }
+                    ?.takeIf { it.isNotBlank() }
+            }.getOrNull()
+            continuation.resume(name)
+        }
+    }
 
     /**
      * Reads [uri], or says why it could not.

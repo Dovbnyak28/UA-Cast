@@ -2,6 +2,8 @@
 
 package com.uacastplayer.ui.player
 
+import com.uacastplayer.player.PlayerUiState
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.guidedtour.GuidedTourKeys
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.player.PlayerCastStatusMessage
 import com.uacastplayer.core.cast.CodecDisplayName
 import com.uacastplayer.playlist.M3uChannel
@@ -63,18 +67,29 @@ internal fun InlinePlayerContent(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .playerControlsInteraction(transientState)
             .background(UaTheme.palette.void)
             .windowInsetsPadding(WindowInsets.statusBars)
             .verticalScroll(rememberScrollState()),
     ) {
         InlinePlayerHeader(currentChannel, uiState.isCasting, content, actions, transientState)
-        InlineVideoPanel(content, actions, transientState)
+        if (uiState.fatalError) {
+            PlaybackFailureCard(
+                canGoNext = uiState.canGoNext,
+                onRetry = actions.viewModel::retryCurrentChannel,
+                onNext = actions.viewModel.navigation::requestNext,
+                onExit = actions.onExit,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
+            )
+        } else {
+            InlineVideoPanel(content, actions, transientState)
+        }
         CastStatusBanner(uiState.castStatusMessage)
         // The terminal error card already owns Retry/Next/Back. Keeping the ordinary navigation
         // row visible at the same time produced two identically named "Next channel" actions in
         // the accessibility tree and an ambiguous TalkBack destination.
-        if (!uiState.fatalError) ChannelNavigationRow(actions)
-        currentChannel?.let { channel ->
+        if (!uiState.fatalError) ChannelNavigationRow(actions, uiState)
+        currentChannel?.takeUnless { uiState.fatalError }?.let { channel ->
             ChannelInfoCard(
                 channel = channel,
                 badges = uiState.badges,
@@ -83,19 +98,10 @@ internal fun InlinePlayerContent(
             )
         }
         QuickSettingsRow(
+            showAudio = !uiState.fatalError && !remotePlaybackOwnsControls(uiState, content.dlnaState),
             onAudioClick = { transientState.showAudioDialog = true },
-            onSubtitlesClick = { transientState.showSubtitleDialog = true },
-            onQualityClick = { transientState.showQualityDialog = true },
-            onAspectRatioClick = {
-                actions.viewModel.navigation.cycleResizeMode()
-                transientState.resizeModeToastNonce++
-            },
             onGuideClick = { transientState.showGuideSheet = true },
-            onPreviousChannelClick = if (uiState.hasPreviousChannel) {
-                actions.viewModel.navigation::requestPreviousChannel
-            } else {
-                null
-            },
+            onMoreClick = { transientState.showActionsSheet = true },
         )
         if (uiState.nextChannelsPreview.isNotEmpty()) {
             NextChannelsRail(
@@ -103,13 +109,16 @@ internal fun InlinePlayerContent(
                 iconRefreshKey = content.iconRefreshKey,
                 resolveIcon = actions.resolveIcon,
                 onSelect = { actions.viewModel.navigation.requestSwitch(it.index) },
+                onViewAll = { transientState.showChannelsSheet = true },
             )
         }
-        SecondaryButton(
-            text = stringResource(R.string.player_back_to_channels),
-            onClick = actions.onExit,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapL),
-        )
+        if (!uiState.fatalError) {
+            SecondaryButton(
+                text = stringResource(R.string.player_back_to_channels),
+                onClick = actions.onExit,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapL),
+            )
+        }
     }
 }
 
@@ -157,18 +166,14 @@ private fun InlinePlayerHeader(
         val dlnaConnected = content.dlnaState.connectedDevice != null
         SmallRoundIconButton(
             icon = AppIcons.CastToTv,
-            onClick = { transientState.showDlnaSheet = true },
+            onClick = { transientState.showDevicePicker = true },
             contentDescription = stringResource(
-                if (dlnaConnected) R.string.player_dlna_connected else R.string.player_dlna_cast,
+                R.string.player_devices,
             ),
-            tint = if (dlnaConnected) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
+            tint = if (dlnaConnected || isCasting) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
             iconSize = CastPeerIconGlyphSize,
-            modifier = Modifier.liveRing(active = dlnaConnected, color = UaTheme.palette.azure),
-        )
-        PlayerCastButton(
-            background = UaTheme.palette.surface1,
-            isCasting = isCasting,
-            modifier = Modifier.padding(start = 8.dp),
+            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON)
+                .liveRing(active = dlnaConnected || isCasting, color = UaTheme.palette.azure),
         )
     }
 }
@@ -223,24 +228,14 @@ private fun InlineVideoPanel(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
-        if (uiState.fatalError) {
-            PlaybackFailureCard(
-                onRetry = actions.viewModel::retryCurrentChannel,
-                onNext = actions.viewModel.navigation::requestNext,
-                onExit = actions.onExit,
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
-            )
-        }
         if (transientState.showResizeModeToast) {
             ResizeModeToast(uiState.resizeMode, modifier = Modifier.align(Alignment.Center))
         }
         if (transientState.controlsVisible && !uiState.fatalError) {
             InlineVideoControls(
-                isPlaying = uiState.isPlaying,
-                onPlayPause = {
-                    val player = actions.viewModel.player
-                    if (player.isPlaying) player.pause() else player.play()
-                },
+                wantsToPlay = uiState.wantsToPlay,
+                canControlPlayback = uiState.canControlPlayback,
+                onPlayPause = actions.viewModel::togglePlayback,
                 onToggleFullscreen = { actions.onFullscreenChanged(true) },
             )
         }
@@ -277,7 +272,7 @@ private fun CastStatusBanner(status: PlayerCastStatusMessage?) {
 }
 
 @Composable
-private fun ChannelNavigationRow(actions: PlayerScreenActions) {
+private fun ChannelNavigationRow(actions: PlayerScreenActions, uiState: PlayerUiState) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -286,12 +281,14 @@ private fun ChannelNavigationRow(actions: PlayerScreenActions) {
             icon = AppIcons.SkipPrevious,
             label = stringResource(R.string.player_previous),
             onClick = actions.viewModel.navigation::requestPrevious,
+            enabled = uiState.canGoPrevious,
             modifier = Modifier.weight(1f),
         )
         PillButton(
             icon = AppIcons.SkipNext,
             label = stringResource(R.string.player_next),
             onClick = actions.viewModel.navigation::requestNext,
+            enabled = uiState.canGoNext,
             modifier = Modifier.weight(1f),
             iconTrailing = true,
         )

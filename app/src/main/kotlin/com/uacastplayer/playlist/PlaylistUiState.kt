@@ -4,6 +4,7 @@ sealed interface PlaylistError {
     data object SizeLimitExceeded : PlaylistError
     data class Http(val code: Int) : PlaylistError
     data object Network : PlaylistError
+    data object Storage : PlaylistError
 
     /**
      * The source was read and held no channels.
@@ -16,6 +17,8 @@ sealed interface PlaylistError {
      */
     data object Empty : PlaylistError
 }
+
+enum class PlaylistSourceSaveState { IDLE, SAVING, SAVED, FAILED, LIMIT_REACHED }
 
 data class PlaylistUiState(
     val groups: List<GroupedChannels> = emptyList(),
@@ -40,6 +43,9 @@ data class PlaylistUiState(
     /** The URL the active playlist was loaded from - null for a file import. Lets the UI offer a
      * one-tap refresh instead of sending the user back through Settings to retype it. */
     val sourceUrl: String? = null,
+    val sourceSaveState: PlaylistSourceSaveState = PlaylistSourceSaveState.IDLE,
+    /** Owner-published completion: UI need not observe a transient loading frame to save an import. */
+    val sourceReadyToSave: Boolean = false,
 ) {
     val hasChannels: Boolean get() = channels.isNotEmpty()
 }

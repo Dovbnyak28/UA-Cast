@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithText
@@ -146,14 +147,15 @@ fun MainActivityComposeRule.waitForChannelsLoaded(
  * plain `onNodeWithText(nav_channels)` finds two nodes and fails with "Expected exactly '1' node
  * but found '2'". Narrowing by [Role.Tab] - which [com.uacastplayer.ui.components.GlassTabBar]
  * already sets - picks the tab without needing a test tag or a production change, and keeps
- * working if the card's wording changes.
+ * working if the card's wording changes. Match the full accessibility label rather than the
+ * visible text, which intentionally uses short aliases at large font scales.
  */
 fun MainActivityComposeRule.openChannelsTab() {
     // A state update (e.g. playlist load) can complete before the corresponding tab has been
     // composed on a cold device. Synchronize the first semantics query with that composition.
     awaitComposeHierarchy()
     onNode(
-        hasText(activity.getString(R.string.nav_channels)) and
+        hasContentDescription(activity.getString(R.string.nav_channels)) and
             SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     ).performClick()
 }

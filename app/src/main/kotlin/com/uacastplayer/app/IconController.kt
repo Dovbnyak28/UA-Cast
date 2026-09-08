@@ -1,5 +1,7 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.data.playlist.withPlaylistCpuCancellable
+
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.data.icons.IconPrefetcher
@@ -341,7 +343,8 @@ class IconController(
         // coroutine actually getting to run (or while queued behind the network watcher) -
         // the collector in init re-arms this once it goes idle again, so bailing here without
         // touching isRunning is safe.
-        val selected = selectPrefetchChannels(channels, iconDisplayMode, context) ?: return
+        val selected = selectPrefetchChannels(channels, iconDisplayMode, context)
+            ?.takeUnless { PlaybackActivity.isActive.value } ?: return
 
         val started = updatePrefetchState(generation) {
             it.copy(isRunning = true, completed = 0, total = selected.size)
@@ -379,7 +382,7 @@ class IconController(
         }
     }
 
-    private fun selectPrefetchChannels(
+    private suspend fun selectPrefetchChannels(
         channels: List<M3uChannel>,
         iconDisplayMode: IconDisplayMode,
         context: PrefetchContext,
@@ -395,15 +398,18 @@ class IconController(
         return if (shouldSkip) {
             null
         } else {
-            PrefetchSelectionPolicy.select(
-                channels = channels,
-                priority = PrefetchSelectionPolicy.PriorityChannels(
-                    favoriteKeys = context.favoriteKeys,
-                    lastWatchedKey = context.lastWatchedKey,
-                    firstGroupChannels = context.firstGroupChannels,
-                ),
-                limit = checkNotNull(limit),
-            ).takeIf(List<M3uChannel>::isNotEmpty)
+            withPlaylistCpuCancellable { checkCancellation ->
+                PrefetchSelectionPolicy.select(
+                    channels = channels,
+                    priority = PrefetchSelectionPolicy.PriorityChannels(
+                        favoriteKeys = context.favoriteKeys,
+                        lastWatchedKey = context.lastWatchedKey,
+                        firstGroupChannels = context.firstGroupChannels,
+                    ),
+                    limit = checkNotNull(limit),
+                    checkCancellation = checkCancellation,
+                )
+            }.takeIf(List<M3uChannel>::isNotEmpty)
         }
     }
 

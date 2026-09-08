@@ -13,6 +13,9 @@ import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import com.uacastplayer.data.cache.CachePaths
+import com.uacastplayer.data.cache.CacheSizeUtils
 
 sealed interface EpgOutcome {
     data class Loaded(val data: EpgData) : EpgOutcome
@@ -35,10 +38,10 @@ private const val TAG = "EpgRepository"
 class EpgRepository(
     context: Context,
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    httpClient: OkHttpClient = AppHttp.client(connectTimeoutSeconds = 15, readTimeoutSeconds = 60),
 ) {
 
     private val appContext = context.applicationContext
-    private val httpClient = AppHttp.client(connectTimeoutSeconds = 15, readTimeoutSeconds = 60)
     private val downloader = EpgDownloader(httpClient, appContext.filesDir, ioDispatcher)
     private val snapshotStore = EpgSnapshotStore(appContext, ioDispatcher)
     private val snapshotMutations = EpgSnapshotMutationCoordinator()
@@ -49,6 +52,7 @@ class EpgRepository(
      * same pipeline as [loadFromSource], just without a fixed [EpgSource] to key off of. */
     suspend fun loadFromUrl(url: String): EpgOutcome = load(url)
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun load(url: String): EpgOutcome {
         // Captured before download/parse. A source selected later retires this writer even if its
         // AtomicFile encode is already in non-cancellable IO by the time the coroutine is cancelled.
@@ -63,6 +67,12 @@ class EpgRepository(
                     }
                     persist(snapshotLease, Fingerprint.of(url), data)
                     EpgOutcome.Loaded(data)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    // HTTP success does not imply a valid XML/gzip document. Retain the previous
+                    // guide and expose a recoverable failure instead of escaping viewModelScope.
+                    EpgOutcome.ReadError(error.javaClass.simpleName)
                 } finally {
                     result.documentFile.delete()
                 }
@@ -82,6 +92,10 @@ class EpgRepository(
      * gigabyte of orphans would keep carrying it until the cache happened to expire.
      */
     suspend fun deleteStaleDownloads() = withContext(ioDispatcher) { downloader.deleteStaleDownloads() }
+
+    suspend fun clearSnapshots() = snapshotMutations.invalidateAndDelete {
+        withContext(ioDispatcher) { CacheSizeUtils.clear(CachePaths.epgSnapshots(appContext.filesDir)) }
+    }
 
     // A corrupt/truncated cached snapshot (any parse failure, not one specific type) should just
     // fall back to null - the caller re-fetches live - not crash startup over stale disk state.

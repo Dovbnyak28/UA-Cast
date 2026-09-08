@@ -52,7 +52,6 @@ import androidx.media3.ui.PlayerView
 import com.uacastplayer.R
 import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.epg.EpgUiState
-import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.player.AudioChannelLayout
 import com.uacastplayer.player.PlaybackBadgesState
@@ -67,13 +66,11 @@ import com.uacastplayer.ui.cast.CastButton
 import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.components.liveRing
 import com.uacastplayer.ui.dlna.DlnaDeviceSheet
-import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
-import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.PRESS_SCALE_ICON
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.UaTheme
@@ -91,6 +88,7 @@ fun PlayerScreen(
     epgState: EpgUiState,
     iconPrefetchState: IconPrefetchUiState,
     modifier: Modifier = Modifier,
+    channels: List<M3uChannel> = emptyList(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dlnaState by viewModel.dlnaState.collectAsStateWithLifecycle()
@@ -122,7 +120,7 @@ fun PlayerScreen(
         resolveIcon = resolveIcon,
         onFullscreenChanged = { isFullscreen = it },
     )
-    val sleepTimer = rememberSleepTimerState(onExpire = { viewModel.player.pause() })
+    val sleepTimer = rememberSleepTimerState(viewModel.sleepTimer)
     val configuration = LocalConfiguration.current
     val isInPip = remember(configuration, activity) {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
@@ -146,6 +144,23 @@ fun PlayerScreen(
         InlinePlayerContent(content, actions, transientState, modifier)
     }
 
+    if (transientState.showChannelsSheet) {
+        PlayerChannelSheet(channels, uiState.currentChannel, viewModel.navigation::requestSwitch) {
+            transientState.showChannelsSheet = false
+        }
+    }
+    val isRemote = remotePlaybackOwnsControls(uiState, dlnaState)
+    RemotePlaybackDialogEffect(isRemote, transientState)
+    if (transientState.showActionsSheet) {
+        PlayerActionsSheet(transientState, actions, uiState.hasPreviousChannel, isRemote)
+    }
+    if (transientState.showLevelsSheet && !isRemote) PlayerLevelsSheet(transientState, environment)
+    if (transientState.showDevicePicker) {
+        PlayerDevicePicker(
+            onDlna = { transientState.showDlnaSheet = true },
+            onDismiss = { transientState.showDevicePicker = false },
+        )
+    }
     if (transientState.showDlnaSheet) {
         DlnaDeviceSheet(
             connectionState = dlnaState,
@@ -164,11 +179,11 @@ fun PlayerScreen(
         currentChannel = uiState.currentChannel,
         showSleepTimerDialog = transientState.showSleepTimerDialog,
         onDismissSleepTimerDialog = { transientState.showSleepTimerDialog = false },
-        showAudioDialog = transientState.showAudioDialog,
+        showAudioDialog = transientState.showAudioDialog && !isRemote,
         onDismissAudioDialog = { transientState.showAudioDialog = false },
-        showSubtitleDialog = transientState.showSubtitleDialog,
+        showSubtitleDialog = transientState.showSubtitleDialog && !isRemote,
         onDismissSubtitleDialog = { transientState.showSubtitleDialog = false },
-        showQualityDialog = transientState.showQualityDialog,
+        showQualityDialog = transientState.showQualityDialog && !isRemote,
         onDismissQualityDialog = { transientState.showQualityDialog = false },
         showGuideSheet = transientState.showGuideSheet,
         onDismissGuideSheet = { transientState.showGuideSheet = false },
@@ -293,6 +308,7 @@ internal fun PlaybackFailureCard(
     onNext: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    canGoNext: Boolean = true,
 ) {
     Column(
         modifier = modifier
@@ -315,6 +331,7 @@ internal fun PlaybackFailureCard(
         SecondaryButton(
             text = stringResource(R.string.player_next),
             onClick = onNext,
+            enabled = canGoNext,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Text(
@@ -352,8 +369,7 @@ internal fun PlayerCastButton(
     )
     Box(
         modifier = modifier
-            .size(IconButtonSize)
-            .guidedTourTarget(GuidedTourKeys.CAST_BUTTON)
+            .size(com.uacastplayer.ui.theme.TouchTargetMin)
             .scale(scale)
             .liveRing(active = isCasting, color = UaTheme.palette.azure)
             .semantics(mergeDescendants = true) {
@@ -372,7 +388,7 @@ internal fun PlayerCastButton(
             .raisedSurface(CircleShape, background, shadow = false),
         contentAlignment = Alignment.Center,
     ) {
-        CastButton(modifier = Modifier.size(IconButtonSize))
+        CastButton(modifier = Modifier.size(com.uacastplayer.ui.theme.TouchTargetMin))
     }
 }
 

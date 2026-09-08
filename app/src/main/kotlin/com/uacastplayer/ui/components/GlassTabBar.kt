@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
@@ -35,20 +35,20 @@ import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
-import com.uacastplayer.ui.theme.GlassTabBarHeight
+import com.uacastplayer.ui.theme.navigationBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.ui.theme.PRESS_SCALE_ICON
 import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.raisedSurface
 
+private const val LARGE_LABEL_FONT_SCALE = 1.5f
+
 /** §5.10 - bottom navigation chrome: floating rounded glass bar with a highlight pill on the selected tab. */
 @Composable
 fun GlassTabBar(items: List<TabBarItem>, modifier: Modifier = Modifier) {
     val glassTone = UaTheme.palette.glassTone
-    // At the two largest Android font settings four full labels cannot fit on a phone. Icons keep
-    // their semantic content descriptions, so the bar remains fully accessible without clipping.
-    val showLabels = LocalDensity.current.fontScale < 1.5f
+    val barHeight = navigationBarHeight(LocalDensity.current.fontScale)
 
     Row(
         modifier = modifier
@@ -57,16 +57,17 @@ fun GlassTabBar(items: List<TabBarItem>, modifier: Modifier = Modifier) {
             .padding(horizontal = 12.dp, vertical = GlassTabBarVerticalPadding)
             .clip(RoundedCornerShape(24.dp))
             .background(glassTone)
-            .height(GlassTabBarHeight),
+            .height(barHeight),
     ) {
         for (item in items) {
-            TabBarButton(item = item, showLabel = showLabels, modifier = Modifier.weight(1f))
+            TabBarButton(item = item, modifier = Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
 
 @Composable
-private fun TabBarButton(item: TabBarItem, showLabel: Boolean, modifier: Modifier = Modifier) {
+private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
+    val largeText = LocalDensity.current.fontScale >= LARGE_LABEL_FONT_SCALE
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -101,7 +102,7 @@ private fun TabBarButton(item: TabBarItem, showLabel: Boolean, modifier: Modifie
                         Modifier
                     },
                 )
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+                .padding(horizontal = if (largeText) 2.dp else 6.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
@@ -111,10 +112,17 @@ private fun TabBarButton(item: TabBarItem, showLabel: Boolean, modifier: Modifie
                 // not a translucent tint - needs accentOnFill's contrast, same as TabBarLabel.
                 tint = if (item.selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
                 modifier = Modifier
-                    .height(if (showLabel) 26.dp else 30.dp)
-                    .padding(bottom = if (showLabel) 2.dp else 0.dp),
+                    .height(26.dp)
+                    .padding(bottom = 2.dp),
             )
-            if (showLabel) TabBarLabel(text = item.label, selected = item.selected)
+            TabBarLabel(
+                text = if (largeText) {
+                    item.largeTextLabel
+                } else {
+                    item.label
+                },
+                selected = item.selected,
+            )
         }
     }
 }

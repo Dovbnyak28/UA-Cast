@@ -7,6 +7,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.R
 import com.uacastplayer.epg.EpgUiState
@@ -16,6 +19,7 @@ import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 import org.junit.Rule
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.experimental.categories.Category
 import org.junit.runner.RunWith
@@ -120,5 +124,35 @@ class DownloadStatusBannerDismissTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(UiTestTags.DOWNLOAD_STATUS_BANNER).assertExists()
+    }
+
+    @Test fun `dismissal survives recreation during the same download`() {
+        bothDownloading()
+        val restoration = StateRestorationTester(composeRule)
+        restoration.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                DownloadStatusBanner(iconState, epgState)
+            }
+        }
+        dismiss()
+        restoration.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(UiTestTags.DOWNLOAD_STATUS_BANNER).assertDoesNotExist()
+    }
+
+    @Test fun `compact status keeps touch targets and expands details on demand`() {
+        bothDownloading()
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) { DownloadStatusBanner(iconState, epgState, compact = true) }
+        }
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val banner = composeRule.onNodeWithTag(UiTestTags.DOWNLOAD_STATUS_BANNER)
+        val compactHeight = banner.getUnclippedBoundsInRoot().let { it.bottom - it.top }
+        assertTrue(compactHeight >= 48.dp)
+        composeRule.onNodeWithContentDescription(context.getString(R.string.download_banner_expand)).performClick()
+        assertTrue(banner.getUnclippedBoundsInRoot().let { it.bottom - it.top } > compactHeight)
+        composeRule.onNodeWithContentDescription(context.getString(R.string.download_banner_collapse)).performClick()
+        assertTrue(banner.getUnclippedBoundsInRoot().let { it.bottom - it.top } == compactHeight)
+        dismiss()
     }
 }

@@ -15,9 +15,14 @@ import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.playlist.ChannelGrouper
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
+import com.uacastplayer.data.cache.CachePaths
+import com.uacastplayer.data.cache.CacheSizeUtils
+import okhttp3.OkHttpClient
 
 sealed interface PlaylistOutcome {
     data class Loaded(
@@ -32,6 +37,7 @@ sealed interface PlaylistOutcome {
         val epgUrls: List<String> = emptyList(),
     ) : PlaylistOutcome
     data object SizeLimitExceeded : PlaylistOutcome
+    data object StorageError : PlaylistOutcome
     data class HttpError(val code: Int) : PlaylistOutcome
     data class ReadError(val message: String?) : PlaylistOutcome
 }
@@ -42,10 +48,10 @@ private const val TRACE_ID_LENGTH = 8
 class PlaylistRepository(
     context: Context,
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    httpClient: OkHttpClient = AppHttp.client(connectTimeoutSeconds = 15, readTimeoutSeconds = 30),
 ) {
 
     private val appContext = context.applicationContext
-    private val httpClient = AppHttp.client(connectTimeoutSeconds = 15, readTimeoutSeconds = 30)
     private val urlLoader = PlaylistUrlLoader(httpClient, ioDispatcher)
     private val fileLoader = PlaylistFileLoader(appContext, ioDispatcher)
     private val sourceStore = PlaylistSourceStore(appContext, ioDispatcher)
@@ -78,23 +84,29 @@ class PlaylistRepository(
         } catch (cancelled: CancellationException) {
             AppLog.d(TAG) { "Playlist $traceId load cancelled" }
             throw cancelled
+        } finally {
+            snapshotMutations.finishWrite(snapshotLease)
         }
     }
 
     /** The file name behind a picked document, for naming the source - see
      * [PlaylistFileLoader.documentName]. */
-    fun documentName(uri: Uri): String? = fileLoader.documentName(uri)
+    suspend fun documentName(uri: Uri): String? = fileLoader.documentName(uri)
 
     suspend fun loadFromFile(uri: Uri): PlaylistOutcome {
         // Asked for on every load, not only the first: taking a grant already held is a no-op, and
         // this is the one place every path to a file playlist goes through - the initial pick, a
         // source switch, and a reload from the saved list. See PlaylistFileLoader.rememberAccess.
-        fileLoader.rememberAccess(uri)
+        withContext(ioDispatcher) { fileLoader.rememberAccess(uri) }
         val sourceId = Fingerprint.of(uri.toString())
         val snapshotLease = snapshotMutations.captureWrite(sourceId)
-        val outcome = toOutcome(fileLoader.load(uri), sourceId, sourceUrl = null)
-        persistIfLoaded(snapshotLease, outcome)
-        return outcome
+        return try {
+            val outcome = toOutcome(fileLoader.load(uri), sourceId, sourceUrl = null)
+            persistIfLoaded(snapshotLease, outcome)
+            outcome
+        } finally {
+            snapshotMutations.finishWrite(snapshotLease)
+        }
     }
 
     /** Cached channels for one saved source (see [PlaylistSource]) - keyed by [sourceId] so
@@ -127,6 +139,10 @@ class PlaylistRepository(
         }
     }
 
+    suspend fun clearSnapshots() = snapshotMutations.invalidateAllAndDelete {
+        withContext(ioDispatcher) { CacheSizeUtils.clear(CachePaths.playlistSnapshots(appContext.filesDir)) }
+    }
+
     /**
      * One-time upgrade path: before multi-playlist support there was exactly one snapshot file
      * (see [LegacyPlaylistSnapshotFile]) and no source list at all. Called only when [loadSources]
@@ -146,7 +162,9 @@ class PlaylistRepository(
         val legacy = LegacyPlaylistSnapshotFile.read(appContext, ioDispatcher) ?: return null
         val id = legacy.sourceFingerprint.ifBlank { Fingerprint.of(legacy.sourceUrl.orEmpty()) }
         val type = if (legacy.sourceUrl != null) PlaylistSourceType.URL else PlaylistSourceType.FILE
-        PlaylistSnapshotStore(appContext, id, ioDispatcher).save(legacy)
+        if (!PlaylistSnapshotStore(appContext, id, ioDispatcher).save(legacy)) {
+            throw IOException("Legacy playlist copy was not committed; original retained")
+        }
         return PlaylistSource(
             id = id,
             type = type,
@@ -172,8 +190,8 @@ class PlaylistRepository(
         lease: PlaylistSnapshotMutationCoordinator.WriteLease,
         outcome: PlaylistOutcome,
     ) {
-        if (outcome !is PlaylistOutcome.Loaded) return
-        val channels = outcome.groups.flatMap { it.channels }
+        if (outcome !is PlaylistOutcome.Loaded || outcome.groups.all { it.channels.isEmpty() }) return
+        val channels = withPlaylistCpu { outcome.groups.flatMap { it.channels } }
         val snapshot = PlaylistSnapshot(
             sourceFingerprint = outcome.sourceFingerprint.orEmpty(),
             savedAtEpochMillis = System.currentTimeMillis(),

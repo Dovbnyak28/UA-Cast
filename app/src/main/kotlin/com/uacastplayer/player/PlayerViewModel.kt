@@ -1,6 +1,7 @@
 package com.uacastplayer.player
 
 import android.app.Application
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.AndroidViewModel
@@ -26,8 +27,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 /**
  * Owns the single ExoPlayer instance for a player session. Scoped to the host Activity (see
@@ -65,14 +66,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var castArtworkUrlFor: (M3uChannel) -> String? = DEFAULT_CAST_ARTWORK
     private val sessionStateMachine = PlayerSessionStateMachine()
     private var retryJob: Job? = null
-    private var stallRecoveryJob: Job? = null
+    private val stallRecovery = PlayerStallRecovery(
+        scope = viewModelScope,
+        session = sessionStateMachine,
+        observe = ::observeStall,
+        onEffect = ::applyStallEffect,
+        recover = ::executeStallRecovery,
+    )
 
     var wrapAroundEnabled: Boolean = preferences.wrapAroundEnabled
+        set(value) {
+            field = value
+            _uiState.update { it.copy(nextChannelsPreview = sessionStateMachine.nextPreview(value)) }
+            syncPlaybackControls()
+        }
     var autoSkipDeadEnabled: Boolean = preferences.autoSkipDeadEnabled
     private var autoSkipCancelledForSession: Boolean = false
 
     private val castPort = (application as? PlayerCastPortOwner)?.playerCastPort ?: DisconnectedPlayerCastPort
     private var isCasting: Boolean = false
+    /** Last Chromecast connection edge observed by the player. Cast side effects are one-shot
+     * hints; this edge is the state-driven safety net when a SharedFlow event is emitted while
+     * the collector is busy or temporarily absent. */
+    private var observedCastConnection = false
 
     // DLNA is a second, independent cast target (see dlna/DlnaSessionRepository) - a receiver only
     // ever reachable one way or the other, never both, but nothing enforces that here: as far as
@@ -85,9 +101,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val isRemoteCasting: Boolean get() = isCasting || isDlnaCasting
 
+    private var sleepTimerExpired = false
+    val sleepTimer = PlayerSleepTimer(viewModelScope, onExpire = ::expireSleepTimer)
+
     private val _uiState = MutableStateFlow(PlayerUiState(resizeMode = preferences.playerResizeMode))
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
-    val dlna = PlayerDlnaController(dlnaRepository) { _uiState.value.currentChannel }
+    val dlna = PlayerDlnaController(
+        dlnaRepository,
+        beforeConnect = { handleDlnaStateChange(DlnaConnectionState(isConnecting = true)) },
+    ) { _uiState.value.currentChannel }
     val tracks = PlayerTrackController(exoPlayer)
     val navigation = PlayerNavigationController(
         channel = ChannelNavigationContext(
@@ -106,23 +128,42 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     )
     // A full MediaSessionService is intentionally out of scope for live TV; this optional bridge
     // simply exposes the Activity-scoped player to headset/watch/system controls.
-    private val mediaSession = PlayerMediaSessionFactory.create(
+    private val sessionPlayer = SessionPlayer(exoPlayer, controls = {
+        val hasChannel = sessionStateMachine.hasCurrentChannel
+        val local = hasChannel && !isRemoteCasting && !isInBackground
+        SessionPlayerControls(
+            canPlay = local && !_uiState.value.fatalError,
+            canStop = local,
+            canSeek = local && _uiState.value.canSeek,
+            canGoNext = hasChannel && (isRemoteCasting || !isInBackground) && _uiState.value.canGoNext,
+            canGoPrevious = hasChannel && (isRemoteCasting || !isInBackground) && _uiState.value.canGoPrevious,
+        )
+    }, actions = SessionPlayerActions(
+        playWhenReady = ::setPlaybackIntent,
+        prepare = { if (!isRemoteCasting && !isInBackground) exoPlayer.prepare() },
+        stop = ::releasePlayback,
+        next = navigation::requestNext,
+        previous = navigation::requestPrevious,
+    ))
+    @VisibleForTesting internal val mediaSession = PlayerMediaSessionFactory.create(
         context = application,
-        player = exoPlayer,
-        onNext = navigation::requestNext,
-        onPrevious = navigation::requestPrevious,
+        player = sessionPlayer,
     )
     private val trackMapper = PlayerTrackMapper { index ->
         getApplication<Application>().getString(R.string.player_track_unknown, index)
     }
 
     private val listener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            syncPlaybackControls()
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) {
                 sessionStateMachine.onPlaybackConfirmed()
                 // Natural recovery can beat the scheduled backoff. Leaving that job alive would
                 // seek/re-prepare a stream that is healthy again a few seconds later.
-                cancelPendingStallRecovery()
+                cancelPendingStallRecovery(resetBudget = false)
             }
             _uiState.update {
                 it.copy(
@@ -130,11 +171,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     autoSkipRecovery = if (isPlaying) null else it.autoSkipRecovery,
                 )
             }
-            PlaybackActivity.setActive(isPlaying || isRemoteCasting)
+            syncPlaybackControls()
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             if (!playWhenReady) cancelPendingStallRecovery()
+            syncPlaybackControls()
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -155,6 +197,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private val playbackPreferencesSubscription = preferences.observePlaybackChanges {
+        wrapAroundEnabled = preferences.wrapAroundEnabled
+        autoSkipDeadEnabled = preferences.autoSkipDeadEnabled
+    }
+
     init {
         if (PlayerInstanceGuard.isLeak(liveInstanceCount)) {
             val leak = IllegalStateException(
@@ -171,7 +218,32 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             castPort.state.collect { state ->
+                val wasCasting = observedCastConnection
                 isCasting = state.isConnected
+                if (state.isConnected && !wasCasting) {
+                    // A missed PauseLocalPlayer must not leave the phone consuming the origin in
+                    // parallel with the receiver. Stop is idempotent and the media item remains
+                    // available for a later hand-back.
+                    cancelLocalRecoveryForRemotePlayback()
+                    exoPlayer.stop()
+                } else if (!state.isConnected && wasCasting &&
+                    LocalPlaybackPolicy.shouldResumeAfterDisconnect(
+                        isChromecastActive = false,
+                        isDlnaActive = isDlnaCasting,
+                    )
+                ) {
+                    // ResumeLocalPlayer is also delivered as an event, but this state edge makes
+                    // hand-back reliable when that one-shot event was dropped by SharedFlow. Give
+                    // the side-effect collector one dispatcher turn first, so ApplyPendingChannel-
+                    // Switch is handled before the resumed player starts the old channel.
+                    viewModelScope.launch {
+                        yield()
+                        if (!isCasting && !isDlnaCasting && !observedCastConnection) {
+                            resumeLocalPlayback()
+                        }
+                    }
+                }
+                observedCastConnection = state.isConnected
                 _uiState.update {
                     it.copy(
                         isCasting = isCasting,
@@ -179,7 +251,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 updateSeekability()
-                PlaybackActivity.setActive(_uiState.value.isPlaying || isRemoteCasting)
+                syncPlaybackControls()
             }
         }
         viewModelScope.launch {
@@ -188,12 +260,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             dlnaRepository.state.collect { state -> handleDlnaStateChange(state) }
         }
-        viewModelScope.launch {
-            while (isActive) {
-                delay(STALL_SAMPLE_INTERVAL_MILLIS)
-                sampleForStall()
-            }
-        }
+        stallRecovery.start()
     }
 
     /**
@@ -208,7 +275,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * local playback fully.
      */
     private fun handleDlnaStateChange(state: DlnaConnectionState) {
-        val isConnected = state.connectedDevice != null
+        val isConnected = state.connectedDevice != null || state.isConnecting
         if (isConnected == isDlnaCasting) return
         isDlnaCasting = isConnected
         if (isConnected) {
@@ -227,7 +294,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             resumeLocalPlayback()
         }
         updateSeekability()
-        PlaybackActivity.setActive(_uiState.value.isPlaying || isRemoteCasting)
+        syncPlaybackControls()
     }
 
     /**
@@ -255,6 +322,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      */
     @VisibleForTesting
     internal fun resumeLocalPlayback() {
+        if (sleepTimerExpired || !sessionStateMachine.hasCurrentChannel) return
         if (isInBackground) {
             AppLog.d(TAG) { "Cast ended off screen - local playback owed until the app is back" }
             resumeLocalWhenForeground = true
@@ -271,7 +339,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             // as long as the phone holds that slot, the receiver's own fetch (direct mode) or the
             // proxy's remux reader can never get a working connection, so casting starves forever.
             // The media item survives stop(), and ResumeLocalPlayer's prepare()+play() below fully
-            // recovers from it. sampleForStall can't fight this: it bails while isCasting.
+            // recovers from it. Stall recovery cannot fight this: it is disabled while casting.
             PlayerCastSideEffect.PauseLocalPlayer -> {
                 cancelLocalRecoveryForRemotePlayback()
                 exoPlayer.stop()
@@ -294,7 +362,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             ) {
                 resumeLocalPlayback()
             }
-            is PlayerCastSideEffect.ApplyPendingChannelSwitch -> switchToIndexImmediate(effect.index)
+            is PlayerCastSideEffect.ApplyPendingChannelSwitch ->
+                if (!sleepTimerExpired) switchToIndexImmediate(effect.index)
             is PlayerCastSideEffect.RecordIncompatibility ->
                 AppLog.d(TAG) { "Cast incompatibility recorded: ${effect.reason}" }
             PlayerCastSideEffect.CloseProxySession -> Unit // The Cast adapter owns and closes the proxy itself.
@@ -305,12 +374,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * [com.uacastplayer.AppViewModel.castArtworkUrlFor] for why it is a function and not a value.
      * The default is the channel's own `tvg-logo`, i.e. what this class did before anything richer
      * was passed in. */
+    private var attachedRequest: PlayerRequest? = null
+
     fun start(
         channels: List<M3uChannel>,
         startIndex: Int,
         castArtworkUrlFor: (M3uChannel) -> String? = DEFAULT_CAST_ARTWORK,
+        request: PlayerRequest? = null,
     ) {
+        // A retained UI request only reattaches; a new tap (or explicit start without a marker)
+        // replaces playback. Preserve the current item, position, pause and recovery budgets.
+        if (request != null && attachedRequest === request && sessionStateMachine.hasCurrentChannel) return
+        attachedRequest = request
         autoSkipCancelledForSession = false
+        resumeAfterSleepIfRequested()
         if (channels.isEmpty()) {
             // The Activity-scoped ViewModel outlives PlayerHost. An empty replacement must not
             // leave the previous media item, codecs, retry jobs, and UI channel alive inside it.
@@ -318,6 +395,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         this.castArtworkUrlFor = castArtworkUrlFor
+        stallRecovery.start()
         sessionStateMachine.start(
             channels = channels,
             startIndex = startIndex.coerceIn(channels.indices),
@@ -327,6 +405,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchToIndexImmediate(index: Int) {
         val transition = sessionStateMachine.switchTo(index, wrapAroundEnabled) ?: return
+        resumeAfterSleepIfRequested()
         applyChannelSwitch(transition)
     }
 
@@ -335,7 +414,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         transition: PlayerSessionStateMachine.ChannelSwitch,
         autoSkipRecovery: AutoSkipRecoveryState? = null,
     ) {
-        // A third stale-job class alongside stallRecoveryJob/retryJob below: requestSwitch's own
+        // A third stale-job class alongside stall recovery/error retry below: requestSwitch's own
         // debounce cancels only a *previous* debounce, not a switch that lands through some other
         // path (start() loading a fresh playlist, a cast-driven ApplyPendingChannelSwitch, an
         // auto-skip to the next live channel) while its delay is still running. Left alive, that
@@ -383,7 +462,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         // player has already stood down for a remote target above, so without this a channel switch
         // during a DLNA cast would change nothing anywhere - the TV keeps the old channel and the
         // phone plays nothing.
-        dlnaRepository.setActiveChannel(channel.streamUrl, channel.displayName)
+        dlnaRepository.setActiveChannel(channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)
         _uiState.update {
             it.copy(
                 currentChannel = channel,
@@ -397,10 +476,52 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 autoSkipRecovery = autoSkipRecovery,
             )
         }
+        syncPlaybackControls()
+    }
+
+    /** Read engine intent at invocation time, so rapid taps and buffering can both be paused. */
+    fun togglePlayback() {
+        setPlaybackIntent(sleepTimerExpired || !exoPlayer.playWhenReady)
+    }
+
+    private fun setPlaybackIntent(play: Boolean) {
+        if (isRemoteCasting || isInBackground) return
+        if (!sessionStateMachine.hasCurrentChannel || _uiState.value.fatalError) return
+        if (play && sleepTimerExpired) {
+            resumeAfterSleepIfRequested()
+            exoPlayer.prepare()
+        } else if (play) {
+            if (exoPlayer.playbackState == Player.STATE_IDLE) exoPlayer.prepare()
+            exoPlayer.play()
+        } else exoPlayer.pause()
+        syncPlaybackControls()
+    }
+
+    private fun syncPlaybackControls() {
+        val hasChannel = sessionStateMachine.hasCurrentChannel
+        _uiState.update {
+            it.copy(
+                wantsToPlay = hasChannel && exoPlayer.playWhenReady,
+                canControlPlayback = hasChannel && !isRemoteCasting && !it.fatalError,
+                canGoNext = sessionStateMachine.nextIndex(wrapAroundEnabled) != null,
+                canGoPrevious = sessionStateMachine.previousIndex(wrapAroundEnabled) != null,
+            )
+        }
+        PlaybackActivity.setActive(
+            PlaybackActivityPolicy.protectNetwork(
+                hasChannel = hasChannel,
+                wantsToPlay = exoPlayer.playWhenReady,
+                ended = exoPlayer.playbackState == Player.STATE_ENDED,
+                fatalError = _uiState.value.fatalError,
+                remote = isRemoteCasting,
+            ),
+        )
+        sessionPlayer.refreshCommands()
     }
 
     /** Actions exposed by the failure/recovery card; both are safe after a stale recomposition. */
     fun retryCurrentChannel() {
+        resumeAfterSleepIfRequested()
         sessionStateMachine.retryCurrent(wrapAroundEnabled)?.let(::applyChannelSwitch)
     }
 
@@ -411,6 +532,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handlePlaybackError(error: PlaybackException) {
+        if (sleepTimerExpired) return
+        val fallback = MediaItemFactory.progressiveFallback(exoPlayer.currentMediaItem, error.errorCode)
+        if (fallback != null && !isRemoteCasting) {
+            exoPlayer.setMediaItem(fallback)
+            performScheduledPlaybackRetry()
+            return
+        }
         val errorType = PlayerErrorClassifier.classify(error)
         when (
             val effect = sessionStateMachine.onPlaybackError(
@@ -456,26 +584,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.update {
                     it.copy(fatalError = true, isBuffering = false, autoSkipRecovery = null)
                 }
+                syncPlaybackControls()
             }
         }
     }
 
-    /**
-     * Catches a "silent" stall - a stream that stopped delivering bytes without ever breaking the
-     * connection, so [onPlayerError] never fires - via periodic sampling (see the init block).
-     * Skipped entirely while casting (the local player isn't the one actually playing then, see
-     * [LocalPlaybackPolicy]) or while paused (nothing to stall).
-     *
-     * Recovery never gives up on a live channel by itself (see [StallRetryPolicy]'s KDoc for why
-     * the old 30s-cooldown-then-give-up behavior was actively self-defeating) - it only escalates
-     * to slower, then eventually 30s-steady, retries. [giveUpOnCurrentChannel] is reserved for real
-     * [androidx.media3.common.PlaybackException]s classified via [PlayerErrorClassifier].
-     */
-    private fun sampleForStall() {
-        if (isRemoteCasting || !sessionStateMachine.hasCurrentChannel || !exoPlayer.playWhenReady) return
-
-        val tick = StallDetectionPolicy.Tick(
-            nowMillis = System.currentTimeMillis(),
+    private fun observeStall(): PlayerStallObservation = PlayerStallObservation(
+        tick = StallDetectionPolicy.Tick(
+            nowMillis = SystemClock.elapsedRealtime(),
             positionMs = exoPlayer.currentPosition,
             phase = when (exoPlayer.playbackState) {
                 Player.STATE_BUFFERING -> StallDetectionPolicy.PlaybackPhase.BUFFERING
@@ -484,66 +600,44 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             },
             playWhenReady = exoPlayer.playWhenReady,
             isLive = exoPlayer.isCurrentMediaItemLive,
-        )
-        val threshold = StallDetectionPolicy.thresholdMillisFor(preferences.effectiveBufferSize)
-        when (val effect = sessionStateMachine.onStallTick(tick, threshold)) {
+        ),
+        thresholdMillis = StallDetectionPolicy.thresholdMillisFor(preferences.effectiveBufferSize),
+        mayRecover = !isRemoteCasting && sessionStateMachine.hasCurrentChannel && !_uiState.value.fatalError,
+    )
+
+    private fun applyStallEffect(effect: PlayerSessionStateMachine.StallEffect) {
+        when (effect) {
             PlayerSessionStateMachine.StallEffect.None -> Unit
             PlayerSessionStateMachine.StallEffect.ClearRecoveryIndicator -> {
-                if (!_uiState.value.isRecoveringPlayback) return
-                _uiState.update { it.copy(isRecoveringPlayback = false, stallRecoveryAttempt = 0) }
+                if (_uiState.value.isRecoveringPlayback) {
+                    _uiState.update { it.copy(isRecoveringPlayback = false, stallRecoveryAttempt = 0) }
+                }
+            }
+            PlayerSessionStateMachine.StallEffect.GiveUp -> {
+                retryJob?.cancel()
+                exoPlayer.stop()
+                _uiState.update {
+                    it.copy(
+                        fatalError = true,
+                        isBuffering = false,
+                        isRecoveringPlayback = false,
+                        autoSkipRecovery = null,
+                    )
+                }
+                syncPlaybackControls()
             }
             is PlayerSessionStateMachine.StallEffect.ScheduleRecovery -> {
-                _uiState.update {
-                    it.copy(isRecoveringPlayback = true, stallRecoveryAttempt = effect.attempt)
-                }
-                AppLog.d(TAG) {
-                    "Recovering from a silent stall: attempt ${effect.attempt}," +
-                        " retrying in ${effect.delayMillis}ms"
-                }
-                stallRecoveryJob?.cancel()
-                stallRecoveryJob = viewModelScope.launch {
-                    delay(effect.delayMillis)
-                    performStallRecovery(effect.attempt)
-                }
+                _uiState.update { it.copy(isRecoveringPlayback = true, stallRecoveryAttempt = effect.attempt) }
+                AppLog.d(TAG) { "Silent-stall recovery attempt ${effect.attempt} in ${effect.delayMillis}ms" }
             }
         }
     }
 
-    /**
-     * [attempt] picks light vs heavy via [StallRetryPolicy.recoveryKindFor] - light
-     * (seekToDefaultPosition + prepare) jumps back to the live edge without tearing down decoders;
-     * heavy (stop/prepare/play, the old unconditional behavior) is reserved for when two light
-     * attempts in a row didn't help, since it costs a full re-buffer from zero.
-     *
-     * Both of [sampleForStall]'s preconditions are re-checked here, not only before the wait. This
-     * runs up to thirty seconds after the stall that scheduled it (see [StallRetryPolicy]'s steady
-     * state), which is long enough for either of them to have stopped being true - and heavy
-     * recovery ends in `play()`, so acting on a stale one does not merely waste work, it starts
-     * playback nobody asked for.
-     *
-     * `playWhenReady` false means the player is not trying to play any more: the user paused, the
-     * app went to the background (see [onEnterBackground] and [BackgroundPlaybackPolicy]), or
-     * ExoPlayer gave up audio focus for a call. Without this check the app resumed a stream the
-     * user had just paused, and - after backgrounding - went on playing a live stream with the
-     * screen off, which is the precise thing that pause existed to prevent.
-     *
-     * [isRemoteCasting] means the local player deliberately stood down for a receiver (see
-     * [handleDlnaStateChange] and [LocalPlaybackPolicy]). `stop()` leaves `playWhenReady` true, so
-     * the check above does not cover this one: recovering here would put the same stream on the
-     * phone and the receiver at once - audible twice, with the phone taking the origin's one
-     * allowed connection and starving the receiver that was playing fine.
-     *
-     * Skipping costs nothing. If the stream is still stalled once playback is genuinely wanted
-     * again, the next [sampleForStall] tick schedules a fresh recovery.
-     */
     @VisibleForTesting
-    internal fun performStallRecovery(attempt: Int) {
-        if (isRemoteCasting || !exoPlayer.playWhenReady) {
-            AppLog.d(TAG) { "Skipping stall recovery: playback is not wanted right now" }
-            cancelPendingStallRecovery()
-            return
-        }
-        when (StallRetryPolicy.recoveryKindFor(attempt)) {
+    internal fun performStallRecovery(attempt: Int) = stallRecovery.perform(attempt)
+
+    private fun executeStallRecovery(kind: StallRecoveryKind) {
+        when (kind) {
             StallRecoveryKind.LIGHT -> {
                 exoPlayer.seekToDefaultPosition()
                 exoPlayer.prepare()
@@ -623,14 +717,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         cancelPendingStallRecovery()
     }
 
-    private fun cancelPendingStallRecovery() {
-        stallRecoveryJob?.cancel()
-        stallRecoveryJob = null
-        sessionStateMachine.cancelStallRecovery()
-        if (_uiState.value.isRecoveringPlayback) {
-            _uiState.update { it.copy(isRecoveringPlayback = false, stallRecoveryAttempt = 0) }
-        }
-    }
+    private fun cancelPendingStallRecovery(resetBudget: Boolean = true) = stallRecovery.cancel(resetBudget)
 
     /** The app is no longer on screen. See [BackgroundPlaybackPolicy] for what this is preventing. */
     fun onEnterBackground(isInPictureInPicture: Boolean) {
@@ -638,6 +725,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         // screen for the purposes of starting playback - same distinction the pause decision below
         // draws, for the same reason.
         isInBackground = !isInPictureInPicture
+        sessionPlayer.refreshCommands()
         val shouldPause = BackgroundPlaybackPolicy.shouldPauseOnStop(
             // Both receivers own playback. Passing only the UI's Chromecast flag here made a
             // background/foreground round-trip call play() locally over an active DLNA session.
@@ -656,6 +744,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * user paused themselves stays paused. */
     fun onReturnToForeground() {
         isInBackground = false
+        sessionPlayer.refreshCommands()
+        if (sleepTimerExpired) return
         val shouldResume = BackgroundPlaybackPolicy.shouldResumeOnStart(
             pausedByPolicy = pausedForBackground,
             isCasting = isRemoteCasting,
@@ -677,6 +767,27 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun expireSleepTimer() {
+        sleepTimerExpired = true
+        pausedForBackground = false
+        resumeLocalWhenForeground = false
+        retryLocalWhenForeground = false
+        navigation.cancelPendingSwitch()
+        cancelLocalRecoveryForRemotePlayback()
+        exoPlayer.pause()
+        exoPlayer.stop()
+        // Set intent before either stop: synchronous disconnect callbacks must not hand back locally.
+        castPort.stopPlayback()
+        dlnaRepository.stop()
+        syncPlaybackControls()
+    }
+
+    private fun resumeAfterSleepIfRequested() {
+        if (!sleepTimerExpired) return
+        sleepTimerExpired = false
+        exoPlayer.playWhenReady = true
+    }
+
     /** Test seam for the lifecycle's two independent receiver flags. Production changes them only
      * through the repository collectors above. */
     @VisibleForTesting
@@ -684,7 +795,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         isCasting = chromecast
         isDlnaCasting = dlna
         _uiState.update { it.copy(isCasting = chromecast) }
-        PlaybackActivity.setActive(_uiState.value.isPlaying || isRemoteCasting)
+        syncPlaybackControls()
     }
 
     /**
@@ -696,6 +807,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * Activity destroy) is what releases the instances.
      */
     fun releasePlayback() {
+        attachedRequest = null
+        stallRecovery.stop()
+        sleepTimer.cancel()
         pausedForBackground = false
         // Nothing is owed to a player with no stream left in it.
         resumeLocalWhenForeground = false
@@ -718,24 +832,27 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         // Closing the phone UI does not end an active Cast/DLNA session. Keep background icon
         // prefetch gated while the receiver is still consuming the same network connection.
         PlaybackActivity.setActive(isRemoteCasting)
+        sessionPlayer.refreshCommands()
     }
 
     override fun onCleared() {
+        playbackPreferencesSubscription.close()
+        stallRecovery.stop()
         navigation.cancelPendingSwitch()
         retryJob?.cancel()
         retryJob = null
         cancelPendingStallRecovery()
         exoPlayer.removeListener(listener)
         mediaSession?.release()
-        exoPlayer.release()
+        sessionPlayer.release()
         liveInstances.decrementAndGet()
-        PlaybackActivity.setActive(isRemoteCasting)
+        // Remote owners are published by the Application adapter, not this now-dead collector.
+        PlaybackActivity.setActive(false)
         super.onCleared()
     }
 
     companion object {
         private const val TAG = "PlayerViewModel"
-        private const val STALL_SAMPLE_INTERVAL_MILLIS = 2_000L
 
         /** What [start] falls back to when no resolver is supplied: the channel's own `tvg-logo`,
          * the only artwork source this class had before [start] took one. */

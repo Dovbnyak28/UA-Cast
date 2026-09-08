@@ -6,16 +6,12 @@ import com.uacastplayer.core.cast.IncompatibilityMemoryPolicy
 import com.uacastplayer.core.cast.TsSourceKind
 import android.content.Context
 import com.google.android.gms.cast.MediaStatus
-import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
-import com.google.android.gms.cast.framework.SessionManager
 import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.data.cast.IncompatibilityMemoryStore
 import com.uacastplayer.data.cast.LocalNetworkAddress
-import com.uacastplayer.data.cast.ProxyServer
 import com.uacastplayer.data.cast.TsFirstSegmentDiagnostic
-import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.diagnostics.CastRouteOutcome
 import com.uacastplayer.diagnostics.CorrelationId
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
@@ -27,7 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,7 +75,7 @@ private data class LoadRetryContext(
  * App-wide singleton (not a ViewModel, since a Cast session must survive navigating away from and
  * back to the player) wrapping the real GMS Cast callbacks. Owns the full direct-then-proxy
  * delivery pipeline: direct-first playback per [CastDeliveryStrategy], a watchdog that falls back
- * to the local [ProxyServer] if the receiver isn't PLAYING within 4s (or immediately if
+ * to the local [CastProxySession] if the receiver isn't PLAYING within 4s (or immediately if
  * [TsFirstSegmentDiagnostic] already flagged the codec as unsupported), and [IncompatibilityMemoryStore]
  * so a (stream, receiver) pair that failed once goes straight to proxy for the next 30 days.
  * [CastLoadResultReducer] / [CastReceiverStatusReducer] remain the pure source of truth for state
@@ -93,18 +89,10 @@ class CastSessionRepository private constructor(
     private val appContext = context.applicationContext
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
     private val remuxEffectivenessStore = RemuxEffectivenessStore.getInstance(appContext)
-    /** One id per user-visible channel playback, shared by every manifest poll and recovery reload
-     * inside it. A stable resource SHA is intentionally reused; this is what distinguishes playing
-     * that same resource again from one attempt being polled repeatedly. */
-    private val proxyPlaybackAttemptId = AtomicLong(0)
-    private val proxyServer = ProxyServer(httpClient) { resourceId, route ->
-        remuxEffectivenessStore.recordProxyRouteAttemptOnce(proxyPlaybackAttemptId.get(), resourceId, route)
-    }
-    private val preferences = AppPreferences(appContext)
+    private val proxy = CastProxySession(appContext, httpClient)
     private val incompatibilityStore = IncompatibilityMemoryStore(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private var castContext: CastContext? = null
     private var currentSession: CastSession? = null
     private var currentReceiverId: String? = null
     private var activeChannel: CastChannel? = null
@@ -114,11 +102,8 @@ class CastSessionRepository private constructor(
         diagnose = { streamUrl -> TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient) },
     )
     private var watchdogJob: Job? = null
-
-    // Set at the start of every proxy fallback attempt (see startProxyAndLoad), used to resolve
-    // which RemuxEffectivenessStore bucket (remux vs plain rewrite) a later PLAYING/give-up
-    // outcome belongs to - see trackPlayingWindow/tryRecover.
-    private var activeProxyResourceId: String? = null
+    private var suspensionJob: Job? = null
+    private var suspendedChannel: CastChannel? = null
 
     // See loadOnReceiver/handleLoadResult: every load() bumps this before the SDK call, so a
     // result callback for a load a newer one has already superseded (a watchdog fallback or a fast
@@ -134,32 +119,38 @@ class CastSessionRepository private constructor(
     // content-type instead of falling back to a URL guess. Reset per channel in startPlayback.
     private var lastKnownSourceKind: TsSourceKind? = null
 
-    // One token for the whole cast session, not per load - see ProxyServer.ensureStarted. Every
-    // channel switch during that session reuses it so the proxy's port/resources/remux session
-    // survive the switch instead of being torn down and rebuilt from under the receiver.
-    private var proxySessionToken: String = ""
+    private val recovery = CastRecoveryRuntime(
+        scope = scope,
+        activeChannel = { activeChannel },
+        reload = ::performRecoveryReload,
+    )
 
-    // Pure attempt/window state is kept outside this Cast SDK adapter. Jobs stay here because they
-    // actually issue SDK loads; the decision inputs and their reset rules live together.
-    private val recoveryEpisode = CastRecoveryEpisode()
-    private var recoveryJob: Job? = null
-
-    // Whether PLAYING has been observed at all this casting episode (across every recovery
-    // reload) - see IncompatibilityRecordingPolicy. Reset per channel in startPlayback.
-    private var everReachedPlaying = false
-
-    // The channel whose direct attempt was abandoned for the proxy this episode, held until the
-    // proxy proves it can play it - at which point the pair is remembered so the next cast skips
-    // direct entirely. See DirectRouteMemoryPolicy. Reset per channel in startPlayback.
-    private var directRouteAbandonedFor: String? = null
+    private val routeHistory = CastRouteHistory(
+        observe = {
+            CastRouteObservation(
+                activeChannel?.streamUrl, currentReceiverId, _state.value.deliveryMode, currentRouteKind(),
+            )
+        },
+        remember = incompatibilityStore::record,
+        record = remuxEffectivenessStore::record,
+    )
     private var sessionCorrelationId: String? = null
     private val channelSwitchSequence = AtomicLong(0)
+    /** Content id of the receiver load whose status callbacks are currently relevant. */
+    private var expectedReceiverContentId: String? = null
 
     private val _state = MutableStateFlow(CastPlaybackState())
     val state: StateFlow<CastPlaybackState> = _state.asStateFlow()
 
-    private val _sideEffects = MutableSharedFlow<CastSideEffect>(extraBufferCapacity = 8)
+    // Receiver status can repeat PLAYING/BUFFERING while the player is busy rendering a frame.
+    // Keep the stream bounded, prefer the newest recovery command, and coalesce duplicate local
+    // pause commands below so a slow UI collector cannot starve a later Resume/Apply command.
+    private val _sideEffects = MutableSharedFlow<CastSideEffect>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     val sideEffects: SharedFlow<CastSideEffect> = _sideEffects.asSharedFlow()
+    private var lastLocalControlEffect: CastSideEffect? = null
 
     private val playbackWatchdogs = CastPlaybackWatchdogs(
         scope = scope,
@@ -168,14 +159,20 @@ class CastSessionRepository private constructor(
             activeStreamUrl = { activeChannel?.streamUrl },
             receiverStatus = { _state.value.receiverStatus },
             deliveryMode = { _state.value.deliveryMode },
-            everReachedPlaying = { everReachedPlaying },
-            bytesServedToReceiver = proxyServer::bytesServedToReceiver,
+            everReachedPlaying = { routeHistory.everReachedPlaying },
+            bytesServedToReceiver = proxy::bytesServedToReceiver,
         ),
         onFailure = ::handleWatchdogFailure,
     )
 
-    private val sessionManagerListener = CastSdkSessionListener(::handleSessionEvent)
-    private val remoteMediaClientCallback = CastSdkRemoteMediaCallback(::handleRemoteMediaStatus)
+    private val sessionLifecycle = CastSessionLifecycle(
+        context = appContext,
+        ioDispatcher = ioDispatcher,
+        hasCurrentSession = { currentSession != null },
+        onEvent = ::handleSessionEvent,
+    )
+    /** Re-created for every CastSession so a queued GMS callback carries its owner identity. */
+    private var remoteMediaClientCallback: CastSdkRemoteMediaCallback? = null
 
     private fun handleSessionEvent(event: CastSdkSessionEvent) {
         when (event) {
@@ -194,9 +191,11 @@ class CastSessionRepository private constructor(
             is CastSdkSessionEvent.Resuming -> {
                 sessionCorrelationId = CorrelationId.from("cast", event.sessionId)
             }
-            is CastSdkSessionEvent.Resumed -> onSessionActive(event.session)
-            is CastSdkSessionEvent.ResumeFailed -> AppLog.w(TAG) {
-                "cast session=${sessionCorrelationId ?: "unknown"} resume failed error=${event.error}"
+            is CastSdkSessionEvent.Resumed -> {
+                if (sessionLifecycle.isCurrent(event.session)) onSessionActive(event.session)
+            }
+            is CastSdkSessionEvent.ResumeFailed -> {
+                if (event.session === currentSession) onSessionInactive()
             }
             is CastSdkSessionEvent.Suspended -> {
                 if (!CastSessionIdentityGuard.isCurrent(event.session, currentSession)) {
@@ -204,18 +203,36 @@ class CastSessionRepository private constructor(
                     return
                 }
                 AppLog.d(TAG) { "cast session=${sessionCorrelationId ?: "unknown"} suspended reason=${event.reason}" }
-                onSessionInactive()
+                onSessionSuspended()
             }
         }
     }
 
-    private fun handleRemoteMediaStatus() {
-        val status = currentSession?.remoteMediaClient?.mediaStatus ?: return
+    private fun handleRemoteMediaStatus(callbackSession: CastSession) {
+        if (_state.value.isSessionSuspended) return
+        val status = callbackSession.remoteMediaClient?.mediaStatus ?: return
+        when {
+            !CastSessionIdentityGuard.isCurrent(callbackSession, currentSession) -> {
+                AppLog.d(TAG) { "cast media status: stale session callback ignored" }
+            }
+            !CastStatusContentPolicy.shouldAccept(
+                statusContentId = status.mediaInfo?.contentId,
+                expectedContentId = expectedReceiverContentId,
+            ) -> {
+                // The callback still belongs to the current CastSession, but its media item is
+                // from a channel load already superseded by a newer one. Processing it could
+                // cancel the new channel's watchdog or mark the new route as PLAYING/FAILED with
+                // stale evidence.
+                AppLog.d(TAG) { "cast media status: stale media item ignored" }
+            }
+            else -> handleAcceptedRemoteMediaStatus(status)
+        }
+    }
+
+    private fun handleAcceptedRemoteMediaStatus(status: MediaStatus) {
         val receiverStatus = mapPlayerState(status.playerState)
         if (receiverStatus == ReceiverStatus.PLAYING) {
             watchdogJob?.cancel()
-            // A delayed recovery can outlive the transient condition that scheduled it.
-            recoveryJob?.cancel()
         }
         playbackWatchdogs.onReceiverStatus(receiverStatus)
         val idleReason = mapIdleReason(status.idleReason)
@@ -240,47 +257,11 @@ class CastSessionRepository private constructor(
     }
 
     private fun trackPlayingWindow(status: ReceiverStatus, nowMillis: Long): Long {
-        rememberDirectRouteFailureIfProven(status)
-        if (status == ReceiverStatus.PLAYING && !everReachedPlaying) {
-            everReachedPlaying = true
-            remuxEffectivenessStore.record(currentRouteKind(), CastRouteOutcome.REACHED_PLAYING)
-        }
-        return recoveryEpisode.onStatus(status, nowMillis)
+        routeHistory.onStatus(status)
+        return recovery.onStatus(status, nowMillis)
     }
 
-    /** The proxy just played a channel whose direct attempt was abandoned - see
-     * [DirectRouteMemoryPolicy] for why that specific pairing, and nothing weaker, is what earns a
-     * persisted "skip direct for this pair" record. Cleared either way once the question has been
-     * answered for this episode: a second PLAYING transition on the same channel is not new
-     * evidence, and the store's own write throttle should not be the thing suppressing it. */
-    private fun rememberDirectRouteFailureIfProven(status: ReceiverStatus) {
-        val streamUrl = directRouteAbandonedFor ?: return
-        if (!DirectRouteMemoryPolicy.provenProxyOnly(_state.value.deliveryMode, status)) return
-        directRouteAbandonedFor = null
-        // The same staleness question every other deferred continuation here asks: a PLAYING update
-        // can arrive for a channel the user has already zapped past, and recording it against
-        // whatever is active now would teach the store about the wrong pair entirely.
-        val isCurrent = StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)
-        val receiverId = currentReceiverId
-        if (isCurrent && receiverId != null) {
-            AppLog.d(TAG) { "cast route: direct never played and the proxy did - remembering this pair" }
-            incompatibilityStore.record(streamUrl, receiverId)
-        }
-    }
-
-    /** See [RemuxEffectivenessStore]/[activeProxyResourceId]: which bucket the current attempt's
-     * eventual REACHED_PLAYING or FAILED outcome belongs in. */
-    private fun currentRouteKind(): CastRouteKind = when (_state.value.deliveryMode) {
-        CastDeliveryMode.Direct -> CastRouteKind.DIRECT
-        CastDeliveryMode.Proxy -> {
-            val resourceId = activeProxyResourceId
-            if (resourceId != null && proxyServer.wasRemuxed(resourceId)) {
-                CastRouteKind.PROXY_REMUX
-            } else {
-                CastRouteKind.PROXY_REWRITE
-            }
-        }
-    }
+    private fun currentRouteKind(): CastRouteKind = proxy.routeKind(_state.value.deliveryMode)
 
     /** [CastRecoveryPolicy.Reload] short-circuits the normal reduce() give-up path entirely - no
      * proxy teardown, no local-playback resume, just a delayed reload of the exact same channel.
@@ -289,7 +270,7 @@ class CastSessionRepository private constructor(
     private fun handleReceiverStatus(status: ReceiverStatus, idleReason: IdleReason, selfInitiated: Boolean) {
         // Centralized here so synthetic watchdog IDLE events observe and close the same PLAYING
         // window as callbacks received from the Cast SDK.
-        val stablePlayingMillis = trackPlayingWindow(status, System.currentTimeMillis())
+        val stablePlayingMillis = trackPlayingWindow(status, android.os.SystemClock.elapsedRealtime())
         val isFailureReason = idleReason == IdleReason.ERROR || idleReason == IdleReason.FINISHED
         val isRecoverableIdle = status == ReceiverStatus.IDLE && isFailureReason
         if (isRecoverableIdle && tryRecover(idleReason, selfInitiated, stablePlayingMillis)) return
@@ -309,11 +290,7 @@ class CastSessionRepository private constructor(
         val channel = activeChannel ?: return false
         val decision = recoveryDecisionFor(idleReason, selfInitiated, stablePlayingMillis)
         if (decision == CastRecoveryDecision.GiveUp) {
-            recordIfGenuinelyIncompatible(channel.streamUrl)
-            // A route that already reached PLAYING once got its REACHED_PLAYING credit in
-            // trackPlayingWindow - a later give-up on the same episode is a reliability concern,
-            // not a routing-never-worked one, so only an attempt that never played counts as FAILED.
-            if (!everReachedPlaying) remuxEffectivenessStore.record(currentRouteKind(), CastRouteOutcome.FAILED)
+            routeHistory.onGiveUp(channel.streamUrl, _state.value.codecIncompatibility != null)
         }
         return if (decision is CastRecoveryDecision.Reload) {
             scheduleReload(channel, decision)
@@ -323,20 +300,13 @@ class CastSessionRepository private constructor(
         }
     }
 
-    private fun recordIfGenuinelyIncompatible(streamUrl: String) {
-        val isConfirmedIncompatible = _state.value.codecIncompatibility != null
-        val shouldRecord = IncompatibilityRecordingPolicy.shouldRecord(isConfirmedIncompatible, everReachedPlaying)
-        if (!shouldRecord) return
-        currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
-    }
-
     private fun recoveryDecisionFor(
         idleReason: IdleReason,
         selfInitiated: Boolean,
         stablePlayingMillis: Long,
     ): CastRecoveryDecision {
         val isConfirmedIncompatible = _state.value.codecIncompatibility != null
-        val decision = recoveryEpisode.decisionFor(idleReason, isConfirmedIncompatible, selfInitiated)
+        val decision = recovery.decisionFor(idleReason, isConfirmedIncompatible, selfInitiated)
         AppLog.d(TAG) {
             val mode = _state.value.deliveryMode
             "cast status: state=IDLE idleReason=$idleReason mode=$mode playedMs=$stablePlayingMillis action=$decision"
@@ -345,18 +315,13 @@ class CastSessionRepository private constructor(
     }
 
     private fun scheduleReload(channel: CastChannel, decision: CastRecoveryDecision.Reload) {
-        recoveryEpisode.scheduled(decision)
         val withoutPlayback = CastStatusMessagePolicy.isRecoveringWithoutPlayback(
-            everReachedPlaying = everReachedPlaying,
+            everReachedPlaying = routeHistory.everReachedPlaying,
             deliveryMode = _state.value.deliveryMode,
             attempt = decision.attempt,
         )
         _state.update { it.copy(isRecovering = true, recoveringWithoutPlayback = withoutPlayback) }
-        recoveryJob?.cancel()
-        recoveryJob = scope.launch {
-            delay(decision.backoffMillis)
-            if (StaleChannelGuard.isCurrent(channel.streamUrl, activeChannel?.streamUrl)) performRecoveryReload(channel)
-        }
+        recovery.schedule(channel, decision)
     }
 
     private fun performRecoveryReload(channel: CastChannel) {
@@ -371,80 +336,7 @@ class CastSessionRepository private constructor(
     }
 
     init {
-        initCastContext()
-    }
-
-    /**
-     * Off the main thread, deliberately. This singleton is constructed from [AppViewModel]'s
-     * property initializers, which run inside `MainActivity.onCreate` before `setContent` - so the
-     * blocking `CastContext.getSharedInstance(Context)` this replaces sat squarely on the cold-start
-     * critical path, spinning up the Play Services Cast module and reflectively resolving
-     * `CastOptionsProvider` while the first frame waited on it.
-     *
-     * The listener registration still lands on the main thread (that is where `Task` callbacks are
-     * delivered by default, and `SessionManager` expects it). Nothing reads [castContext] before
-     * then except [endSession], and there can be no session to end until the framework is up. If
-     * the Cast button is composed before this settles, `CastButtonFactory` initializes the same
-     * shared instance itself and the two converge on it.
-     *
-     * Measured on a Pixel 10 Pro emulator (API 37, x86_64), debug build, median of 5 cold starts:
-     * the blocking call itself cost ~120ms on the main thread, and `MainActivity.onCreate` went
-     * from 349ms (range 341-404) to 303ms (range 294-305) - so this also removes the long tail, not
-     * just the median. `am start -W` TotalTime is NOT sensitive to this and shows no change: it
-     * measures to the splash window's first frame, which the system draws before this work ever
-     * runs. The framework itself finishes resolving 160-900ms in, well after onCreate returns.
-     */
-    // Play Services being missing/outdated/misconfigured can surface as several different
-    // exception types - all of them mean "no cast support on this device", not a crash. Both the
-    // synchronous throw and the Task's own failure path are covered.
-    @Suppress("TooGenericExceptionCaught")
-    private fun initCastContext() {
-        try {
-            CastContext.getSharedInstance(appContext, ioDispatcher.asExecutor())
-                .addOnSuccessListener { context ->
-                    castContext = context
-                    context.sessionManager.addSessionManagerListener(sessionManagerListener, CastSession::class.java)
-                    adoptSessionAlreadyRunning(context.sessionManager)
-                }
-                .addOnFailureListener { e ->
-                    AppLog.w(TAG) { "Cast context unavailable: ${e.javaClass.simpleName}" }
-                }
-        } catch (e: Exception) {
-            AppLog.w(TAG) { "Cast context unavailable: ${e.javaClass.simpleName}" }
-        }
-    }
-
-    /**
-     * Picks up a session that was already connected before this repository was listening.
-     *
-     * [SessionManager] reports transitions, not state: a listener registered after a session is up
-     * hears nothing until that session ends. Two ordinary situations land there.
-     *
-     * The first is process death. A cast session lives in Play Services, not in this app, and
-     * survives the app being killed in the background - so reopening the app builds a repository
-     * that believes nothing is casting while a receiver is still connected. Everything downstream
-     * follows that belief: `LocalPlaybackPolicy` only holds the local player back while
-     * `isCasting`, so the restored channel starts playing out of the phone's speaker into a room
-     * where the TV is also connected, and the Cast button - which reads the framework directly -
-     * contradicts the rest of the UI.
-     *
-     * The second needs no process death at all, and this file already describes it: resolving the
-     * shared [CastContext] is deliberately off the main thread, and "if the Cast button is composed
-     * before this settles, `CastButtonFactory` initializes the same shared instance itself". A
-     * session started in that window connects before the line above runs.
-     *
-     * Guarded on [currentSession] rather than adopting unconditionally, because adoption is not
-     * free: it mints a fresh proxy token and starts playback, both of which would be wrong for a
-     * session this repository is already driving.
-     */
-    private fun adoptSessionAlreadyRunning(sessionManager: SessionManager) {
-        if (currentSession != null) return
-        sessionManager.currentCastSession
-            ?.takeIf { it.isConnected }
-            ?.let { session ->
-                AppLog.d(TAG) { "Adopting a cast session that was already connected" }
-                onSessionActive(session)
-            }
+        sessionLifecycle.initialize()
     }
 
     /**
@@ -460,28 +352,52 @@ class CastSessionRepository private constructor(
                 "cast session=${sessionCorrelationId ?: "unknown"} switch=$switchId index=${channel.index}"
             }
             _state.value = CastReceiverStatusReducer.requestChannelSwitch(_state.value, channel.index)
-            startPlayback(channel.streamUrl, channel.title, channel.userAgent, channel.referrer)
+            if (!_state.value.isSessionSuspended) {
+                startPlayback(channel.streamUrl, channel.title, channel.userAgent, channel.referrer)
+            }
         } else {
             diagnosticCoordinator.scheduleWarmup(channel.streamUrl)
         }
     }
 
     private fun onSessionActive(session: CastSession, rawSessionId: String? = null) {
+        suspensionJob?.cancel()
+        val status = session.remoteMediaClient?.mediaStatus
+        val keepMedia = currentSession === session && CastSuspensionPolicy.canKeepMedia(
+            channelUnchanged = !_state.value.isSessionSuspended || suspendedChannel == activeChannel,
+            expectedContentId = expectedReceiverContentId,
+            actualContentId = status?.mediaInfo?.contentId,
+            status = status?.let { mapPlayerState(it.playerState) } ?: ReceiverStatus.IDLE,
+        )
+        suspendedChannel = null
+        _state.update { it.copy(isSessionSuspended = false, isRecovering = false) }
         val previousSession = currentSession
         if (previousSession !== session) {
             // A callback owned by the previous session may still be in GMS's delivery queue.
             // Detach it and invalidate its PendingResult generation before publishing the new
             // session, even when there is no active channel to issue a replacement load.
-            previousSession?.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
+            remoteMediaClientCallback?.let { callback ->
+                callback.ownerSession.remoteMediaClient?.unregisterCallback(callback)
+            }
             loadGeneration.invalidate()
+            remoteMediaClientCallback = null
         }
         currentSession = session
         currentReceiverId = session.castDevice?.deviceId
-        proxySessionToken = UUID.randomUUID().toString()
+        // A resume callback carries the same CastSession instance. Keep the proxy token stable
+        // across that lifecycle edge: changing it would restart the local server and invalidate a
+        // receiver URL that may still be in flight. Mint a token only when a genuinely new session
+        // is adopted/started (or when a defensive recovery finds an empty token).
+        proxy.adoptToken(CastProxySessionTokenPolicy.select(
+            previousSession = previousSession,
+            session = session,
+            currentToken = proxy.token,
+            newToken = { UUID.randomUUID().toString() },
+        ))
         if (rawSessionId != null) {
             sessionCorrelationId = CorrelationId.from("cast", rawSessionId)
         } else if (sessionCorrelationId == null) {
-            sessionCorrelationId = CorrelationId.from("cast", proxySessionToken)
+            sessionCorrelationId = CorrelationId.from("cast", proxy.token)
         }
         channelSwitchSequence.set(0)
         AppLog.d(TAG) { "cast session=${sessionCorrelationId ?: "unknown"} active" }
@@ -489,69 +405,64 @@ class CastSessionRepository private constructor(
         // fire more than once for the same session across a suspension - and now for adoption at
         // startup. RemoteMediaClient keeps a list, not a set, so registering twice means every
         // receiver status update is handled twice.
-        session.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
-        session.remoteMediaClient?.registerCallback(remoteMediaClientCallback)
-        startProxyEagerly()
+        val callback = remoteMediaClientCallback ?: CastSdkRemoteMediaCallback(
+            ownerSession = session,
+            onStatusUpdated = ::handleRemoteMediaStatus,
+        ).also { remoteMediaClientCallback = it }
+        session.remoteMediaClient?.unregisterCallback(callback)
+        session.remoteMediaClient?.registerCallback(callback)
+        proxy.startEagerly()
         // Covers starting a session from the player while a channel is already open, not just
         // switching channels mid-session: setActiveChannel() records every channel the player
         // opens (including the very first one, via start()), so activeChannel is already set by
         // the time a session connects here even if no switch happened while casting was active.
-        activeChannel?.let { startPlayback(it.streamUrl, it.title, it.userAgent, it.referrer) }
+        if (keepMedia) {
+            handleRemoteMediaStatus(session)
+        } else {
+            activeChannel?.let { startPlayback(it.streamUrl, it.title, it.userAgent, it.referrer) }
+        }
     }
 
-    /**
-     * Starts the proxy server (a `ServerSocket` bind + thread pool - cheap, see
-     * docs/PROXY_RULES.md) the moment a cast session connects, rather than waiting for an actual
-     * fallback to need it - if one does turn out to be needed (codec incompatibility, watchdog
-     * timeout), [startProxyAndLoad] doesn't also pay for the server startup at that point, only for
-     * registering the one resource it actually needs. Safe to call unconditionally even for a
-     * session that never falls back: [ProxyServer.ensureStarted] is a no-op if already running for
-     * this session's token, and every session end ([CastReceiverStatusReducer.reduceDisconnected])
-     * unconditionally emits [CastSideEffect.CloseProxySession], so an eagerly-started-but-never-used
-     * proxy still gets torn down like any other.
-     */
-    private fun startProxyEagerly() {
-        val host = LocalNetworkAddress.currentIpv4Address(appContext) ?: return
-        CastProxyOperation.run { ensureProxyStarted(host) }
-            .onFailure { error ->
-                // This runs from a Cast SDK callback on main. A failed local socket bind costs the
-                // optimisation only; direct receiver playback must still get its chance.
-                AppLog.w(TAG) { "Eager Cast proxy startup failed: ${error.javaClass.simpleName}" }
-                proxyServer.stop()
+    private fun onSessionSuspended() {
+        if (_state.value.isSessionSuspended) return
+        loadGeneration.invalidate()
+        watchdogJob?.cancel()
+        recovery.cancel()
+        playbackWatchdogs.cancelAll()
+        suspendedChannel = activeChannel
+        _state.value = CastSuspensionPolicy.suspend(_state.value)
+        // Keep the proxy URL/token alive for SDK resume, but never retain locks indefinitely.
+        suspensionJob = scope.launch {
+            delay(CastSuspensionPolicy.MAX_SUSPENSION_MILLIS)
+            if (_state.value.isSessionSuspended) {
+                sessionLifecycle.endSession()
+                if (_state.value.isSessionSuspended) onSessionInactive()
             }
-    }
-
-    private fun ensureProxyStarted(host: String) {
-        proxyServer.ensureStarted(
-            sessionToken = proxySessionToken,
-            host = host,
-            remuxEnabled = preferences.rawTsRemuxEnabled,
-            // Passed rather than left at its default so that turning the remux escape hatch off
-            // restores exactly the behaviour it always restored on this path - the two used to be
-            // one flag (see ProxyServer.unwrapWrapperPlaylists). Untying them for Chromecast is
-            // arguably the better default, since an unwrapped stream would be passed through
-            // rather than handed over as a manifest with an endless "segment" in it, but that is a
-            // change to a receiver this cannot be tested against.
-            unwrapWrapperPlaylists = preferences.rawTsRemuxEnabled,
-        )
+        }
     }
 
     private fun onSessionInactive() {
+        suspensionJob?.cancel()
+        suspensionJob = null
+        suspendedChannel = null
         // Invalidate before unregistering/clearing: a PendingResult can complete on another thread
         // while the session is being torn down and must already observe itself as stale.
         loadGeneration.invalidate()
         watchdogJob?.cancel()
-        recoveryJob?.cancel()
+        recovery.cancel()
         playbackWatchdogs.cancelAll()
-        currentSession?.remoteMediaClient?.unregisterCallback(remoteMediaClientCallback)
+        remoteMediaClientCallback?.let { callback ->
+            currentSession?.remoteMediaClient?.unregisterCallback(callback)
+        }
+        remoteMediaClientCallback = null
         currentSession = null
         currentReceiverId = null
         selfInitiatedTransition = false
-        activeProxyResourceId = null
-        directRouteAbandonedFor = null
+        routeHistory.clearAbandonedRoute()
         lastKnownSourceKind = null
-        everReachedPlaying = false
-        recoveryEpisode.reset()
+        expectedReceiverContentId = null
+        routeHistory.reset()
+        recovery.reset()
         // See RemuxEffectivenessStore.resetAttemptTracking's doc - its dedupe set otherwise grows
         // for the entire process lifetime, not just one cast session.
         remuxEffectivenessStore.resetAttemptTracking()
@@ -560,19 +471,21 @@ class CastSessionRepository private constructor(
     }
 
     private fun startPlayback(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
-        proxyPlaybackAttemptId.incrementAndGet()
+        loadGeneration.invalidate()
+        proxy.beginPlaybackAttempt()
         watchdogJob?.cancel()
-        recoveryJob?.cancel()
+        recovery.cancel()
         diagnosticCoordinator.cancelWarmup()
         playbackWatchdogs.cancelAll()
-        recoveryEpisode.reset()
-        everReachedPlaying = false
-        directRouteAbandonedFor = null
+        recovery.reset()
+        routeHistory.reset()
+        routeHistory.clearAbandonedRoute()
         val receiverId = currentReceiverId.orEmpty()
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
         val mode = CastDeliveryStrategy.initialMode(knownIncompatible)
         lastKnownSourceKind = null
+        expectedReceiverContentId = null
         _state.update {
             it.copy(
                 deliveryMode = mode,
@@ -605,6 +518,10 @@ class CastSessionRepository private constructor(
             scheduleStallWatchdog = false,
         )
 
+        if (_state.value.deliveryMode != CastDeliveryMode.Direct ||
+            _state.value.loadPhase == CastLoadPhase.FAILED
+        ) return
+        val directGeneration = loadGeneration.current
         watchdogJob = scope.launch {
             launch {
                 val outcome = if (cached != null) {
@@ -614,6 +531,9 @@ class CastSessionRepository private constructor(
                     diagnosticCoordinator.probe(streamUrl)
                 }
                 val (verdict, sourceKind) = outcome ?: return@launch
+                if (!loadGeneration.isCurrent(directGeneration) ||
+                    _state.value.deliveryMode != CastDeliveryMode.Direct
+                ) return@launch
                 lastKnownSourceKind = sourceKind
                 handleDiagnosticVerdict(LoadRetryContext(streamUrl, title, userAgent, referrer), verdict, sourceKind)
             }
@@ -690,9 +610,8 @@ class CastSessionRepository private constructor(
         AppLog.d(TAG) { "Falling back to proxy: $reason" }
         // Only a note that it happened - nothing is persisted until the proxy actually plays this
         // channel, which is what tells a route that cannot work apart from a bad moment on the
-        // network. See DirectRouteMemoryPolicy / rememberDirectRouteFailureIfProven.
-        directRouteAbandonedFor = streamUrl
-        remuxEffectivenessStore.record(CastRouteKind.DIRECT, CastRouteOutcome.FAILED)
+        // network. See CastRouteHistory.
+        routeHistory.abandonDirect(streamUrl)
         _state.update { it.copy(deliveryMode = CastDeliveryMode.Proxy) }
         startProxyAndLoad(streamUrl, title, userAgent, referrer)
     }
@@ -710,28 +629,17 @@ class CastSessionRepository private constructor(
         val host = LocalNetworkAddress.currentIpv4Address(appContext)
         if (host == null) {
             reportProxyUnavailableIpv4Only()
-            return
-        }
-        val hadProxyOwner = activeProxyResourceId != null
-        val prepared = CastProxyOperation.run {
-            ensureProxyStarted(host)
-            val resourceId = proxyServer.registerPlaylist(streamUrl, userAgent, referrer)
-            PreparedCastProxy(resourceId, proxyServer.buildLocalUrl(resourceId))
-        }.getOrElse { error ->
-            AppLog.w(TAG) { "Cast proxy preparation failed: ${error.javaClass.simpleName}" }
-            proxyServer.stop()
-            if (hadProxyOwner) applyProxyLifecycle(ProxyLifecycleEvent.STOPPED)
-            activeProxyResourceId = null
-            directRouteAbandonedFor = null
             applyResult(CastProxyFailureReducer.reduce(_state.value))
             return
         }
-        applyProxyLifecycle(
-            event = ProxyLifecycleEvent.STARTED,
-            channelTitle = title,
-            receiverName = currentSession?.castDevice?.friendlyName,
-        )
-        activeProxyResourceId = prepared.resourceId
+        val prepared = proxy.prepare(
+            host, streamUrl, title, userAgent, referrer, currentSession?.castDevice?.friendlyName,
+        ).getOrElse { error ->
+            AppLog.w(TAG) { "Cast proxy preparation failed: ${error.javaClass.simpleName}" }
+            routeHistory.clearAbandonedRoute()
+            applyResult(CastProxyFailureReducer.reduce(_state.value))
+            return
+        }
         AppLog.d(TAG) { "Proxy fallback loading receiver (resource=${prepared.resourceId})" }
         loadOnReceiver(prepared.localUrl, LoadRetryContext(streamUrl, title, userAgent, referrer))
     }
@@ -751,9 +659,7 @@ class CastSessionRepository private constructor(
         // receiver's fetch and the load can never succeed in the first place. A failed/abandoned
         // load still resumes local playback through the existing reducer paths (Failure,
         // receiver error, DISCONNECTED all emit ResumeLocalPlayer).
-        if (!_sideEffects.tryEmit(CastSideEffect.PauseLocalPlayer)) {
-            AppLog.w(TAG) { "Dropped cast side effect, no buffer space: PauseLocalPlayer" }
-        }
+        emitSideEffect(CastSideEffect.PauseLocalPlayer)
         // Read off activeChannel rather than carried in the context: every path here loads the
         // channel that is active right now (the recovery reload guards that with StaleChannelGuard
         // before it gets this far), and the worst a race could produce is the wrong thumbnail.
@@ -764,7 +670,20 @@ class CastSessionRepository private constructor(
         // - CastMediaLoader treats both the same - but "we sent none at all" vs "the receiver
         // ignored what we sent" is exactly the split a missing-artwork report needs.
         AppLog.d(TAG) { "cast load: artwork=${!logoUrl.isNullOrBlank()}" }
-        val pendingLoad = client.load(request)
+        val pendingLoad = try {
+            // A malformed provider URL or an SDK-side request validation failure must become the
+            // same recoverable load failure as a rejected PendingResult, never an exception on the
+            // main thread from a channel tap or a delayed recovery callback.
+            expectedReceiverContentId = urlToLoad
+            client.load(request)
+        } catch (error: IllegalArgumentException) {
+            handleSdkLoadException(error, generation, context)
+            null
+        } catch (error: IllegalStateException) {
+            handleSdkLoadException(error, generation, context)
+            null
+        }
+        if (pendingLoad == null) return
         // Arm this before registering the callback. A PendingResult that is already complete may
         // invoke setResultCallback synchronously; if that callback starts a newer proxy load first,
         // scheduling this older generation afterwards would cancel the newer load's watchdog.
@@ -777,6 +696,20 @@ class CastSessionRepository private constructor(
             }
             handleLoadResult(generation, result.status.statusCode, loadResult, context)
         }
+    }
+
+    private fun handleSdkLoadException(
+        error: Exception,
+        generation: Long,
+        context: LoadRetryContext,
+    ) {
+        AppLog.w(TAG) { "cast load request rejected: ${error.javaClass.simpleName}" }
+        handleLoadResult(
+            generation = generation,
+            statusCode = -1,
+            result = CastLoadResult.Failure("sdk_load_exception"),
+            context = context,
+        )
     }
 
     /** First ignores anything from a load a newer request has already superseded - see
@@ -804,7 +737,7 @@ class CastSessionRepository private constructor(
         // Lets a still-draining previous channel's remux session (see ProxyServer/RemuxHandoffPolicy)
         // be torn down right away instead of waiting out its grace period - a harmless no-op if this
         // load wasn't on the proxy or nothing was draining.
-        if (result is CastLoadResult.Success) proxyServer.confirmActiveSession()
+        if (result is CastLoadResult.Success) proxy.confirmActiveSession()
         val shouldRetryOnProxy = DirectFailureFallbackPolicy.shouldRetryOnProxy(
             result = result,
             mode = _state.value.deliveryMode,
@@ -821,32 +754,38 @@ class CastSessionRepository private constructor(
 
     /** Ends the active Cast session outright - used by [CastProxyService]'s notification "Stop" action. */
     fun endSession() {
-        castContext?.sessionManager?.endCurrentSession(true)
-    }
-
-    private fun applyProxyLifecycle(
-        event: ProxyLifecycleEvent,
-        channelTitle: String? = null,
-        receiverName: String? = null,
-    ) {
-        when (ProxySessionPolicy.commandFor(event)) {
-            ProxyServiceCommand.StartForeground ->
-                CastProxyService.start(appContext, channelTitle.orEmpty(), receiverName.orEmpty())
-            ProxyServiceCommand.StopForeground -> CastProxyService.stop(appContext)
-        }
+        sessionLifecycle.endSession()
     }
 
     private fun applyResult(result: CastReducerResult) {
         _state.value = result.state
         for (effect in result.effects) {
             if (effect is CastSideEffect.CloseProxySession) {
-                proxyServer.stop()
-                applyProxyLifecycle(ProxyLifecycleEvent.STOPPED)
+                loadGeneration.invalidate()
+                watchdogJob?.cancel()
+                recovery.cancel()
+                playbackWatchdogs.cancelAll()
+                proxy.stop()
             }
-            if (!_sideEffects.tryEmit(effect)) {
-                AppLog.w(TAG) { "Dropped cast side effect, no buffer space: ${effect.javaClass.simpleName}" }
-            }
+            emitSideEffect(effect)
         }
+    }
+
+    /**
+     * Side effects are deliberately bounded one-shot hints, while the state flow above is the
+     * source of truth. Coalescing repeated pauses prevents a slow collector from filling the
+     * buffer with identical PLAYING notifications and dropping a later hand-back command.
+     */
+    private fun emitSideEffect(effect: CastSideEffect) {
+        if (effect == CastSideEffect.PauseLocalPlayer &&
+            lastLocalControlEffect == CastSideEffect.PauseLocalPlayer
+        ) {
+            return
+        }
+        if (effect == CastSideEffect.PauseLocalPlayer || effect == CastSideEffect.ResumeLocalPlayer) {
+            lastLocalControlEffect = effect
+        }
+        _sideEffects.tryEmit(effect)
     }
 
     private fun mapPlayerState(playerState: Int): ReceiverStatus = when (playerState) {

@@ -91,7 +91,9 @@ class BackupControllerImportTest {
         val seen = Import()
         val controller = controller()
 
-        controller.importFrom(uri, { emptyList() }, { emptyList() }, { seen.sources = it }, { seen.settings = it })
+        controller.importFrom(
+            uri, { emptyList() }, { emptyList() }, { seen.sources = it }, { seen.settings = it },
+        ).join()
         testScheduler.advanceUntilIdle()
 
         assertNotNull("the import should have reached the callbacks", seen.sources)
@@ -126,7 +128,11 @@ class BackupControllerImportTest {
         val seen = Import()
         val controller = controller()
 
-        controller.importFrom(uri, { emptyList() }, { emptyList() }, { seen.sources = it }, { seen.settings = it })
+        // Import now waits for the real store's initial IO. Virtual-time idleness alone does
+        // not mean that external dispatcher finished; await the operation being asserted.
+        controller.importFrom(
+            uri, { emptyList() }, { emptyList() }, { seen.sources = it }, { seen.settings = it },
+        ).join()
         testScheduler.advanceUntilIdle()
 
         assertNotNull("a file at exactly the cap is within it", seen.sources)

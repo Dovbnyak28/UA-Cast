@@ -47,7 +47,7 @@ jobs:
         run: bash scripts/check-legal-assets.sh app/build/outputs/apk/debug
 
       - name: Debug unit tests and screenshot verification
-        run: ./gradlew :app:verifyRoborazziDebug --stacktrace
+        run: ./gradlew :core:test :app:verifyRoborazziDebug --stacktrace
 
       - name: Release unit tests
         run: ./gradlew :app:testReleaseUnitTest --stacktrace
@@ -77,7 +77,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-test-reports
-          path: app/build/reports
+          path: |
+            app/build/reports
+            core/build/reports
           retention-days: 14
 
       - name: Upload screenshot diffs
@@ -112,7 +114,7 @@ jobs:
         run: ./gradlew :app:lintDebug :app:lintRelease :app:lintPlay --stacktrace
 
       - name: Detekt
-        run: ./gradlew :app:detekt --stacktrace
+        run: ./gradlew :core:detekt :app:detekt --stacktrace
 
       - name: Detekt baseline stays empty
         run: bash scripts/check-detekt-baseline.sh
@@ -150,6 +152,7 @@ jobs:
           path: |
             app/build/reports/lint-results-*.html
             app/build/reports/detekt/
+            core/build/reports/detekt/
           if-no-files-found: ignore
           retention-days: 14
 

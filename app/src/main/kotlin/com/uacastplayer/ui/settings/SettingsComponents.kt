@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -53,7 +54,7 @@ internal fun SettingsSection(
     locked: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().settingsSearchTarget(title)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
@@ -86,6 +87,7 @@ internal fun PlaylistActionRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .settingsSearchTarget(label)
             .raisedSurface(
                 RoundedCornerShape(RadiusItem),
                 UaTheme.palette.surface1,
@@ -148,7 +150,7 @@ internal fun SettingsNavigationRow(
                 title,
                 style = CardTitle,
                 color = UaTheme.palette.labelPrimary,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
@@ -181,8 +183,10 @@ internal fun LabeledRow(label: String, icon: ImageVector, content: @Composable (
 /** Label chrome for a single full-width [SegmentedControl]. */
 @Composable
 internal fun SegmentedRow(label: String, icon: ImageVector, content: @Composable () -> Unit) {
-    RowLabel(label, icon)
-    content()
+    Column(Modifier.settingsSearchTarget(label)) {
+        RowLabel(label, icon)
+        content()
+    }
 }
 
 @Composable
@@ -209,6 +213,7 @@ internal fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolea
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 16.dp)
+            .settingsSearchTarget(label)
             // The label is part of the setting's hit target, not just decoration. A single
             // toggleable parent also gives TalkBack one unambiguous switch semantics.
             .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
@@ -277,6 +282,7 @@ internal fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Uni
             .clip(RoundedCornerShape(RadiusItem))
             .background(if (isSelected) UaTheme.palette.azure else UaTheme.palette.surface2)
             .selectable(selected = isSelected, onClick = onClick, role = Role.RadioButton)
+            .heightIn(min = 48.dp)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -285,14 +291,14 @@ internal fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Uni
             Icon(
                 AppIcons.Check,
                 contentDescription = null,
-                tint = UaTheme.palette.labelPrimary,
+                tint = UaTheme.palette.accentOnFill,
                 modifier = Modifier.size(14.dp),
             )
         }
         Text(
             text = label,
             style = BodyRegular,
-            color = if (isSelected) UaTheme.palette.labelPrimary else UaTheme.palette.labelSecondary,
+            color = if (isSelected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
         )
     }
 }

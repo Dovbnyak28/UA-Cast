@@ -24,7 +24,7 @@ class CastProxyFailureReducerTest {
         assertTrue(result.state.receiverLoadFailed)
         assertFalse(result.state.isRecovering)
         assertFalse(result.state.recoveringWithoutPlayback)
-        assertEquals(listOf(CastSideEffect.ResumeLocalPlayer), result.effects)
+        assertEquals(listOf(CastSideEffect.CloseProxySession, CastSideEffect.ResumeLocalPlayer), result.effects)
     }
 
     @Test
@@ -34,4 +34,3 @@ class CastProxyFailureReducerTest {
         assertTrue(result.effects.none { it is CastSideEffect.RecordIncompatibility })
     }
 }
-

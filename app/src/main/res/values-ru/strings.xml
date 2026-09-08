@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="player_remote_controls_notice">Во время трансляции настройками воспроизведения управляет телевизор. Используйте управление устройством.</string>
+    <string name="playlist_error_storage">Не удалось сохранить плейлист. Предыдущая копия сохранена. Освободите место и перезапустите приложение для повторной попытки.</string>
+    <string name="player_levels">Яркость и громкость</string>
     <string name="app_name">UA Cast Player</string>
 
     <!-- Language picker (first run) -->
@@ -56,7 +59,7 @@
 
     <!-- Add playlist screen -->
     <string name="add_playlist_title">Добавить плейлист</string>
-    <string name="add_playlist_name_hint">Название плейлиста</string>
+    <string name="add_playlist_name_hint">Название плейлиста (необязательно)</string>
     <string name="add_playlist_url_hint">URL плейлиста</string>
     <string name="add_playlist_url_error">Введите полный адрес с http:// или https://</string>
     <string name="add_playlist_helper">Поддерживаются плейлисты M3U, M3U8, TXT. URL должен начинаться с http:// или https://.</string>
@@ -65,7 +68,7 @@
     <string name="add_playlist_status_no_channels">Загружено, но каналов не найдено — проверьте ссылку</string>
     <string name="add_playlist_save_button">Загрузить и сохранить</string>
     <string name="add_playlist_file_button">Загрузить из файла</string>
-    <string name="add_playlist_tip">Совет: вставьте ссылку M3U / M3U8 от вашего провайдера или загрузите файл плейлиста с устройства.</string>
+    <string name="add_playlist_tip">Используйте плейлист или учётную запись вашего ТВ-провайдера. Приложение не предоставляет собственных каналов.</string>
     <string name="add_playlist_type_url">URL M3U</string>
     <string name="add_playlist_type_file">Файл</string>
     <string name="add_playlist_type_xtream">Xtream</string>
@@ -147,12 +150,14 @@
     <string name="favorites_manual_hint">Удерживайте канал, чтобы перетащить его на новую позицию.</string>
 
     <!-- Settings screen -->
-    <string name="settings_section_general">Общие</string>
+    <string name="settings_section_general">Вид и язык</string>
     <string name="settings_back_to_overview">Вернуться ко всем настройкам</string>
-    <string name="settings_page_general_summary">Язык, тема, телепрограмма и работа батареи</string>
-    <string name="settings_page_playlist_access">Плейлист и доступ</string>
-    <string name="settings_page_playlist_summary">Источники, скрытые группы и родительский контроль</string>
-    <string name="settings_page_playback_summary">Вид каналов, значки, буфер и навигация</string>
+    <string name="settings_page_general_summary">Тема, язык, вид каналов и логотипы</string>
+    <string name="settings_page_playlist_access">Плейлисты и телепрограмма</string>
+    <string name="settings_page_playlist_summary">Источники, скрытые группы и телепрограмма XMLTV</string>
+    <string name="settings_page_playback_summary">Буфер, переключение каналов и работа батареи</string>
+    <string name="settings_page_parental_summary">PIN, заблокированные каналы и восстановление доступа</string>
+    <string name="home_change_playlist">Сменить плейлист</string>
     <string name="settings_page_data_storage">Данные и хранилище</string>
     <string name="settings_page_data_summary">Кэш, резервная копия, импорт и экспорт</string>
     <string name="settings_page_help_about">Помощь и о приложении</string>
@@ -165,18 +170,18 @@
     <string name="settings_language_label">Язык</string>
     <string name="settings_icon_wifi_only_label">Загружать логотипы только через Wi-Fi</string>
     <string name="settings_epg_source_label">Источник телепрограммы</string>
-    <string name="epg_source_rect_transparent">Прямоугольные (прозрачный фон)</string>
-    <string name="epg_source_square_dark">Квадратные (тёмный фон)</string>
-    <string name="epg_source_perfect_player">Perfect Player</string>
-    <string name="epg_source_rect_transparent_simple">Упрощённый: прямоугольные</string>
-    <string name="epg_source_square_dark_simple">Упрощённый: квадратные</string>
+    <string name="epg_source_rect_transparent">it999 · epg2.xml.gz</string>
+    <string name="epg_source_square_dark">it999 · epg.xml.gz</string>
+    <string name="epg_source_perfect_player">it999 · pp.xml.gz</string>
+    <string name="epg_source_rect_transparent_simple">it999 · epg2.xml</string>
+    <string name="epg_source_square_dark_simple">it999 · epg.xml</string>
     <string name="settings_epg_truncated">Эта телепрограмма больше, чем приложение может вместить, поэтому последние каналы в ней остались без передач. Попробуйте упрощённый источник выше.</string>
     <string name="settings_epg_suggestion_hint">В плейлисте найден адрес EPG</string>
     <string name="settings_epg_suggestion_action">Использовать</string>
     <string name="settings_detail_level_label">Уровень детализации</string>
     <string name="settings_detail_level_full">Полный</string>
     <string name="settings_detail_level_balanced">Сбалансированный</string>
-    <string name="settings_detail_level_data_saver">Экономия трафика</string>
+    <string name="settings_detail_level_data_saver">Минимально</string>
     <string name="settings_icon_display_mode_tier_default_hint">Снижено автоматически для экономии ресурсов на этом устройстве</string>
     <string name="settings_channel_layout_label">Раскладка</string>
     <string name="channel_layout_list">Список</string>
@@ -341,7 +346,7 @@
     <string name="player_toggle_controls">Показать или скрыть элементы управления</string>
     <string name="player_next_channels_title">Следующие каналы</string>
     <string name="player_view_all">Смотреть все</string>
-    <string name="player_quality">Качество видео</string>
+    <string name="player_quality">О потоке</string>
     <!-- "Соотношение" alone is 11 characters with no break point; see the uk note and
          docs/DESIGN_SYSTEM.md "§E Equal-share rows". -->
     <string name="player_aspect_ratio">Формат кадра</string>
@@ -397,8 +402,6 @@
     <string name="common_confirm">Подтвердить</string>
     <string name="common_cancel">Отмена</string>
     <!-- DLNA casting -->
-    <string name="player_dlna_cast">Транслировать на другое устройство (DLNA)</string>
-    <string name="player_dlna_connected">Подключено к телевизору через DLNA</string>
     <string name="dlna_sheet_title">Другие устройства (DLNA)</string>
     <string name="dlna_sheet_searching">Поиск устройств…</string>
     <string name="dlna_sheet_no_devices">Устройства не найдены</string>
@@ -447,7 +450,6 @@
     <string name="epg_timezone">Часовой пояс: %1$s</string>
     <string name="home_make_it_yours_title">Настройте главный экран</string>
     <string name="home_make_it_yours_body">Добавляйте часто просматриваемые каналы в избранное, чтобы открывать их одним нажатием.</string>
-    <string name="home_browse_channels_button">Открыть каналы</string>
 
     <string name="update_banner_title">Доступна новая версия</string>
     <string name="update_banner_message">Версию %1$s можно загрузить.</string>
@@ -500,4 +502,41 @@
     <string name="feature_custom_epg">Свой источник телепрограммы</string>
     <string name="feature_custom_icons">Свои источники логотипов</string>
     <string name="settings_developer_license">Разработчику: состояние лицензии</string>
+    <string name="settings_data_import_persistence_failure">Часть импортированных данных не удалось сохранить. Освободите место и повторите импорт резервной копии перед закрытием приложения.</string>
+    <string name="playlist_remove_confirmation">Удалить «%1$s» из сохранённых плейлистов? Для повторного добавления понадобится адрес или файл.</string>
+    <string name="playlist_remove_active_confirmation">Удалить активный плейлист «%1$s»? Будет выбрана другая сохранённая подборка или список каналов станет пустым. Для восстановления понадобится адрес или файл.</string>
+    <string name="player_tracks_loading">Дорожки ещё загружаются. Оставьте это окно открытым или попробуйте после начала воспроизведения.</string>
+    <string name="player_tracks_empty">В этом потоке нет доступных для выбора дорожек.</string>
+    <string name="epg_guide_loading">Загрузка телепрограммы…</string>
+    <string name="epg_guide_error">Не удалось загрузить телепрограмму. Проверьте соединение и источник EPG в настройках.</string>
+    <string name="epg_guide_no_match">В этом источнике EPG нет расписания канала. Выберите другой источник в настройках.</string>
+    <string name="epg_guide_empty_day">На эту дату нет программ. Выберите другой день.</string>
+    <string name="dlna_connecting_device">Подключение к %1$s…</string>
+    <string name="dlna_connection_failed">Не удалось начать воспроизведение на %1$s. Телевизор может быть недоступен или не поддерживать этот поток.</string>
+    <string name="dlna_network_hint">Телефон и телевизор должны быть в одной сети Wi-Fi. Проверьте, включён ли приём медиа на телевизоре.</string>
+    <string name="dlna_search_again">Искать снова</string>
+    <string name="settings_visual_section">Вид и логотипы</string>
+    <string name="settings_detail_level_hint">Влияет только на детализацию списка и загрузку логотипов. Качество видео и расход трафика видеопотока не меняются.</string>
+    <string name="player_devices">На телевизор</string>
+    <string name="player_more_controls">Ещё</string>
+    <string name="player_search_channels">Найти канал</string>
+    <string name="player_channels_loading">Загрузка каналов…</string>
+    <string name="player_channels_no_results">Каналы не найдены</string>
+    <string name="favorites_search">Поиск в избранном</string>
+    <string name="favorites_edit">Редактировать избранное</string>
+    <string name="favorites_move_up">Переместить выше</string>
+    <string name="favorites_move_down">Переместить ниже</string>
+    <string name="favorites_remove_confirm">Убрать «%1$s» из избранного? Его можно снова добавить из списка каналов.</string>
+    <string name="settings_epg_custom_active">Источник из плейлиста / свой</string>
+    <string name="settings_epg_variants_hint">Готовые файлы предоставляет it999. Имена файлов обозначают варианты; покрытие каналов зависит от поставщика. Выбор варианта заменит текущий источник.</string>
+    <string name="nav_large_home">Дом</string>
+    <string name="nav_large_channels">ТВ</string>
+    <string name="nav_large_favorites">Избр.</string>
+    <string name="nav_large_settings">Опц.</string>
+    <string name="playlist_sources_saving">Сохраняем изменения плейлистов…</string>
+    <string name="playlist_sources_save_failed">Изменения не сохранены. Повторите попытку перед закрытием приложения.</string>
+    <string name="playlist_sources_retry_save">Повторить сохранение</string>
+    <string name="playlist_sources_limit">Можно сохранить до %1$d плейлистов. Удалите один, прежде чем добавлять другой.</string>
+    <string name="download_banner_expand">Показать сведения о загрузках</string>
+    <string name="download_banner_collapse">Скрыть сведения о загрузках</string>
 </resources>

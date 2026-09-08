@@ -13,6 +13,8 @@ interface PlayerCastPort {
     val sideEffects: Flow<PlayerCastSideEffect>
 
     fun setActiveChannel(channel: PlayerCastChannel)
+    /** Ends remote playback, including a pending load. Disconnected/test-only ports may do nothing. */
+    fun stopPlayback() = Unit
 }
 
 /** Implemented by the Application so an Activity-scoped [PlayerViewModel] can obtain the port

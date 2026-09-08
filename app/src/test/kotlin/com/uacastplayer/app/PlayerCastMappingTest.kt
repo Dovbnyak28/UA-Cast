@@ -12,6 +12,17 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlayerCastMappingTest {
+    @Test
+    fun `failed media in a connected SDK session does not retain remote playback ownership`() {
+        val state = com.uacastplayer.cast.CastPlaybackState(
+            isSessionConnected = true,
+            loadPhase = com.uacastplayer.cast.CastLoadPhase.FAILED,
+            receiverLoadFailed = true,
+        )
+        assertEquals(false, PlayerCastMapping.state(state).isConnected)
+        assertEquals(PlayerCastStatusMessage.ReceiverLoadFailed, PlayerCastMapping.state(state).statusMessage)
+    }
+
 
     @Test
     fun `channel fields cross the composition adapter unchanged`() {

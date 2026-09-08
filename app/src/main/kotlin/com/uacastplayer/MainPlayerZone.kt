@@ -15,17 +15,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
+import com.uacastplayer.player.PlayerRequest
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.player.PlayerEnrichmentState
 import com.uacastplayer.ui.player.PlayerFavoriteActions
 import com.uacastplayer.ui.player.PlayerHost
 import com.uacastplayer.ui.nav.AdaptiveRootLayout
 import com.uacastplayer.ui.theme.GapM
-import com.uacastplayer.ui.theme.GlassTabBarHeight
+import com.uacastplayer.ui.theme.navigationBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.theme.ScreenHPadding
 
@@ -72,10 +74,14 @@ internal fun BoxScope.PlayerZone(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val usesNavigationRail = maxWidth >= AdaptiveRootLayout.MEDIUM_WIDTH_DP.dp
         PlayerHost(
-            channels = request.channels,
-            startIndex = request.startIndex,
+            request = request,
             collapsed = !isPlayerExpanded,
             onExit = onClosePlayer,
+            onCollapse = {
+                onPlayerContainerStateChange(
+                    PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Back),
+                )
+            },
             onTapCollapsed = {
                 onPlayerContainerStateChange(
                     PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Tap),
@@ -99,7 +105,7 @@ internal fun BoxScope.PlayerZone(
                     // tablets made the mini player float unnecessarily high above the gesture bar.
                     .padding(
                         bottom = if (usesNavigationRail) GapM else {
-                            GlassTabBarHeight + GlassTabBarVerticalPadding * 2
+                            navigationBarHeight(LocalDensity.current.fontScale) + GlassTabBarVerticalPadding * 2
                         },
                     )
                     .fillMaxWidth()

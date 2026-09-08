@@ -31,5 +31,7 @@ object CastContentType {
     private fun urlMimeType(url: String): String = when (StreamMimeClassifier.classify(url)) {
         StreamType.HLS -> "application/x-mpegurl"
         StreamType.DASH -> "application/dash+xml"
+        StreamType.MPEG_TS -> "video/mp2t"
+        StreamType.PROGRESSIVE -> StreamMimeClassifier.progressiveMimeType(url) ?: "application/octet-stream"
     }
 }

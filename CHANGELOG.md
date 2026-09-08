@@ -12,6 +12,19 @@ local build produces.
 
 ### Fixed
 
+- **Backup import could replace favorites before their startup read completed.** Imports now
+  wait for the initial favorites load before merging, retaining existing entries on slow storage.
+- **Player restoration could bypass channel restrictions.** Opening waits for parental-control
+  initialization, and process restoration filters the whole navigation list, not just its first item.
+- **Recreating the Activity could reload an already retained player.** The UI request now survives
+  recreation and reattaches without replacing the media item or resetting playback recovery state.
+- **An old logo failure could hide a successfully downloaded icon.** Cache invalidation now retires
+  in-flight publishers, and a failed duplicate cannot overwrite an existing positive cache entry.
+- **Player controls at large font sizes and system volume boundaries were inconsistent.** Channel
+  labels wrap with explicit ellipsis, volume steps read the current device level, and closing the
+  expanded player revokes automatic picture-in-picture entry.
+- **Hostile playlists and proxy manifests could overrun practical processing budgets.** Parsing,
+  HLS resource expansion and proxy admission now enforce bounds with cancellation and regression coverage.
 - **Cast recovery could reload after the receiver had already recovered.** Scheduled recovery is
   now tied to the active session identity, so a stale callback cannot interrupt healthy playback.
 - **A debounced channel switch could target an old playlist.** Pending work is invalidated when
@@ -22,12 +35,20 @@ local build produces.
   atomic, and equivalent resolver candidates are deduplicated before work starts.
 - **Logo cache state could outlive custom-source changes or disk trimming.** Memory entries are
   invalidated whenever the underlying source or disk cache changes.
+- **Rapid DLNA device switches could leave the old renderer playing or publish stale state.**
+  Device handoff now stops prior targets and commits only the latest connection generation.
+- **A stale Cast media-status callback could describe the previous channel.** Receiver updates are
+  now accepted only for the current session and expected content item, so an old PLAYING/ERROR
+  status cannot cancel the new channel's watchdog or overwrite its UI state.
+- **Cast SDK load validation could throw on the main thread.** Synchronous request-rejection
+  exceptions are converted into the same recoverable failure path as an asynchronous load result.
 
 ### Changed
 
-- The full Android CI gate now runs successfully across unit, screenshot, quality, release and
-  API 24/30/36 instrumentation jobs. A manual `workflow_dispatch` entry point is available for
-  release-candidate verification.
+- Android CI separates unit/screenshot, quality, release packaging and API 24/30/36 instrumentation
+  jobs. A manual `workflow_dispatch` entry point is available for release-candidate verification.
+- Android-free policies now compile in the JVM `core` module, with dependency-direction checks
+  and an empty Detekt baseline maintained by the quality gate.
 
 ## 0.9.2
 

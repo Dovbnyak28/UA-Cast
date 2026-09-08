@@ -57,11 +57,14 @@ private const val PROXY_READ_TIMEOUT_SECONDS = 15L
 private data class PreparedDlnaProxy(val token: String, val localUrl: String)
 private data class DlnaConnectRequest(
     val device: DlnaDevice,
-    val streamUrl: String,
-    val title: String,
+    val media: DlnaMedia,
     val isRepoint: Boolean,
+    /** Renderers that could still be active when this attempt was requested. */
+    val previousDevices: List<DlnaDevice>,
     val generation: Long,
 )
+
+private data class DlnaMedia(val url: String, val title: String, val userAgent: String?, val referrer: String?)
 
 /**
  * App-wide singleton (same lifetime rationale as [com.uacastplayer.cast.CastSessionRepository]:
@@ -82,9 +85,20 @@ private data class DlnaConnectRequest(
  * and does not do (no seek/position sync, no codec gating). Volume is supported, through the
  * renderer's separate RenderingControl service - see [setVolume].
  */
-class DlnaSessionRepository private constructor(
+class DlnaSessionRepository internal constructor(
     context: Context,
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    private val localAddress: (Context) -> String? = LocalNetworkAddress::currentIpv4Address,
+    private val soapHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build(),
+    private val proxyHttpClient: OkHttpClient = AppHttp.client(
+        connectTimeoutSeconds = PROXY_CONNECT_TIMEOUT_SECONDS,
+        readTimeoutSeconds = PROXY_READ_TIMEOUT_SECONDS,
+    ),
 ) {
 
     private val appContext = context.applicationContext
@@ -92,11 +106,6 @@ class DlnaSessionRepository private constructor(
     private val discoveryHttpClient = OkHttpClient.Builder()
         .connectTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
-    private val soapHttpClient = OkHttpClient.Builder()
-        .connectTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .writeTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
     /**
@@ -108,11 +117,6 @@ class DlnaSessionRepository private constructor(
      * [com.uacastplayer.data.cast.RawTsRemuxSession]'s reader into a backoff reconnect and a
      * discontinuity, i.e. exactly the stall-and-rebuffer symptom the proxy exists to avoid.
      */
-    private val proxyHttpClient = AppHttp.client(
-        connectTimeoutSeconds = PROXY_CONNECT_TIMEOUT_SECONDS,
-        readTimeoutSeconds = PROXY_READ_TIMEOUT_SECONDS,
-    )
-
     private val proxyServer = ProxyServer(proxyHttpClient)
     private val setUriHttpClient = soapHttpClient.newBuilder()
         .readTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -125,9 +129,9 @@ class DlnaSessionRepository private constructor(
     // Shares soapHttpClient's connection pool and timeouts: volume is a small, fast action against
     // the same host the transport actions already talk to.
     private val renderingControlClient = RenderingControlClient(soapHttpClient)
+    private val rendererWatchdog = DlnaRendererWatchdog(scope, DlnaTransportStateReader(soapHttpClient)::read)
     private val ssdpDiscovery = SsdpDiscovery(appContext, discoveryHttpClient, ioDispatcher)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val connectAttempts = LatestDlnaAttemptSerializer()
     private val volumeAttempts = LatestDlnaAttemptSerializer()
 
@@ -141,6 +145,8 @@ class DlnaSessionRepository private constructor(
     // SOAP call can still be blocked, so [connectAttempts] also serializes the actual renderer
     // commands and checks cancellation between them; see [connectGeneration].
     private var connectJob: Job? = null
+    /** Latest target, including an attempt whose network work has not committed state yet. */
+    private var pendingConnectDevice: DlnaDevice? = null
 
     /**
      * Which connect attempt is the current one. Bumped by every [startSession] and by [stop], and
@@ -191,15 +197,15 @@ class DlnaSessionRepository private constructor(
      * often the *loss* of Wi-Fi to a mobile connection that is perfectly healthy - a Wi-Fi-only
      * request would simply stop reporting and never fire.
      */
-    private fun watchForNetworkChange() {
+    private fun watchForNetworkChange(generation: Long) {
         networkWatch?.close()
         val connectivityManager =
             appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = checkSessionStillServable()
-            override fun onLost(network: Network) = checkSessionStillServable()
+            override fun onAvailable(network: Network) = checkSessionStillServable(generation)
+            override fun onLost(network: Network) = checkSessionStillServable(generation)
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
-                checkSessionStillServable()
+                checkSessionStillServable(generation)
         }
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -216,14 +222,14 @@ class DlnaSessionRepository private constructor(
             .onFailure { e -> AppLog.w(TAG) { "Cannot watch the network for this session: ${e.javaClass.simpleName}" } }
     }
 
-    private fun checkSessionStillServable() {
+    private fun checkSessionStillServable(generation: Long) {
         if (_state.value.connectedDevice == null) return
-        val current = LocalNetworkAddress.currentIpv4Address(appContext)
+        val current = localAddress(appContext)
         if (DlnaNetworkChangePolicy.sessionSurvives(sessionHost, current)) return
         AppLog.d(TAG) { "The address this session was served from is gone; ending it" }
         // On the main thread deliberately: stop() touches _state and connectJob, and a
         // NetworkCallback arrives on a binder thread.
-        scope.launch { stop() }
+        scope.launch { if (generation == connectGeneration.get()) stop() }
     }
 
     /** A last-resort net under [SsdpDiscovery]'s own per-stage catches - discovery failing must
@@ -243,12 +249,26 @@ class DlnaSessionRepository private constructor(
     }
 
     /** Starts the proxy for [streamUrl] and points [device] at the resulting local url. */
-    fun connect(device: DlnaDevice, streamUrl: String, title: String) =
-        startSession(device, streamUrl, title, isRepoint = false)
+    fun connect(
+        device: DlnaDevice,
+        streamUrl: String,
+        title: String,
+        userAgent: String? = null,
+        referrer: String? = null,
+    ) = startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer), isRepoint = false)
 
-    private fun startSession(device: DlnaDevice, streamUrl: String, title: String, isRepoint: Boolean) {
-        _state.update { it.copy(isConnecting = true) }
+    private fun startSession(device: DlnaDevice, media: DlnaMedia, isRepoint: Boolean) {
+        rendererWatchdog.stop()
+        networkWatch?.close()
+        networkWatch = null
+        _state.update { it.copy(isConnecting = true, connectingDevice = device, failedDevice = null) }
         val generation = connectGeneration.incrementAndGet()
+        val previousDevices = DlnaConnectionAttemptPolicy.previousDevices(
+            pendingDevice = pendingConnectDevice,
+            connectedDevice = _state.value.connectedDevice,
+            targetDevice = device,
+        )
+        pendingConnectDevice = device
         AppLog.d(TAG) {
             "DLNA attempt gen=$generation action=${if (isRepoint) "switch" else "connect"} started"
         }
@@ -257,7 +277,13 @@ class DlnaSessionRepository private constructor(
         val sessionVolumeGeneration = volumeGeneration.incrementAndGet()
         connectJob?.cancel()
         connectJob = scope.launch {
-            val request = DlnaConnectRequest(device, streamUrl, title, isRepoint, generation)
+            val request = DlnaConnectRequest(
+                device = device,
+                media = media,
+                isRepoint = isRepoint,
+                previousDevices = previousDevices,
+                generation = generation,
+            )
             val connected = withContext(ioDispatcher) {
                 connectAttempts.run(generation, connectGeneration::get) { checkpoint ->
                     connectBlocking(request, checkpoint)
@@ -284,19 +310,31 @@ class DlnaSessionRepository private constructor(
             } else {
                 _state.value.volume
             }
-            _state.value = when {
-                connected -> DlnaConnectionState(connectedDevice = device, volume = volume)
-                // A re-point that failed leaves the renderer where it was - still connected, still
-                // playing the previous channel. Dropping to disconnected here would be a worse lie
-                // than the stale channel name: the user would lose the Stop button for a cast that
-                // is demonstrably still running, and the proxy feeding it is deliberately still up
-                // (see connectBlocking).
-                isRepoint -> DlnaConnectionState(connectedDevice = device, volume = _state.value.volume)
-                else -> DlnaConnectionState()
+            // The renderer call may have completed just before a newer connect was requested;
+            // cancellation cannot interrupt a blocking SOAP read. Never let that old answer publish
+            // a device over the newer attempt's state.
+            if (!DlnaConnectionAttemptPolicy.shouldCommit(generation, connectGeneration.get())) {
+                return@launch
             }
+            pendingConnectDevice = null
+            _state.value = if (connected) DlnaConnectionState(connectedDevice = device, volume = volume)
+                else DlnaConnectionState(failedDevice = device)
             // Started once there is something to watch over, and only then: a callback registered
             // for a connect that failed would outlive it with no session to end.
-            if (_state.value.connectedDevice != null) watchForNetworkChange()
+            if (_state.value.connectedDevice != null) {
+                watchConnectedSession(device, generation)
+            }
+        }
+    }
+
+    /** Monitoring belongs to the committed session, not a pending SOAP transaction. */
+    private fun watchConnectedSession(device: DlnaDevice, generation: Long) {
+        watchForNetworkChange(generation)
+        rendererWatchdog.start(device.controlUrl) {
+            if (generation == connectGeneration.get()) {
+                AppLog.w(TAG) { "DLNA renderer is no longer playing or reachable; ending session" }
+                stop()
+            }
         }
     }
 
@@ -310,9 +348,10 @@ class DlnaSessionRepository private constructor(
      * never told about the new url and kept playing the old one, while the phone (which stands down
      * for a remote target, see `LocalPlaybackPolicy`) played nothing either.
      */
-    fun setActiveChannel(streamUrl: String, title: String) {
-        val device = _state.value.connectedDevice ?: return
-        startSession(device, streamUrl, title, isRepoint = true)
+    fun setActiveChannel(streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null) {
+        // A channel selected while the first connection is preparing must replace that attempt.
+        val device = pendingConnectDevice ?: _state.value.connectedDevice ?: return
+        startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer), isRepoint = true)
     }
 
     /**
@@ -362,6 +401,13 @@ class DlnaSessionRepository private constructor(
         checkpoint: suspend () -> Unit,
     ): Boolean {
         checkpoint()
+        request.previousDevices.forEach { previous ->
+            // A device selected from the DLNA sheet may differ from the currently active renderer.
+            // Stop the old renderer before handing the shared proxy to the new one, otherwise the
+            // old TV keeps playing invisibly and may consume the origin's only allowed connection.
+            avTransportClient.stop(previous.controlUrl)
+            checkpoint()
+        }
         val prepared = prepareProxyForAttempt(request) ?: return false
         checkpoint()
         val correlationId = CorrelationId.from("dlna", prepared.token)
@@ -394,7 +440,7 @@ class DlnaSessionRepository private constructor(
         val uriAccepted = avTransportClient.setAvTransportUri(
             request.device.controlUrl,
             prepared.localUrl,
-            request.title,
+            request.media.title,
         )
         checkpoint()
         val ok = uriAccepted && avTransportClient.play(request.device.controlUrl)
@@ -405,14 +451,9 @@ class DlnaSessionRepository private constructor(
                     "${if (request.isRepoint) "channel switch" else "connect"} " +
                     "failed for ${request.device.friendlyName}"
             }
-            // Only a first connect tears the session down. On a re-point the renderer is still
-            // playing the previous channel *through this proxy* - stopping it was what put an error
-            // on the TV, since the failure is usually a refused action rather than a dead stream.
-            //
-            // And only the attempt that is still current may tear anything down (see
-            // [connectGeneration]): a superseded attempt's failure says nothing about the session
-            // that replaced it, and this teardown would take that session's proxy with it.
-            if (!request.isRepoint) tearDownProxyIfCurrent(request.generation)
+            // Stop was already issued above: the previous channel is not a valid fallback.
+            // Release ownership so the phone can resume instead of claiming a stopped TV plays.
+            tearDownProxyIfCurrent(request.generation)
         } else {
             AppLog.d(TAG) { "DLNA session=$correlationId attempt=${request.generation} connected" }
         }
@@ -420,9 +461,10 @@ class DlnaSessionRepository private constructor(
     }
 
     private fun prepareProxyForAttempt(request: DlnaConnectRequest): PreparedDlnaProxy? {
-        val host = LocalNetworkAddress.currentIpv4Address(appContext)
+        val host = localAddress(appContext)
         if (host == null) {
             AppLog.w(TAG) { "No LAN address available; cannot start DLNA proxy" }
+            tearDownProxyIfCurrent(request.generation)
             return null
         }
         return runCatchingNonFatal {
@@ -444,7 +486,7 @@ class DlnaSessionRepository private constructor(
             // The foreground service owns the CPU/Wi-Fi locks for exactly the proxy's lifetime.
             CastProxyService.start(
                 appContext,
-                request.title,
+                request.media.title,
                 request.device.friendlyName,
                 CastProxyTarget.DLNA,
             )
@@ -457,7 +499,9 @@ class DlnaSessionRepository private constructor(
                 remuxEnabled = false,
                 flattenHlsToStream = true,
             )
-            val localUrl = proxyServer.buildLocalUrl(proxyServer.registerPlaylist(request.streamUrl))
+            val localUrl = proxyServer.buildLocalUrl(
+                proxyServer.registerPlaylist(request.media.url, request.media.userAgent, request.media.referrer),
+            )
             sessionHost = host
             PreparedDlnaProxy(token, localUrl)
         }
@@ -488,12 +532,14 @@ class DlnaSessionRepository private constructor(
      * which is the same main-thread teardown the Chromecast path performs.
      */
     fun stop() {
-        val device = _state.value.connectedDevice
+        rendererWatchdog.stop()
+        val devices = listOfNotNull(_state.value.connectedDevice, pendingConnectDevice).distinctRenderers()
         _state.value = DlnaConnectionState()
         // Retires any in-flight attempt along with the session: without this, a connect still
         // blocked on a renderer that never answers would come back after the user had already
         // stopped, find its own generation current, and tear down a second time.
         connectGeneration.incrementAndGet()
+        pendingConnectDevice = null
         // And the same for volume: see volumeGeneration. The next session reads its own.
         volumeGeneration.incrementAndGet()
         connectJob?.cancel()
@@ -504,12 +550,12 @@ class DlnaSessionRepository private constructor(
         stoppedToken?.let { token ->
             AppLog.d(TAG) { "DLNA session=${CorrelationId.from("dlna", token)} stopped" }
         }
-        if (device != null) {
+        if (devices.isNotEmpty()) {
             // Acquire the same FIFO command lane before this method returns. A new connect then
             // cannot overtake the old renderer's deferred SOAP Stop and be stopped by it later.
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 connectAttempts.runSerialized {
-                    withContext(ioDispatcher) { avTransportClient.stop(device.controlUrl) }
+                    withContext(ioDispatcher) { devices.forEach { avTransportClient.stop(it.controlUrl) } }
                 }
             }
         }

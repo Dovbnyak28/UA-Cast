@@ -1,7 +1,9 @@
 package com.uacastplayer.data.playlist
 
+import com.uacastplayer.playlist.M3uParser
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +19,43 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaylistCpuDispatcherTest {
+
+    @Test
+    fun `cancelling an actual long line parse permits replacement without publishing old result`() = runBlocking {
+        val insideLine = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val published = AtomicBoolean(false)
+        val obsolete = launch(start = CoroutineStart.UNDISPATCHED) {
+            withPlaylistCpuCancellable { checkCancellation ->
+                var probes = 0
+                M3uParser.parse("#EXTINF:-1 ${"a".repeat(8_192)},Old\nhttps://example.test/old") {
+                    if (++probes == 3) {
+                        insideLine.countDown()
+                        check(release.await(SETUP_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    }
+                    checkCancellation()
+                }
+                published.set(true)
+            }
+        }
+        try {
+            assertTrue(
+                "parser never checked inside the line",
+                insideLine.await(SETUP_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
+            obsolete.cancel()
+        } finally {
+            release.countDown()
+            withTimeout(PLAYLIST_TIMEOUT_MILLIS) { obsolete.cancelAndJoin() }
+        }
+        val replacement = withTimeout(PLAYLIST_TIMEOUT_MILLIS) {
+            withPlaylistCpuCancellable { probe ->
+                M3uParser.parse("#EXTINF:-1,New\nhttps://example.test/new", probe)
+            }
+        }
+        assertEquals(false, published.get())
+        assertEquals("New", replacement.channels.single().displayName)
+    }
 
     @Test
     fun `cancelled playlist work releases the single CPU lane promptly`() = runBlocking {

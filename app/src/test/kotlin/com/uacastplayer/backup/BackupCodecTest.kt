@@ -13,7 +13,10 @@ class BackupCodecTest {
             BackupPlaylistSource("id2", "FILE", "content://x/y", null, 200L),
         ),
         favorites = listOf(
-            BackupFavorite("k1", "Channel One", "http://a.com/1.m3u8", "tvg1", "News", 10L),
+            BackupFavorite(
+                "k1", "Channel One", "http://a.com/1.m3u8", "tvg1", "News", 10L,
+                "EPG name", "https://x/logo.png", "RequiredAgent", "https://x/",
+            ),
             BackupFavorite("k2", "Channel Two", "http://a.com/2.m3u8", null, null, 20L),
         ),
         settings = BackupSettings(

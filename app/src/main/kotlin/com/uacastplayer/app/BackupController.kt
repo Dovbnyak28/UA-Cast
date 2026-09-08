@@ -107,6 +107,7 @@ class BackupController(
         currentFavorites: () -> List<FavoriteChannel>,
         onSourcesMerged: (List<PlaylistSource>) -> Unit,
         onSettingsImported: (BackupSettings) -> Unit,
+        awaitSourcesPersisted: suspend () -> Boolean = { true },
     ): Job {
         val generation = importGeneration.incrementAndGet()
         _backupImportSummary.value = null
@@ -117,6 +118,9 @@ class BackupController(
                 val text = readBoundedText(uri) ?: return@withContext null
                 BackupCodec.decode(text)
             } ?: return@launch
+            // Waiting only at the persistence stage is too late: reorder() treats a merge as
+            // a replacement, so an initial read still in flight would lose its existing rows.
+            favoritesRepository.awaitLoaded()
             val mergeResult = mergeWithLatestState(generation, data, currentSources, currentFavorites)
                 ?: return@launch
             if (generation != importGeneration.get()) return@launch
@@ -127,9 +131,14 @@ class BackupController(
             favoritesRepository.reorder(mergeResult.favorites)
             onSettingsImported(data.settings)
 
+            val sourcesSaved = awaitSourcesPersisted()
+            val favoritesSaved = favoritesRepository.awaitPersistence()
+            if (generation != importGeneration.get()) return@launch
+
             _backupImportSummary.value = BackupImportSummary(
                 mergeResult.importedSourceCount,
                 mergeResult.importedFavoriteCount,
+                persistenceFailed = !sourcesSaved || !favoritesSaved,
             )
         }
     }

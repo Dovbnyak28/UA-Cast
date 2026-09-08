@@ -58,9 +58,10 @@ internal class FavoritesStore(
     }
 
     override suspend fun save(favorites: List<FavoriteChannel>) = withContext(ioDispatcher) {
-        atomicFile.writeSafely(TAG, "Favorites") { stream ->
+        val saved = atomicFile.writeSafely(TAG, "Favorites") { stream ->
             stream.write(FavoritesJsonCodec.encode(favorites).toByteArray(Charsets.UTF_8))
         }
+        if (!saved) throw IOException("Favorites persistence failed")
         Unit
     }
 }

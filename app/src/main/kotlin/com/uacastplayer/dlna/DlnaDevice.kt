@@ -45,4 +45,7 @@ data class DlnaConnectionState(
      * volume control" rather than as zero, which would be a lie the user could act on.
      */
     val volume: Int? = null,
+    /** Pending and failed targets are presentation evidence owned by the connection attempt. */
+    val connectingDevice: DlnaDevice? = null,
+    val failedDevice: DlnaDevice? = null,
 )

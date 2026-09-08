@@ -15,6 +15,7 @@ data class XmlTvParseResult(
     val programmes: List<EpgProgramme>,
     val channelLimitExceeded: Boolean,
     val programmeLimitExceeded: Boolean,
+    val aliasLimitExceeded: Boolean = false,
 )
 
 /**
@@ -150,7 +151,7 @@ private class XmlTvHandler(
     private var programmeLimitExceeded = false
 
     private var currentChannelId: String? = null
-    private var currentDisplayNames: List<String>? = null
+    private val channelNames = XmlTvChannelNames()
     private var currentIconUrl: String? = null
 
     private var currentProgrammeChannelId: String? = null
@@ -191,7 +192,7 @@ private class XmlTvHandler(
         when (qName) {
             "channel" -> {
                 currentChannelId = attributes.getValue("id")?.let(::internChannelId)
-                currentDisplayNames = emptyList()
+                channelNames.beginChannel()
                 currentIconUrl = null
             }
             "display-name" -> textTarget = StringBuilder()
@@ -241,7 +242,7 @@ private class XmlTvHandler(
             // nothing useful in EpgIndex and only add an empty key to its name map.
             "display-name" -> {
                 textTarget?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { name ->
-                    currentDisplayNames = currentDisplayNames?.plus(name)
+                    if (currentChannelId != null) channelNames.add(name)
                 }
                 textTarget = null
             }
@@ -249,13 +250,12 @@ private class XmlTvHandler(
                 val id = currentChannelId
                 if (id != null) {
                     if (channels.size < XmlTvParser.MAX_CHANNELS) {
-                        channels += EpgChannel(id, currentDisplayNames.orEmpty(), currentIconUrl)
+                        channels += EpgChannel(id, channelNames.finishChannel(), currentIconUrl)
                     } else {
                         channelLimitExceeded = true
                     }
                 }
                 currentChannelId = null
-                currentDisplayNames = null
                 currentIconUrl = null
             }
             // "desc" is still listed even though startElement no longer opens a target for it:
@@ -291,7 +291,9 @@ private class XmlTvHandler(
         }
     }
 
-    fun result() = XmlTvParseResult(channels, programmes, channelLimitExceeded, programmeLimitExceeded)
+    fun result() = XmlTvParseResult(
+        channels, programmes, channelLimitExceeded, programmeLimitExceeded, channelNames.limited,
+    )
 
     private fun periodicallyCheckCancellation() {
         eventsUntilCancellationCheck--

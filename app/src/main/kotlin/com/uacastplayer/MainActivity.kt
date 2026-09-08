@@ -15,7 +15,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.prefs.withAppLocale
-import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.favorites.FavoriteKey
+import com.uacastplayer.player.PlayerRequest
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -25,12 +26,18 @@ import com.uacastplayer.ui.theme.UaCastTheme
  * keep nothing, so only the tab scaffold underneath them has state worth holding on to. */
 internal const val ROOT_SCAFFOLD_STATE_KEY = "root-scaffold"
 
-internal data class PlayerRequest(val channels: List<M3uChannel>, val startIndex: Int)
+internal fun PlayerRequest.toSavedRequest(): SavedPlayerRequest? = channels.getOrNull(startIndex)?.let { channel ->
+    SavedPlayerRequest(FavoriteKey.of(channel), startIndex)
+}
 
 /** The Bundle-safe remnant of a [PlayerRequest] that survives process death - just the playing
  * channel's stable key (see [FavoriteKey]), never the channel list itself, which can be
  * megabytes for large playlists and would risk a TransactionTooLargeException. */
 internal data class SavedPlayerRequest(val channelKey: String, val startIndex: Int)
+
+/** The persisted player key is newer than the saveable marker after a channel switch. */
+internal fun SavedPlayerRequest.preferredChannelKey(persistedKey: String?): String =
+    persistedKey ?: channelKey
 
 internal val SavedPlayerRequestSaver: Saver<SavedPlayerRequest?, List<Any>> = Saver(
     save = { request -> request?.let { listOf(it.channelKey, it.startIndex) }.orEmpty() },

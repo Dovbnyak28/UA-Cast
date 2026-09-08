@@ -192,6 +192,8 @@ fun ChannelsScreen(
         com.uacastplayer.ui.epg.EpgGuideSheet(
             channel = channel,
             epgData = epgState.data,
+            isLoading = epgState.isLoading,
+            hasError = epgState.hasError,
             nowMillis = epgState.nowMillis,
             onDismiss = { guideChannel = null },
         )
@@ -335,6 +337,7 @@ private fun ErrorState(error: PlaylistError, retryExistingSource: Boolean, onRet
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
+        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
         PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
     }
     EmptyState(

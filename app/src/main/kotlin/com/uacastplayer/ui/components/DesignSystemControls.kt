@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -75,6 +76,7 @@ import com.uacastplayer.ui.theme.TabLabel
 import com.uacastplayer.ui.theme.TouchTargetMin
 import com.uacastplayer.ui.theme.UaCastTheme
 private const val GHOST_BUTTON_PRESSED_ALPHA = 0.12f
+private const val DISABLED_CONTROL_ALPHA = 0.38f
 private const val PILL_SHAPE_PERCENT = 50
 // The app is dark-only (see UaCastTheme's KDoc) - previews below use this instead of Studio's
 // default white canvas so raisedSurface/sunkenSurface depth cues are visible at a glance.
@@ -164,6 +166,7 @@ fun GradientPlayButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    enabled: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -175,6 +178,7 @@ fun GradientPlayButton(
     Box(
         modifier = modifier
             .size(PlayButtonSize)
+            .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
             .scale(scale)
             // One of the three places in the app allowed to glow - see docs/DESIGN_SYSTEM.md "§D
             // Depth". The edge-highlight border below is the same raisedSurface(fill = Brush)
@@ -185,6 +189,8 @@ fun GradientPlayButton(
             .background(UaTheme.palette.accentGradient)
             .border(1.dp, UaTheme.palette.edgeHighlightAccent, CircleShape)
             .clickable(
+                enabled = enabled,
+                role = Role.Button,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
@@ -208,6 +214,7 @@ fun RoundIconButton(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
     onClickLabel: String? = contentDescription,
+    enabled: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -220,9 +227,11 @@ fun RoundIconButton(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .size(RoundButtonSize)
+            .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
             .scale(scale)
             .raisedSurface(CircleShape, pressedSurface(UaTheme.palette.surface1, pressed), shadow = false)
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
                 role = Role.Button,
@@ -533,8 +542,8 @@ fun TabBarLabel(text: String, selected: Boolean) {
         text = text,
         style = TabLabel,
         color = if (selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
-        maxLines = 1,
-        softWrap = false,
+        maxLines = 2,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     )
 }

@@ -1,6 +1,8 @@
 package com.uacastplayer.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -18,8 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,15 +37,11 @@ private val RailVerticalPadding = 4.dp
 /** Medium/expanded counterpart of [GlassTabBar], retaining the same selection semantics. */
 @Composable
 fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) {
-    // Four labelled destinations do not fit in a short landscape rail once the user asks for
-    // 150%+ text. Match GlassTabBar's accessible icon-only fallback: the full destination names
-    // remain on the icons' content descriptions while the visual rail keeps every target visible.
-    val showLabels = LocalDensity.current.fontScale < 1.5f
-
     Column(
         modifier = modifier
             .width(RailWidth)
             .fillMaxHeight()
+            .verticalScroll(rememberScrollState())
             .background(UaTheme.palette.glassTone)
             .padding(horizontal = 10.dp, vertical = 8.dp)
             .selectableGroup(),
@@ -87,9 +83,9 @@ fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) 
                     imageVector = item.icon,
                     contentDescription = item.contentDescription,
                     tint = contentColor,
-                    modifier = Modifier.size(if (showLabels) 26.dp else 30.dp),
+                    modifier = Modifier.size(26.dp),
                 )
-                if (showLabels) {
+                run {
                     Text(
                         text = item.label,
                         style = CaptionSemibold,

@@ -196,6 +196,11 @@ This is not optional bookkeeping. The local player stands down for *any* remote 
 starves the proxy feeding the TV. So without `setActiveChannel` a channel switch during a DLNA cast
 changed nothing anywhere: the TV kept the old channel and the phone played nothing.
 
+Selecting a different renderer performs an explicit handoff: any renderer still connected (and any
+superseded in-flight target) receives a best-effort `Stop` before the new renderer is given the shared
+proxy. A superseded connection result is generation-checked before it can publish state, so rapid
+device switching cannot resurrect an older renderer in the UI.
+
 ## Explicitly out of scope for this MVP
 
 - **No renderer position/state tracking.** The app never polls `GetPositionInfo` or

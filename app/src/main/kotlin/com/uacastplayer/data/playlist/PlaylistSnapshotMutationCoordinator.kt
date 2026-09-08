@@ -3,6 +3,7 @@ package com.uacastplayer.data.playlist
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -15,7 +16,9 @@ import kotlinx.coroutines.sync.withLock
  * after deletion. A later re-add captures the new generation and may persist normally.
  */
 internal class PlaylistSnapshotMutationCoordinator {
-    internal data class WriteLease(val sourceId: String, val generation: Long)
+    internal data class WriteLease(val sourceId: String, val generation: Long, val cacheGeneration: Long) {
+        internal val finished = AtomicBoolean(false)
+    }
 
     private class Entry {
         val generation = AtomicLong(0)
@@ -24,27 +27,42 @@ internal class PlaylistSnapshotMutationCoordinator {
     }
 
     private val entries = ConcurrentHashMap<String, Entry>()
+    private val cacheGeneration = AtomicLong()
+    private val cacheMutex = Mutex()
 
     fun captureWrite(sourceId: String): WriteLease {
         val entry = acquireEntry(sourceId)
-        return WriteLease(sourceId, entry.generation.get())
+        return WriteLease(sourceId, entry.generation.get(), cacheGeneration.get())
     }
 
     suspend fun runWriteIfCurrent(lease: WriteLease, write: suspend () -> Unit): Boolean {
         val entry = entries[lease.sourceId]
-        if (entry == null) return false
+        if (entry == null || lease.finished.get()) return false
         return try {
-            entry.mutex.withLock {
-                if (lease.generation != entry.generation.get()) {
-                    false
-                } else {
-                    write()
-                    true
+            cacheMutex.withLock {
+                entry.mutex.withLock {
+                    if (lease.generation != entry.generation.get() || lease.cacheGeneration != cacheGeneration.get()) {
+                        false
+                    } else {
+                        write()
+                        true
+                    }
                 }
             }
         } finally {
-            release(lease.sourceId, entry)
+            finishWrite(lease)
         }
+    }
+
+    /** Also called when download/parse failed or was cancelled before reaching the writer. */
+    fun finishWrite(lease: WriteLease) {
+        if (!lease.finished.compareAndSet(false, true)) return
+        entries[lease.sourceId]?.let { release(lease.sourceId, it) }
+    }
+
+    suspend fun invalidateAllAndDelete(delete: suspend () -> Unit) {
+        cacheGeneration.incrementAndGet()
+        cacheMutex.withLock { delete() }
     }
 
     suspend fun invalidateAndDelete(sourceId: String, delete: suspend () -> Unit) {

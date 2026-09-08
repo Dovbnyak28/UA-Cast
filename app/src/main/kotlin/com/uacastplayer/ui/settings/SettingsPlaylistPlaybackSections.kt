@@ -37,11 +37,11 @@ internal data class PlaybackDisplayActions(
     val onIconDisplayModeSelected: (IconDisplayMode) -> Unit,
     val onListDensitySelected: (ListDensity) -> Unit,
     val onChannelLayoutSelected: (ChannelLayout) -> Unit,
-    val onBufferSizeSelected: (BufferSize) -> Unit,
+    val onIconWifiOnlyChanged: (Boolean) -> Unit,
 )
 
 internal data class PlaybackBehaviorActions(
-    val onIconWifiOnlyChanged: (Boolean) -> Unit,
+    val onBufferSizeSelected: (BufferSize) -> Unit,
     val onWrapAroundChanged: (Boolean) -> Unit,
     val onAutoSkipChanged: (Boolean) -> Unit,
 )
@@ -127,15 +127,14 @@ private fun HiddenGroupsControl(
 }
 
 @Composable
-internal fun PlaybackSettingsSection(
+internal fun DisplaySettingsSection(
     settingsState: SettingsUiState,
     iconWifiOnly: Boolean,
     displayActions: PlaybackDisplayActions,
-    behaviorActions: PlaybackBehaviorActions,
     iconSourceActions: IconSourceActions,
 ) {
     val gate = LocalFeatureGate.current
-    SettingsSection(title = stringResource(R.string.settings_section_playback), icon = AppIcons.Play) {
+    SettingsSection(title = stringResource(R.string.settings_visual_section), icon = AppIcons.Image) {
         SegmentedRow(stringResource(R.string.settings_detail_level_label), AppIcons.Image) {
             SegmentedControl(
                 options = List(DETAIL_LEVEL_PRESETS.size) { stringResource(detailLevelLabelRes(it)) },
@@ -147,6 +146,11 @@ internal fun PlaybackSettingsSection(
                 },
             )
         }
+        Text(
+            text = stringResource(R.string.settings_detail_level_hint),
+            style = Caption,
+            color = UaTheme.palette.labelSecondary,
+        )
         if (settingsState.iconDisplayModeIsAutomatic) {
             Text(
                 text = stringResource(R.string.settings_icon_display_mode_tier_default_hint),
@@ -158,7 +162,7 @@ internal fun PlaybackSettingsSection(
         SwitchRow(
             stringResource(R.string.settings_icon_wifi_only_label),
             iconWifiOnly,
-            behaviorActions.onIconWifiOnlyChanged,
+            displayActions.onIconWifiOnlyChanged,
         )
         SegmentedRow(stringResource(R.string.settings_channel_layout_label), AppIcons.GridView) {
             SegmentedControl(
@@ -167,11 +171,28 @@ internal fun PlaybackSettingsSection(
                 onSelected = { displayActions.onChannelLayoutSelected(ChannelLayout.entries[it]) },
             )
         }
+        IconSourcesSection(
+            customSources = settingsState.customIconSources,
+            addError = settingsState.iconSourceAddError,
+            onAddSource = { url -> gate.guard(Feature.CUSTOM_ICON_SOURCES) { iconSourceActions.onAdd(url) }() },
+            onRemoveSource = iconSourceActions.onRemove,
+            onDismissError = iconSourceActions.onDismissError,
+        )
+    }
+}
+
+@Composable
+internal fun PlaybackSettingsSection(
+    settingsState: SettingsUiState,
+    behaviorActions: PlaybackBehaviorActions,
+    onOpenBatteryOptimizationHint: () -> Unit,
+) {
+    Column {
         SegmentedRow(stringResource(R.string.settings_buffer_size_label), AppIcons.Storage) {
             SegmentedControl(
                 options = BufferSize.entries.map { stringResource(it.labelRes()) },
                 selectedIndex = BufferSize.entries.indexOf(settingsState.bufferSize),
-                onSelected = { displayActions.onBufferSizeSelected(BufferSize.entries[it]) },
+                onSelected = { behaviorActions.onBufferSizeSelected(BufferSize.entries[it]) },
             )
         }
         SwitchRow(
@@ -184,13 +205,7 @@ internal fun PlaybackSettingsSection(
             settingsState.autoSkipDeadEnabled,
             behaviorActions.onAutoSkipChanged,
         )
-        IconSourcesSection(
-            customSources = settingsState.customIconSources,
-            addError = settingsState.iconSourceAddError,
-            onAddSource = { url -> gate.guard(Feature.CUSTOM_ICON_SOURCES) { iconSourceActions.onAdd(url) }() },
-            onRemoveSource = iconSourceActions.onRemove,
-            onDismissError = iconSourceActions.onDismissError,
-        )
+        BatteryOptimizationRow(onOpenBatteryOptimizationHint)
     }
 }
 

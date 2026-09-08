@@ -16,10 +16,19 @@ class FavoritesJsonCodecTest {
                 streamUrl = "http://example.com/1.m3u8",
                 tvgId = "bbc.one.uk",
                 groupTitle = "News",
+                tvgName = "BBC1",
+                tvgLogo = "https://x/bbc.png",
+                userAgent = "ProviderAgent",
+                referrer = "https://provider.example/",
             )
         )
         val json = FavoritesJsonCodec.encode(favorites)
         assertEquals(favorites, FavoritesJsonCodec.decode(json))
+        val channel = FavoritesJsonCodec.decode(json).single().toChannel()
+        assertEquals("ProviderAgent", channel.userAgent)
+        assertEquals("https://provider.example/", channel.referrer)
+        assertEquals("https://x/bbc.png", channel.tvgLogo)
+        assertEquals("BBC1", channel.tvgName)
     }
 
     @Test

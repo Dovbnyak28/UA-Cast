@@ -89,6 +89,7 @@ import com.uacastplayer.ui.theme.DUR_NAV
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.appBackground
+import com.uacastplayer.ui.theme.miniPlayerContentPadding
 import java.io.File
 
 private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
@@ -111,6 +112,7 @@ fun RootScaffold(
     activePlaylistSourceId: String?,
     onSwitchPlaylistSource: (PlaylistSource) -> Unit,
     onRemovePlaylistSource: (PlaylistSource) -> Unit,
+    onRetrySourceSave: () -> Unit,
     pinnedGroupKeys: Set<String>,
     hiddenGroupKeys: Set<String>,
     onPinGroup: (String) -> Unit,
@@ -168,6 +170,7 @@ fun RootScaffold(
     guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
     guidedTourDestination: BottomDestination? = null,
+    miniPlayerVisible: Boolean = false,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
     val stateHolder = rememberSaveableStateHolder()
@@ -196,6 +199,7 @@ fun RootScaffold(
     val navigationItems = BottomDestination.entries.map { destination ->
         TabBarItem(
             label = stringResource(destination.tabLabelRes()),
+            largeTextLabel = stringResource(destination.largeTextLabelRes()),
             icon = destination.icon(),
             selected = destination == navState.current,
             tourKey = destination.tourKey(),
@@ -209,7 +213,9 @@ fun RootScaffold(
         )
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize().appBackground()) {
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize().appBackground(plain = navState.current == BottomDestination.SETTINGS),
+    ) {
         val widthDp = maxWidth.value.toInt()
         val navigationMode = AdaptiveRootLayout.navigationModeFor(widthDp)
         val expanded = AdaptiveRootLayout.isExpanded(widthDp)
@@ -239,7 +245,10 @@ fun RootScaffold(
                 }
             },
         ) { innerPadding ->
-            Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(innerPadding)
+                    .padding(bottom = miniPlayerContentPadding(miniPlayerVisible)),
+            ) {
                 if (navigationMode == RootNavigationMode.NAVIGATION_RAIL) {
                     GlassNavigationRail(items = navigationItems)
                 }
@@ -275,6 +284,7 @@ fun RootScaffold(
                         activePlaylistSourceId = activePlaylistSourceId,
                         onSwitchPlaylistSource = onSwitchPlaylistSource,
                         onRemovePlaylistSource = onRemovePlaylistSource,
+                        onRetrySourceSave = onRetrySourceSave,
                         onOpenAddPlaylist = onOpenAddPlaylist,
                         onRefreshPlaylist = onRefreshPlaylist,
                     ),
@@ -336,10 +346,8 @@ fun RootScaffold(
                     onLanguageSelected = onLanguageSelected,
                     currentAppTheme = currentAppTheme,
                     onAppThemeSelected = onAppThemeSelected,
-                    currentEpgSource = epgState.selectedSource,
+                    epgState = epgState,
                     onEpgSourceSelected = onEpgSourceSelected,
-                    suggestedEpgUrl = epgState.suggestedUrl,
-                    epgTruncated = epgState.data?.truncation?.any == true,
                     onUseSuggestedEpgUrl = onUseSuggestedEpgUrl,
                     iconWifiOnly = iconPrefetchState.wifiOnly,
                     onIconWifiOnlyChanged = onIconWifiOnlyChanged,
@@ -430,7 +438,7 @@ internal fun RootTopBar(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         if (showDownloadStatus) {
-            DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState)
+            DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState, compact = true)
         }
         UpdateBanner(
             release = updateSection.state.availableRelease,

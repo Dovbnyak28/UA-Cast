@@ -224,6 +224,31 @@ class EpgControllerRaceTest {
         }
     }
 
+    @Test
+    fun `manual refresh preserves the custom source and ignores repeated taps while loading`() {
+        XmlTvServer("retry", hold = true).use { server ->
+            val preferences = AppPreferences(application).apply {
+                customEpgUrl = server.url
+                hasChosenEpgSource = false
+            }
+            val completed = CountDownLatch(1)
+            val controller = EpgController(
+                preferences, EpgRepository(application), scope,
+                onLoaded = { applied.incrementAndGet(); completed.countDown() },
+            )
+            controller.refresh()
+            assertTrue(server.requestReceived.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            repeat(20) { controller.refresh() }
+            assertTrue(controller.epgState.value.isLoading)
+            server.release()
+            assertTrue(controller.awaitChannels(listOf("retry"), LOAD_WAIT_MILLIS))
+            assertTrue(completed.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertEquals(server.url, preferences.customEpgUrl)
+            assertEquals(false, preferences.hasChosenEpgSource)
+            assertEquals(1, applied.get())
+        }
+    }
+
     private companion object {
         const val HOLD_TIMEOUT_SECONDS = 10L
         const val LOAD_WAIT_MILLIS = 10_000L

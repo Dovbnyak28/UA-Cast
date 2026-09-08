@@ -16,7 +16,7 @@ package com.uacastplayer.core.security
  * calls per digest - each parsing the format string and allocating a `Formatter` - which dominated
  * the SHA-256 itself.
  */
-internal object Hex {
+object Hex {
 
     private const val DIGITS = "0123456789abcdef"
     private const val BITS_PER_DIGIT = 4

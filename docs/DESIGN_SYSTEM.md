@@ -54,8 +54,9 @@ reaching for `MaterialTheme.typography.bodyMedium` etc.
 
 - `EaseSpring` - the standard easing curve for all token-driven animations.
 - `DurPress` (250ms) - press/release scale and highlight-slide animations.
-- `DurEnter` (700ms) + `StaggerMs` (70ms) - list/grid entry, via `Modifier.staggeredEntry` (see
-  `ui/components/EntryStagger.kt`).
+- `DUR_ENTER` (220ms) + `STAGGER_MS` (30ms) - list/grid entry for the first 10 items only, via
+  `Modifier.staggeredEntry`. Later items appear immediately; returning to a recycled row does not
+  replay its entrance. Maximum first-screen delay plus animation is 490ms (9 × 30 + 220).
 - `GlideMs` (2200ms) - the loading skeleton's shimmer sweep (`ui/components/Skeleton.kt`).
 - `DurRing` (1400ms) - the ring that leaves a Cast/DLNA button while a session is live
   (`ui/components/LiveRing.kt`).
@@ -134,12 +135,33 @@ one-off shape - for any other "explain transient/dismissible state inline" need.
 
 ### `SettingsChip`
 
-A private composable in `ui/settings/SettingsScreen.kt`, not part of the shared catalog above
-(same visual language, but settings-specific: it renders a leading checkmark when selected instead
-of swapping label color). Built directly on `Box`/`Row`/`clickable` - `Surface2` background when
-unselected, `Azure` when selected, `RadiusItem` corners, `BodyRegular` label. Used for chip rows
-with more than 4 options or long labels (language, EPG source, icon display mode) where
-`SegmentedControl` wouldn't fit.
+An internal composable in `ui/settings/SettingsComponents.kt`. It uses radio-selection semantics,
+a leading checkmark and a minimum 48dp height. Unselected: `surface2` / `labelSecondary`.
+Selected: `azure` / `accentOnFill` for both text and checkmark; never `labelPrimary` on the accent
+fill. `PaletteContrastTest` checks these actual pairs with sRGB luminance and alpha compositing.
+
+Language and EPG source choices use `SettingsChoiceRow`: a labelled row opens a scrollable radio
+dialog, so long localized choices do not require sideways scrolling. Short presets still use
+`SegmentedControl`.
+
+### Navigation and player menus
+
+- Bottom navigation keeps visible labels at large font scales. `navigationBarHeight(fontScale)`
+  is shared with mini-player positioning; changing one without the other would create overlap.
+  At font scale 1.5 and above, `TabBarItem.largeTextLabel` supplies localized short words while
+  `contentDescription` retains the full destination name. `LargeTextNavigationTest` verifies one-line,
+  non-overflowing labels at 320dp / 200% in EN/UK/RU/ES; never hide the labels to make them fit.
+  Root content also reserves `miniPlayerContentPadding` outside its scroll viewport while the mini
+  player is visible. A search target must be above the overlay, not merely inside screen bounds.
+- Settings has six task-oriented pages: appearance/language, playlists/guide, playback, parental
+  control, data/backup, and help/about. `SettingsSearch` maps localized controls to these pages;
+  opening a result brings that control into view and highlights it without changing its value.
+- Both player layouts use `PlayerActionsSheet` for secondary actions and one TV entry that opens
+  `PlayerDevicePicker`. Chromecast retains its native SDK control; DLNA has explicit connecting,
+  cancellation, failure and retry UI. TV actions remain player-only.
+- The on-screen Back and Android Back collapse the player. The mini-player close action ends it.
+- Source deletion requires confirmation. Favorites exposes removal and reordering in edit mode,
+  not in the ordinary play-focused rows. Cancelling a drag restores the pre-drag order.
 
 ## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `MidnightPalette.kt`, `Theme.kt`, `Background.kt`)
 
@@ -175,6 +197,9 @@ contrast or size rather than by turning the accent up.
 - **`wallpaperTexture = false`** makes `Background.kt` return a flat `void` fill and skip the
   gradient/noise layers entirely, rather than tinting them to nothing. That's what keeps Midnight's
   black actually `#000000` on an OLED panel: a texture drawn at 2% over black is still lit pixels.
+- **`appBackground(plain = true)`** uses the same early-return flat path for settings and the import
+  form, regardless of theme. It preserves palette colors without loading decorative wallpaper or
+  allocating overlay brushes. Home and content screens keep their themed background.
 - **`LocalUaPalette`** (a `staticCompositionLocalOf<UaPalette>`) carries the active palette down
   the tree; **`UaTheme.palette`** is the `@Composable` accessor components actually call.
   `staticCompositionLocalOf` is deliberate, not an oversight - a theme switch is meant to force the
@@ -271,6 +296,22 @@ wrap. Cinema deliberately uses Android's offline `FontFamily.SansSerif`, matchin
 app so long titles keep predictable metrics across OEMs and locales. A future iteration can still
 swap in an actually-bundled OFL font file by changing just `CinemaPalette.kt`'s
 `displayFontFamily` value.
+
+## Player interaction contract (2026-09-06)
+
+- Play/Pause follows Media3 `playWhenReady`, not `isPlaying`: buffering still offers Pause.
+  Local controls are disabled while a remote receiver owns playback. Previous/Next expose disabled
+  semantics at unavailable boundaries, including a one-channel session. Live wrap-around changes
+  update both availability and preview without restarting the stream.
+- Fullscreen preserves the 66 dp primary control and existing secondary touch targets. The ellipsis
+  opens More; brightness/volume step buttons live in a scrollable sheet accessible from both layouts,
+  instead of permanently covering a second row of video. Gestures remain an optional shortcut.
+- Controls hide only after an idle interval of at least 3 seconds, extended by accessibility timeout
+  preferences. Pointer activity restarts it; an open sheet, held pointer, keyboard focus or touch
+  exploration holds controls visible. Closing a sheet gives a fresh interval.
+- The full channel picker remains the route to untruncated names. Search is debounced and cancellable
+  on the playlist CPU worker, with indices scoped to the current playback session.
+- Midnight never starts artwork-tone resolution or bitmap sampling for its disabled color wash.
 
 ## §E Equal-share rows
 

@@ -92,6 +92,8 @@ class PlayerVideoFitInstrumentedTest {
     }
 
     private fun tapAspectRatio() {
+        composeTestRule.onNodeWithText(composeTestRule.activity.getString(R.string.player_more_controls))
+            .performScrollTo().performClick()
         val node = composeTestRule.onNodeWithText(composeTestRule.activity.getString(R.string.player_aspect_ratio))
         node.performScrollTo()
         composeTestRule.waitUntil(OPEN_TRANSFORM_TIMEOUT_MILLIS) {
@@ -150,6 +152,8 @@ class PlayerVideoFitInstrumentedTest {
         // Closed outright, not collapsed: this has to survive the player being torn down, which is
         // the only version of it a user would ever notice.
         composeTestRule.onNodeWithContentDescription(composeTestRule.activity.getString(R.string.common_back))
+            .performClick()
+        composeTestRule.onNodeWithContentDescription(composeTestRule.activity.getString(R.string.player_mini_close))
             .performClick()
         composeTestRule.waitForIdle()
         // The same channel, not a different one: the search field still holds the query setUp typed,

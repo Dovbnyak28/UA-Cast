@@ -4,7 +4,7 @@ set -euo pipefail
 # Keep documentation and source comments aligned with the package moves. Generated baseline
 # profiles intentionally retain a few historical symbols for runtime warm-up safety, so they are
 # excluded from this check.
-readonly SEARCH_ROOTS=(docs README.md app/src/main/kotlin app/src/main/AndroidManifest.xml)
+readonly SEARCH_ROOTS=(docs README.md app/src/main/kotlin core/src/main/kotlin app/src/main/AndroidManifest.xml)
 readonly LEGACY_REFERENCES=(
   '(^|[^/[:alnum:]_])cast/TsProgramInfoParser'
   '(^|[^/[:alnum:]_])cast/CastCompatibilityPolicy'

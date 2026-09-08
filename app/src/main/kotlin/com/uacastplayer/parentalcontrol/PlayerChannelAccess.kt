@@ -87,5 +87,24 @@ object PlayerChannelAccess {
         lockedKeys: Set<String>,
         keyOf: (M3uChannel) -> String,
         sessionUnlocked: Boolean,
-    ): Boolean = sessionUnlocked || lockedKeys.isEmpty() || keyOf(channel) !in lockedKeys
+        locksLoaded: Boolean = true,
+    ): Boolean = locksLoaded && (sessionUnlocked || lockedKeys.isEmpty() || keyOf(channel) !in lockedKeys)
+
+    /** Restoration must authorize the current item AND narrow every navigable item. */
+    fun forRestore(
+        channels: List<M3uChannel>,
+        channelKey: String,
+        lockedKeys: Set<String>,
+        keyOf: (M3uChannel) -> String,
+        sessionUnlocked: Boolean,
+        locksLoaded: Boolean,
+    ): Selection? {
+        if (!locksLoaded) return null
+        val index = channels.indexOfFirst { keyOf(it) == channelKey }
+        return if (index >= 0 && mayRestoreAfterProcessDeath(channels[index], lockedKeys, keyOf, sessionUnlocked)) {
+            forSession(channels, index, lockedKeys, keyOf, sessionUnlocked)
+        } else {
+            null
+        }
+    }
 }

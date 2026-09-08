@@ -51,14 +51,14 @@ class PremiumRepositoryTest {
 
     private class StubProvider(private val catalogue: List<BillingProduct> = emptyList()) : BillingProvider {
         val connectionFlow = MutableStateFlow(BillingConnectionState.DISCONNECTED)
-        val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
+        val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>?>(emptySet())
         var acknowledged = mutableListOf<PurchaseRecord>()
         var acknowledgementAttempts = mutableListOf<PurchaseRecord>()
         var acknowledgementFailures = emptySet<String>()
         var catalogueQueries = 0
 
         override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
-        override val purchases: StateFlow<Set<PurchaseRecord>> = purchasesFlow.asStateFlow()
+        override val purchases: StateFlow<Set<PurchaseRecord>?> = purchasesFlow.asStateFlow()
         override suspend fun connect() = Unit
         override suspend fun products(): List<BillingProduct> {
             catalogueQueries++
@@ -96,6 +96,18 @@ class PremiumRepositoryTest {
         id: String = "product",
         needsAck: Boolean = false,
     ) = PurchaseRecord(id, tier, now, expires, needsAck)
+
+    @Test fun connectedButUnknownOwnershipPreservesCachedPaidLicenseUntilARealAnswer() = runTest {
+        val storage = FakeStorage(storedLicense = License(LicenseTier.LIFETIME))
+        val provider = StubProvider()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = null
+        val repository = PremiumRepository(provider, storage, scope) { now }
+        repository.loadInitial()
+        assertEquals(LicenseTier.LIFETIME, storage.storedLicense?.tier)
+        provider.purchasesFlow.value = emptySet()
+        assertEquals(LicenseTier.FREE, storage.storedLicense?.tier)
+    }
 
     @Test
     fun aFreshInstallIsGrantedATrialAndItIsRemembered() = runTest {

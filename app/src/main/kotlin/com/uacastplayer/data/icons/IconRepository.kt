@@ -49,6 +49,8 @@ class IconRepository(
     private val failureStore = IconFailureStore(appContext)
     private val customSourceStore = CustomIconSourceStore(appContext)
     private val memoryCache = LruCache<String, CachedIcon>(MEMORY_CACHE_SIZE)
+    private val cacheLock = Any()
+    private var cacheGeneration = 0L
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
 
     /** Keeps [castArtworkUrl]'s verdict from being written down once a second - see the call site. */
@@ -62,12 +64,13 @@ class IconRepository(
     // the two mutators are called from the main thread.
     @Volatile private var cachedCustomBaseUrls: List<String>? = null
 
-    private fun customBaseUrls(): List<String> =
+    private fun customBaseUrls(): List<String> = synchronized(cacheLock) {
         cachedCustomBaseUrls ?: customSourceStore.getBaseUrls().also { cachedCustomBaseUrls = it }
+    }
 
     fun customIconSources(): List<String> = customBaseUrls()
 
-    fun addCustomIconSource(baseUrl: String) {
+    fun addCustomIconSource(baseUrl: String) = synchronized(cacheLock) {
         val current = customBaseUrls()
         if (baseUrl !in current) {
             customSourceStore.saveBaseUrls(current + baseUrl)
@@ -76,14 +79,15 @@ class IconRepository(
         }
     }
 
-    fun removeCustomIconSource(baseUrl: String) {
+    fun removeCustomIconSource(baseUrl: String) = synchronized(cacheLock) {
         customSourceStore.saveBaseUrls(customBaseUrls() - baseUrl)
         cachedCustomBaseUrls = null
         invalidateMemoryCache()
     }
 
     /** Drops every entry, positive and negative - see the class doc for when this needs calling. */
-    fun invalidateMemoryCache() {
+    fun invalidateMemoryCache() = synchronized(cacheLock) {
+        cacheGeneration++
         memoryCache.evictAll()
     }
 
@@ -99,10 +103,19 @@ class IconRepository(
 
     suspend fun resolveIconFile(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File? {
         val cacheKey = IconMemoryCacheKey.of(tvgLogo, epgIconUrl, tvgId)
-        memoryCache.get(cacheKey)?.let { return it.file }
+        val generation = synchronized(cacheLock) {
+            memoryCache.get(cacheKey)?.let { return it.file }
+            cacheGeneration
+        }
 
         val resolved = resolveIconFileUncached(tvgLogo, epgIconUrl, tvgId)
-        memoryCache.put(cacheKey, CachedIcon(resolved))
+        synchronized(cacheLock) {
+            // Invalidation retires in-flight publishers too. Within one generation a failed
+            // duplicate must not replace an icon another resolver has already downloaded.
+            if (generation == cacheGeneration && (resolved != null || memoryCache.get(cacheKey)?.file == null)) {
+                memoryCache.put(cacheKey, CachedIcon(resolved))
+            }
+        }
         return resolved
     }
 

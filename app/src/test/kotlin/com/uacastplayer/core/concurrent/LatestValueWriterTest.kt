@@ -4,12 +4,36 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.async
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LatestValueWriterTest {
+    @Test
+    fun `durability barrier waits for the conflated latest write and reports disk failure`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val writer = LatestValueWriter<Int>(backgroundScope, { value ->
+            gate.await()
+            if (value == 3) throw java.io.IOException("full")
+        })
+        writer.submit(1)
+        runCurrent()
+        writer.submit(2)
+        writer.submit(3)
+        val completion = async { writer.awaitPending() }
+        runCurrent()
+        assertFalse(completion.isCompleted)
+        gate.complete(Unit)
+        runCurrent()
+        assertFalse(completion.await())
+        writer.submit(4)
+        runCurrent()
+        assertTrue(writer.awaitPending())
+    }
+
 
     @Test
     fun `writes never overlap and a busy writer persists the newest submitted state next`() = runTest {

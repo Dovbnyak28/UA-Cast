@@ -57,6 +57,7 @@ import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.IconHeader
 import com.uacastplayer.ui.components.PrimaryButton
+import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.premium.LocalPremiumNotice
@@ -96,6 +97,7 @@ data class HomeSourceState(
     val onRemovePlaylistSource: (PlaylistSource) -> Unit,
     val onOpenAddPlaylist: () -> Unit,
     val onRefreshPlaylist: () -> Unit,
+    val onRetrySourceSave: () -> Unit = {},
 )
 
 @Composable
@@ -143,14 +145,7 @@ fun HomeScreen(
         }
     }
     val favoriteChannels = remember(homeContent.favorites) {
-        homeContent.favorites.map { fav ->
-            M3uChannel(
-                displayName = fav.displayName,
-                streamUrl = fav.streamUrl,
-                tvgId = fav.tvgId,
-                groupTitle = fav.groupTitle,
-            )
-        }
+        homeContent.favorites.map { it.toChannel() }
     }
 
     Column(
@@ -171,14 +166,22 @@ fun HomeScreen(
         // the app the user is looking at, and below the title because it is not what Home is for.
         LocalPremiumNotice.current(Modifier.padding(top = 12.dp))
 
-        if (playlistState.hasChannels) {
-            PlaylistDashboardCard(
-                playlistState = playlistState,
-                epgState = epgState,
-                totalChannels = totalChannels,
-                favoriteCount = favorites.size,
-                onRefreshPlaylist = onRefreshPlaylist,
+        com.uacastplayer.ui.playlist.PlaylistPersistenceStatus(playlistState.sourceSaveState, source.onRetrySourceSave)
+        if (!playlistState.hasChannels && playlistSources.isNotEmpty()) {
+            PrimaryButton(
+                text = stringResource(R.string.home_playlist_sources_title),
                 onClick = { showSourceSheet = true },
+                leadingIcon = AppIcons.Channels,
+                modifier = Modifier.fillMaxWidth().padding(top = GapL),
+            )
+        }
+
+        if (playlistState.hasChannels) {
+            SecondaryButton(
+                text = stringResource(R.string.home_change_playlist) + " · " +
+                    (playlistState.displayName ?: stringResource(R.string.playlist_unnamed)),
+                onClick = { showSourceSheet = true },
+                modifier = Modifier.fillMaxWidth().padding(top = GapM).guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD),
             )
 
             homeContent.continueWatching?.let { channel ->
@@ -195,20 +198,6 @@ fun HomeScreen(
                 )
             }
 
-            PrimaryButton(
-                text = stringResource(R.string.home_view_channels_button),
-                onClick = onOpenChannels,
-                leadingIcon = AppIcons.Channels,
-                modifier = Modifier.fillMaxWidth().padding(top = GapL),
-            )
-
-            if (homeContent.continueWatching == null && favoriteChannels.isEmpty()) {
-                HomePersonalizationCard(
-                    onBrowseChannels = onOpenChannels,
-                    modifier = Modifier.padding(top = GapL, bottom = GapL),
-                )
-            }
-
             if (favoriteChannels.isNotEmpty()) {
                 HomeFavoritesRow(
                     channels = favoriteChannels,
@@ -218,6 +207,22 @@ fun HomeScreen(
                     modifier = Modifier.padding(top = GapL, bottom = GapL),
                 )
             }
+            PrimaryButton(
+                text = stringResource(R.string.home_view_channels_button),
+                onClick = onOpenChannels,
+                leadingIcon = AppIcons.Channels,
+                modifier = Modifier.fillMaxWidth().padding(top = GapL),
+            )
+            if (homeContent.continueWatching == null && favoriteChannels.isEmpty()) {
+                HomePersonalizationCard(modifier = Modifier.padding(top = GapL))
+            }
+            PlaylistDashboardCard(
+                playlistState = playlistState,
+                epgState = epgState,
+                totalChannels = totalChannels,
+                favoriteCount = favorites.size,
+                onRefreshPlaylist = onRefreshPlaylist,
+            )
         } else if (playlistState.isLoading) {
             // hasChannels wins over isLoading, and isLoading over the empty state - the same order
             // ChannelsScreen uses, and for the same reason: a restore in progress is not the
@@ -244,16 +249,15 @@ fun HomeScreen(
                 onOpenAddPlaylist()
             },
             onDismiss = { showSourceSheet = false },
+            saveState = playlistState.sourceSaveState,
+            onRetrySave = source.onRetrySourceSave,
         )
     }
 }
 
 /** Fills the new-user Home state with a useful next step instead of leaving a tall blank canvas. */
 @Composable
-private fun HomePersonalizationCard(
-    onBrowseChannels: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun HomePersonalizationCard(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -285,12 +289,6 @@ private fun HomePersonalizationCard(
             color = UaTheme.palette.labelSecondary,
             modifier = Modifier.padding(top = GapS),
         )
-        PrimaryButton(
-            text = stringResource(R.string.home_browse_channels_button),
-            onClick = onBrowseChannels,
-            leadingIcon = AppIcons.Channels,
-            modifier = Modifier.fillMaxWidth().padding(top = GapM),
-        )
     }
 }
 
@@ -305,6 +303,7 @@ private fun HomeNoChannelsState(
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
+        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
         PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
         null -> null
     }
@@ -347,7 +346,6 @@ private fun PlaylistDashboardCard(
     totalChannels: Int,
     favoriteCount: Int,
     onRefreshPlaylist: () -> Unit,
-    onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -359,16 +357,6 @@ private fun PlaylistDashboardCard(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(
-                role = Role.Button,
-                onClickLabel = stringResource(R.string.home_active_playlist_label),
-                onClick = onClick,
-            )
-            // The tour's "add a playlist" target for a user who already has one: this card is what
-            // opens the source sheet, and adding another is what that sheet is for. The empty-state
-            // button below registers the same name - the two branches are mutually exclusive, so
-            // only one of them is ever live.
-            .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD)
             .padding(CardPadding),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

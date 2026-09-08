@@ -51,12 +51,14 @@ class PlayerControlsScreenshotTest {
                         uiState = PlayerUiState(
                             currentChannel = current,
                             isPlaying = true,
+                            wantsToPlay = true,
+                            canControlPlayback = true,
+                            canGoNext = true,
+                            canGoPrevious = true,
                             nextChannelsPreview = previews,
                         ),
                         isFullscreen = true,
                         sleepTimerRemainingMillis = remember { mutableStateOf<Long?>(null) },
-                        brightnessLevel = 0.4f,
-                        volumeLevel = 0.7f,
                         onExit = {},
                         onPlayPause = {},
                         onNext = {},
@@ -67,8 +69,6 @@ class PlayerControlsScreenshotTest {
                         isDlnaCasting = false,
                         onOpenDlnaSheet = {},
                         onSelectPreview = {},
-                        onBrightnessStep = {},
-                        onVolumeStep = {},
                     )
                 }
             }

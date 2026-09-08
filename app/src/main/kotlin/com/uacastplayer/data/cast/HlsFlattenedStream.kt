@@ -7,6 +7,7 @@ import com.uacastplayer.proxy.HlsFlattenPolicy
 import com.uacastplayer.proxy.HlsMediaPlaylist
 import com.uacastplayer.proxy.HlsMediaPlaylistParser
 import com.uacastplayer.proxy.HlsReplayCursor
+import com.uacastplayer.proxy.HlsReplayProgress
 import com.uacastplayer.proxy.MAX_HLS_PLAYLIST_BYTES
 import com.uacastplayer.proxy.M3u8Rewriter
 import com.uacastplayer.proxy.MpegTsSniffer
@@ -62,6 +63,7 @@ internal class HlsFlattenedStream(
      */
     private val isRunning: () -> Boolean,
     private val maxPlaylistBytes: Int = MAX_HLS_PLAYLIST_BYTES,
+    private val progress: HlsReplayProgress = HlsReplayProgress(),
 ) {
 
     @Volatile private var stopped = false
@@ -124,6 +126,7 @@ internal class HlsFlattenedStream(
                 }
             }
             val absolute = selection.segmentUris
+                .asSequence()
                 .mapNotNull { M3u8Rewriter.resolveUrl(base, it) }
             // all(), not a loop with a break: it stops on the first false, which is exactly the
             // "client hung up, stop fetching" behaviour wanted, and says so in one line.
@@ -144,10 +147,7 @@ internal class HlsFlattenedStream(
             // response. A stream that plays nothing is worse than a manifest that might.
             // `break` rather than a return, and they are the same thing here: `headersSent` is what
             // this function returns, and it is false.
-            if (!headersSent) {
-                AppLog.w(TAG) { "Flattened stream served no bytes on its first pass; leaving it to the manifest" }
-                break
-            }
+            if (!hasViableResponse(headersSent)) break
             playlist = when {
                 clientGone -> null
                 // A finished playlist will never grow, so there is nothing left to wait for. Rare
@@ -169,6 +169,18 @@ internal class HlsFlattenedStream(
             }
         }
         return headersSent
+    }
+
+    private fun hasViableResponse(headersSent: Boolean): Boolean = when {
+        !headersSent -> {
+            AppLog.w(TAG) { "Flattened stream served no bytes on its first pass; leaving it to the manifest" }
+            false
+        }
+        !progress.mayContinue(bytesWritten) -> {
+            AppLog.w(TAG) { "Ending flattened response after its no-progress budget expired" }
+            false
+        }
+        else -> true
     }
 
     /**

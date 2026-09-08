@@ -15,7 +15,7 @@ import com.uacastplayer.ui.theme.EntryLift
 import com.uacastplayer.ui.theme.STAGGER_MS
 import kotlinx.coroutines.delay
 
-/** How many items get a delay before the wave flattens out - see [EntryStagger]. */
+/** Only the first screenful gets an entry animation - see [EntryStagger]. */
 private const val MAX_STAGGERED_ITEMS = 10
 
 /**
@@ -51,13 +51,13 @@ class EntryStagger internal constructor() {
  * The delay is capped at [MAX_STAGGERED_ITEMS] deliberately. A stagger that keeps growing with the
  * index is the standard way this effect turns into a defect: on a 2863-channel playlist item 400
  * would wait half a minute, and even on one screenful an uncapped wave makes the last row feel like
- * it is lagging rather than arriving. Past the cap items simply fade with no delay.
+ * it is lagging rather than arriving. Past the cap items appear immediately, without a fade.
  *
  * [key] must be the same key the lazy list itself uses, so "already played" survives recycling.
  */
 @Composable
 fun Modifier.staggeredEntry(stagger: EntryStagger, key: Any, index: Int): Modifier {
-    val animate = animationsAllowed()
+    val animate = animationsAllowed() && index in 0 until MAX_STAGGERED_ITEMS
     // Read once per composition of this item: if it has played before (a scroll-back), the item
     // starts fully visible and no animation is scheduled at all.
     val alreadyPlayed = remember(stagger, key) { stagger.hasPlayed(key) }
@@ -66,10 +66,10 @@ fun Modifier.staggeredEntry(stagger: EntryStagger, key: Any, index: Int): Modifi
     }
     val lift = with(LocalDensity.current) { EntryLift.toPx() }
 
-    LaunchedEffect(stagger, key) {
+    LaunchedEffect(stagger, key, animate) {
         if (alreadyPlayed || !animate) return@LaunchedEffect
         stagger.markPlayed(key)
-        delay(minOf(index, MAX_STAGGERED_ITEMS).toLong() * STAGGER_MS)
+        delay(index.toLong() * STAGGER_MS)
         progress.animateTo(1f, tween(DUR_ENTER, easing = EaseSpring))
     }
 

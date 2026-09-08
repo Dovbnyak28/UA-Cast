@@ -49,13 +49,14 @@ internal fun FullscreenPlayerContent(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .playerControlsInteraction(transientState)
             .background(Color.Black)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = { transientState.controlsVisible = !transientState.controlsVisible },
                 onDoubleClick = {
-                    if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
+                    viewModel.togglePlayback()
                     environment.haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 },
             )
@@ -89,8 +90,11 @@ private fun Modifier.fullscreenGestureInput(
         onDragStart = { offset ->
             zone = PlayerGesturePolicy.zoneFor(offset.x / size.width.toFloat())
             horizontalTravel = 0f
+            transientState.volumeLevel = environment.audioManager.currentVolumeFraction()
         },
+        onDragCancel = { transientState.volumeLevel = environment.audioManager.currentVolumeFraction() },
         onDragEnd = {
+            transientState.volumeLevel = environment.audioManager.currentVolumeFraction()
             val action = PlayerGesturePolicy.channelSwipeAction(horizontalTravel / size.width.toFloat())
             when (action) {
                 PlayerGesturePolicy.SwipeChannelAction.NEXT -> actions.viewModel.navigation.requestNext()
@@ -161,12 +165,8 @@ private fun FullscreenControls(
         uiState = uiState,
         isFullscreen = true,
         sleepTimerRemainingMillis = sleepTimer.remainingMillis,
-        brightnessLevel = transientState.brightnessLevel,
-        volumeLevel = transientState.volumeLevel,
         onExit = actions.onExit,
-        onPlayPause = {
-            if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
-        },
+        onPlayPause = viewModel::togglePlayback,
         onNext = viewModel.navigation::requestNext,
         onPrevious = viewModel.navigation::requestPrevious,
         onToggleFullscreen = { actions.onFullscreenChanged(false) },
@@ -177,24 +177,9 @@ private fun FullscreenControls(
         },
         onOpenSleepTimer = { transientState.showSleepTimerDialog = true },
         isDlnaCasting = content.dlnaState.connectedDevice != null,
-        onOpenDlnaSheet = { transientState.showDlnaSheet = true },
+        onOpenDlnaSheet = { transientState.showDevicePicker = true },
+        onOpenActions = { transientState.showActionsSheet = true },
         onSelectPreview = { viewModel.navigation.requestSwitch(it.index) },
-        onBrightnessStep = { delta ->
-            transientState.brightnessLevel = PlayerGesturePolicy.applyLevelDelta(
-                transientState.brightnessLevel,
-                delta,
-            )
-            environment.activity?.let { applyWindowBrightness(it, transientState.brightnessLevel) }
-            transientState.showGesture(GestureIndicatorKind.BRIGHTNESS)
-        },
-        onVolumeStep = { delta ->
-            transientState.volumeLevel = PlayerGesturePolicy.applyLevelDelta(
-                transientState.volumeLevel,
-                delta,
-            )
-            environment.audioManager?.let { applyStreamVolume(it, transientState.volumeLevel) }
-            transientState.showGesture(GestureIndicatorKind.VOLUME)
-        },
     )
 }
 
@@ -221,6 +206,7 @@ private fun FullscreenPlaybackStatus(
     }
     if (uiState.fatalError) {
         PlaybackFailureCard(
+            canGoNext = uiState.canGoNext,
             onRetry = actions.viewModel::retryCurrentChannel,
             onNext = actions.viewModel.navigation::requestNext,
             onExit = actions.onExit,

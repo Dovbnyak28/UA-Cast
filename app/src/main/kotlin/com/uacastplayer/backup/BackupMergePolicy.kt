@@ -77,6 +77,10 @@ object BackupMergePolicy {
                 imported.tvgId,
                 imported.groupTitle,
                 imported.addedAtMillis,
+                imported.tvgName,
+                imported.tvgLogo,
+                imported.userAgent,
+                imported.referrer,
             )
         }
 

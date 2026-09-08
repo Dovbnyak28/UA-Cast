@@ -5,6 +5,7 @@ import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.playlist.PlaylistSourceSaveState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -12,6 +13,13 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class PlaylistOutcomeReducerTest {
+
+    @Test fun `successful refresh cannot erase an unsaved source warning`() {
+        val current = loadedState.copy(sourceSaveState = PlaylistSourceSaveState.FAILED)
+        val outcome = PlaylistOutcome.Loaded(loadedState.groups, 0)
+        val result = PlaylistOutcomeReducer.reduce(current, outcome, fromCache = false, displayName = null)
+        assertEquals(PlaylistSourceSaveState.FAILED, result.sourceSaveState)
+    }
 
     private fun channel(name: String) = M3uChannel(displayName = name, streamUrl = "http://example.com/$name")
 

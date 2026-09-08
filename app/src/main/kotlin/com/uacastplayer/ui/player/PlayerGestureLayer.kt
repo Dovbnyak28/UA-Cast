@@ -84,6 +84,15 @@ internal fun applyStreamVolume(audioManager: AudioManager, level: Float) = apply
     setVolume = { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) },
 )
 
+/** Button presses follow the actual stream, including hardware/route changes and platform limits. */
+internal fun stepStreamVolume(audioManager: AudioManager, increase: Boolean): Float {
+    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+    val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+    val target = (current + if (increase) 1 else -1).coerceIn(0, max)
+    setStreamVolumeSafely(target) { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
+    return audioManager.currentVolumeFraction()
+}
+
 /**
  * The volume drag, with the one call that can refuse handed in.
  *
@@ -96,14 +105,18 @@ internal fun applyStreamVolume(audioManager: AudioManager, level: Float) = apply
  * with Do Not Disturb on learns about it is the app closing mid-programme.
  *
  * Refused is not failed: Do Not Disturb is holding the volume where the user put it, and the right
- * answer is to leave it there. The indicator has already moved, and it corrects itself the next
- * time the player reads the real volume back (see `currentVolumeFraction`).
+ * answer is to leave it there. Steppers read the real value back after each request; a drag
+ * retains sub-step travel until completion, then reads the platform value back too.
  *
  * Taking [setVolume] as a function rather than the manager is what makes the refusal testable at
  * all - the same seam, for the same reason, as `UpdateInstallController`'s downloader and installer.
  */
 internal fun applyStreamVolume(max: Int, level: Float, setVolume: (Int) -> Unit) {
     val target = (level * max).toInt().coerceIn(0, max)
+    setStreamVolumeSafely(target, setVolume)
+}
+
+private fun setStreamVolumeSafely(target: Int, setVolume: (Int) -> Unit) {
     try {
         setVolume(target)
     } catch (e: SecurityException) {
@@ -247,6 +260,14 @@ internal object PipController {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         runCatchingNonFatal {
             activity.setPictureInPictureParams(buildParams(videoSize, sourceRectHint, autoEnter))
+        }
+    }
+
+    /** Auto-enter belongs to the expanded video surface, not to the surviving Activity. */
+    fun disableAutoEnter(activity: Activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        runCatchingNonFatal {
+            activity.setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
         }
     }
 

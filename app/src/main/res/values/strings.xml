@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="player_remote_controls_notice">Playback settings are controlled by the TV. Use the device controls while casting.</string>
+    <string name="playlist_error_storage">Could not save the playlist. Your previous copy is safe. Free up storage and restart the app to retry.</string>
+    <string name="player_levels">Brightness and volume</string>
     <string name="app_name">UA Cast Player</string>
 
     <!-- Language picker (first run) -->
@@ -53,7 +56,7 @@
 
     <!-- Add playlist screen -->
     <string name="add_playlist_title">Add playlist</string>
-    <string name="add_playlist_name_hint">Playlist name</string>
+    <string name="add_playlist_name_hint">Playlist name (optional)</string>
     <string name="add_playlist_url_hint">Playlist URL</string>
     <string name="add_playlist_url_error">Enter a complete http:// or https:// address</string>
     <string name="add_playlist_helper">M3U, M3U8, and TXT playlists are supported. The URL must start with http:// or https://.</string>
@@ -62,7 +65,7 @@
     <string name="add_playlist_status_no_channels">Loaded, but no channels were found - check the link</string>
     <string name="add_playlist_save_button">Download and save</string>
     <string name="add_playlist_file_button">Load from file</string>
-    <string name="add_playlist_tip">Tip: paste the M3U / M3U8 link from your provider, or upload a playlist file from your device.</string>
+    <string name="add_playlist_tip">Use a playlist or account provided by your TV provider. This app does not provide channels.</string>
     <string name="add_playlist_type_url">M3U URL</string>
     <string name="add_playlist_type_file">File</string>
     <string name="add_playlist_type_xtream">Xtream</string>
@@ -140,12 +143,14 @@
     <string name="favorites_manual_hint">Press and hold a channel to drag it into a new position.</string>
 
     <!-- Settings screen -->
-    <string name="settings_section_general">General</string>
+    <string name="settings_section_general">Appearance and language</string>
     <string name="settings_back_to_overview">Back to all settings</string>
-    <string name="settings_page_general_summary">Language, theme, TV guide, and battery behavior</string>
-    <string name="settings_page_playlist_access">Playlist &amp; access</string>
-    <string name="settings_page_playlist_summary">Sources, hidden groups, and parental control</string>
-    <string name="settings_page_playback_summary">Channel layout, icons, buffer, and navigation</string>
+    <string name="settings_page_general_summary">Theme, language, channel layout, and logos</string>
+    <string name="settings_page_playlist_access">Playlists and TV guide</string>
+    <string name="settings_page_playlist_summary">Sources, hidden groups, and XMLTV guide</string>
+    <string name="settings_page_playback_summary">Buffer, channel switching, and battery behavior</string>
+    <string name="settings_page_parental_summary">PIN, locked channels, and access recovery</string>
+    <string name="home_change_playlist">Change playlist</string>
     <string name="settings_page_data_storage">Data &amp; storage</string>
     <string name="settings_page_data_summary">Cache, backup, import, and export</string>
     <string name="settings_page_help_about">Help &amp; about</string>
@@ -158,18 +163,18 @@
     <string name="settings_language_label">Language</string>
     <string name="settings_icon_wifi_only_label">Fetch channel logos on Wi-Fi only</string>
     <string name="settings_epg_source_label">TV guide source</string>
-    <string name="epg_source_rect_transparent">Rectangular (transparent)</string>
-    <string name="epg_source_square_dark">Square (dark background)</string>
-    <string name="epg_source_perfect_player">Perfect Player</string>
-    <string name="epg_source_rect_transparent_simple">Simplified: rectangular</string>
-    <string name="epg_source_square_dark_simple">Simplified: square</string>
+    <string name="epg_source_rect_transparent">it999 · epg2.xml.gz</string>
+    <string name="epg_source_square_dark">it999 · epg.xml.gz</string>
+    <string name="epg_source_perfect_player">it999 · pp.xml.gz</string>
+    <string name="epg_source_rect_transparent_simple">it999 · epg2.xml</string>
+    <string name="epg_source_square_dark_simple">it999 · epg.xml</string>
     <string name="settings_epg_truncated">This guide is larger than the app can hold, so the last channels in it have no programmes. Try a simplified source above.</string>
     <string name="settings_epg_suggestion_hint">An EPG address was found in the playlist</string>
     <string name="settings_epg_suggestion_action">Use</string>
     <string name="settings_detail_level_label">Detail level</string>
     <string name="settings_detail_level_full">Full</string>
     <string name="settings_detail_level_balanced">Balanced</string>
-    <string name="settings_detail_level_data_saver">Data saver</string>
+    <string name="settings_detail_level_data_saver">Minimal</string>
     <string name="settings_icon_display_mode_tier_default_hint">Turned down automatically to save resources on this device</string>
     <string name="settings_channel_layout_label">Layout</string>
     <string name="channel_layout_list">List</string>
@@ -336,7 +341,7 @@
     <string name="player_toggle_controls">Show or hide player controls</string>
     <string name="player_next_channels_title">Next channels</string>
     <string name="player_view_all">View all</string>
-    <string name="player_quality">Quality</string>
+    <string name="player_quality">Stream information</string>
     <string name="player_aspect_ratio">Aspect ratio</string>
     <string name="player_buffering">Buffering…</string>
     <string name="player_recovering_playback">Recovering playback…</string>
@@ -390,8 +395,6 @@
     <string name="common_confirm">Confirm</string>
     <string name="common_cancel">Cancel</string>
     <!-- DLNA casting -->
-    <string name="player_dlna_cast">Cast to other devices (DLNA)</string>
-    <string name="player_dlna_connected">Connected to DLNA TV</string>
     <string name="dlna_sheet_title">Other devices (DLNA)</string>
     <string name="dlna_sheet_searching">Searching for devices…</string>
     <string name="dlna_sheet_no_devices">No devices found</string>
@@ -442,7 +445,6 @@
 
     <string name="home_make_it_yours_title">Make Home yours</string>
     <string name="home_make_it_yours_body">Star channels you watch often and they will appear here for one-tap access.</string>
-    <string name="home_browse_channels_button">Browse channels</string>
 
     <string name="update_banner_title">A new version is available</string>
     <string name="update_banner_message">Version %1$s is ready to download.</string>
@@ -495,4 +497,41 @@
     <string name="feature_custom_epg">Your own TV guide source</string>
     <string name="feature_custom_icons">Your own logo sources</string>
     <string name="settings_developer_license">Developer: license state</string>
+    <string name="settings_data_import_persistence_failure">Some imported data could not be saved. Free up storage and import the backup again before closing the app.</string>
+    <string name="playlist_remove_confirmation">Remove “%1$s” from saved playlists? You will need its address or file to add it again.</string>
+    <string name="playlist_remove_active_confirmation">Remove active playlist “%1$s”? Another saved playlist will be selected, or the channel list will become empty. You will need its address or file to restore it.</string>
+    <string name="player_tracks_loading">Tracks are still loading. Keep this window open or try again when playback starts.</string>
+    <string name="player_tracks_empty">No selectable tracks in this stream.</string>
+    <string name="epg_guide_loading">Loading the TV guide…</string>
+    <string name="epg_guide_error">The TV guide could not be loaded. Check your connection and the EPG source in Settings.</string>
+    <string name="epg_guide_no_match">This EPG source has no schedule for this channel. Choose another source in Settings.</string>
+    <string name="epg_guide_empty_day">No programmes for this date. Try another day.</string>
+    <string name="dlna_connecting_device">Connecting to %1$s…</string>
+    <string name="dlna_connection_failed">Could not start playback on %1$s. The TV may be unavailable or may not support this stream.</string>
+    <string name="dlna_network_hint">Keep the phone and TV on the same Wi-Fi network. Check that media sharing is enabled on the TV.</string>
+    <string name="dlna_search_again">Search again</string>
+    <string name="settings_visual_section">Appearance and logos</string>
+    <string name="settings_detail_level_hint">Controls list detail and logo downloads only. Video quality and video data usage do not change.</string>
+    <string name="player_devices">Watch on TV</string>
+    <string name="player_more_controls">More</string>
+    <string name="player_search_channels">Find a channel</string>
+    <string name="player_channels_loading">Loading channels…</string>
+    <string name="player_channels_no_results">No matching channels</string>
+    <string name="favorites_search">Search favorites</string>
+    <string name="favorites_edit">Edit favorites</string>
+    <string name="favorites_move_up">Move up</string>
+    <string name="favorites_move_down">Move down</string>
+    <string name="favorites_remove_confirm">Remove “%1$s” from favorites? You can add it again from the channel list.</string>
+    <string name="settings_epg_custom_active">Playlist / custom source</string>
+    <string name="settings_epg_variants_hint">Preset files come from it999. File names distinguish variants; channel coverage depends on the provider. Selecting a preset replaces the current source.</string>
+    <string name="nav_large_home">Home</string>
+    <string name="nav_large_channels">TV</string>
+    <string name="nav_large_favorites">Fav.</string>
+    <string name="nav_large_settings">Prefs</string>
+    <string name="playlist_sources_saving">Saving playlist changes…</string>
+    <string name="playlist_sources_save_failed">Changes were not saved. Retry before closing the app.</string>
+    <string name="playlist_sources_retry_save">Retry saving</string>
+    <string name="playlist_sources_limit">You can save up to %1$d playlists. Remove one before adding another.</string>
+    <string name="download_banner_expand">Show download details</string>
+    <string name="download_banner_collapse">Hide download details</string>
 </resources>

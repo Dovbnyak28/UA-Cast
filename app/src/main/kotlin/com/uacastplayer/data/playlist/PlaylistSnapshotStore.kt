@@ -29,11 +29,10 @@ class PlaylistSnapshotStore(
 
     private val atomicFile = AtomicFile(File(context.filesDir, "playlist_snapshot_$sourceId.bin"))
 
-    suspend fun save(snapshot: PlaylistSnapshot) = withContext(ioDispatcher) {
+    suspend fun save(snapshot: PlaylistSnapshot): Boolean = withContext(ioDispatcher) {
         atomicFile.writeSafely(TAG, "Playlist snapshot") { stream ->
             PlaylistSnapshotCodec.encode(snapshot, stream)
         }
-        Unit
     }
 
     /**

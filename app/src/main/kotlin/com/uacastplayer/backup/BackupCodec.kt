@@ -113,6 +113,10 @@ object BackupCodec {
         putOpt("tvgId", favorite.tvgId)
         putOpt("groupTitle", favorite.groupTitle)
         put("addedAtMillis", favorite.addedAtMillis)
+        putOpt("tvgName", favorite.tvgName)
+        putOpt("tvgLogo", favorite.tvgLogo)
+        putOpt("userAgent", favorite.userAgent)
+        putOpt("referrer", favorite.referrer)
     }
 
     private fun favoriteFromJson(json: JSONObject): BackupFavorite? {
@@ -127,6 +131,10 @@ object BackupCodec {
             tvgId = json.stringOrNull("tvgId"),
             groupTitle = json.stringOrNull("groupTitle"),
             addedAtMillis = json.optLong("addedAtMillis", 0L),
+            tvgName = json.stringOrNull("tvgName"),
+            tvgLogo = json.stringOrNull("tvgLogo"),
+            userAgent = json.stringOrNull("userAgent"),
+            referrer = json.stringOrNull("referrer"),
         )
     }
 

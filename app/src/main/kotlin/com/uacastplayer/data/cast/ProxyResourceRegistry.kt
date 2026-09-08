@@ -26,8 +26,8 @@ internal data class ResourceEntry(
 
 /**
  * The proxy's per-session state that outlives any single request: the resource map (every
- * playlist/media URL discovered, keyed by a stable `SHA-256("type:url")` id via [Fingerprint], so
- * re-registering the same URL is idempotent), LRU-bounded to [MAX_RESOURCES] entries - plus the
+ * playlist/media URL discovered, keyed by its URL/type/access headers via [Fingerprint], so
+ * re-registering the same request is idempotent), LRU-bounded to [MAX_RESOURCES] entries - plus the
  * "one active remux stream per session" handoff (docs/PROXY_RULES.md): a channel switch stops the
  * replaced session's upstream reader immediately, while keeping its completed buffer servable for
  * a grace period (see [beginDraining]/[RemuxHandoffPolicy]).
@@ -48,35 +48,51 @@ internal class ProxyResourceRegistry(private val httpClient: OkHttpClient) {
             size > MAX_RESOURCES
     }
     private val resourcesLock = Any()
+    private val manifests = ProxyManifestResources()
 
     private var activeRemuxSession: RawTsRemuxSession? = null
     private var drainingRemuxSession: RawTsRemuxSession? = null
     private var drainTimerThread: Thread? = null
     private val remuxLock = Any()
 
-    fun registerPlaylist(url: String, userAgent: String?, referrer: String?): String = register(
-        RESOURCE_TYPE_PLAYLIST,
-        url,
-        userAgent?.ifBlank { null } ?: HttpDefaults.BROWSER_USER_AGENT,
-        referrer?.ifBlank { null },
-    )
+    fun registerPlaylist(url: String, userAgent: String?, referrer: String?): String {
+        val entry = ResourceEntry(
+            RESOURCE_TYPE_PLAYLIST, url,
+            userAgent?.ifBlank { null } ?: HttpDefaults.BROWSER_USER_AGENT, referrer?.ifBlank { null },
+        )
+        manifests.beginRoot(entry)
+        return register(entry.type, entry.originalUrl, entry.userAgent, entry.referrer)
+    }
 
     fun register(type: String, url: String, userAgent: String, referrer: String?): String {
-        val id = Fingerprint.of("$type:$url")
-        synchronized(resourcesLock) { resources[id] = ResourceEntry(type, url, userAgent, referrer) }
+        // Same URL with different provider credentials/headers is a different resource. Otherwise
+        // an old receiver request silently acquires the newest channel's access requirements.
+        val entry = ResourceEntry(type, url, userAgent, referrer)
+        val id = entry.resourceId()
+        synchronized(resourcesLock) { resources[id] = entry }
         return id
     }
 
-    fun get(resourceId: String): ResourceEntry? = synchronized(resourcesLock) { resources[resourceId] }
+    fun get(resourceId: String): ResourceEntry? = manifests.get(resourceId)
+        ?: synchronized(resourcesLock) { resources[resourceId] }
+
+    fun rewriteManifest(
+        text: String, finalUrl: String, parent: ResourceEntry, localUrl: (String) -> String,
+    ): String? =
+        manifests.rewrite(text, finalUrl, parent, localUrl)
+
+    fun openSession() = manifests.openSession()
 
     /** Exposed only so tests can verify header inheritance (see [ProxyServer.servePlaylist])
      * without going through a real socket. */
-    fun snapshot(): Map<String, ResourceEntry> = synchronized(resourcesLock) { resources.toMap() }
+    fun snapshot(): Map<String, ResourceEntry> =
+        synchronized(resourcesLock) { resources.toMap() } + manifests.snapshot()
 
     /** Discards every registered resource and stops any active/draining remux session -
      * appropriate when the whole proxy server is stopping, not a mid-session channel switch. */
     fun clearAll() {
         synchronized(resourcesLock) { resources.clear() }
+        manifests.clear()
         synchronized(remuxLock) {
             activeRemuxSession?.stop()
             activeRemuxSession = null
@@ -205,3 +221,7 @@ internal class ProxyResourceRegistry(private val httpClient: OkHttpClient) {
         drainingRemuxSession?.takeIf { it.resourceId == resourceId }
     }
 }
+
+internal fun ResourceEntry.resourceId(): String = Fingerprint.of(
+    listOf(type, originalUrl, userAgent, referrer.orEmpty()).joinToString(":") { "${it.length}:$it" },
+)

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import com.uacastplayer.testing.RequiresComposeTestManifest
@@ -43,6 +44,7 @@ class NavigationRailLayoutTest(private val fontScale: Float) {
         val root = composeRule.onRoot().getUnclippedBoundsInRoot()
         listOf("Головна", "Канали", "Улюблені", "Налаштування").forEach { description ->
             val icon = composeRule.onNodeWithContentDescription(description)
+            icon.performScrollTo()
             icon.assertIsDisplayed()
             val bounds = icon.getUnclippedBoundsInRoot()
             assertTrue(
@@ -51,10 +53,9 @@ class NavigationRailLayoutTest(private val fontScale: Float) {
                     bounds.right <= root.right && bounds.bottom <= root.bottom,
             )
         }
-        if (fontScale >= 1.5f) {
-            composeRule.onNodeWithText("Налашт.").assertDoesNotExist()
-        } else {
+        run {
             val label = composeRule.onNodeWithText("Налашт.")
+            label.performScrollTo()
             label.assertIsDisplayed()
             val bounds = label.getUnclippedBoundsInRoot()
             assertTrue(

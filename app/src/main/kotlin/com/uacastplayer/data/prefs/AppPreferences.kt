@@ -165,6 +165,22 @@ class AppPreferences(
         get() = prefs.getBoolean(KEY_AUTO_SKIP_DEAD, true)
         set(value) = prefs.edit { putBoolean(KEY_AUTO_SKIP_DEAD, value) }
 
+    /** Android delivers preference changes on Main. Closing also rejects an already posted callback. */
+    fun observePlaybackChanges(onChange: () -> Unit): AutoCloseable {
+        val active = java.util.concurrent.atomic.AtomicBoolean(true)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                null, KEY_WRAP_AROUND, KEY_AUTO_SKIP_DEAD -> if (active.get()) onChange()
+                else -> Unit
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return AutoCloseable {
+            active.set(false)
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
     /** Once true, the automatic first-cast-session battery optimization hint never shows again on its own. */
     var hasSeenBatteryOptimizationHint: Boolean
         get() = prefs.getBoolean(KEY_SEEN_BATTERY_HINT, false)

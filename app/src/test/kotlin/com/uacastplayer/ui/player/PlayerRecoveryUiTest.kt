@@ -73,7 +73,7 @@ class PlayerRecoveryUiTest {
     }
 
     @Test
-    fun fullscreenControls_explainLevelsAndExposePreviewAsARealAction() {
+    fun fullscreenControls_exposeMoreAndPreviewAsRealActions() {
         var selected = false
         val preview = IndexedChannel(
             index = 1,
@@ -88,8 +88,6 @@ class PlayerRecoveryUiTest {
                     ),
                     isFullscreen = true,
                     sleepTimerRemainingMillis = remember { mutableStateOf<Long?>(null) },
-                    brightnessLevel = 0.4f,
-                    volumeLevel = 0.7f,
                     onExit = {},
                     onPlayPause = {},
                     onNext = {},
@@ -100,16 +98,11 @@ class PlayerRecoveryUiTest {
                     isDlnaCasting = false,
                     onOpenDlnaSheet = {},
                     onSelectPreview = { selected = true },
-                    onBrightnessStep = {},
-                    onVolumeStep = {},
                 )
             }
         }
 
-        composeRule.onNodeWithText("40%").assertIsDisplayed()
-        composeRule.onNodeWithText("70%").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Зменшити яскравість, зараз 40 відсотків")
-            .assertHasClickAction()
+        composeRule.onNodeWithContentDescription("Ще").assertHasClickAction()
         composeRule.onNodeWithText("Наступний тестовий канал").assertHasClickAction().performClick()
         assertTrue(selected)
     }

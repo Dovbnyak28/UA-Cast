@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -55,7 +56,14 @@ import java.time.format.DateTimeFormatter
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EpgGuideSheet(channel: M3uChannel, epgData: EpgData?, nowMillis: Long, onDismiss: () -> Unit) {
+fun EpgGuideSheet(
+    channel: M3uChannel,
+    epgData: EpgData?,
+    nowMillis: Long,
+    onDismiss: () -> Unit,
+    isLoading: Boolean = false,
+    hasError: Boolean = false,
+) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember(nowMillis, zoneId) {
@@ -68,7 +76,7 @@ fun EpgGuideSheet(channel: M3uChannel, epgData: EpgData?, nowMillis: Long, onDis
         epgData.programmesByChannelId[epgChannel.id]
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = UaTheme.palette.surface2) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = GapM)) {
             Text(
                 text = channel.displayName,
@@ -86,10 +94,22 @@ fun EpgGuideSheet(channel: M3uChannel, epgData: EpgData?, nowMillis: Long, onDis
                 onNext = { dayOffset += 1 },
                 onToday = { dayOffset = 0 },
             )
+            val onRefresh = LocalEpgRefresh.current
+            val needsRefresh = hasError || programmes.isNullOrEmpty()
+            if (!programmes.isNullOrEmpty() && (isLoading || hasError)) {
+                Text(
+                    stringResource(if (isLoading) R.string.epg_guide_loading else R.string.epg_guide_error),
+                    style = Caption,
+                    color = UaTheme.palette.labelSecondary,
+                )
+            }
+            if (!isLoading && onRefresh != null && needsRefresh) {
+                TextButton(onClick = onRefresh) { Text(stringResource(R.string.common_retry)) }
+            }
             if (programmes.isNullOrEmpty()) {
                 IconHeader(
                     icon = AppIcons.Tv,
-                    title = stringResource(R.string.epg_guide_no_data),
+                    title = stringResource(epgGuideEmptyMessage(epgData != null, isLoading, hasError)),
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
@@ -141,7 +161,7 @@ private fun EpgDaySelector(
             Text(
                 text = stringResource(R.string.epg_timezone, zoneId.id),
                 style = Caption,
-                color = UaTheme.palette.labelTertiary,
+                color = UaTheme.palette.labelSecondary,
             )
         }
         if (dayOffset != 0) {
@@ -169,6 +189,15 @@ internal fun ScheduleList(
     zoneId: ZoneId,
     progressNowMillis: Long? = nowMillis,
 ) {
+    if (schedule.past.isEmpty() && schedule.current == null && schedule.upcoming.isEmpty()) {
+        Text(
+            stringResource(R.string.epg_guide_empty_day),
+            style = BodyText,
+            color = UaTheme.palette.labelSecondary,
+            modifier = Modifier.padding(vertical = GapM),
+        )
+        return
+    }
     // `firstOrNull { it.startMillis > nowMillis }`, not `firstOrNull()`: since [DayScheduleBuilder]
     // stopped dropping a programme running alongside the current one, the head of `upcoming` can be
     // one that has already begun. Its start is behind `nowMillis`, which would put the progress bar
@@ -239,25 +268,26 @@ private fun ProgrammeRow(
         TIME_FORMATTER.format(Instant.ofEpochMilli(programme.startMillis).atZone(zoneId))
     }
     val textColor = when (state) {
-        ProgrammeRowState.PAST -> UaTheme.palette.labelTertiary
+        ProgrammeRowState.PAST -> UaTheme.palette.labelSecondary
         ProgrammeRowState.CURRENT -> UaTheme.palette.labelPrimary
         ProgrammeRowState.UPCOMING -> UaTheme.palette.labelPrimary
     }
     val timeColor = if (state == ProgrammeRowState.CURRENT) {
         UaTheme.palette.accentText
     } else {
-        UaTheme.palette.labelTertiary
+        UaTheme.palette.labelSecondary
     }
 
+    val timeWidth = 52.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.Top) {
-            Text(text = timeLabel, style = Caption, color = timeColor, modifier = Modifier.width(52.dp))
+            Text(text = timeLabel, style = Caption, color = timeColor, modifier = Modifier.width(timeWidth))
             Text(text = programme.title, style = BodyText, color = textColor, modifier = Modifier.weight(1f))
         }
         if (state == ProgrammeRowState.CURRENT && effectiveStopMillis != null) {
             TrackProgress(
                 progress = ProgrammeProgress.progress(programme.startMillis, effectiveStopMillis, nowMillis),
-                modifier = Modifier.padding(top = 6.dp, start = 52.dp),
+                modifier = Modifier.padding(top = 6.dp, start = timeWidth),
             )
         }
     }

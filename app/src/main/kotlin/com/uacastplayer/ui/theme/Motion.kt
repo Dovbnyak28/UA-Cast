@@ -12,12 +12,12 @@ val EaseSpring = CubicBezierEasing(
     1f,
 )
 
-const val DUR_ENTER = 700
+const val DUR_ENTER = 220
 /** Duration for subtle top-level destination transitions. */
 const val DUR_NAV = 220
 const val DUR_PRESS = 250
 const val DUR_RING = 1400
-const val STAGGER_MS = 70
+const val STAGGER_MS = 30
 const val GLIDE_MS = 2200
 const val BREATHE_MS = 2000
 

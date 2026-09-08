@@ -36,15 +36,14 @@ class PlaylistSourceStore(
      * Refusing the write is the recoverable failure: the user's new playlist is not saved this
      * session, and everything they already had survives the trip back up.
      */
-    suspend fun save(sources: List<PlaylistSource>) = withContext(ioDispatcher) {
+    suspend fun save(sources: List<PlaylistSource>): Boolean = withContext(ioDispatcher) {
         if (writtenByANewerBuild()) {
             AppLog.w(TAG) { "Playlist sources on disk are from a newer format - not overwriting them" }
-            return@withContext
+            return@withContext false
         }
         atomicFile.writeSafely(TAG, "Playlist sources") { stream ->
             PlaylistSourceCodec.encode(sources, stream)
         }
-        Unit
     }
 
     private fun writtenByANewerBuild(): Boolean = try {

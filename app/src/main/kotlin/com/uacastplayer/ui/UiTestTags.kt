@@ -8,6 +8,7 @@ package com.uacastplayer.ui
 object UiTestTags {
     const val MINI_PLAYER_BAR = "mini_player_bar"
     const val SETTINGS_SEARCH = "settings_search"
+    const val PLAYER_CHANNEL_LIST = "player_channel_list"
 
     /** The root top bar's title row, matched by tag because the title itself is a localised,
      * per-destination string. See `RootTopBarLayoutTest`. */

@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.playlist
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.appBackground
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -13,13 +14,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,7 +44,6 @@ import com.uacastplayer.ui.components.PrimaryButton
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.raisedSurface
-import com.uacastplayer.ui.theme.appBackground
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
@@ -58,6 +59,14 @@ import com.uacastplayer.ui.theme.Title
 /** Which kind of source [AddPlaylistScreen] is currently configured for - just UI state, not
  * persisted anywhere: once a source loads, all three converge on the same URL/file pipeline. */
 private enum class PlaylistSourceType { URL, FILE, XTREAM }
+
+/** A one-shot HTTP confirmation. HTTP playlist support remains available for providers that have
+ * no TLS endpoint, but it must be an explicit user decision instead of an accidental credential
+ * transfer over an untrusted network. */
+private sealed interface PendingCleartextLoad {
+    data class Url(val value: String) : PendingCleartextLoad
+    data class Xtream(val server: String, val username: String, val password: String) : PendingCleartextLoad
+}
 
 /** Dedicated full-screen "add playlist" flow, reached from Home/Channels/Settings. */
 @Composable
@@ -79,36 +88,17 @@ fun AddPlaylistScreen(
     var xtreamUsername by rememberSaveable { mutableStateOf("") }
     var xtreamPassword by rememberSaveable { mutableStateOf("") }
     var xtreamPasswordVisible by rememberSaveable { mutableStateOf(false) }
-    // Only auto-dismiss once we've actually observed a load-in-progress from this screen -
-    // otherwise this fires immediately whenever a playlist was already loaded before opening it.
-    var hasStartedLoading by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(playlistState.isLoading) {
-        if (playlistState.isLoading) hasStartedLoading = true
-    }
-    LaunchedEffect(hasStartedLoading, playlistState.hasChannels, playlistState.isLoading, playlistState.error) {
-        // Guard against a *replacement* load failing: the old playlist's hasChannels/groups stay
-        // true (applyPlaylistOutcome preserves them on error), so without the error check this
-        // would auto-dismiss and hide the failure instead of leaving the status card showing it.
-        val loadSucceeded = listOf(
-            hasStartedLoading,
-            playlistState.hasChannels,
-            !playlistState.isLoading,
-            playlistState.error == null,
-        ).all { it }
-        if (loadSucceeded) {
-            // Only persist the name once the load has actually succeeded - setting it eagerly on
-            // tap would silently overwrite the existing name even when the load no-ops (blank URL)
-            // or the user cancels the file picker before a file is ever chosen.
-            onSetDisplayName(effectiveDisplayName(name, sourceType, xtreamServer))
-            onPlaylistLoaded()
-        }
-    }
+    var pendingCleartextLoad by remember { mutableStateOf<PendingCleartextLoad?>(null) }
+    PlaylistAddCompletion(
+        state = playlistState,
+        onSubmit = { onSetDisplayName(effectiveDisplayName(name, sourceType, xtreamServer)) },
+        onSaved = onPlaylistLoaded,
+    )
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .appBackground()
+            .appBackground(plain = true)
             // safeDrawing, not statusBars alone, and outside the scroll so it shrinks the viewport
             // rather than scrolling away: this is a full-bleed gate screen, so nothing above it pads
             // the bottom, and safeDrawing also covers the IME - which matters here more than on the
@@ -134,14 +124,6 @@ fun AddPlaylistScreen(
             )
         }
 
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text(stringResource(R.string.add_playlist_name_hint)) },
-            singleLine = true,
-            colors = uaTextFieldColors(),
-            modifier = Modifier.fillMaxWidth().padding(top = GapL),
-        )
 
         SegmentedControl(
             options = listOf(
@@ -179,6 +161,15 @@ fun AddPlaylistScreen(
             )
         }
 
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text(stringResource(R.string.add_playlist_name_hint)) },
+            singleLine = true,
+            colors = uaTextFieldColors(),
+            modifier = Modifier.fillMaxWidth().padding(top = GapL),
+        )
+
         if (hasLoadFeedback(playlistState)) {
             Column(
                 modifier = Modifier
@@ -206,15 +197,33 @@ fun AddPlaylistScreen(
             }
         }
 
+        PlaylistPersistenceStatus(
+            state = playlistState.sourceSaveState,
+            onRetry = { onSetDisplayName(effectiveDisplayName(name, sourceType, xtreamServer)) },
+            retryEnabled = !playlistState.isLoading,
+        )
         SourceActionButton(
             sourceType = sourceType,
             url = url,
             xtreamServer = xtreamServer,
             xtreamUsername = xtreamUsername,
             xtreamPassword = xtreamPassword,
-            isLoading = playlistState.isLoading,
-            onLoadUrl = onLoadUrl,
-            onLoadXtream = onLoadXtream,
+            isLoading = playlistState.isLoading ||
+                playlistState.sourceSaveState == com.uacastplayer.playlist.PlaylistSourceSaveState.SAVING,
+            onLoadUrl = { value ->
+                if (CleartextCredentialPolicy.isCleartextPlaylistUrl(value)) {
+                    pendingCleartextLoad = PendingCleartextLoad.Url(value)
+                } else {
+                    onLoadUrl(value)
+                }
+            },
+            onLoadXtream = { server, username, password ->
+                if (CleartextCredentialPolicy.exposesCredentials(server)) {
+                    pendingCleartextLoad = PendingCleartextLoad.Xtream(server, username, password)
+                } else {
+                    onLoadXtream(server, username, password)
+                }
+            },
             onPickFile = onPickFile,
         )
 
@@ -223,6 +232,59 @@ fun AddPlaylistScreen(
             style = Caption,
             color = UaTheme.palette.labelSecondary,
             modifier = Modifier.padding(top = GapL, bottom = GapL),
+        )
+    }
+
+    pendingCleartextLoad?.let { pending ->
+        CleartextLoadDialog(
+            pending = pending,
+            onDismiss = { pendingCleartextLoad = null },
+            onConfirm = {
+                pendingCleartextLoad = null
+                dispatchCleartextLoad(it, onLoadUrl, onLoadXtream)
+            },
+        )
+    }
+}
+
+@Composable
+private fun CleartextLoadDialog(
+    pending: PendingCleartextLoad,
+    onDismiss: () -> Unit,
+    onConfirm: (PendingCleartextLoad) -> Unit,
+) {
+    val message = when (pending) {
+        is PendingCleartextLoad.Url -> R.string.add_playlist_url_cleartext_warning
+        is PendingCleartextLoad.Xtream -> R.string.add_playlist_xtream_cleartext_warning
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_playlist_title)) },
+        text = { Text(stringResource(message)) },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(pending) }) {
+                Text(stringResource(R.string.common_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        },
+    )
+}
+
+private fun dispatchCleartextLoad(
+    pending: PendingCleartextLoad,
+    onLoadUrl: (String) -> Unit,
+    onLoadXtream: (server: String, username: String, password: String) -> Unit,
+) {
+    when (pending) {
+        is PendingCleartextLoad.Url -> onLoadUrl(pending.value)
+        is PendingCleartextLoad.Xtream -> onLoadXtream(
+            pending.server,
+            pending.username,
+            pending.password,
         )
     }
 }
@@ -419,6 +481,7 @@ private fun loadFeedbackMessage(playlistState: PlaylistUiState): String = when {
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
+        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
         PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
     }
     // A load that finished, reported no error, and produced nothing. Without this branch the

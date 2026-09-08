@@ -21,8 +21,7 @@ object PlayerContainerStateMachine {
         /** The system back gesture/button - collapses from fullscreen, or closes from collapsed. */
         data object Back : Event
 
-        /** The bar's own close (X) button, or exiting fullscreen via its own exit affordance -
-         * always closes outright, regardless of the previous state. */
+        /** Explicit close (X), never the on-screen Back button: always closes outright. */
         data object Close : Event
     }
 
@@ -36,4 +35,7 @@ object PlayerContainerStateMachine {
             State.CLOSED -> State.CLOSED
         }
     }
+
+    /** A restored layout marker alone must not reserve space before a channel request is restored. */
+    fun isMiniPlayerVisible(state: State, hasRequest: Boolean): Boolean = hasRequest && state == State.COLLAPSED
 }

@@ -33,7 +33,7 @@ internal class CastSdkSessionListener(
     }
 
     override fun onSessionResumeFailed(session: CastSession, error: Int) {
-        onEvent(CastSdkSessionEvent.ResumeFailed(error))
+        onEvent(CastSdkSessionEvent.ResumeFailed(session, error))
     }
 
     override fun onSessionSuspended(session: CastSession, reason: Int) {
@@ -42,18 +42,22 @@ internal class CastSdkSessionListener(
 }
 
 internal sealed interface CastSdkSessionEvent {
-    data class Started(val session: CastSession, val sessionId: String) : CastSdkSessionEvent
+    data class Started(val session: CastSession, val sessionId: String?) : CastSdkSessionEvent
     data class StartFailed(val error: Int) : CastSdkSessionEvent
     data class Ended(val session: CastSession, val error: Int) : CastSdkSessionEvent
     data class Resuming(val sessionId: String) : CastSdkSessionEvent
     data class Resumed(val session: CastSession) : CastSdkSessionEvent
-    data class ResumeFailed(val error: Int) : CastSdkSessionEvent
+    data class ResumeFailed(val session: CastSession, val error: Int) : CastSdkSessionEvent
     data class Suspended(val session: CastSession, val reason: Int) : CastSdkSessionEvent
 }
 
 /** Keeps the GMS callback object free of playback and recovery decisions. */
 internal class CastSdkRemoteMediaCallback(
-    private val onStatusUpdated: () -> Unit,
+    /** The [CastSession] that owns this callback. GMS may deliver a queued callback after
+     * unregisterCallback(), so the repository must be able to reject it if another session is now
+     * current instead of reading a global currentSession and treating the event as new. */
+    val ownerSession: CastSession,
+    private val onStatusUpdated: (CastSession) -> Unit,
 ) : RemoteMediaClient.Callback() {
-    override fun onStatusUpdated() = onStatusUpdated.invoke()
+    override fun onStatusUpdated() = onStatusUpdated.invoke(ownerSession)
 }

@@ -43,6 +43,7 @@ object AppIcons {
     val Plus: ImageVector get() = ActionAppIcons.Plus
     val Minus: ImageVector get() = ActionAppIcons.Minus
     val Sort: ImageVector get() = ActionAppIcons.Sort
+    val More: ImageVector get() = ActionAppIcons.More
 
     val Timer: ImageVector get() = UtilityAppIcons.Timer
     val Kids: ImageVector get() = UtilityAppIcons.Kids
@@ -699,6 +700,21 @@ private object MediaAppIcons {
 }
 
 private object ActionAppIcons {
+    val More: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "More", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.Black)) {
+                listOf(5f, 12f, 19f).forEach { x ->
+                    moveTo(x + 2f, 12f)
+                    arcTo(2f, 2f, 0f, false, true, x - 2f, 12f)
+                    arcTo(2f, 2f, 0f, false, true, x + 2f, 12f)
+                    close()
+                }
+            }
+        }.build()
+    }
     val Upload: ImageVector by lazy {
         ImageVector.Builder(
             name = "Upload", defaultWidth = 24.dp, defaultHeight = 24.dp,

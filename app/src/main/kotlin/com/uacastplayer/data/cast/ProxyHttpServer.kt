@@ -119,6 +119,7 @@ private class ProxyHttpMetrics {
 internal class ProxyHttpServer(
     /** Runs after bounded parsing but before a request can occupy the response-serving pool. */
     private val isRequestAuthorized: (ParsedRequest) -> Boolean = { true },
+    private val admissionTimeoutMillis: Int = SOCKET_READ_TIMEOUT_MILLIS,
     private val onRequest: (ParsedRequest, OutputStream) -> Unit,
 ) {
 
@@ -189,6 +190,7 @@ internal class ProxyHttpServer(
         metrics: ProxyHttpMetrics,
     ) {
         val client = socket.accept()
+        val deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(admissionTimeoutMillis.toLong())
         metrics.acceptedConnections.incrementAndGet()
         clientSockets += client
         if (!running || serverSocket !== socket) {
@@ -204,7 +206,7 @@ internal class ProxyHttpServer(
             return
         }
         try {
-            admissionPool.submit { admitConnection(client, ipLease, responsePool, metrics) }
+            admissionPool.submit { admitConnection(client, ipLease, responsePool, metrics, deadlineNanos) }
         } catch (e: RejectedExecutionException) {
             AppLog.d(TAG) { "Admission queue rejected a client: ${e.javaClass.simpleName}" }
             if (running && serverSocket === socket) metrics.rejectedAdmissionQueue.incrementAndGet()
@@ -256,14 +258,16 @@ internal class ProxyHttpServer(
         ipLease: IpConnectionLease,
         responsePool: ExecutorService,
         metrics: ProxyHttpMetrics,
+        deadlineNanos: Long,
     ) {
         var handedToResponsePool = false
         var request: ParsedRequest? = null
         try {
-            socket.soTimeout = SOCKET_READ_TIMEOUT_MILLIS
-            val input = BufferedInputStream(socket.getInputStream())
+            val input = BufferedInputStream(AdmissionDeadlineInput(socket, deadlineNanos))
             val output = BufferedOutputStream(socket.getOutputStream())
             request = readRequest(input)
+            if (System.nanoTime() - deadlineNanos >= 0) throw SocketTimeoutException("HTTP admission deadline exceeded")
+            socket.soTimeout = SOCKET_READ_TIMEOUT_MILLIS
             handedToResponsePool = routeAdmittedRequest(
                 request,
                 AdmittedConnection(socket, ipLease, output, responsePool, metrics),

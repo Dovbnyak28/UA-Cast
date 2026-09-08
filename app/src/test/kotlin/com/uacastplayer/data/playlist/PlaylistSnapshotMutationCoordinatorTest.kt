@@ -14,6 +14,28 @@ import org.junit.Test
 
 class PlaylistSnapshotMutationCoordinatorTest {
     @Test
+    fun `clear all retires downloads for both known and not yet persisted sources`() = runTest {
+        val coordinator = PlaylistSnapshotMutationCoordinator()
+        val a = coordinator.captureWrite("saved")
+        val b = coordinator.captureWrite("new-download")
+        coordinator.invalidateAllAndDelete { }
+        assertFalse(coordinator.runWriteIfCurrent(a) { error("recreated cleared cache") })
+        assertFalse(coordinator.runWriteIfCurrent(b) { error("created stale cache") })
+        assertTrue(coordinator.runWriteIfCurrent(coordinator.captureWrite("fresh")) { })
+    }
+
+    @Test
+    fun `failed downloads release leases and cannot grow the coordination map forever`() {
+        val coordinator = PlaylistSnapshotMutationCoordinator()
+        repeat(1_000) { index ->
+            val lease = coordinator.captureWrite("failed-$index")
+            coordinator.finishWrite(lease)
+            coordinator.finishWrite(lease) // cleanup remains safe after a writer already finished
+        }
+        assertTrue(coordinator.entryCountForTesting() <= 256)
+    }
+
+    @Test
     fun `delete waits for non cancellable write and remains final disk mutation`() = runTest {
         val coordinator = PlaylistSnapshotMutationCoordinator()
         val lease = coordinator.captureWrite("source-a")

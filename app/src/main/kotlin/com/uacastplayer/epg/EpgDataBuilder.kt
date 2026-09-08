@@ -22,12 +22,13 @@ object EpgDataBuilder {
             programmes.sortBy { it.startMillis }
         }
         val truncation = EpgTruncation(
-            channelsDropped = parsed.channelLimitExceeded,
+            // Persist the existing incomplete-channel-metadata warning without changing cache format.
+            channelsDropped = parsed.channelLimitExceeded || parsed.aliasLimitExceeded,
             programmesDropped = parsed.programmeLimitExceeded,
         )
         checkCancellation()
         return EpgData(
-            index = EpgIndex(parsed.channels),
+            index = EpgIndex(parsed.channels, checkCancellation),
             programmesByChannelId = mutableProgrammesByChannel,
             truncation = truncation,
         )

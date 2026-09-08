@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -49,6 +50,7 @@ import com.uacastplayer.ui.theme.UaCastTheme
 
 private const val MIN_PERCENT = 0
 private const val MAX_PERCENT = 100
+private const val EXPANDED_CHEVRON_DEGREES = 180f
 
 /**
  * A dismissible, non-modal strip explaining why the app might look sparse or feel slow right
@@ -69,20 +71,25 @@ fun DownloadStatusBanner(
     iconPrefetchState: IconPrefetchUiState,
     epgState: EpgUiState,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     val isActive = iconPrefetchState.isRunning || epgState.isLoading
     // Saveable, so a dismissal is not undone by an Activity recreation while the same download is
     // still running - the banner reappearing on its own reads as it having ignored the dismissal.
     var dismissed by rememberSaveable { mutableStateOf(false) }
+    var wasActive by rememberSaveable { mutableStateOf(isActive) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
     // Keyed on [isActive], not on the two flags behind it. Keyed on the flags, this re-ran whenever
     // *either* changed while the other was still true - so with icons and the guide downloading
     // together, which is the exact situation this banner describes, dismissing it and then having
     // one of the two simply *finish* brought it straight back. A download ending is not a new
     // download starting, and only the latter is meant to undo a dismissal.
     LaunchedEffect(isActive) {
-        if (isActive) {
+        if (isActive && !wasActive) {
             dismissed = false
+            expanded = false
         }
+        wasActive = isActive
     }
 
     AnimatedVisibility(
@@ -106,43 +113,56 @@ fun DownloadStatusBanner(
                     shape = shape,
                 )
                 .border(1.dp, UaTheme.palette.hairline, shape)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = if (compact && !expanded) 0.dp else 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.Text(
-                    text = stringResource(R.string.download_banner_title),
-                    color = UaTheme.palette.labelPrimary,
-                    style = TabLabel,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { dismissed = true }) {
-                    Icon(
-                        imageVector = AppIcons.Close,
-                        contentDescription = stringResource(R.string.download_banner_dismiss),
-                        tint = UaTheme.palette.labelSecondary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-            if (iconPrefetchState.isRunning) {
+            DownloadBannerHeader(compact, expanded, { expanded = !expanded }, { dismissed = true })
+            if (iconPrefetchState.isRunning && (!compact || expanded)) {
                 BannerProgressLine(
                     label = stringResource(R.string.download_banner_icons, iconPrefetchState.percent()),
                     fraction = iconPrefetchState.percent() / 100f,
                 )
             }
-            if (epgState.isLoading) {
+            if (epgState.isLoading && (!compact || expanded)) {
                 BannerProgressLine(
                     label = stringResource(R.string.download_banner_epg_processing),
                     fraction = null,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DownloadBannerHeader(compact: Boolean, expanded: Boolean, onExpand: () -> Unit, onDismiss: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Text(
+            text = stringResource(R.string.download_banner_title),
+            color = UaTheme.palette.labelPrimary,
+            style = TabLabel,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (compact) {
+            IconButton(onClick = onExpand) {
+                Icon(
+                    imageVector = AppIcons.ChevronDown,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.download_banner_collapse else R.string.download_banner_expand,
+                    ),
+                    tint = UaTheme.palette.labelSecondary,
+                    modifier = Modifier.size(20.dp).rotate(if (expanded) EXPANDED_CHEVRON_DEGREES else 0f),
+                )
+            }
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                imageVector = AppIcons.Close,
+                contentDescription = stringResource(R.string.download_banner_dismiss),
+                tint = UaTheme.palette.labelSecondary,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }

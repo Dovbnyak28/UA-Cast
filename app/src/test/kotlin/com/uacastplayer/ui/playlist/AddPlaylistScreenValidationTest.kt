@@ -2,7 +2,6 @@ package com.uacastplayer.ui.playlist
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
@@ -45,7 +44,7 @@ class AddPlaylistScreenValidationTest {
         save.assertIsNotEnabled()
         composeRule.onNodeWithText("Статус").assertDoesNotExist()
 
-        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("provider.example/list.m3u")
+        composeRule.onNodeWithText("URL плейлиста").performTextInput("provider.example/list.m3u")
         save.assertIsNotEnabled()
         composeRule.onNodeWithText("Введіть повну адресу з http:// або https://").assertExists()
     }
@@ -66,7 +65,7 @@ class AddPlaylistScreenValidationTest {
             }
         }
 
-        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("https://provider.example/list.m3u")
+        composeRule.onNodeWithText("URL плейлиста").performTextInput("https://provider.example/list.m3u")
         composeRule.onNodeWithText("Завантажити та зберегти").assertIsEnabled()
     }
 
@@ -86,7 +85,7 @@ class AddPlaylistScreenValidationTest {
             }
         }
 
-        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("http://provider.example/list.m3u")
+        composeRule.onNodeWithText("URL плейлиста").performTextInput("http://provider.example/list.m3u")
         composeRule.onNodeWithText(
             "Цей плейлист використовує незашифрований HTTP. Його адресу, вбудовані дані доступу " +
                 "та завантажений вміст можуть прочитати або змінити під час передавання. " +

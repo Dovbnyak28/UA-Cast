@@ -143,6 +143,7 @@ class AppViewModel @JvmOverloads constructor(
         playlistRepository = playlistRepository,
         scope = viewModelScope,
         onLoaded = { channels, groups, epgUrls, fromCache ->
+            favoritesRepository.refreshMetadata(channels)
             // Do not download/parse an EPG on a fresh install that has no channels to match it to.
             // This is idempotent, so later playlist switches keep the already selected guide.
             epgController.loadInitial()
@@ -254,6 +255,7 @@ class AppViewModel @JvmOverloads constructor(
     val lockedChannelKeys: StateFlow<Set<String>> = parentalControlController.lockedKeys
     val parentalControlPinSet: StateFlow<Boolean> = parentalControlController.isPinSet
     val parentalControlUnlocked: StateFlow<Boolean> = parentalControlController.unlockedThisSession
+    val parentalControlReady: StateFlow<Boolean> = parentalControlController.isReady
 
     internal val epgController = EpgController(
         preferences = preferences,
@@ -312,6 +314,14 @@ class AppViewModel @JvmOverloads constructor(
     // refresh (see refreshLastWatchedChannel()) rather than picking up the write automatically.
     internal val lastWatchedChannelKeyMutable = MutableStateFlow(preferences.lastWatchedChannelKey)
     val lastWatchedChannelKey: StateFlow<String?> = lastWatchedChannelKeyMutable.asStateFlow()
+
+    /**
+     * Reads the latest persisted player channel for restoration. The player is a separate,
+     * Activity-scoped ViewModel and writes this preference on every channel switch, so the flow
+     * above is intentionally refreshed only when the player closes. Process recreation must use
+     * the synchronous value instead of that possibly stale in-memory mirror.
+     */
+    internal fun persistedLastWatchedChannelKey(): String? = preferences.lastWatchedChannelKey
 
     internal val uiStateMutable = MutableStateFlow(
         AppUiState(
@@ -584,8 +594,9 @@ class AppViewModel @JvmOverloads constructor(
             uri = uri,
             currentSources = { playlistSources.value },
             currentFavorites = { favorites.value },
-            onSourcesMerged = playlistController::applyImportedSources,
+            onSourcesMerged = { playlistController.applyImportedSources(it, activateIfNeeded = true) },
             onSettingsImported = ::applyImportedSettings,
+            awaitSourcesPersisted = playlistController::awaitSourcesPersistence,
         )
     }
 
@@ -594,7 +605,10 @@ class AppViewModel @JvmOverloads constructor(
             BackupPlaylistSource(it.id, it.type.name, it.location, it.displayName, it.addedAtEpochMillis)
         }
         val favoritesBackup = favorites.value.map {
-            BackupFavorite(it.key, it.displayName, it.streamUrl, it.tvgId, it.groupTitle, it.addedAtMillis)
+            BackupFavorite(
+                it.key, it.displayName, it.streamUrl, it.tvgId, it.groupTitle, it.addedAtMillis,
+                it.tvgName, it.tvgLogo, it.userAgent, it.referrer,
+            )
         }
         val exportEpgSourceId = if (preferences.hasChosenEpgSource && preferences.customEpgUrl == null) {
             preferences.epgSource.id
@@ -678,7 +692,11 @@ class AppViewModel @JvmOverloads constructor(
             // Cancellation is cooperative, not instant - wait until every captured writer has
             // actually unwound before deleting its directory.
             iconCacheClearBarrier?.awaitStopped()
-            withContext(ioDispatcher) { CacheSizeUtils.clear(files) }
+            when (kind) {
+                CacheKind.PLAYLIST -> playlistRepository.clearSnapshots()
+                CacheKind.EPG -> epgRepository.clearSnapshots()
+                else -> withContext(ioDispatcher) { CacheSizeUtils.clear(files) }
+            }
             // The deleted files are exactly what resolveChannelIcon's in-memory cache may still
             // hold (positive results pointing at gone files, or negative results which should
             // be retried), so the next resolution must consult disk again.

@@ -45,7 +45,7 @@ internal object PlayerEngineFactory {
             .build()
     }
 
-    private fun buildLoadControl(profile: PlayerBufferProfile): DefaultLoadControl =
+    internal fun buildLoadControl(profile: PlayerBufferProfile): DefaultLoadControl =
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 profile.minBufferMs,
@@ -56,7 +56,9 @@ internal object PlayerEngineFactory {
             // A duration-derived byte target can become very large on high-bitrate streams. The
             // fixed cap is the primary safeguard against one player exhausting a small heap.
             .setTargetBufferBytes(profile.targetBufferBytes)
-            .setPrioritizeTimeOverSizeThresholds(true)
+            // A high-bitrate stream must stop loading at the byte target even when it has not
+            // accumulated minBufferMs yet. Time-first makes the purported memory budget advisory.
+            .setPrioritizeTimeOverSizeThresholds(false)
             .build()
 }
 

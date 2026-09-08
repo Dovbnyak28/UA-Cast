@@ -143,13 +143,11 @@ fun MiniPlayerBar(
             }
         }
 
-        if (!uiState.isCasting) {
-            val playPauseLabelRes = if (uiState.isPlaying) R.string.player_pause else R.string.player_play
+        if (uiState.canControlPlayback) {
+            val playPauseLabelRes = if (uiState.wantsToPlay) R.string.player_pause else R.string.player_play
             SmallRoundIconButton(
-                icon = if (uiState.isPlaying) AppIcons.Pause else AppIcons.Play,
-                onClick = {
-                    if (viewModel.player.isPlaying) viewModel.player.pause() else viewModel.player.play()
-                },
+                icon = if (uiState.wantsToPlay) AppIcons.Pause else AppIcons.Play,
+                onClick = viewModel::togglePlayback,
                 contentDescription = stringResource(playPauseLabelRes),
                 modifier = Modifier.padding(start = 8.dp),
             )

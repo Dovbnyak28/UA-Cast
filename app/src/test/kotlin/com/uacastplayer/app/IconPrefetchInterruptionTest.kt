@@ -57,6 +57,28 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
  */
 @RunWith(RobolectricTestRunner::class)
 class IconPrefetchInterruptionTest {
+    @Test fun `production selection leaves the caller thread before visiting channels`() {
+        val observed = java.util.concurrent.atomic.AtomicReference<Thread>()
+        val visited = CountDownLatch(1)
+        val caller = Thread.currentThread()
+        val channels = object : AbstractList<M3uChannel>() {
+            override val size: Int = 1
+            override fun get(index: Int): M3uChannel {
+                observed.set(Thread.currentThread())
+                visited.countDown()
+                return M3uChannel("One", "https://example.test/one")
+            }
+        }
+        val controller = controller()
+        controller.triggerPrefetch(
+            channels, IconDisplayMode.CACHE,
+            context = IconController.PrefetchContext(favoriteKeys = setOf("Missing")),
+        )
+        assertTrue(visited.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+        assertFalse(caller === observed.get())
+        // Coroutine debug mode appends an active coroutine ID to the worker's name.
+        assertTrue(observed.get().name.startsWith("ua-cast-playlist-cpu"))
+    }
 
     private val application: Application get() = ApplicationProvider.getApplicationContext()
 

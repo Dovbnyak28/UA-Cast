@@ -46,6 +46,11 @@ data class PlayerUiState(
     val currentChannel: M3uChannel? = null,
     val isBuffering: Boolean = true,
     val isPlaying: Boolean = false,
+    /** Media3 playback intent, including buffering; never inferred from rendered frames. */
+    val wantsToPlay: Boolean = false,
+    val canControlPlayback: Boolean = false,
+    val canGoNext: Boolean = false,
+    val canGoPrevious: Boolean = false,
     val badges: PlaybackBadgesState = PlaybackBadgesState(),
     /** The decoded video's dimensions *and* pixel aspect ratio, straight from
      * [androidx.media3.common.Player.Listener.onVideoSizeChanged].
@@ -85,7 +90,7 @@ data class PlayerUiState(
     val isRecoveringPlayback: Boolean = false,
     /** Mirrors [StallRetryPolicy.State.attempt] for the current recovery streak - once it reaches
      * [StallRetryPolicy.CHANNEL_PICKER_HINT_ATTEMPT] the UI adds a "pick another channel" escape
-     * hatch alongside the automatic retries, which never stop on their own. */
+     * hatch alongside the bounded automatic retries. */
     val stallRecoveryAttempt: Int = 0,
     /** Non-null after a dead channel triggered auto-skip, until playback succeeds or recovery ends. */
     val autoSkipRecovery: AutoSkipRecoveryState? = null,

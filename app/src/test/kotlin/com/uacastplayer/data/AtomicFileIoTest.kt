@@ -4,11 +4,15 @@ import androidx.core.util.AtomicFile
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
+import kotlinx.coroutines.CancellationException
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import com.uacastplayer.testing.AndroidAtomicRenameShadow
 
 /**
  * [writeSafely] exists for one reason: every store built on it writes from a fire-and-forget
@@ -21,7 +25,42 @@ import org.robolectric.RobolectricTestRunner
  * wrong reason.
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [AndroidAtomicRenameShadow::class])
 class AtomicFileIoTest {
+
+    @Test fun `failed sync cannot replace the original`() {
+        val target = folder.newFile("sync-failure.bin").apply { writeText("original") }
+        val saved = AtomicFile(target).writeSafely("Test", "Snapshot") {
+            it.write("uncommitted".toByteArray())
+            it.close() // Fault injection: fsync of an invalid descriptor must fail before rename.
+        }
+        assertFalse(saved)
+        assertTrue(target.readText() == "original")
+    }
+
+    @Test fun `a committed file can be replaced atomically`() {
+        val target = folder.newFile("replace.bin").apply { writeText("old") }
+        assertTrue(AtomicFile(target).writeSafely("Test", "Snapshot") { it.write("new".toByteArray()) })
+        assertTrue(target.readText() == "new")
+    }
+
+    @Test fun `finish failure is not reported as a committed write`() {
+        val target = folder.newFolder("blocked-destination")
+        File(target, "owned-test-marker").writeText("keep")
+        val wrote = AtomicFile(target).writeSafely("Test", "Snapshot") { it.write(byteArrayOf(1)) }
+        assertFalse(wrote)
+        assertTrue(File(target, "owned-test-marker").isFile)
+        assertFalse(File(target.path + ".new").exists())
+    }
+
+    @Test fun `cancellation rolls back and propagates to its owner`() {
+        val target = folder.newFile("cancelled.bin").apply { writeText("original") }
+        assertThrows(CancellationException::class.java) {
+            AtomicFile(target).writeSafely("Test", "Snapshot") { throw CancellationException("owner stopped") }
+        }
+        assertTrue(target.readText() == "original")
+        assertFalse(File(target.path + ".new").exists())
+    }
 
     @get:Rule
     val folder = TemporaryFolder()

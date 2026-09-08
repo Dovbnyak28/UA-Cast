@@ -3,8 +3,8 @@ package com.uacastplayer.cast
 /**
  * Mutable state for one channel's recovery episode, deliberately independent of the Cast SDK.
  *
- * [CastSessionRepository] remains the adapter that schedules coroutines and issues SDK reloads;
- * this class owns only the state-machine inputs that decide the next recovery action. Keeping the
+ * [CastRecoveryRuntime] owns the coroutines and asks this state machine for decisions;
+ * this class owns only the inputs that decide the next recovery action. Keeping the
  * attempt counter and PLAYING window together prevents their reset rules from drifting apart.
  */
 internal class CastRecoveryEpisode {

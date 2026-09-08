@@ -34,14 +34,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import com.uacastplayer.R
+import com.uacastplayer.guidedtour.GuidedTourKeys
+import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.player.SleepTimerFormatter
@@ -59,7 +59,6 @@ import com.uacastplayer.ui.theme.LiveText
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaTheme
-import kotlin.math.roundToInt
 
 private const val LIVE_LABEL_MIN_ALPHA = 0.6f
 private const val TOP_SCRIM_END = 0.22f
@@ -67,15 +66,13 @@ private const val BOTTOM_SCRIM_START = 0.70f
 
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
-@Suppress("LongParameterList") // one accessible stepper pair added for brightness/volume, see below
+@Suppress("LongParameterList") // Stateless overlay callbacks; platform level controls live in PlayerLevelsSheet.
 internal fun PlayerControlsOverlay(
     uiState: PlayerUiState,
     isFullscreen: Boolean,
     // State, not a plain Long? - see SleepTimerState's doc. Kept unread until SleepTimerButton's
     // own body so the once-a-second tick only recomposes that small pill, not this whole overlay.
     sleepTimerRemainingMillis: State<Long?>,
-    brightnessLevel: Float,
-    volumeLevel: Float,
     onExit: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -86,8 +83,7 @@ internal fun PlayerControlsOverlay(
     isDlnaCasting: Boolean,
     onOpenDlnaSheet: () -> Unit,
     onSelectPreview: (IndexedChannel) -> Unit,
-    onBrightnessStep: (Float) -> Unit,
-    onVolumeStep: (Float) -> Unit,
+    onOpenActions: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -129,32 +125,25 @@ internal fun PlayerControlsOverlay(
                 BadgesRow(uiState.badges)
             }
             LiveIndicator()
-            // Sits beside the Cast button rather than replacing it: the two reach different
-            // hardware (Cast for Google devices, DLNA for the Samsung/LG/Sony sets with no Cast
-            // receiver), so a user with either kind needs to see the one that applies to them.
+            // The shared device picker explains protocols without crowding the video header.
             SmallRoundIconButton(
                 icon = AppIcons.CastToTv,
                 onClick = onOpenDlnaSheet,
                 contentDescription = stringResource(
-                    if (isDlnaCasting) R.string.player_dlna_connected else R.string.player_dlna_cast,
+                    R.string.player_devices,
                 ),
                 background = UaTheme.palette.scrimBackground,
-                tint = if (isDlnaCasting) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
-                modifier = Modifier.liveRing(active = isDlnaCasting, color = UaTheme.palette.azure),
+                tint = if (isDlnaCasting || uiState.isCasting) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
+                modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON)
+                    .liveRing(active = isDlnaCasting || uiState.isCasting, color = UaTheme.palette.azure),
             )
-            PlayerCastButton(isCasting = uiState.isCasting)
+            SmallRoundIconButton(
+                icon = AppIcons.More,
+                onClick = onOpenActions,
+                contentDescription = stringResource(R.string.player_more_controls),
+                background = UaTheme.palette.scrimBackground,
+            )
         }
-
-        // TalkBack-reachable alternative to the fullscreen brightness/volume drag gesture (see
-        // PlayerScreen's pointerInput(activity, audioManager) block) - the drag zones have no
-        // other way for a screen-reader user to reach them, so these steppers are the accessible
-        // equivalent, not just a visual convenience.
-        LevelStepperRow(
-            brightnessLevel = brightnessLevel,
-            volumeLevel = volumeLevel,
-            onBrightnessStep = onBrightnessStep,
-            onVolumeStep = onVolumeStep,
-        )
 
         Box(modifier = Modifier.weight(1f))
 
@@ -195,16 +184,19 @@ internal fun PlayerControlsOverlay(
             RoundIconButton(
                 icon = AppIcons.SkipPrevious,
                 onClick = onPrevious,
+                enabled = uiState.canGoPrevious,
                 contentDescription = stringResource(R.string.player_previous),
             )
             GradientPlayButton(
-                icon = if (uiState.isPlaying) AppIcons.Pause else AppIcons.Play,
+                icon = if (uiState.wantsToPlay) AppIcons.Pause else AppIcons.Play,
                 onClick = onPlayPause,
-                contentDescription = playPauseLabel(uiState.isPlaying),
+                enabled = uiState.canControlPlayback,
+                contentDescription = playPauseLabel(uiState.wantsToPlay),
             )
             RoundIconButton(
                 icon = AppIcons.SkipNext,
                 onClick = onNext,
+                enabled = uiState.canGoNext,
                 contentDescription = stringResource(R.string.player_next),
             )
             Box(modifier = Modifier.weight(1f))
@@ -224,90 +216,6 @@ internal fun PlayerControlsOverlay(
                 background = UaTheme.palette.scrimBackground,
             )
         }
-    }
-}
-
-private const val LEVEL_STEP = 0.1f
-private const val PERCENT_SCALE = 100
-
-/** Stepper pair for brightness (left) and volume (right), see the call site's comment. */
-@Composable
-private fun LevelStepperRow(
-    brightnessLevel: Float,
-    volumeLevel: Float,
-    onBrightnessStep: (Float) -> Unit,
-    onVolumeStep: (Float) -> Unit,
-) {
-    val brightnessPercent = (brightnessLevel * PERCENT_SCALE).roundToInt()
-    val volumePercent = (volumeLevel * PERCENT_SCALE).roundToInt()
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LevelStepper(
-            contextIcon = AppIcons.Brightness,
-            percent = brightnessPercent,
-            decreaseDescription = stringResource(R.string.player_brightness_decrease, brightnessPercent),
-            increaseDescription = stringResource(R.string.player_brightness_increase, brightnessPercent),
-            onDecrease = { onBrightnessStep(-LEVEL_STEP) },
-            onIncrease = { onBrightnessStep(LEVEL_STEP) },
-        )
-        LevelStepper(
-            contextIcon = AppIcons.Volume,
-            percent = volumePercent,
-            decreaseDescription = stringResource(R.string.player_volume_decrease, volumePercent),
-            increaseDescription = stringResource(R.string.player_volume_increase, volumePercent),
-            onDecrease = { onVolumeStep(-LEVEL_STEP) },
-            onIncrease = { onVolumeStep(LEVEL_STEP) },
-        )
-    }
-}
-
-/** A visually self-describing alternative to the player's brightness/volume gestures. */
-@Composable
-private fun LevelStepper(
-    contextIcon: ImageVector,
-    percent: Int,
-    decreaseDescription: String,
-    increaseDescription: String,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(UaTheme.palette.scrimBackground)
-            .border(1.dp, UaTheme.palette.overlayHighlight, RoundedCornerShape(999.dp))
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = contextIcon,
-            contentDescription = null,
-            tint = UaTheme.palette.labelPrimary,
-            modifier = Modifier.size(18.dp),
-        )
-        Text(
-            text = "$percent%",
-            color = UaTheme.palette.labelPrimary,
-            style = Caption,
-            textAlign = TextAlign.End,
-            modifier = Modifier.widthIn(min = 38.dp),
-        )
-        SmallRoundIconButton(
-            icon = AppIcons.Minus,
-            onClick = onDecrease,
-            contentDescription = decreaseDescription,
-            background = Color.Transparent,
-        )
-        SmallRoundIconButton(
-            icon = AppIcons.Plus,
-            onClick = onIncrease,
-            contentDescription = increaseDescription,
-            background = Color.Transparent,
-        )
     }
 }
 

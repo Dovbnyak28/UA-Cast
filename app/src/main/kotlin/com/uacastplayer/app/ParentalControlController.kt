@@ -9,6 +9,7 @@ import com.uacastplayer.log.AppLog
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,7 +37,9 @@ class ParentalControlController(
     private val writer = LatestValueWriter(scope, store::save) { error ->
         AppLog.w(TAG) { "Parental-control persistence failed: ${error.javaClass.simpleName}" }
     }
-    private var initialLoadFinished = false
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+    private var initialLoadJob: Job? = null
     private val pendingAdds = mutableSetOf<String>()
     private val pendingRemovals = mutableSetOf<String>()
     private var pendingReset = false
@@ -50,31 +53,32 @@ class ParentalControlController(
     val unlockedThisSession: StateFlow<Boolean> = _unlockedThisSession.asStateFlow()
 
     fun loadInitial() {
-        scope.launch {
+        if (initialLoadJob != null) return
+        initialLoadJob = scope.launch {
             val loaded = store.load()
             val hadPendingMutation = pendingReset || pendingAdds.isNotEmpty() || pendingRemovals.isNotEmpty()
             val base = if (pendingReset) emptySet() else loaded
             val resolved = (base - pendingRemovals) + pendingAdds
-            initialLoadFinished = true
             pendingReset = false
             pendingAdds.clear()
             pendingRemovals.clear()
             _lockedKeys.value = resolved
+            _isReady.value = true
             if (hadPendingMutation) writer.submit(resolved)
         }
     }
 
-    fun isLocked(channelKey: String): Boolean = channelKey in _lockedKeys.value
+    fun isLocked(channelKey: String): Boolean = !_isReady.value || channelKey in _lockedKeys.value
 
     fun lockChannel(channelKey: String) {
         if (channelKey in _lockedKeys.value) return
         val updated = _lockedKeys.value + channelKey
-        if (!initialLoadFinished) {
+        if (!_isReady.value) {
             pendingAdds += channelKey
             pendingRemovals -= channelKey
         }
         _lockedKeys.value = updated
-        if (initialLoadFinished) writer.submit(updated)
+        if (_isReady.value) writer.submit(updated)
     }
 
     /** Permanently removes [channelKey] from the locked set. Callers must gate this behind
@@ -84,12 +88,12 @@ class ParentalControlController(
     fun unlockChannelPermanently(channelKey: String) {
         if (channelKey !in _lockedKeys.value) return
         val updated = _lockedKeys.value - channelKey
-        if (!initialLoadFinished) {
+        if (!_isReady.value) {
             pendingRemovals += channelKey
             pendingAdds -= channelKey
         }
         _lockedKeys.value = updated
-        if (initialLoadFinished) writer.submit(updated)
+        if (_isReady.value) writer.submit(updated)
     }
 
     /** Verifies [pin] against the stored hash and, on success, flips [unlockedThisSession] for the
@@ -135,7 +139,7 @@ class ParentalControlController(
         _isPinSet.value = false
         _unlockedThisSession.value = false
         _lockedKeys.value = emptySet()
-        if (initialLoadFinished) {
+        if (_isReady.value) {
             writer.submit(emptySet())
         } else {
             pendingReset = true

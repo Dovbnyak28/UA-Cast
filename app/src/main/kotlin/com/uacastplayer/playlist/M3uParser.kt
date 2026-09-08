@@ -10,9 +10,7 @@ object M3uParser {
 
     private const val UTF8_BOM = "\uFEFF"
     private const val CANCELLATION_CHECK_INTERVAL_LINES = 256
-    private const val QUOTED_ATTRIBUTE_VALUE_GROUP = 2
-    private const val UNQUOTED_ATTRIBUTE_VALUE_GROUP = 3
-    private val attributePattern = Regex("""([a-zA-Z][\w-]*)=(?:"([^"]*)"|(\S+))""")
+    private const val CANCELLATION_CHECK_INTERVAL_CHARS = 1_024
 
     /**
      * [lineSequence] rather than `split("\n").map { it.trimEnd('\r') }`: that built the whole
@@ -27,7 +25,7 @@ object M3uParser {
      * or url anyway.
      */
     fun parse(text: String, checkCancellation: () -> Unit = {}): M3uParseResult {
-        val state = ParseState()
+        val state = ParseState(checkCancellation)
         var linesUntilCancellationCheck = CANCELLATION_CHECK_INTERVAL_LINES
         checkCancellation()
         for (rawLine in text.removePrefix(UTF8_BOM).lineSequence()) {
@@ -43,7 +41,7 @@ object M3uParser {
         return state.finish()
     }
 
-    private class ParseState {
+    private class ParseState(private val checkCancellation: () -> Unit) {
         private val channels = mutableListOf<M3uChannel>()
         private val groupTitlePool = HashMap<String, String>()
         private var skippedLineCount = 0
@@ -70,12 +68,15 @@ object M3uParser {
         }
 
         private fun acceptHeader(line: String) {
-            if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line.substring("#EXTM3U".length))
+            if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line, checkCancellation)
         }
 
         private fun acceptExtinf(line: String) {
-            if (pendingExtinf != null) skippedLineCount++
-            pendingExtinf = parseExtinf(line.substring("#EXTINF:".length))
+            if (pendingExtinf != null) {
+                skippedLineCount++
+                clearPendingChannel()
+            }
+            pendingExtinf = parseExtinf(line, checkCancellation)
         }
 
         private fun acceptGroup(line: String) {
@@ -124,20 +125,15 @@ object M3uParser {
 
     /** `url-tvg`/`x-tvg-url` (case-insensitive, providers use either) on the `#EXTM3U` line - the
      * de-facto convention for pointing a player at the provider's own EPG. The value can be a
-     * comma-separated list of several URLs; [attributePattern] already handles both quoted and
-     * bare attribute values. */
-    private fun parseEpgUrls(content: String): List<String> {
-        val urls = mutableListOf<String>()
-        for (match in attributePattern.findAll(content)) {
-            val key = match.groupValues[1].lowercase()
-            if (key != "url-tvg" && key != "x-tvg-url") continue
-            val value = (
-                match.groups[QUOTED_ATTRIBUTE_VALUE_GROUP]?.value
-                    ?: match.groups[UNQUOTED_ATTRIBUTE_VALUE_GROUP]?.value
-                ).orEmpty()
-            urls += value.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+     * comma-separated list of several URLs, in either quoted or bare attribute values. */
+    private fun parseEpgUrls(content: String, checkCancellation: () -> Unit): List<String> {
+        val urls = M3uEpgUrls(checkCancellation)
+        M3uAttributeReader(content, "#EXTM3U".length, content.length, checkCancellation).forEach { key, value ->
+            if (key.equals("url-tvg", ignoreCase = true) || key.equals("x-tvg-url", ignoreCase = true)) {
+                urls.add(value)
+            }
         }
-        return urls
+        return urls.result()
     }
 
     private data class PendingExtinf(
@@ -148,30 +144,18 @@ object M3uParser {
         val groupTitle: String?,
     )
 
-    private fun parseExtinf(content: String): PendingExtinf {
-        val splitIndex = indexOfUnquotedComma(content)
-        val attributesSection: String
-        val displayName: String?
-        if (splitIndex == -1) {
-            attributesSection = content
-            displayName = null
-        } else {
-            attributesSection = content.substring(0, splitIndex)
-            displayName = content.substring(splitIndex + 1).trim().ifEmpty { null }
-        }
+    private fun parseExtinf(content: String, checkCancellation: () -> Unit): PendingExtinf {
+        val splitIndex = indexOfUnquotedComma(content, checkCancellation)
+        val attributesEnd = if (splitIndex == -1) content.length else splitIndex
+        val displayName = if (splitIndex == -1) null else content.substring(splitIndex + 1).trim().ifEmpty { null }
 
         var tvgId: String? = null
         var tvgName: String? = null
         var tvgLogo: String? = null
         var groupTitle: String? = null
 
-        for (match in attributePattern.findAll(attributesSection)) {
-            val key = match.groupValues[1].lowercase()
-            val value = (
-                match.groups[QUOTED_ATTRIBUTE_VALUE_GROUP]?.value
-                    ?: match.groups[UNQUOTED_ATTRIBUTE_VALUE_GROUP]?.value
-                ).orEmpty()
-            when (key) {
+        M3uAttributeReader(content, "#EXTINF:".length, attributesEnd, checkCancellation).forEach { key, value ->
+            when (key.lowercase()) {
                 "tvg-id" -> tvgId = normalizeAttributeValue(value)
                 "tvg-name" -> tvgName = normalizeAttributeValue(value)
                 "tvg-logo" -> tvgLogo = normalizeAttributeValue(value)
@@ -193,9 +177,10 @@ object M3uParser {
         return key to value
     }
 
-    private fun indexOfUnquotedComma(content: String): Int {
+    private fun indexOfUnquotedComma(content: String, checkCancellation: () -> Unit): Int {
         var inQuotes = false
-        for (i in content.indices) {
+        for (i in "#EXTINF:".length until content.length) {
+            if (i % CANCELLATION_CHECK_INTERVAL_CHARS == 0) checkCancellation()
             when (content[i]) {
                 '"' -> inQuotes = !inQuotes
                 ',' -> if (!inQuotes) return i

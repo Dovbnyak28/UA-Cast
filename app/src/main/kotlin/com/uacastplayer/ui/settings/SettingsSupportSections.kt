@@ -84,12 +84,14 @@ internal fun DataSettingsSection(
             SecondaryButton(
                 text = stringResource(R.string.settings_data_export),
                 onClick = gate.guard(Feature.BACKUP, onShowExportWarning),
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .settingsSearchTarget(stringResource(R.string.settings_data_export)),
             )
             SecondaryButton(
                 text = stringResource(R.string.settings_data_import),
                 onClick = gate.guard(Feature.BACKUP, onImportBackup),
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .settingsSearchTarget(stringResource(R.string.settings_data_import)),
             )
         }
     }
@@ -120,11 +122,15 @@ internal fun BackupImportSummaryBanner(
     modifier: Modifier = Modifier,
 ) {
     BackupNoticeBanner(
-        text = stringResource(
-            R.string.settings_data_import_summary,
-            summary.importedSourceCount,
-            summary.importedFavoriteCount,
-        ),
+        text = if (summary.persistenceFailed) {
+            stringResource(R.string.settings_data_import_persistence_failure)
+        } else {
+            stringResource(
+                R.string.settings_data_import_summary,
+                summary.importedSourceCount,
+                summary.importedFavoriteCount,
+            )
+        },
         onDismiss = onDismiss,
         modifier = modifier,
     )

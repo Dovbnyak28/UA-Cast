@@ -157,6 +157,19 @@ class EpgController(
         }
     }
 
+    /** Retry the current source without changing the user's provider or auto-detection choice. */
+    fun refresh() {
+        if (_epgState.value.isLoading) return
+        initialLoadStarted.set(true)
+        val current = _epgState.value
+        _epgState.update { it.copy(isLoading = true, hasError = false) }
+        launchLoad {
+            val outcome = current.customUrl?.let { epgRepository.loadFromUrl(it) }
+                ?: epgRepository.loadFromSource(current.selectedSource)
+            applyEpgOutcome(outcome)
+        }
+    }
+
     /** Accepts the "EPG address found in playlist" suggestion (see [EpgSourceAutoDetect]) - counts
      * as the user's own manual choice from here on, same as [selectEpgSource]. */
     fun useSuggestedEpgUrl() {

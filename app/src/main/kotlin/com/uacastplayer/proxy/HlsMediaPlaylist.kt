@@ -65,32 +65,58 @@ object HlsMediaPlaylistParser {
     private val keyMethodPattern = Regex("(?:^|,)\\s*METHOD\\s*=\\s*([^,\\s]+)", RegexOption.IGNORE_CASE)
 
     fun parse(text: String): HlsMediaPlaylist {
-        val lines = text.removePrefix(UTF8_BOM)
+        HlsPlaylistBudget.requireAccepted(text)
+        val parsed = ParsedLines()
+        text.removePrefix(UTF8_BOM)
             .lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .toList()
-        return HlsMediaPlaylist(
-            segmentUris = lines.filterNot { it.startsWith("#") },
-            mediaSequence = lines.firstNotNullOfOrNull { line ->
-                line.takeIf { it.startsWith(TAG_MEDIA_SEQUENCE) }
-                    ?.removePrefix(TAG_MEDIA_SEQUENCE)?.trim()?.toLongOrNull()?.takeIf { it >= 0 }
-            } ?: 0L,
-            targetDurationSeconds = lines.firstNotNullOfOrNull { line ->
-                line.takeIf { it.startsWith(TAG_TARGET_DURATION) }
-                    ?.removePrefix(TAG_TARGET_DURATION)?.trim()
-                    // A decimal target duration is against the spec but does occur; taking the whole
-                    // part is better than discarding the tag and falling back to a guess.
-                    ?.substringBefore('.')?.toIntOrNull()?.takeIf { it > 0 }
-            },
-            hasEndList = lines.any { it.startsWith(TAG_ENDLIST) },
-            isMaster = lines.any { it.startsWith(TAG_STREAM_INF) },
-            // METHOD=NONE is the spec's way of saying "encryption stops here", and appears in
-            // streams that switch encryption off partway. It is not an obstacle.
-            hasEncryptedSegments = lines.any(::declaresEncryption),
-            hasInitSegment = lines.any { it.startsWith(TAG_MAP) },
-            hasByteRanges = lines.any { it.startsWith(TAG_BYTERANGE) },
-            hasPlaylistHeader = lines.firstOrNull() == PLAYLIST_HEADER,
+            .forEach(parsed::accept)
+        return parsed.build()
+    }
+
+    /** Retain only URI lines, not two full manifest lists alongside the original text. */
+    private class ParsedLines {
+        private val uris = mutableListOf<String>()
+        private var first: String? = null
+        private var sequence: Long? = null
+        private var duration: Int? = null
+        private var ended = false
+        private var master = false
+        private var encrypted = false
+        private var init = false
+        private var ranges = false
+
+        fun accept(line: String) {
+            if (first == null) first = line
+            when {
+                !line.startsWith('#') -> uris.add(line)
+                line.startsWith(TAG_MEDIA_SEQUENCE) -> if (sequence == null) {
+                    sequence = line.removePrefix(TAG_MEDIA_SEQUENCE).trim().toLongOrNull()?.takeIf { it >= 0 }
+                }
+                line.startsWith(TAG_TARGET_DURATION) -> if (duration == null) {
+                    // Tolerate providers with decimal durations while preserving first-valid semantics.
+                    duration = line.removePrefix(TAG_TARGET_DURATION).trim().substringBefore('.')
+                        .toIntOrNull()?.takeIf { it > 0 }
+                }
+                line.startsWith(TAG_ENDLIST) -> ended = true
+                line.startsWith(TAG_STREAM_INF) -> master = true
+                declaresEncryption(line) -> encrypted = true
+                line.startsWith(TAG_MAP) -> init = true
+                line.startsWith(TAG_BYTERANGE) -> ranges = true
+            }
+        }
+
+        fun build() = HlsMediaPlaylist(
+            segmentUris = uris,
+            mediaSequence = sequence ?: 0,
+            targetDurationSeconds = duration,
+            hasEndList = ended,
+            isMaster = master,
+            hasEncryptedSegments = encrypted,
+            hasInitSegment = init,
+            hasByteRanges = ranges,
+            hasPlaylistHeader = first == PLAYLIST_HEADER,
         )
     }
 

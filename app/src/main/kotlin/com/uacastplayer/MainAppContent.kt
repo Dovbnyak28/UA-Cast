@@ -22,6 +22,7 @@ import com.uacastplayer.ui.platform.launchOrLogAbsence
 import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
+import com.uacastplayer.player.PlayerRequest
 import com.uacastplayer.parentalcontrol.PlayerChannelAccess
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.premium.PremiumSectionState
@@ -30,6 +31,7 @@ import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.premium.LocalPremiumNotice
 import com.uacastplayer.ui.premium.rememberFeatureGate
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.player.PlayerRequestViewModel
 import java.time.LocalDate
 
 /**
@@ -47,6 +49,9 @@ internal fun MainAppContent(
     onFinish: () -> Unit,
 ) {
     val playlistState by viewModel.playlistState.collectAsStateWithLifecycle()
+    val parentalReady by viewModel.parentalControlReady.collectAsStateWithLifecycle()
+    val lockedKeys by viewModel.lockedChannelKeys.collectAsStateWithLifecycle()
+    val sessionUnlocked by viewModel.parentalControlUnlocked.collectAsStateWithLifecycle()
 
     val pickPlaylistFile = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -58,7 +63,9 @@ internal fun MainAppContent(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::importBackupFrom) }
 
-    var playerRequest by remember { mutableStateOf<PlayerRequest?>(null) }
+    val requestOwner = androidx.lifecycle.viewmodel.compose.viewModel<PlayerRequestViewModel>()
+    val playerRequest by requestOwner.request.collectAsStateWithLifecycle()
+    var pendingOpen by remember { mutableStateOf<PlayerRequest?>(null) }
     var playerContainerState by rememberSaveable {
         mutableStateOf(PlayerContainerStateMachine.State.CLOSED)
     }
@@ -78,7 +85,12 @@ internal fun MainAppContent(
             keyOf = FavoriteKey::of,
             sessionUnlocked = viewModel.parentalControlUnlocked.value,
         )
-        playerRequest = PlayerRequest(playable.channels, playable.startIndex)
+        val request = PlayerRequest(playable.channels, playable.startIndex)
+        requestOwner.open(request)
+        // Update the saveable marker at the user action, not in an effect of playerRequest.
+        // On recreation the in-memory request starts null; an effect mirroring that null used
+        // to erase the restored marker before the restoration effect below could consume it.
+        savedPlayerRequest = request.toSavedRequest()
         playerContainerState =
             PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Open)
     }
@@ -89,15 +101,17 @@ internal fun MainAppContent(
     val requireParentalControlUnlock = rememberParentalControlGate(viewModel)
 
     val openPlayer = { channels: List<M3uChannel>, startIndex: Int ->
-        val channel = channels.getOrNull(startIndex)
-        if (channel != null && viewModel.isChannelLocked(channel)) {
-            requireParentalControlUnlock { openPlayerReal(channels, startIndex) }
-        } else {
-            openPlayerReal(channels, startIndex)
-        }
+        pendingOpen = PlayerRequest(channels, startIndex)
+    }
+    OpenPlayerWhenReady(
+        pendingOpen, parentalReady, { pendingOpen = null }, viewModel::isChannelLocked, requireParentalControlUnlock,
+    ) { request ->
+        openPlayerReal(request.channels, request.startIndex)
     }
     val closePlayer = {
-        playerRequest = null
+        pendingOpen = null
+        requestOwner.close()
+        savedPlayerRequest = null
         playerContainerState = PlayerContainerStateMachine.State.CLOSED
         // Home's "continue watching" card only needs to catch up here, not reactively -
         // AppPreferences isn't itself observable, and refreshing on every write from
@@ -118,49 +132,37 @@ internal fun MainAppContent(
     // a one-shot "switch to Channels" signal, not a persisted tab selection.
     var focusChannelsToken by remember { mutableIntStateOf(0) }
 
-    // Mirrors the live playerRequest into the Bundle-safe form on every open/close, so the saved
-    // state always reflects "what would need re-opening if the process dies right now" without
-    // ever holding the channel list itself.
-    LaunchedEffect(playerRequest) {
-        val request = playerRequest
-        savedPlayerRequest = if (request == null) {
-            null
-        } else {
-            request.channels.getOrNull(request.startIndex)?.let { channel ->
-                SavedPlayerRequest(FavoriteKey.of(channel), request.startIndex)
-            }
-        }
-    }
-
     // After process death, playerRequest starts out null but savedPlayerRequest may still hold the
     // channel that was playing - re-open it once the restored playlist has loaded far enough to
     // find it by key. The original sub-list (e.g. a specific group or search results) isn't
     // recoverable, so this falls back to the full flat playlist; if the channel is gone entirely,
     // the saved marker is dropped and the player just stays closed.
-    LaunchedEffect(savedPlayerRequest, playlistState.groups) {
+    LaunchedEffect(savedPlayerRequest, playlistState.groups, parentalReady, lockedKeys, sessionUnlocked) {
         val saved = savedPlayerRequest ?: return@LaunchedEffect
-        if (playerRequest != null || !playlistState.hasChannels) return@LaunchedEffect
+        if (requestOwner.request.value != null || !playlistState.hasChannels || !parentalReady) return@LaunchedEffect
         // Off the main thread: FavoriteKey.of is a SHA-256 per channel without a tvg-id, and this
         // scans the entire flattened playlist - tens of thousands of channels on a large provider
         // list, at exactly the moment the app is being restored and the user is waiting on a frame.
-        val (flatChannels, index) = withPlaylistCpu {
-            val flat = playlistState.channels
-            flat to flat.indexOfFirst { FavoriteKey.of(it) == saved.channelKey }
+        val restored = withPlaylistCpu {
+            // PlayerViewModel persists every switch, while AppViewModel's StateFlow is refreshed
+            // only when the player closes. Prefer that synchronous value so a process death or a
+            // rotation after Next/Previous restores the channel that was actually on screen, not
+            // the channel that originally opened this PlayerHost.
+            val restoreKey = saved.preferredChannelKey(viewModel.persistedLastWatchedChannelKey())
+            PlayerChannelAccess.forRestore(
+                playlistState.channels, restoreKey, lockedKeys, FavoriteKey::of, sessionUnlocked, parentalReady,
+            )
         }
+        // A new open/close can arrive during the CPU hop. It must win over this old restore.
+        if (savedPlayerRequest != saved || requestOwner.request.value != null) return@LaunchedEffect
         // A locked channel must not come back on its own - see
         // PlayerChannelAccess.mayRestoreAfterProcessDeath. This path reopens the player without a
         // tap, so it is the one place the PIN gate can never have run.
-        val mayRestore = index >= 0 && PlayerChannelAccess.mayRestoreAfterProcessDeath(
-            channel = flatChannels[index],
-            lockedKeys = viewModel.lockedChannelKeys.value,
-            keyOf = FavoriteKey::of,
-            sessionUnlocked = viewModel.parentalControlUnlocked.value,
-        )
-        if (mayRestore) {
+        if (restored != null) {
             // playerContainerState is itself rememberSaveable, so the Expanded/Collapsed layout the
             // user left it in normally survives process death on its own - this only needs to force
             // it open if that somehow didn't happen (fresh state).
-            playerRequest = PlayerRequest(flatChannels, index)
+            requestOwner.open(PlayerRequest(restored.channels, restored.startIndex))
             if (playerContainerState == PlayerContainerStateMachine.State.CLOSED) {
                 playerContainerState = PlayerContainerStateMachine.reduce(
                     playerContainerState,
@@ -236,12 +238,16 @@ internal fun MainAppContent(
             section = premiumSection,
         )
         CompositionLocalProvider(
+            com.uacastplayer.ui.epg.LocalEpgRefresh provides viewModel.epgController::refresh,
             LocalFeatureGate provides premiumUi.gate,
             LocalPremiumNotice provides premiumUi.notice,
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 ScaffoldZone(
                     viewModel = viewModel,
+                    miniPlayerVisible = PlayerContainerStateMachine.isMiniPlayerVisible(
+                        playerContainerState, hasRequest = playerRequest != null,
+                    ),
                     playlistState = playlistState,
                     guidedTourDestination = guidedTourState.currentStep?.destination,
                     currentLanguage = currentLanguage,

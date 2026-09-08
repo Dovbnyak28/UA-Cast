@@ -32,4 +32,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "UA Cast Player"
 include(":app")
+include(":core")
 include(":baselineprofile")

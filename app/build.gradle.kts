@@ -10,6 +10,39 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+/** Local opt-in fixture. The generator is not cacheable; shipping variants never register it. */
+@org.gradle.work.DisableCachingByDefault(because = "The local playlist may contain private stream credentials")
+abstract class GenerateTemporaryPlaylistAssets : DefaultTask() {
+    @get:InputFile
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val playlistFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val directory = outputDirectory.get().asFile
+        check(directory.isDirectory || directory.mkdirs()) { "Cannot create temporary fixture directory" }
+        val target = directory.resolve("temporary-playlist.m3u8")
+        val source = playlistFile.orNull?.asFile
+        if (source == null) {
+            // Removing the opt-in must also remove a fixture left by an earlier debug build.
+            check(!target.exists() || target.delete()) { "Cannot remove previous temporary fixture" }
+        } else {
+            check(source.length() in 1..8_388_608) { "Temporary playlist must be between 1 byte and 8 MiB" }
+            source.copyTo(target, overwrite = true)
+        }
+    }
+}
+
+val temporaryPlaylistAssets = tasks.register<GenerateTemporaryPlaylistAssets>("generateTemporaryPlaylistAssets") {
+    val localPath = providers.gradleProperty("uacast.temporaryPlaylist")
+    if (localPath.isPresent) playlistFile.set(layout.projectDirectory.file(localPath.get()))
+    outputDirectory.set(layout.buildDirectory.dir("generated/temporaryPlaylistAssets/debug"))
+}
+
 /**
  * Whether this invocation is producing an Android App Bundle rather than APKs - see the `splits`
  * block, which has to switch itself off when it is.
@@ -239,6 +272,12 @@ private val abiVersionCodeOffsets = mapOf<String?, Int>(
 
 androidComponents {
     onVariants { variant ->
+        if (variant.name == "debug") {
+            variant.sources.assets?.addGeneratedSourceDirectory(
+                temporaryPlaylistAssets,
+                GenerateTemporaryPlaylistAssets::outputDirectory,
+            )
+        }
         // The Baseline Profile plugin creates these variants after the Android extension is
         // evaluated, so a conventional static source-set lookup cannot see them. Register through
         // the Variant API at the point they actually exist. The same registration also attaches
@@ -269,6 +308,7 @@ baselineProfile {
 }
 
 dependencies {
+    implementation(project(":core"))
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(libs.androidx.core.ktx)

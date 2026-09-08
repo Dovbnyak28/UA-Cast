@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,9 +67,9 @@ private const val VOLUME_VALUE_WIDTH_DP = 44
 /**
  * "Other devices (DLNA)" bottom sheet: runs [discoverDevices] once per appearance and lists what it
  * finds. There is no live-updating device list - an SSDP search is a fixed ~3s window (see
- * `dlna/SsdpDiscovery`), not a subscription, so re-opening the sheet is how the user retries.
+ * `dlna/SsdpDiscovery`), not a subscription. The explicit search action starts a new window.
  *
- * Separate from the Chromecast button next to it ([com.uacastplayer.ui.player.PlayerCastButton]),
+ * Reached from the shared TV picker, separately from [com.uacastplayer.ui.player.PlayerCastButton],
  * because the two protocols reach different hardware: Cast covers Google devices, DLNA covers the
  * Samsung/LG/Sony sets that have no Cast receiver at all.
  */
@@ -82,8 +85,9 @@ fun DlnaDeviceSheet(
 ) {
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
     var searching by remember { mutableStateOf(true) }
+    var searchGeneration by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(searchGeneration) {
         searching = true
         devices = discoverDevices()
         searching = false
@@ -97,6 +101,7 @@ fun DlnaDeviceSheet(
             onDeviceSelected = onDeviceSelected,
             onStopCasting = onStopCasting,
             onVolumeChange = onVolumeChange,
+            onRetryDiscovery = { searchGeneration++ },
         )
     }
 }
@@ -117,10 +122,12 @@ internal fun DlnaDeviceSheetContent(
     onDeviceSelected: (DlnaDevice) -> Unit,
     onStopCasting: () -> Unit,
     onVolumeChange: (Int) -> Unit,
+    onRetryDiscovery: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = ScreenHPadding)
             .padding(bottom = GapL),
         verticalArrangement = Arrangement.spacedBy(GapS),
@@ -132,7 +139,7 @@ internal fun DlnaDeviceSheetContent(
         )
 
         val connected = connectionState.connectedDevice
-        connected?.let { device ->
+        connected?.takeUnless { connectionState.isConnecting }?.let { device ->
             DlnaConnectedRow(deviceName = device.friendlyName, onStop = onStopCasting)
             // Absent, not disabled, when the renderer has no RenderingControl service or the
             // first read failed: a greyed-out slider sitting at zero would say the TV is muted.
@@ -146,6 +153,17 @@ internal fun DlnaDeviceSheetContent(
         // what it is already playing. What stays listed is what the user could switch *to*.
         val switchable = devices.filter { it != connected }
         when {
+            connectionState.isConnecting -> {
+                Text(
+                    stringResource(
+                        R.string.dlna_connecting_device,
+                        connectionState.connectingDevice?.friendlyName.orEmpty(),
+                    ),
+                    style = BodyText,
+                    color = UaTheme.palette.labelPrimary,
+                )
+                TextButton(onClick = onStopCasting) { Text(stringResource(R.string.common_cancel)) }
+            }
             searching -> DlnaSearchingRow()
             // Only when there is nothing at all. With a device connected, an empty remainder
             // means "nothing else to switch to", and "No devices found" directly under a card
@@ -167,6 +185,21 @@ internal fun DlnaDeviceSheetContent(
                     )
                 }
             }
+        }
+        connectionState.failedDevice?.let { device ->
+            Text(
+                stringResource(R.string.dlna_connection_failed, device.friendlyName),
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+            )
+            val gate = LocalFeatureGate.current
+            TextButton(onClick = gate.guard(Feature.DLNA) { onDeviceSelected(device) }) {
+                Text(stringResource(R.string.common_retry))
+            }
+        }
+        if (!searching && !connectionState.isConnecting) {
+            Text(stringResource(R.string.dlna_network_hint), style = Caption, color = UaTheme.palette.labelSecondary)
+            TextButton(onClick = onRetryDiscovery) { Text(stringResource(R.string.dlna_search_again)) }
         }
     }
 }

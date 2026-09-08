@@ -17,6 +17,7 @@ import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchasesAsync
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.BillingProvider
@@ -25,7 +26,6 @@ import com.uacastplayer.premium.billing.PurchaseRecord
 import com.uacastplayer.premium.billing.PurchaseResult
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,8 +75,8 @@ class PlayBillingProvider(
     private val _connection = MutableStateFlow(BillingConnectionState.DISCONNECTED)
     override val connection: StateFlow<BillingConnectionState> = _connection.asStateFlow()
 
-    private val _purchases = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
-    override val purchases: StateFlow<Set<PurchaseRecord>> = _purchases.asStateFlow()
+    private val purchaseSnapshots = BillingPurchaseSnapshots()
+    override val purchases: StateFlow<Set<PurchaseRecord>?> = purchaseSnapshots.state
 
     /**
      * Play's own objects, kept because its API needs them back.
@@ -91,22 +91,23 @@ class PlayBillingProvider(
 
     /** Completed by [purchasesUpdatedListener]; Play reports the outcome of a purchase through the
      * client-wide listener rather than through the call that started it. */
-    @Volatile private var pendingPurchase: CompletableDeferred<PurchaseResult>? = null
+    private val pendingPurchase = PendingPurchaseCoordinator()
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
         val records = purchases.orEmpty().mapNotNull(::toRecord)
         if (records.isNotEmpty()) {
-            _purchases.value = _purchases.value + records
+            purchaseSnapshots.notePurchases(records)
+            onReconnected()
         }
-        val pending = pendingPurchase
-        pending?.complete(outcomeOf(result, records.firstOrNull()))
-        // A late callback can race with a newer purchase attempt after the timeout path. Only
-        // clear the exact deferred this callback completed; never discard the replacement slot.
-        if (pendingPurchase === pending) pendingPurchase = null
+        pendingPurchase.complete(records) { outcomeOf(result, it) }
     }
 
     private fun onReconnected() {
-        scope.launch { refreshPurchases() }
+        scope.launch {
+            runCatchingNonFatal { refreshPurchases() }.onFailure { error ->
+                AppLog.w(TAG) { "Ownership refresh failed: ${error.javaClass.simpleName}" }
+            }
+        }
     }
 
     private val client: BillingClient = BillingClient.newBuilder(appContext)
@@ -237,26 +238,20 @@ class PlayBillingProvider(
             .setProductDetailsParamsList(listOf(paramsBuilder.build()))
             .build()
 
-        val deferred = CompletableDeferred<PurchaseResult>()
-        // The one being replaced is answered before it is dropped. Play reports a purchase through
-        // the client-wide listener rather than through the call that started it, so there is exactly
-        // one slot: a second attempt overwriting the first left that first coroutine awaiting a
-        // reply now addressed to the second, and it would never arrive. The UI is what stops two
-        // attempts from overlapping (see AppViewModel.isPurchasing); this is what stops a
-        // coroutine being stranded if one ever does.
-        pendingPurchase?.complete(PurchaseResult.Cancelled)
-        pendingPurchase = deferred
-        val launch = client.launchBillingFlow(activity, flow)
+        val attempt = pendingPurchase.begin(product.id) ?: return PurchaseResult.Unavailable
+        val launch = runCatchingNonFatal { client.launchBillingFlow(activity, flow) }.getOrElse { error ->
+            pendingPurchase.launchFailed(attempt)
+            AppLog.w(TAG) { "Purchase sheet launch failed: ${error.javaClass.simpleName}" }
+            return PurchaseResult.Unavailable
+        }
         if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
-            if (pendingPurchase === deferred) pendingPurchase = null
+            pendingPurchase.launchFailed(attempt)
             return outcomeOf(launch, null)
         }
-        val result = PurchaseCallbackTimeoutPolicy.await(deferred)
-        // A timed-out Play callback may still arrive later and refresh _purchases. Do not leave a
-        // completed purchase slot behind for the next attempt, but never clear a newer attempt
-        // that raced with this one.
-        if (pendingPurchase === deferred) pendingPurchase = null
-        return result
+        // Timeout/caller cancellation ends the UI wait, not Play's outstanding flow. Replacing
+        // this slot would deliver its late result to a different purchase. A missing callback
+        // therefore requires reopening the app before another checkout; restore remains available.
+        return PurchaseCallbackTimeoutPolicy.await(attempt.result)
     }
 
     override suspend fun restore(): PurchaseResult {
@@ -277,16 +272,10 @@ class PlayBillingProvider(
      * at all, and Play fails these for ordinary reasons: the service restarting mid-call, a
      * network that dropped between connecting and asking. Returning an empty list there would
      * confiscate features somebody paid for, on a bad connection, silently - the exact failure the
-     * cached license exists to prevent, arriving through a different door. So a failed query leaves
-     * the last known answer standing.
+     * cached license exists to prevent, arriving through a different door. A failed query therefore
+     * publishes Unknown; the repository retains the cached entitlement until a complete answer.
      */
-    private suspend fun refreshPurchases(): Set<PurchaseRecord>? {
-        val subscriptions = queryOwned(PremiumProducts.TYPE_SUBSCRIPTION) ?: return null
-        val oneTime = queryOwned(PremiumProducts.TYPE_ONE_TIME) ?: return null
-        val owned = (subscriptions + oneTime).toSet()
-        _purchases.value = owned
-        return owned
-    }
+    private suspend fun refreshPurchases(): Set<PurchaseRecord>? = purchaseSnapshots.refresh(::queryOwned)
 
     /** What this account owns of [type], or null when the store could not be asked. */
     private suspend fun queryOwned(type: String): List<PurchaseRecord>? {

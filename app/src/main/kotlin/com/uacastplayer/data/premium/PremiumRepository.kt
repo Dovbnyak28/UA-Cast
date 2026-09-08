@@ -154,7 +154,7 @@ class PremiumRepository(
                         // "you own nothing" - acting on it would revoke a paid feature offline.
                         if (state == BillingConnectionState.CONNECTED) {
                             noteWhetherAnythingIsForSale(observedProvider)
-                            applyPurchases(purchases, observedProvider)
+                            if (purchases != null) applyPurchases(purchases, observedProvider)
                         }
                     }.onFailure { error ->
                         // A single SDK/storage callback must not retire the permanent observer.

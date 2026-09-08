@@ -40,7 +40,10 @@ internal fun IconSourcesSection(
     onDismissError: () -> Unit,
 ) {
     var newSourceUrl by rememberSaveable { mutableStateOf("") }
-    Column(modifier = Modifier.padding(top = 16.dp)) {
+    Column(
+        modifier = Modifier.settingsSearchTarget(stringResource(R.string.settings_icon_sources_title))
+            .padding(top = 16.dp),
+    ) {
         Text(
             text = stringResource(R.string.settings_icon_sources_title),
             style = BodyRegular,
