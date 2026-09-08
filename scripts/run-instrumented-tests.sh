@@ -77,22 +77,27 @@ adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE.test" >/dev/null 2>&1 || t
 echo "Running $RUNNER"
 report_dir="app/build/reports/instrumented"
 mkdir -p "$report_dir"
-runner_status=0
-output=$(adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1) || runner_status=$?
-printf '%s\n' "$output" | tee "$report_dir/runner.txt"
-if [ "$runner_status" -ne 0 ]; then
-    echo "run-instrumented-tests: adb runner command failed with status $runner_status" >&2
-    exit "$runner_status"
+# Stream progress to CI and disk instead of retaining everything in a command substitution.
+# If the emulator hangs or the job is cancelled, the completed tests remain diagnosable.
+set +e
+adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1 | tee "$report_dir/runner.txt"
+runner_statuses=("${PIPESTATUS[@]}")
+set -e
+if [ "${runner_statuses[0]}" -ne 0 ]; then
+    echo "run-instrumented-tests: adb runner command failed with status ${runner_statuses[0]}" >&2
+    exit "${runner_statuses[0]}"
+fi
+if [ "${runner_statuses[1]}" -ne 0 ]; then
+    echo "run-instrumented-tests: failed to persist the instrumentation report" >&2
+    exit "${runner_statuses[1]}"
 fi
 
-# Do not use grep -q with pipefail: grep may exit early on a long runner output, causing the
-# producer to receive SIGPIPE and making a real failure look like a non-match.
-if printf '%s' "$output" | grep "FAILURES!!!" >/dev/null; then
+if grep -q "FAILURES!!!" "$report_dir/runner.txt"; then
     echo "run-instrumented-tests: the suite reported failures" >&2
     exit 1
 fi
 
-if ! printf '%s' "$output" | grep -E "OK \([0-9]+ tests?\)" >/dev/null; then
+if ! grep -Eq "OK \([0-9]+ tests?\)" "$report_dir/runner.txt"; then
     echo "run-instrumented-tests: the runner never reported a passing result - treating as failure" >&2
     exit 1
 fi

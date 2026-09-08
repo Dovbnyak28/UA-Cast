@@ -140,6 +140,21 @@ The targeted proxy/DLNA tests, Detekt and Android test compilation passed locall
 The final CI run must validate the complete updated candidate; neither rejected
 run is presented as a passing release gate.
 
+The third run, `34265294523`, passed debug tests, quality, packaging, and API 30/36,
+but exposed a brittle release-JVM shutdown assertion in `CastProxySessionTest`.
+It required the TCP handshake itself to fail immediately after `stop()`. Inspection
+of JDK 21's `NioSocketImpl.close()` confirms that descriptor disposal can wait for
+an in-progress `accept()` to unwind. The test now sends an HTTP request and requires
+connection refusal/reset or EOF with zero response bytes. Its one-second read
+deadline still fails on a hang, and any HTTP response also fails. No production
+shutdown delay, retry, timeout increase, or blocking thread join was introduced.
+The instrumentation launcher now streams runner output to CI and its report as it
+arrives, preserving partial progress if a device hangs. Both adb and report-writer
+exit codes are checked; JUnit failure and missing-summary checks remain mandatory.
+The emulator step has a 30-minute cap within the existing 45-minute job budget so
+partial reports can still upload on step timeout. The shutdown regression passed
+20 separate local JVM runs; all four runner-status contract cases passed.
+
 The four reproduced audit findings are fixed and covered by regressions. This is not
 a claim that no unknown bugs exist. Real Hisense VIDAA/Chromecast interoperability,
 Google Play purchase/restore flows, Play Console acceptance, and large-scale behavior
