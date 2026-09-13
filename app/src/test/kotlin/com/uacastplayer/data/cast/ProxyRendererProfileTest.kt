@@ -238,7 +238,7 @@ class ProxyRendererProfileTest {
 
         val (body, contentType) = fetch(origin.urlFor("/live.m3u8"), unwrap = true, remux = false, flatten = true)
 
-        assertEquals("video/mp2t", contentType)
+        assertEquals("video/vnd.dlna.mpeg-tts", contentType)
         assertFalse("the renderer must not see a manifest", body.contains("#EXTM3U"))
         assertEquals("both segments must be fetched", 1, origin.hitsFor("/a.ts"))
         assertEquals(1, origin.hitsFor("/b.ts"))
@@ -307,6 +307,22 @@ class ProxyRendererProfileTest {
         client.newCall(request).execute().use { return it.header("Content-Type") }
     }
 
+    private fun headResponseHeaders(originUrl: String): Map<String, String> {
+        val server = ProxyServer(OkHttpClient()).also { proxy = it }
+        server.start(
+            sessionToken = "session",
+            host = "127.0.0.1",
+            remuxEnabled = false,
+            unwrapWrapperPlaylists = true,
+            flattenHlsToStream = true,
+        )
+        val resourceId = server.registerPlaylist(originUrl)
+        val request = Request.Builder().url(server.buildLocalUrl(resourceId)).head().build()
+        client.newCall(request).execute().use { response ->
+            return response.headers.names().associateWith { name -> response.header(name).orEmpty() }
+        }
+    }
+
     /**
      * A HEAD has to name the content type the GET will actually produce.
      *
@@ -359,8 +375,46 @@ class ProxyRendererProfileTest {
     fun `a head on a channel that can be flattened names the stream`() {
         val origin = hlsOrigin()
 
-        assertEquals("video/mp2t", headContentType(origin.urlFor("/live.m3u8")))
+        assertEquals("video/vnd.dlna.mpeg-tts", headContentType(origin.urlFor("/live.m3u8")))
         assertEquals("a HEAD must not pull any media", 0, origin.hitsFor("/a.ts"))
+    }
+
+    @Test
+    fun `flattened HLS advertises the DLNA live streaming profile`() {
+        val origin = hlsOrigin()
+
+        val server = ProxyServer(OkHttpClient()).also { proxy = it }
+        server.start(
+            sessionToken = "session",
+            host = "127.0.0.1",
+            remuxEnabled = false,
+            unwrapWrapperPlaylists = true,
+            flattenHlsToStream = true,
+        )
+        val resourceId = server.registerPlaylist(origin.urlFor("/live.m3u8"))
+        val request = Request.Builder().url(server.buildLocalUrl(resourceId)).build()
+        client.newCall(request).execute().use { response ->
+            assertEquals("video/vnd.dlna.mpeg-tts", response.header("Content-Type"))
+            assertEquals("Streaming", response.header("transferMode.dlna.org"))
+            assertTrue(response.header("contentFeatures.dlna.org").orEmpty().contains("DLNA.ORG_OP=00"))
+            assertEquals("chunked", response.header("Transfer-Encoding"))
+            assertEquals("keep-alive", response.header("Connection")?.lowercase())
+            assertTrue(response.header("Content-Length") == null)
+            response.body.bytes()
+        }
+    }
+
+    @Test
+    fun `flattened HLS HEAD advertises DLNA features without a body`() {
+        val origin = hlsOrigin()
+
+        val headers = headResponseHeaders(origin.urlFor("/live.m3u8"))
+
+        assertEquals("video/vnd.dlna.mpeg-tts", headers["Content-Type"])
+        assertEquals("Streaming", headers["transferMode.dlna.org"])
+        assertTrue(headers["contentFeatures.dlna.org"].orEmpty().contains("DLNA.ORG_OP=00"))
+        assertTrue(headers["Content-Length"] == null)
+        assertEquals(0, origin.hitsFor("/a.ts"))
     }
 
     /**
@@ -379,7 +433,7 @@ class ProxyRendererProfileTest {
 
         val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
 
-        assertEquals("video/mp2t", contentType)
+        assertEquals("video/vnd.dlna.mpeg-tts", contentType)
         assertEquals(1, origin.hitsFor("/a.ts"))
     }
 
@@ -410,7 +464,7 @@ class ProxyRendererProfileTest {
 
         val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
 
-        assertEquals("video/mp2t", contentType)
+        assertEquals("video/vnd.dlna.mpeg-tts", contentType)
         assertEquals(1, origin.hitsFor("/modern.m3u8"))
         assertEquals(1, origin.hitsFor("/live.m3u8"))
         assertEquals(1, origin.hitsFor("/a.ts"))

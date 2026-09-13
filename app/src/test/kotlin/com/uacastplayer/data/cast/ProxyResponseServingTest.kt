@@ -78,6 +78,29 @@ class ProxyResponseServingTest {
     }
 
     @Test
+    fun `chunked output frames payload and terminates the live response`() {
+        val output = ByteArrayOutputStream()
+        val chunked = ChunkedOutputStream(output)
+
+        chunked.write("hello".toByteArray())
+        chunked.finish()
+
+        assertEquals("5\r\nhello\r\n0\r\n\r\n", output.toString(Charsets.ISO_8859_1.name()))
+    }
+
+    @Test
+    fun `chunked output finish is idempotent`() {
+        val output = ByteArrayOutputStream()
+        val chunked = ChunkedOutputStream(output)
+
+        chunked.write(byteArrayOf(1, 2))
+        chunked.finish()
+        chunked.finish()
+
+        assertEquals("2\r\n\u0001\u0002\r\n0\r\n\r\n", output.toString(Charsets.ISO_8859_1.name()))
+    }
+
+    @Test
     fun `failed streaming write is not reported as delivered`() {
         val output = FailAfterFirstWriteOutputStream()
         val body = serving.countedBody(output)

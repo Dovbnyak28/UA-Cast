@@ -490,24 +490,29 @@ internal class ProxyHttpServer(
     private data class RequestReadBudget(var totalBytes: Int = 0)
     private enum class LineReadStatus { CONTINUE, COMPLETE, INVALID }
 
-    // Deliberately always "close" rather than keep-alive: correctly framing a reused connection
-    // needs the response's exact length known up front for every case (Content-Length here is
-    // reliable, but a chunked or close-delimited upstream body is not), and a framing mistake
-    // hangs or corrupts the next request on that socket - worse for a Chromecast receiver than
-    // the extra per-segment TCP handshake this trades away. Revisit only with a real framing
-    // layer (chunked-encoding support included), not a quick loop around handleConnection.
+    // Responses default to "close" rather than keep-alive: correctly reusing a connection needs
+    // the response's exact framing known up front for every ordinary route. The one exception is
+    // the DLNA flattened live route, which supplies its own chunked framing and explicitly asks
+    // for keep-alive. Revisit other routes only with a real framing layer, not a quick loop around
+    // handleConnection.
     //
     // CORS on every response is not optional: the Default Media Receiver is a web app, so every
     // playlist/segment fetch it makes is a cross-origin XHR - without Access-Control-Allow-Origin
     // the receiver's browser blocks the response *after* it arrives, and playback dies within
     // seconds as IDLE/ERROR (playedMs=0) even though this server behaved perfectly. Field
     // signature: direct cast fails (origin without CORS), proxy fallback then fails identically.
-    fun writeHeaders(output: OutputStream, status: Int, statusText: String, headers: Map<String, String>) {
+    fun writeHeaders(
+        output: OutputStream,
+        status: Int,
+        statusText: String,
+        headers: Map<String, String>,
+        connection: String = "close",
+    ) {
         val builder = StringBuilder("HTTP/1.1 $status $statusText\r\n")
         for ((key, value) in headers) builder.append("$key: $value\r\n")
         builder.append("Access-Control-Allow-Origin: *\r\n")
         builder.append("Access-Control-Expose-Headers: Content-Length, Content-Range\r\n")
-        builder.append("Connection: close\r\n\r\n")
+        builder.append("Connection: $connection\r\n\r\n")
         output.write(builder.toString().toByteArray(Charsets.ISO_8859_1))
         // Flushed here rather than left to each caller, because the caller that forgets loses the
         // whole response silently and nothing anywhere says so. [handleConnection] wraps the socket

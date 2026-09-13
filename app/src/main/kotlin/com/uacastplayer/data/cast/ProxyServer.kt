@@ -17,6 +17,10 @@ private const val HTTP_BAD_GATEWAY = 502
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 private const val HTTP_OK = 200
 private const val HTTP_NOT_FOUND = 404
+private const val DLNA_STREAM_CONTENT_TYPE = "video/vnd.dlna.mpeg-tts"
+private const val DLNA_TRANSFER_MODE = "Streaming"
+private const val DLNA_CONTENT_FEATURES =
+    "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=8D500000000000000000000000000000"
 
 /**
  * Local HLS proxy: rewrites and re-serves an HLS stream so a Cast receiver that can't (or won't)
@@ -480,12 +484,12 @@ class ProxyServer(
      *
      * Returns false when nothing was written, which is the whole reason the headers are deferred
      * into a callback: until the first segment's bytes exist there is still a working fallback,
-     * and a response that has already claimed `video/mp2t` cannot take it. Encrypted segments,
+     * and a response that has already claimed the DLNA MPEG-TS type cannot take it. Encrypted segments,
      * fragmented MP4 and an unreachable playlist all land here.
      *
-     * A HEAD is answered with the headers alone. A DLNA renderer commonly HEADs a url before
-     * committing to it, and replaying a live channel to answer that would fetch media nobody is
-     * going to watch.
+     * A HEAD is answered with the DLNA profile headers alone. A renderer commonly HEADs a url
+     * before committing to it, and replaying a live channel to answer that would fetch media nobody
+     * is going to watch.
      */
     private fun serveFlattenedHls(
         resourceId: String,
@@ -494,7 +498,16 @@ class ProxyServer(
         method: String,
         output: OutputStream,
     ): Boolean {
-        val headers = mapOf("Content-Type" to "video/mp2t")
+        // VIDAA's native DLNA renderer probes live resources with HEAD/Range and is stricter than
+        // a normal HTTP client about the media profile. The MIME and DLNA feature headers describe
+        // the actual continuous TS response; they are intentionally limited to this DLNA-only
+        // flattened route so Chromecast keeps receiving ordinary HLS responses.
+        val headers = mapOf(
+            "Content-Type" to DLNA_STREAM_CONTENT_TYPE,
+            "transferMode.dlna.org" to DLNA_TRANSFER_MODE,
+            "contentFeatures.dlna.org" to DLNA_CONTENT_FEATURES,
+            "Cache-Control" to "no-store, no-cache, must-revalidate",
+        )
         // Captured, then compared: the server being up is not enough on its own, because start()
         // stops and rebinds for a genuinely new session and would read as running again. A loop
         // left over from the previous session has to stop, and its token is what says it is left
@@ -508,12 +521,21 @@ class ProxyServer(
             isRunning = { httpServer.isRunning && sessionToken == servingSession },
         )
         if (!trackFlattenedStream(stream, servingSession)) return false
+        val chunked = if (method == "GET") ChunkedOutputStream(output) else null
+        var responseCommitted = false
         return try {
             val wrote = if (method != "GET") {
                 announceFlattened(stream, output, headers)
             } else {
-                stream.writeTo(responseServing.countedBody(output)) {
-                    responseServing.writeHeaders(output, HTTP_OK, "OK", headers)
+                stream.writeTo(responseServing.countedBody(checkNotNull(chunked))) {
+                    responseCommitted = true
+                    responseServing.writeHeaders(
+                        output = output,
+                        status = HTTP_OK,
+                        statusText = "OK",
+                        headers = headers + ("Transfer-Encoding" to "chunked"),
+                        connection = "keep-alive",
+                    )
                 }
             }
             if (method == "GET" && wrote) {
@@ -521,6 +543,7 @@ class ProxyServer(
             }
             wrote
         } finally {
+            if (method == "GET" && responseCommitted) runCatching { chunked?.finish() }
             stream.stop()
             synchronized(flattenedStreamsLock) {
                 flattenedStreams.remove(stream)
@@ -543,7 +566,7 @@ class ProxyServer(
     /**
      * Answers a HEAD, which asks what a resource is rather than for it.
      *
-     * This used to answer "video/mp2t" for every channel without checking. Falling back to the
+     * This used to answer a TS MIME for every channel without checking. Falling back to the
      * manifest is routine on this path - encrypted segments, an fMP4 init, a variant that cannot be
      * read - so a renderer that HEADs first was told MPEG-TS and then handed an M3U8 on the GET,
      * which is the exact mismatch [serveUpstreamPlaylist]'s own KDoc records going into the field:

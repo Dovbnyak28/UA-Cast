@@ -18,7 +18,7 @@ permissions:
 
 env:
   UACAST_VERSION_CODE: ${{ github.run_number }}
-  UACAST_VERSION_NAME: 0.9.3.${{ github.run_number }}
+  UACAST_VERSION_NAME: 0.9.4.${{ github.run_number }}
 
 jobs:
   unit:

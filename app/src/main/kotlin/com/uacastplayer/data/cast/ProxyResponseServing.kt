@@ -61,8 +61,9 @@ internal class ProxyResponseServing(
         status: Int,
         statusText: String,
         headers: Map<String, String>,
+        connection: String = "close",
     ) {
-        httpServer.writeHeaders(output, status, statusText, headers)
+        httpServer.writeHeaders(output, status, statusText, headers, connection)
     }
 
     fun writePlaylistText(text: String, method: String, output: OutputStream) {
@@ -244,5 +245,48 @@ private class DeliveredBodyOutputStream(
     override fun write(bytes: ByteArray, offset: Int, length: Int) {
         out.write(bytes, offset, length)
         deliveredBytes.addAndGet(length.toLong())
+    }
+}
+
+/**
+ * Frames a live response without buffering it to discover a length up front.
+ *
+ * Hisense VIDAA's native DLNA renderer is known to probe a resource with a range request and then
+ * expect a streaming response. A live HLS replay has no final length, so close-delimited HTTP is
+ * ambiguous to strict renderers: a normal close looks like a failed transfer. Chunked framing
+ * keeps the connection alive while preserving the streaming, bounded-memory behaviour of the
+ * flattened route. The wrapped stream deliberately does not close its delegate; the socket owner
+ * closes that after the response handler returns.
+ */
+internal class ChunkedOutputStream(private val output: OutputStream) : OutputStream() {
+
+    private var finished = false
+
+    override fun write(byte: Int) {
+        write(byteArrayOf(byte.toByte()))
+    }
+
+    override fun write(bytes: ByteArray, offset: Int, length: Int) {
+        check(!finished) { "chunked response is already finished" }
+        if (length == 0) return
+        output.write(Integer.toHexString(length).toByteArray(Charsets.ISO_8859_1))
+        output.write(CRLF)
+        output.write(bytes, offset, length)
+        output.write(CRLF)
+    }
+
+    /** Writes the zero-size terminator required by HTTP/1.1 chunked framing. */
+    fun finish() {
+        if (finished) return
+        output.write(ZERO_CHUNK)
+        output.flush()
+        finished = true
+    }
+
+    override fun flush() = output.flush()
+
+    private companion object {
+        val CRLF = byteArrayOf('\r'.code.toByte(), '\n'.code.toByte())
+        val ZERO_CHUNK = "0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
     }
 }

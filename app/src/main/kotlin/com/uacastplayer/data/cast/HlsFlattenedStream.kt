@@ -288,8 +288,27 @@ internal class HlsFlattenedStream(
                 true
             }
         }
+    } catch (e: ReceiverStreamException) {
+        // A renderer closing its socket is a normal end-of-consumer signal, not an origin outage.
+        // Keeping this separate from the origin path is what makes a VIDAA capture actionable.
+        AppLog.d(TAG) {
+            "Flattened stream receiver disconnected: ${e.cause?.javaClass?.simpleName ?: e.javaClass.simpleName}, " +
+                "delivered=${bytesWritten}B"
+        }
+        false
+    } catch (e: OriginStreamException) {
+        AppLog.w(TAG) {
+            "Flattened stream origin failed: ${e.cause?.javaClass?.simpleName ?: e.javaClass.simpleName}, " +
+                "delivered=${bytesWritten}B"
+        }
+        false
     } catch (e: IOException) {
-        AppLog.d(TAG) { "Flattened stream ended: ${e.javaClass.simpleName}" }
+        // Call setup failures (DNS, connect timeout, TLS) do not pass through copyToClient and are
+        // therefore origin-side by definition. Keep the generic fallback for an unexpected I/O
+        // implementation so a new stream adapter cannot make this path crash.
+        AppLog.w(TAG) {
+            "Flattened stream origin request failed: ${e.javaClass.simpleName}, delivered=${bytesWritten}B"
+        }
         false
     }
 
@@ -318,27 +337,74 @@ internal class HlsFlattenedStream(
         onFirstBytes: () -> Unit,
     ): Boolean {
         val chunk = ByteArray(CHUNK_BYTES)
-        var buffered = 0
-        var reachedEnd = false
-        while (buffered <= TS_PACKET_SIZE_BYTES && !reachedEnd) {
-            val read = input.read(chunk, buffered, chunk.size - buffered)
-            if (read == -1) reachedEnd = true else if (read > 0) buffered += read
-        }
-        if (reachedEnd || !MpegTsSniffer.looksLikeMpegTs(chunk, buffered)) return false
+        val buffered = readInitialBytes(input, chunk)
+        if (buffered == null || !MpegTsSniffer.looksLikeMpegTs(chunk, buffered)) return false
 
-        onFirstBytes()
-        output.write(chunk, 0, buffered)
+        writeInitialBytes(output, chunk, checkNotNull(buffered), onFirstBytes)
         bytesWritten += buffered
+        bytesWritten += copyRemaining(input, output, chunk)
+        flushReceiver(output)
+        return true
+    }
+
+    private fun readInitialBytes(input: java.io.InputStream, chunk: ByteArray): Int? {
+        var buffered = 0
+        while (buffered <= TS_PACKET_SIZE_BYTES) {
+            val read = try {
+                input.read(chunk, buffered, chunk.size - buffered)
+            } catch (error: IOException) {
+                throw OriginStreamException(error)
+            }
+            if (read == -1) return null
+            if (read > 0) buffered += read
+        }
+        return buffered
+    }
+
+    private fun writeInitialBytes(
+        output: OutputStream,
+        chunk: ByteArray,
+        buffered: Int,
+        onFirstBytes: () -> Unit,
+    ) {
+        try {
+            onFirstBytes()
+            output.write(chunk, 0, buffered)
+        } catch (error: IOException) {
+            throw ReceiverStreamException(error)
+        }
+    }
+
+    private fun copyRemaining(
+        input: java.io.InputStream,
+        output: OutputStream,
+        chunk: ByteArray,
+    ): Long {
+        var copied = 0L
         while (true) {
-            val read = input.read(chunk)
-            if (read == -1) break
+            val read = try {
+                input.read(chunk)
+            } catch (error: IOException) {
+                throw OriginStreamException(error)
+            }
+            if (read == -1) return copied
             if (read > 0) {
-                output.write(chunk, 0, read)
-                bytesWritten += read
+                try {
+                    output.write(chunk, 0, read)
+                } catch (error: IOException) {
+                    throw ReceiverStreamException(error)
+                }
+                copied += read
             }
         }
-        output.flush()
-        return true
+    }
+
+    private fun flushReceiver(output: OutputStream) {
+        try {
+            output.flush()
+        } catch (error: IOException) {
+            throw ReceiverStreamException(error)
+        }
     }
 
     private fun newCall(url: String) = httpClient.newCall(
@@ -366,6 +432,11 @@ internal class HlsFlattenedStream(
     }
 
     private fun stillRunning(): Boolean = !stopped && isRunning()
+
+    /** Distinguishes an origin read/connect failure from a renderer that abandoned its socket. */
+    private class OriginStreamException(cause: IOException) : IOException(cause)
+
+    private class ReceiverStreamException(cause: IOException) : IOException(cause)
 
     private companion object {
         const val TS_PACKET_SIZE_BYTES = 188

@@ -29,7 +29,10 @@ Two consequences of "same proxy" that are easy to get wrong, and were:
 
 The renderer profile is deliberately different from Chromecast's: raw MPEG-TS stays a continuous
 stream (`remuxEnabled=false`), single-URL wrapper playlists are unwrapped, and a real HLS channel is
-replayed as one continuous `video/mp2t` response (`flattenHlsToStream=true`). This is the direct fix
+replayed as one continuous DLNA MPEG-TS response (`flattenHlsToStream=true`). The response uses the
+standard `video/vnd.dlna.mpeg-tts` MIME, `transferMode.dlna.org: Streaming`, matching
+`contentFeatures.dlna.org` attributes, and HTTP/1.1 chunked framing for the unknown-length live
+body. This is the direct fix
 for a Hisense VIDAA field capture where the set fetched one manifest, no segments, refused
 `SetAVTransportURI`, and displayed "Archivo no compatible". A master playlist is probed in order,
 with a bounded eight-variant budget, so an unsupported fMP4/encrypted first variant does not hide a

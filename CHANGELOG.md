@@ -3,8 +3,17 @@
 Versions are marked in three places, which must move together: the local defaults in
 `app/build.gradle.kts`, `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
 changelog. CI appends its run number to both build values (see `docs/RELEASING.md`), so a CI
-artifact reads `0.9.3.<run>` with a `versionCode` of the run number - the values below are what a
+artifact reads `0.9.4.<run>` with a `versionCode` of the run number - the values below are what a
 local build produces.
+
+## 0.9.4
+
+`versionCode` 13. DLNA compatibility fix for Hisense VIDAA live playback.
+
+- Added the standard DLNA MPEG-TS MIME and live-stream feature headers to flattened HLS responses.
+- Framed flattened live responses with HTTP/1.1 chunked transfer and a keep-alive connection so
+  VIDAA can distinguish an active stream from a failed close-delimited response.
+- Added regression coverage for DLNA GET/HEAD headers, chunk framing and terminator handling.
 
 ## 0.9.3
 
