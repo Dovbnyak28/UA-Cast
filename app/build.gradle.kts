@@ -73,8 +73,8 @@ android {
         targetSdk = 36
         // CI overrides these via -Puacast.versionCode/-Puacast.versionName; the defaults below
         // are what local (non-CI) builds get.
-        versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 13
-        versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.4"
+        versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 14
+        versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.5"
         buildConfigField("boolean", "SELF_UPDATER_ENABLED", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

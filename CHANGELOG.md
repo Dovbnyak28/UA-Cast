@@ -3,8 +3,15 @@
 Versions are marked in three places, which must move together: the local defaults in
 `app/build.gradle.kts`, `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
 changelog. CI appends its run number to both build values (see `docs/RELEASING.md`), so a CI
-artifact reads `0.9.4.<run>` with a `versionCode` of the run number - the values below are what a
+artifact reads `0.9.5.<run>` with a `versionCode` of the run number - the values below are what a
 local build produces.
+
+## 0.9.5
+
+`versionCode` 14. More usable DLNA volume control.
+
+- Reworked the volume row into a dedicated card with a full-width 48dp touch target, clearer TV-volume label, and a stable percentage chip.
+- Kept the renderer-reported volume as the source of truth while dragging and after SOAP updates.
 
 ## 0.9.4
 

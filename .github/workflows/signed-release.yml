@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       version_name:
-        description: User-visible versionName (for example 0.9.4)
+        description: User-visible versionName (for example 0.9.5)
         required: true
         type: string
 
