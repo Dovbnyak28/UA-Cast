@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,9 +60,6 @@ import kotlin.math.roundToInt
 
 private const val SPINNER_SIZE_DP = 18
 private const val SPINNER_STROKE_DP = 2
-
-/** Wide enough for "100%" at the largest font scale this app supports. */
-private const val VOLUME_VALUE_WIDTH_DP = 44
 
 /**
  * "Other devices (DLNA)" bottom sheet: runs [discoverDevices] once per appearance and lists what it
@@ -287,15 +284,44 @@ private fun DlnaVolumeRow(volume: Int, onVolumeChange: (Int) -> Unit) {
     LaunchedEffect(volume) { dragged = null }
     val shown = dragged ?: volume.toFloat()
     val label = stringResource(R.string.dlna_volume)
+    val valueLabel = stringResource(R.string.dlna_volume_value, shown.roundToInt())
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(RadiusItem))
+            .background(UaTheme.palette.surface1)
             .padding(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(GapS),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Volume, contentDescription = null, tint = UaTheme.palette.labelSecondary)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(GapS),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                AppIcons.Volume,
+                contentDescription = null,
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = label,
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = valueLabel,
+                style = Caption,
+                color = UaTheme.palette.azure,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(UaTheme.palette.surface2)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
         Slider(
             value = shown,
             onValueChange = { dragged = it },
@@ -304,19 +330,14 @@ private fun DlnaVolumeRow(volume: Int, onVolumeChange: (Int) -> Unit) {
             colors = SliderDefaults.colors(
                 thumbColor = UaTheme.palette.azure,
                 activeTrackColor = UaTheme.palette.azure,
+                inactiveTrackColor = UaTheme.palette.overlayHighlight,
             ),
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
+                // Keep the visual track compact while preserving the full 48dp touch target.
+                .height(48.dp)
+                .padding(bottom = 2.dp)
                 .semantics { contentDescription = label },
-        )
-        // Fixed width, so the row does not shift sideways under the finger as the number goes from
-        // one digit to three.
-        Text(
-            text = stringResource(R.string.dlna_volume_value, shown.roundToInt()),
-            style = Caption,
-            color = UaTheme.palette.labelSecondary,
-            maxLines = 1,
-            modifier = Modifier.width(VOLUME_VALUE_WIDTH_DP.dp),
         )
     }
 }
