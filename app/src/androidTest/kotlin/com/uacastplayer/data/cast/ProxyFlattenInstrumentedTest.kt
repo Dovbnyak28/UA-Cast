@@ -153,7 +153,7 @@ class ProxyFlattenInstrumentedTest {
         val request = startProxy(origin.urlFor("/live.m3u8")).build()
 
         client.newCall(request).execute().use { response ->
-            assertEquals("video/mp2t", response.header("Content-Type"))
+            assertEquals("video/vnd.dlna.mpeg-tts", response.header("Content-Type"))
             assertEquals(tsBytes().size, response.body.bytes().size)
         }
         assertEquals(
@@ -167,7 +167,7 @@ class ProxyFlattenInstrumentedTest {
 
     /**
      * A channel listed but not deliverable must give the route back. Committing the response to
-     * "video/mp2t" before a single byte is known to exist leaves the renderer holding an endless
+     * the DLNA MPEG-TS MIME before a single byte is known to exist leaves the renderer holding an endless
      * empty body, with the manifest route - which might have worked - already unreachable.
      */
     @Test
@@ -188,7 +188,8 @@ class ProxyFlattenInstrumentedTest {
      *
      * Both halves failed on this path. The bytes sat in a `BufferedOutputStream` that nothing ever
      * flushed while the socket was closed underneath it, so the renderer got a connection that
-     * opened and shut with nothing on it; and the answer, once it arrived, was "video/mp2t" for
+     * opened and shut with nothing on it; and the answer, once it arrived, was the DLNA MPEG-TS
+     * MIME for
      * every channel whether or not the GET could produce one.
      */
     @Test
@@ -201,7 +202,7 @@ class ProxyFlattenInstrumentedTest {
 
         client.newCall(request).execute().use { response ->
             assertEquals(HTTP_OK, response.code)
-            assertEquals("video/mp2t", response.header("Content-Type"))
+            assertEquals("video/vnd.dlna.mpeg-tts", response.header("Content-Type"))
         }
         assertEquals("a HEAD must not pull any media", 0, origin.hitsFor("/a.ts"))
     }
