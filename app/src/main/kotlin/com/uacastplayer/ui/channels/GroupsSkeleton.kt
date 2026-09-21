@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.core.settings.ChannelLayout
 import androidx.compose.runtime.State
 import com.uacastplayer.ui.components.SkeletonBadge
 import com.uacastplayer.ui.components.SkeletonBlock

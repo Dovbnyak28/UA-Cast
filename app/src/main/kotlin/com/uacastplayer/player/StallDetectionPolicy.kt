@@ -1,6 +1,6 @@
 package com.uacastplayer.player
 
-import com.uacastplayer.data.prefs.BufferSize
+import com.uacastplayer.core.settings.BufferSize
 
 /**
  * Detects a "silent" stall - a live stream that stopped delivering bytes without ever breaking the

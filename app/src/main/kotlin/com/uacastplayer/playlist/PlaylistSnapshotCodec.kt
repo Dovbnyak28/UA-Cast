@@ -1,5 +1,7 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.io.presizeFor
+import com.uacastplayer.core.io.readCountField
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
@@ -59,9 +61,13 @@ object PlaylistSnapshotCodec {
         val sourceFingerprint = input.readUTF()
         val sourceUrl = input.readNullableUTF()
         val savedAtEpochMillis = input.readLong()
-        val skippedLineCount = input.readInt()
-        val channelCount = input.readInt()
-        val channels = ArrayList<M3uChannel>(channelCount)
+        val skippedLineCount = input.readCountField()
+        // No ceiling to check against - a playlist is as long as the provider makes it, and the
+        // only bound is PlaylistUrlLoader's 8MB on the document. So the count is checked for sense
+        // and the list is grown rather than sized from the file; see readCountField for why a
+        // count invented here would be worse than none.
+        val channelCount = input.readCountField()
+        val channels = ArrayList<M3uChannel>(presizeFor(channelCount))
         repeat(channelCount) {
             val displayName = input.readUTF()
             val streamUrl = input.readUTF()
@@ -80,9 +86,13 @@ object PlaylistSnapshotCodec {
     private fun decodeV1(input: DataInputStream): PlaylistSnapshot {
         val sourceFingerprint = input.readUTF()
         val savedAtEpochMillis = input.readLong()
-        val skippedLineCount = input.readInt()
-        val channelCount = input.readInt()
-        val channels = ArrayList<M3uChannel>(channelCount)
+        val skippedLineCount = input.readCountField()
+        // No ceiling to check against - a playlist is as long as the provider makes it, and the
+        // only bound is PlaylistUrlLoader's 8MB on the document. So the count is checked for sense
+        // and the list is grown rather than sized from the file; see readCountField for why a
+        // count invented here would be worse than none.
+        val channelCount = input.readCountField()
+        val channels = ArrayList<M3uChannel>(presizeFor(channelCount))
         repeat(channelCount) {
             val displayName = input.readUTF()
             val streamUrl = input.readUTF()

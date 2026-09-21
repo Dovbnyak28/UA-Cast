@@ -22,6 +22,10 @@ data class BackupFavorite(
     val tvgId: String?,
     val groupTitle: String?,
     val addedAtMillis: Long,
+    val tvgName: String? = null,
+    val tvgLogo: String? = null,
+    val userAgent: String? = null,
+    val referrer: String? = null,
 )
 
 /**
@@ -44,5 +48,12 @@ data class BackupData(
     val settings: BackupSettings,
 )
 
+/** One-shot user-visible outcome of writing a backup through Android's document provider. */
+enum class BackupExportResult { SUCCESS, FAILURE }
+
 /** Shown to the user after a successful import (see AppViewModel.importBackupFrom). */
-data class BackupImportSummary(val importedSourceCount: Int, val importedFavoriteCount: Int)
+data class BackupImportSummary(
+    val importedSourceCount: Int,
+    val importedFavoriteCount: Int,
+    val persistenceFailed: Boolean = false,
+)

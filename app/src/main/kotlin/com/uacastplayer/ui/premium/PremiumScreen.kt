@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,13 +17,19 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.premium.PremiumSectionState
+import androidx.annotation.StringRes
+import com.uacastplayer.premium.PremiumAvailability
+import com.uacastplayer.premium.StoreAbsence
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyRegular
+import com.uacastplayer.ui.theme.CardPadding
 import com.uacastplayer.ui.theme.Caption
+import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.raisedSurface
 
 /**
  * What premium is, what it costs, and how to get back something already paid for.
@@ -56,31 +63,45 @@ fun PremiumContent(
             )
         }
 
-        for (feature in PremiumLabels.SOLD) {
-            FeatureRow(feature = feature, unlocked = feature in section.entitlements.unlocked)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .raisedSurface(
+                    RoundedCornerShape(RadiusCard),
+                    UaTheme.palette.surface1,
+                    edgeColor = UaTheme.palette.hairline,
+                    shadow = false,
+                )
+                .padding(CardPadding),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            for (feature in PremiumLabels.SOLD) {
+                FeatureRow(feature = feature, unlocked = feature in section.entitlements.unlocked)
+            }
         }
 
         if (section.products.isEmpty()) {
             // The honest state until this app is published: there is no store to buy from. Saying
             // so beats an empty list under a heading that promises prices.
-            //
-            // Restore is hidden here rather than shown and disabled, and that is the point: with no
-            // store to ask, tapping it could only ever do nothing, and a button that does nothing is
-            // the defect - not the missing message explaining why it did nothing.
             Text(
-                text = stringResource(R.string.premium_no_store),
+                text = stringResource(noStoreMessage(section)),
                 style = Caption,
                 color = UaTheme.palette.labelSecondary,
                 modifier = Modifier.padding(top = 4.dp),
             )
         } else {
             for (product in section.products) {
-                TierRow(product = product, onPurchase = { section.onPurchase(product) })
+                TierRow(
+                    product = product,
+                    onPurchase = { section.onPurchase(product) },
+                    enabled = !section.isPurchasing,
+                )
             }
 
             SecondaryButton(
                 text = stringResource(R.string.premium_restore),
                 onClick = section.onRestore,
+                enabled = !section.isPurchasing,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
 
@@ -114,6 +135,20 @@ private fun outcomeLine(outcome: PurchaseResult?): String? = when (outcome) {
     // already in the log for a diagnostics report, and the user needs the next step, not the cause.
     is PurchaseResult.Failed -> stringResource(R.string.premium_purchase_failed)
 }
+
+/**
+ * The reason there is nothing to buy, in the reader's terms.
+ *
+ * One sentence used to cover all of them, and it said the app was unpublished - which becomes a
+ * falsehood the day it is published, told to the people least able to argue with it.
+ */
+@StringRes
+private fun noStoreMessage(section: PremiumSectionState): Int =
+    when (StoreAbsence.of(PremiumAvailability.STORE_IS_LIVE, section.connection, hasProducts = false)) {
+        StoreAbsence.DEVICE_HAS_NO_STORE -> R.string.premium_no_play_on_device
+        StoreAbsence.STORE_OFFERS_NOTHING -> R.string.premium_store_offers_nothing
+        else -> R.string.premium_no_store
+    }
 
 @Composable
 private fun statusLine(section: PremiumSectionState, nowMillis: Long): String {
@@ -162,9 +197,17 @@ private fun FeatureRow(feature: Feature, unlocked: Boolean) {
 }
 
 @Composable
-private fun TierRow(product: BillingProduct, onPurchase: () -> Unit) {
+private fun TierRow(product: BillingProduct, onPurchase: () -> Unit, enabled: Boolean = true) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = false,
+            )
+            .padding(horizontal = CardPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -172,10 +215,11 @@ private fun TierRow(product: BillingProduct, onPurchase: () -> Unit) {
             text = product.title,
             style = BodyRegular,
             color = UaTheme.palette.labelPrimary,
-            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            modifier = Modifier.weight(1f).padding(end = 10.dp),
         )
         // The price comes from the store, never from a string resource: Play returns it in the
         // user's own currency with regional pricing and any running promotion already applied.
-        SecondaryButton(text = product.formattedPrice, onClick = onPurchase)
+        SecondaryButton(text = product.formattedPrice, onClick = onPurchase, enabled = enabled)
     }
 }

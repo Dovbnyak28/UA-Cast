@@ -12,11 +12,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.uacastplayer.R
 
-// How strongly the wallpaper texture shows through under the theme-color gradient - low enough
-// that card surfaces and text (drawn on top by every screen) keep the same contrast as the old
-// flat gradient; this only textures the empty space around them.
+// Keep the dark texture opaque enough to retain its own black levels, then mute it with the
+// theme-coloured overlay below. Lowering the image alpha itself reveals a much lighter intermediate
+// layer on some renderers, which is the opposite of the subdued form background we need.
 private const val WALLPAPER_ALPHA = 0.85f
-private const val OVERLAY_ALPHA = 0.3f
+private const val OVERLAY_ALPHA = 0.55f
 
 /**
  * The screen background: a decorative wallpaper image (soft ambient glow + grain, see
@@ -27,8 +27,11 @@ private const val OVERLAY_ALPHA = 0.3f
  * premium "spotlight" feel.
  */
 @Composable
-fun Modifier.appBackground(): Modifier {
+fun Modifier.appBackground(plain: Boolean = false): Modifier {
     val palette = UaTheme.palette
+    // Forms/settings keep the theme's colors without competing wallpaper. Return before allocating
+    // brushes or loading artwork; Midnight uses the same flat path for all destinations.
+    if (plain || !palette.wallpaperTexture) return background(palette.void)
     // Screen-root modifiers like this recompose along with whatever else is unstable in the
     // caller's composable (see block 2.4) - remembered so a Brush isn't reallocated on every one
     // of those recompositions when the palette itself hasn't actually changed.
@@ -46,10 +49,6 @@ fun Modifier.appBackground(): Modifier {
     // active theme's own accent, so Azure gets a blue-tinted glow instead of a gold one that
     // would otherwise fight its cool palette.
     val wallpaperTint = remember(palette.azure) { ColorFilter.tint(palette.azure, BlendMode.Color) }
-    // Midnight opts out entirely (see UaPalette.wallpaperTexture): its background is true black, and
-    // painting a near-black texture over it would light every pixel the theme exists to leave off.
-    // Its overlayBrush is void-to-void, so what is left here really is a flat fill.
-    if (!palette.wallpaperTexture) return background(palette.void)
     return background(palette.void)
         .paint(
             painterResource(R.drawable.app_wallpaper),

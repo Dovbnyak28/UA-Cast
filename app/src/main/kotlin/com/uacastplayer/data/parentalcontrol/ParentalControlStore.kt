@@ -2,6 +2,8 @@ package com.uacastplayer.data.parentalcontrol
 
 import android.content.Context
 import androidx.core.util.AtomicFile
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.json.JsonDecodeResult
 import com.uacastplayer.data.writeSafely
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.parentalcontrol.LockedChannelsCodec
@@ -9,7 +11,7 @@ import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 private const val TAG = "ParentalControlStore"
@@ -18,14 +20,23 @@ private const val TAG = "ParentalControlStore"
  * [com.uacastplayer.favorites.FavoriteKey]) so they survive an app restart - deliberately not
  * scoped per playlist source, since [com.uacastplayer.favorites.FavoriteKey] is itself already
  * stable across sources (same reasoning [com.uacastplayer.data.favorites.FavoritesStore] uses). */
-class ParentalControlStore(context: Context) : LockedChannelsStorage {
+class ParentalControlStore(
+    context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) : LockedChannelsStorage {
 
     private val atomicFile = AtomicFile(File(context.filesDir, "parental_control_locked_channels.json"))
 
-    override suspend fun load(): Set<String> = withContext(Dispatchers.IO) {
+    override suspend fun load(): Set<String> = withContext(ioDispatcher) {
         try {
             val bytes = atomicFile.readFully()
-            LockedChannelsCodec.decode(String(bytes, Charsets.UTF_8))
+            when (val decoded = LockedChannelsCodec.decodeResult(String(bytes, Charsets.UTF_8))) {
+                is JsonDecodeResult.Success -> decoded.value
+                is JsonDecodeResult.Malformed -> {
+                    AppLog.w(TAG) { "Locked channels data malformed, starting empty: ${decoded.failureType}" }
+                    emptySet()
+                }
+            }
         } catch (_: FileNotFoundException) {
             emptySet()
         } catch (e: IOException) {
@@ -39,7 +50,7 @@ class ParentalControlStore(context: Context) : LockedChannelsStorage {
 
     /** A lost write here fails safe in the direction that matters: a lock that did not persist is
      * re-applied by the user, while an unlock that did not persist leaves the channel locked. */
-    override suspend fun save(keys: Set<String>) = withContext(Dispatchers.IO) {
+    override suspend fun save(keys: Set<String>) = withContext(ioDispatcher) {
         atomicFile.writeSafely(TAG, "Locked channels") { stream ->
             stream.write(LockedChannelsCodec.encode(keys).toByteArray(Charsets.UTF_8))
         }

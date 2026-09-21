@@ -48,6 +48,8 @@ object AvTransportSoapBuilder {
 
     fun stopEnvelope(): String = envelope("Stop", "<InstanceID>0</InstanceID>")
 
+    fun getTransportInfoEnvelope(): String = envelope("GetTransportInfo", "<InstanceID>0</InstanceID>")
+
     fun soapAction(action: String): String = "\"$AV_TRANSPORT_SERVICE_TYPE#$action\""
 
     fun didlLite(mediaUrl: String, title: String): String =

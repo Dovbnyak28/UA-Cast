@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.uacastplayer.ui.theme.DurRing
+import com.uacastplayer.ui.theme.DUR_RING
 
 /** How far past the button's own edge the ring travels before it has fully faded. */
 private const val RING_MAX_GROWTH = 0.42f
@@ -38,23 +38,34 @@ private val RingStrokeWidth = 1.5.dp
  */
 @Composable
 fun Modifier.liveRing(active: Boolean, color: Color): Modifier {
-    if (!active) return this
-
-    val transition = rememberInfiniteTransition(label = "liveRing")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(DurRing, easing = LinearEasing)),
-        label = "liveRingPulse",
-    )
-    val stroke = with(LocalDensity.current) { RingStrokeWidth.toPx() }
-
-    return this.drawBehind {
-        val baseRadius = size.minDimension / 2f
-        drawCircle(
-            color = color.copy(alpha = RING_START_ALPHA * (1f - progress)),
-            radius = baseRadius * (1f + RING_MAX_GROWTH * progress),
-            style = Stroke(width = stroke),
-        )
+    return if (!active) {
+        this
+    } else {
+        val stroke = with(LocalDensity.current) { RingStrokeWidth.toPx() }
+        if (!animationsAllowed()) {
+            this.drawBehind {
+                drawCircle(
+                    color = color.copy(alpha = RING_START_ALPHA),
+                    radius = size.minDimension / 2f,
+                    style = Stroke(width = stroke),
+                )
+            }
+        } else {
+            val transition = rememberInfiniteTransition(label = "liveRing")
+            val progress by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(DUR_RING, easing = LinearEasing)),
+                label = "liveRingPulse",
+            )
+            this.drawBehind {
+                val baseRadius = size.minDimension / 2f
+                drawCircle(
+                    color = color.copy(alpha = RING_START_ALPHA * (1f - progress)),
+                    radius = baseRadius * (1f + RING_MAX_GROWTH * progress),
+                    style = Stroke(width = stroke),
+                )
+            }
+        }
     }
 }

@@ -1,37 +1,26 @@
 package com.uacastplayer.data.cast
 
-import com.uacastplayer.cast.CastCompatibilityPolicy
-import com.uacastplayer.cast.CastCompatibilityVerdict
-import com.uacastplayer.cast.TsProgramInfoParser
-import com.uacastplayer.diagnostics.CastRouteKind
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.core.cast.CastRouteKind
 import com.uacastplayer.log.AppLog
-import com.uacastplayer.playlist.BoundedReadResult
-import com.uacastplayer.playlist.BoundedTextReader
-import com.uacastplayer.proxy.M3u8Rewriter
-import com.uacastplayer.proxy.MpegTsSniffer
-import com.uacastplayer.proxy.PlaylistDetector
 import com.uacastplayer.proxy.PlaylistUnwrapPolicy
-import com.uacastplayer.proxy.RawTsRemuxActivation
 import com.uacastplayer.proxy.RemuxHandoffPolicy
 import java.io.IOException
-import java.io.InputStream
 import java.io.OutputStream
-import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicLong
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 
 private const val TAG = "ProxyServer"
-private const val MAX_PLAYLIST_BYTES = 4 * 1024 * 1024
-private const val PLAYLIST_SNIFF_BYTES = 16L
-private const val TS_PROBE_BYTES = 128L * 1024
 private const val HTTP_BAD_GATEWAY = 502
 private const val HTTP_SERVICE_UNAVAILABLE = 503
-
-/** How an upstream response is to be served, decided from the response itself rather than from
- * the resource's registered type - see `decideRoute`. */
-private enum class UpstreamRoute { PLAYLIST, REMUX, PASSTHROUGH }
+private const val HTTP_OK = 200
+private const val HTTP_NOT_FOUND = 404
+private const val DLNA_STREAM_CONTENT_TYPE = "video/vnd.dlna.mpeg-tts"
+private const val DLNA_TRANSFER_MODE = "Streaming"
+private const val DLNA_CONTENT_FEATURES =
+    "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=8D500000000000000000000000000000"
 
 /**
  * Local HLS proxy: rewrites and re-serves an HLS stream so a Cast receiver that can't (or won't)
@@ -39,14 +28,19 @@ private enum class UpstreamRoute { PLAYLIST, REMUX, PASSTHROUGH }
  * `/hls/<sessionToken>/<resourceId>`, `resourceId = SHA-256("type:url")`. Only GET/HEAD are
  * served; headers are capped at 16KB; the resource map is LRU-bounded to 512 entries.
  *
- * A facade over three collaborators, each with its own file: [ProxyHttpServer] (sockets, request
- * parsing, response writing), [ProxyResourceRegistry] (the resource map, tokens, idempotency) and
- * [RawTsRemuxSession] (one continuous raw-TS reader per active remux). This class owns what's left
- * once those are factored out: session identity (host/token), routing a request to either an
- * existing remux session or a fresh upstream fetch, and the active/draining remux handoff.
+ * A routing facade over four collaborators, each with its own file: [ProxyHttpServer] (sockets and
+ * request parsing), [ProxyResponseServing] (headers, bodies, progress accounting and traffic
+ * rollups), [ProxyResourceRegistry] (the resource map, tokens and idempotency), and
+ * [RawTsRemuxSession] (one continuous raw-TS reader per active remux). This class owns session
+ * identity and decides which upstream/remux route produces a response; it does not write response
+ * bytes itself.
  */
 class ProxyServer(
     private val httpClient: OkHttpClient,
+    /** Injected so the serve rollup's windows can be driven by a test rather than by the clock -
+     * the same seam [com.uacastplayer.app.UpdateController] uses. Declared before
+     * [onRouteAttempted] so that stays the trailing parameter its call site passes as a lambda. */
+    now: () -> Long = System::currentTimeMillis,
     /** Fired once per top-level (channel) resource, the first time this server decides whether it
      * takes the raw-TS remux path or an ordinary rewritten-HLS passthrough - see
      * [fetchAndServeUpstreamResource]. Callers own de-duplication (see
@@ -56,7 +50,17 @@ class ProxyServer(
 ) {
 
     private val resourceRegistry = ProxyResourceRegistry(httpClient)
-    private val httpServer = ProxyHttpServer(onRequest = ::serveRequest)
+    private val httpServer = ProxyHttpServer(
+        onRequest = ::serveRequest,
+        isRequestAuthorized = ::isAuthorizedRequest,
+    )
+    private val responseServing = ProxyResponseServing(httpServer, now)
+    private val flattenedStreamsLock = Any()
+    private val flattenedStreams = mutableSetOf<HlsFlattenedStream>()
+    private var acceptingFlattenedStreams = false
+    private val upstreamCallsLock = Any()
+    private val upstreamCalls = mutableSetOf<Call>()
+    private var acceptingUpstreamCalls = false
 
     // Written from the main thread (start/ensureStarted, reached from CastSessionRepository on
     // Dispatchers.Main.immediate) and read from ProxyHttpServer's pool threads - isSessionToken,
@@ -72,12 +76,31 @@ class ProxyServer(
     @Volatile private var host: String = "127.0.0.1"
     @Volatile private var remuxEnabled = true
 
-    // Deliberately never reset - not by start(), not by stop(). The only consumer
-    // (CastSessionRepository's stall watchdog) reads DELTAS between two ticks, and a reset mid-load
-    // would make a delta negative, i.e. read as "no progress" and fire the very watchdog this
-    // counter exists to keep from firing spuriously. Monotonic for the process lifetime has no such
-    // edge, and a Long cannot realistically wrap here.
-    private val bytesServed = AtomicLong(0)
+    /**
+     * Whether an m3u8 that is really a pointer at one endless stream should be followed to that
+     * stream (see [PlaylistUnwrapPolicy]) rather than rewritten as a playlist.
+     *
+     * Separate from [remuxEnabled], which it used to be read off. They answer different questions:
+     * unwrapping is about *what the origin actually is* - a playlist-shaped pointer is not a
+     * playlist - while remuxing is about what one particular receiver can swallow. Tying them
+     * together meant a receiver that wants no remux also got no unwrap, and so was handed a
+     * manifest whose single "segment" is an endless raw TS.
+     *
+     * That combination is exactly what a DLNA renderer must never be given, and unwrapping is what
+     * turns it into the one thing such a renderer plays best: a continuous MPEG-TS, passed
+     * through untouched.
+     */
+    @Volatile private var unwrapWrapperPlaylists = true
+
+    /**
+     * Whether an HLS channel should be replayed to the client as one continuous MPEG-TS response
+     * instead of being served as a manifest - see [HlsFlattenedStream].
+     *
+     * Off for Chromecast, which reads HLS natively and would only lose adaptive switching by it.
+     * On for DLNA, where a manifest is the one thing most renderers cannot read at all, and where
+     * the alternative is what a Hisense VIDAA answered with "Archivo no compatible".
+     */
+    @Volatile private var flattenHlsToStream = false
 
     /**
      * Starts the server if it isn't already running for this exact `(sessionToken, host)` pair -
@@ -89,30 +112,78 @@ class ProxyServer(
      * its own doc). Only an actual new cast session (a new token) or a host change forces a real
      * [start].
      */
-    fun ensureStarted(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
+    @Synchronized
+    fun ensureStarted(
+        sessionToken: String,
+        host: String,
+        remuxEnabled: Boolean = true,
+        unwrapWrapperPlaylists: Boolean = true,
+        flattenHlsToStream: Boolean = false,
+    ): Int {
         val currentPort = httpServer.port
         val sameSession = this.sessionToken == sessionToken && this.host == host
         if (httpServer.isRunning && currentPort != null && sameSession) {
             this.remuxEnabled = remuxEnabled
+            this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
+            this.flattenHlsToStream = flattenHlsToStream
             return currentPort
         }
-        return start(sessionToken, host, remuxEnabled)
+        return start(sessionToken, host, remuxEnabled, unwrapWrapperPlaylists, flattenHlsToStream)
     }
 
     /** Always tears down and rebinds a fresh socket/port, discarding every resource and remux
      * session - appropriate for an actual new cast session, not a mid-session channel switch (see
      * [ensureStarted], which every caller other than this class's own tests should prefer). */
-    fun start(sessionToken: String, host: String, remuxEnabled: Boolean = true): Int {
+    @Synchronized
+    fun start(
+        sessionToken: String,
+        host: String,
+        remuxEnabled: Boolean = true,
+        unwrapWrapperPlaylists: Boolean = true,
+        flattenHlsToStream: Boolean = false,
+    ): Int {
         stop()
         this.sessionToken = sessionToken
         this.host = host
         this.remuxEnabled = remuxEnabled
-        return httpServer.start()
+        this.unwrapWrapperPlaylists = unwrapWrapperPlaylists
+        this.flattenHlsToStream = flattenHlsToStream
+        val port = httpServer.start()
+        resourceRegistry.openSession()
+        synchronized(flattenedStreamsLock) { acceptingFlattenedStreams = true }
+        synchronized(upstreamCallsLock) { acceptingUpstreamCalls = true }
+        return port
     }
 
+    @Synchronized
     fun stop() {
+        val callsToCancel = synchronized(upstreamCallsLock) {
+            acceptingUpstreamCalls = false
+            upstreamCalls.toList().also { upstreamCalls.clear() }
+        }
+        val streamsToStop = synchronized(flattenedStreamsLock) {
+            acceptingFlattenedStreams = false
+            flattenedStreams.toList().also { flattenedStreams.clear() }
+        }
+        // First, while their worker threads and client sockets still exist: a flattened stream can
+        // be blocked on the upstream socket, which neither shutdownNow() nor closing only the
+        // receiver side is guaranteed to wake.
+        callsToCancel.forEach(Call::cancel)
+        streamsToStop.forEach(HlsFlattenedStream::stop)
         httpServer.stop()
         resourceRegistry.clearAll()
+        // Before the counters go quiet, not after: the window a session ends in is the one a reader
+        // wants most, and without this it would be the one window that never got written down.
+        responseServing.flushRollup()
+        val httpMetrics = httpServer.metricsSnapshot()
+        val rejected = httpMetrics.rejectedPerIp + httpMetrics.rejectedAdmissionQueue +
+            httpMetrics.rejectedResponseQueue + httpMetrics.unauthorizedRequests
+        if (rejected > 0 || httpMetrics.malformedRequests > 0) {
+            AppLog.d(TAG) {
+                "proxy admission: accepted=${httpMetrics.acceptedConnections}, rejected=$rejected, " +
+                    "malformed=${httpMetrics.malformedRequests}"
+            }
+        }
     }
 
     /** Called once the new channel's load is confirmed to have succeeded on the receiver (see
@@ -136,7 +207,7 @@ class ProxyServer(
      * that has not finished yet. Read by [com.uacastplayer.cast.CastStallWatchdogPolicy] to tell a
      * load that is merely slow from one that is genuinely stuck.
      */
-    fun bytesServedToReceiver(): Long = bytesServed.get()
+    fun bytesServedToReceiver(): Long = responseServing.bytesServedToReceiver()
 
     /** @throws IllegalStateException if called while the server isn't running - a caller asking
      * for a URL into a stopped proxy is a bug upstream, not something to paper over with a
@@ -153,37 +224,42 @@ class ProxyServer(
         return "http://$host:$port/hls/$sessionToken/$resourceId/seg$sequence.ts"
     }
 
-    /** Exposed only so tests can verify header inheritance (see [servePlaylist]) without going through a real socket. */
+    /** Exposed only so tests can verify header inheritance (see [servePlaylist]) without going
+     * through a real socket. */
     internal fun resourcesForTesting(): Map<String, ResourceEntry> = resourceRegistry.snapshot()
 
     private fun serveRequest(request: ParsedRequest, output: OutputStream) {
-        val segments = request.path.substringBefore('?').split('/').filter { it.isNotEmpty() }
+        when (val target = ProxyRequestTarget.parse(request.path, sessionToken)) {
+            null -> {
+                responseServing.writeError(output, HTTP_NOT_FOUND, "Not Found")
+                return
+            }
+            is ProxyRequestTarget.RemuxSegment -> {
+                serveRemuxSegment(
+                    resourceId = target.resourceId,
+                    segmentPathPart = target.segmentPathPart,
+                    method = request.method,
+                    output = output,
+                )
+                return
+            }
+            is ProxyRequestTarget.Resource -> serveResource(target.resourceId, request, output)
+        }
+    }
 
-        if (segments.size == 4 && segments[0] == "hls" && isSessionToken(segments[1])) {
-            serveRemuxSegment(
-                resourceId = segments[2],
-                segmentPathPart = segments[3],
-                method = request.method,
-                output = output,
-            )
-            return
-        }
-        if (segments.size != 3 || segments[0] != "hls" || !isSessionToken(segments[1])) {
-            httpServer.writeError(output, 404, "Not Found")
-            return
-        }
-        val resourceId = segments[2]
+    private fun serveResource(resourceId: String, request: ParsedRequest, output: OutputStream) {
         val resource = resourceRegistry.get(resourceId)
         if (resource == null) {
-            // Silent before: a receiver asking for a resource this session never registered (a
-            // stale url from a previous session, or one evicted from the LRU) looked exactly like
-            // no request at all in a log capture.
             AppLog.d(TAG) { "Unknown resource requested: $resourceId" }
-            httpServer.writeError(output, 404, "Not Found")
+            responseServing.writeError(output, HTTP_NOT_FOUND, "Not Found")
             return
         }
         servePlaylistOrMediaResource(resourceId, resource, request, output)
     }
+
+    /** Checked in [ProxyHttpServer]'s admission pool before a request can consume a serving worker. */
+    private fun isAuthorizedRequest(request: ParsedRequest): Boolean =
+        ProxyRequestTarget.parse(request.path, sessionToken) != null
 
     private fun servePlaylistOrMediaResource(
         resourceId: String,
@@ -199,7 +275,7 @@ class ProxyServer(
         // for exactly which sessions are served vs. restarted.
         val existingSession = resourceRegistry.remuxSessionForPlaylist(resourceId)
         if (existingSession != null) {
-            writePlaylistText(existingSession.currentPlaylist(), request.method, output)
+            responseServing.writePlaylistText(existingSession.currentPlaylist(), request.method, output)
         } else {
             fetchAndServeUpstreamResource(resourceId, resource, request, output)
         }
@@ -211,12 +287,41 @@ class ProxyServer(
         request: ParsedRequest,
         output: OutputStream,
     ) {
-        val upstreamRequest = Request.Builder().url(resource.originalUrl).apply {
+        val upstreamRequest = buildUpstreamRequest(resourceId, resource, request, output) ?: return
+        val upstream = fetchUpstreamOrRespondError(upstreamRequest, resourceId, output) ?: return
+        try {
+            routeUpstreamResponse(resourceId, resource, request, output, upstream.response)
+        } finally {
+            releaseUpstreamCall(upstream.call)
+        }
+    }
+
+    /** Provider-controlled URL/header values can be malformed before an OkHttp Call exists. Keep
+     * that failure inside the same 502 boundary as a socket-level upstream failure. */
+    private fun buildUpstreamRequest(
+        resourceId: String,
+        resource: ResourceEntry,
+        request: ParsedRequest,
+        output: OutputStream,
+    ): Request? = try {
+        Request.Builder().url(resource.originalUrl).apply {
             header("User-Agent", resource.userAgent)
             resource.referrer?.let { header("Referer", it) }
             request.headers["range"]?.let { header("Range", it) }
         }.build()
-        val response = fetchUpstreamOrRespondError(upstreamRequest, resourceId, output) ?: return
+    } catch (e: IllegalArgumentException) {
+        AppLog.w(TAG) { "Upstream request for resource $resourceId is invalid: ${e.javaClass.simpleName}" }
+        responseServing.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
+        null
+    }
+
+    private fun routeUpstreamResponse(
+        resourceId: String,
+        resource: ResourceEntry,
+        request: ParsedRequest,
+        output: OutputStream,
+        response: Response,
+    ) {
         if (!response.isSuccessful) {
             AppLog.w(TAG) { "Upstream fetch for resource $resourceId returned ${response.code}" }
         }
@@ -244,42 +349,23 @@ class ProxyServer(
         // OkHttp "connection was leaked" warning against the origin host.
         var handedOff = false
         try {
-            val route = decideRoute(resourceId, resource, response)
+            val decision = ProxyRouteSelector.select(resource, response, remuxEnabled)
+            decision.attemptedRoute?.let { route -> onRouteAttempted(resourceId, route) }
             handedOff = true
             // Each branch owns `response` from here: the playlist and passthrough paths close it
             // through their own use {}, and the remux path passes it to the session's reader.
-            when (route) {
+            when (decision.route) {
                 UpstreamRoute.PLAYLIST ->
                     serveUpstreamPlaylist(resourceId, resource, response, request.method, output)
                 UpstreamRoute.REMUX ->
                     serveRemuxedUpstream(resourceId, response, request.method, output)
                 UpstreamRoute.PASSTHROUGH ->
-                    response.use { servePassthrough(resourceId, it, request.method, output) }
+                    response.use { responseServing.servePassthrough(resourceId, it, request.method, output) }
             }
         } finally {
-            if (!handedOff) runCatching { response.close() }
+            if (!handedOff) runCatchingNonFatal { response.close() }
         }
     }
-
-    /** Everything between acquiring the upstream response and handing it off - i.e. everything
-     * that can still throw while this function owns it. */
-    private fun decideRoute(resourceId: String, resource: ResourceEntry, response: Response): UpstreamRoute {
-        val remuxEligible = resource.type == RESOURCE_TYPE_PLAYLIST
-        val isPlaylist = isUpstreamPlaylist(response)
-        val shouldRemux = !isPlaylist && remuxEligible && shouldRemuxUpstream(response)
-
-        // Only the top-level (channel) resource represents a routing decision worth counting -
-        // a RESOURCE_TYPE_MEDIA fetch is just serving one piece of a playlist already routed.
-        if (remuxEligible) {
-            onRouteAttempted(resourceId, if (shouldRemux) CastRouteKind.PROXY_REMUX else CastRouteKind.PROXY_REWRITE)
-        }
-        return when {
-            isPlaylist -> UpstreamRoute.PLAYLIST
-            shouldRemux -> UpstreamRoute.REMUX
-            else -> UpstreamRoute.PASSTHROUGH
-        }
-    }
-
 
     /** Runs an upstream fetch, turning a network-level failure (refused/reset connection, timeout
      * - never a clean HTTP response) into a logged 502 instead of letting the exception escape
@@ -293,12 +379,29 @@ class ProxyServer(
         request: Request,
         resourceId: String,
         output: OutputStream,
-    ): Response? = try {
-        httpClient.newCall(request).execute()
-    } catch (e: IOException) {
-        AppLog.w(TAG) { "Upstream fetch for resource $resourceId failed: ${e.javaClass.simpleName}" }
-        httpServer.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
-        null
+    ): TrackedUpstreamResponse? {
+        val call = httpClient.newCall(request)
+        if (!trackUpstreamCall(call)) {
+            call.cancel()
+            responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
+            return null
+        }
+        return try {
+            TrackedUpstreamResponse(call, call.execute())
+        } catch (e: IOException) {
+            releaseUpstreamCall(call)
+            AppLog.w(TAG) { "Upstream fetch for resource $resourceId failed: ${e.javaClass.simpleName}" }
+            responseServing.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
+            null
+        }
+    }
+
+    private fun trackUpstreamCall(call: Call): Boolean = synchronized(upstreamCallsLock) {
+        if (acceptingUpstreamCalls && httpServer.isRunning) upstreamCalls.add(call) else false
+    }
+
+    private fun releaseUpstreamCall(call: Call) {
+        synchronized(upstreamCallsLock) { upstreamCalls.remove(call) }
     }
 
     /** Ownership of [response] passes to the remux session's background reader thread - it is
@@ -312,40 +415,10 @@ class ProxyServer(
             httpServer.isRunning
         }
         if (session == null) {
-            httpServer.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
+            responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
         } else {
-            writePlaylistText(session.awaitInitialPlaylist(), method, output)
+            responseServing.writePlaylistText(session.awaitInitialPlaylist(), method, output)
         }
-    }
-
-    private fun isUpstreamPlaylist(response: Response): Boolean =
-        response.body != null &&
-            PlaylistDetector.isPlaylist(response.header("Content-Type"), response.peekBody(PLAYLIST_SNIFF_BYTES).bytes())
-
-    private fun shouldRemuxUpstream(response: Response): Boolean {
-        val tsProbe = if (response.body != null) response.peekBody(TS_PROBE_BYTES).bytes() else ByteArray(0)
-        val looksLikeTs = MpegTsSniffer.looksLikeMpegTs(tsProbe)
-        val verdict = if (looksLikeTs) classifyTsProbe(tsProbe) else CastCompatibilityVerdict.Unknown
-        return RawTsRemuxActivation.shouldActivate(
-            isHlsPlaylist = false,
-            looksLikeMpegTs = looksLikeTs,
-            verdict = verdict,
-            featureEnabled = remuxEnabled,
-        )
-    }
-
-    /** [CastCompatibilityPolicy.classify]/[TsProgramInfoParser.parse] are expected to already
-     * degrade to null/[CastCompatibilityVerdict.Unknown] on malformed input (see both), but this is
-     * still an arbitrary third-party byte stream feeding a hand-written binary parser - any future
-     * defect in that parsing must fail into "don't know, act conservatively" here, not propagate up
-     * through [ProxyHttpServer]'s catch and silently drop the connection with no HTTP response at
-     * all (which looks like a timeout to the receiver, not a clean error). */
-    @Suppress("TooGenericExceptionCaught")
-    private fun classifyTsProbe(tsProbe: ByteArray): CastCompatibilityVerdict = try {
-        CastCompatibilityPolicy.classify(TsProgramInfoParser.parse(tsProbe))
-    } catch (e: Exception) {
-        AppLog.e(TAG, e) { "Failed to classify a probed TS stream's codecs; treating as Unknown" }
-        CastCompatibilityVerdict.Unknown
     }
 
     private fun serveRemuxSegment(resourceId: String, segmentPathPart: String, method: String, output: OutputStream) {
@@ -358,37 +431,16 @@ class ProxyServer(
             // "receiver never asked for segments at all", which a sender-side logcat otherwise
             // can't distinguish - both just look like the receiver idling until IDLE/ERROR.
             AppLog.d(TAG) { "Remux segment miss: $segmentPathPart of $resourceId (session=${session != null})" }
-            httpServer.writeError(output, 404, "Not Found")
+            responseServing.writeError(output, HTTP_NOT_FOUND, "Not Found")
             return
         }
         AppLog.d(TAG) { "Remux segment served: seq=$sequence ${bytes.size}B of $resourceId" }
-        val headers = mapOf("Content-Type" to "video/MP2T", "Content-Length" to bytes.size.toString())
-        httpServer.writeHeaders(output, 200, "OK", headers)
-        // HEAD gets the same headers (Content-Length included) with no body, same as
-        // writePlaylistText/servePassthrough already do for their resources.
-        if (method == "GET") {
-            output.write(bytes)
-            bytesServed.addAndGet(bytes.size.toLong())
-        }
-        output.flush()
+        responseServing.writeRemuxSegment(bytes, method, output)
     }
 
     private fun parseSegmentSequence(segmentPathPart: String): Int? {
         if (!segmentPathPart.startsWith("seg") || !segmentPathPart.endsWith(".ts")) return null
         return segmentPathPart.removePrefix("seg").removeSuffix(".ts").toIntOrNull()
-    }
-
-    private fun writePlaylistText(text: String, method: String, output: OutputStream) {
-        val bytes = text.toByteArray(Charsets.UTF_8)
-        httpServer.writeHeaders(
-            output, 200, "OK",
-            mapOf("Content-Type" to "application/vnd.apple.mpegurl", "Content-Length" to bytes.size.toString()),
-        )
-        if (method == "GET") {
-            output.write(bytes)
-            bytesServed.addAndGet(bytes.size.toLong())
-        }
-        output.flush()
     }
 
     /**
@@ -410,13 +462,128 @@ class ProxyServer(
         output: OutputStream,
     ) {
         val finalUrl = response.request.url.toString()
-        val text = response.use { readPlaylistText(it, output) } ?: return
-        val unwrapTarget = if (remuxEnabled) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
-        if (unwrapTarget == null) {
-            serveRewrittenPlaylist(text, finalUrl, method, output, resource)
-        } else {
-            serveUnwrappedStream(resourceId, resource, unwrapTarget, method, output)
+        val text = response.use { responseServing.readPlaylistText(it, output) } ?: return
+        val unwrapTarget =
+            if (unwrapWrapperPlaylists) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
+        when {
+            unwrapTarget != null -> serveUnwrappedStream(resourceId, resource, unwrapTarget, method, output)
+            // Tried before the rewrite, and falls through to it on any refusal - a receiver that
+            // can read a manifest is no worse off than before, and one that cannot was getting
+            // nothing playable at all. See HlsFlattenedStream.
+            flattenHlsToStream && serveFlattenedHls(resourceId, resource, finalUrl, method, output) -> Unit
+            // Tried before the rewrite, and falls through to it on any refusal - a receiver that
+            // can read a manifest is no worse off than before, and one that cannot was getting
+            // nothing playable at all. See HlsFlattenedStream.
+            else -> serveRewrittenPlaylist(text, finalUrl, method, output, resource)
         }
+    }
+
+    /**
+     * Replays an HLS channel as one continuous MPEG-TS response for a receiver that cannot read a
+     * manifest.
+     *
+     * Returns false when nothing was written, which is the whole reason the headers are deferred
+     * into a callback: until the first segment's bytes exist there is still a working fallback,
+     * and a response that has already claimed the DLNA MPEG-TS type cannot take it. Encrypted segments,
+     * fragmented MP4 and an unreachable playlist all land here.
+     *
+     * A HEAD is answered with the DLNA profile headers alone. A renderer commonly HEADs a url
+     * before committing to it, and replaying a live channel to answer that would fetch media nobody
+     * is going to watch.
+     */
+    private fun serveFlattenedHls(
+        resourceId: String,
+        resource: ResourceEntry,
+        playlistUrl: String,
+        method: String,
+        output: OutputStream,
+    ): Boolean {
+        // VIDAA's native DLNA renderer probes live resources with HEAD/Range and is stricter than
+        // a normal HTTP client about the media profile. The MIME and DLNA feature headers describe
+        // the actual continuous TS response; they are intentionally limited to this DLNA-only
+        // flattened route so Chromecast keeps receiving ordinary HLS responses.
+        val headers = mapOf(
+            "Content-Type" to DLNA_STREAM_CONTENT_TYPE,
+            "transferMode.dlna.org" to DLNA_TRANSFER_MODE,
+            "contentFeatures.dlna.org" to DLNA_CONTENT_FEATURES,
+            "Cache-Control" to "no-store, no-cache, must-revalidate",
+        )
+        // Captured, then compared: the server being up is not enough on its own, because start()
+        // stops and rebinds for a genuinely new session and would read as running again. A loop
+        // left over from the previous session has to stop, and its token is what says it is left
+        // over.
+        val servingSession = sessionToken
+        val stream = HlsFlattenedStream(
+            httpClient = httpClient,
+            playlistUrl = playlistUrl,
+            userAgent = resource.userAgent,
+            referrer = resource.referrer,
+            isRunning = { httpServer.isRunning && sessionToken == servingSession },
+        )
+        if (!trackFlattenedStream(stream, servingSession)) return false
+        val chunked = if (method == "GET") ChunkedOutputStream(output) else null
+        var responseCommitted = false
+        return try {
+            val wrote = if (method != "GET") {
+                announceFlattened(stream, output, headers)
+            } else {
+                stream.writeTo(responseServing.countedBody(checkNotNull(chunked))) {
+                    responseCommitted = true
+                    responseServing.writeHeaders(
+                        output = output,
+                        status = HTTP_OK,
+                        statusText = "OK",
+                        headers = headers + ("Transfer-Encoding" to "chunked"),
+                        connection = "keep-alive",
+                    )
+                }
+            }
+            if (method == "GET" && wrote) {
+                AppLog.d(TAG) { "Flattened HLS stream ended for $resourceId after ${stream.bytesWritten}B" }
+            }
+            wrote
+        } finally {
+            if (method == "GET" && responseCommitted) runCatching { chunked?.finish() }
+            stream.stop()
+            synchronized(flattenedStreamsLock) {
+                flattenedStreams.remove(stream)
+                Unit // cleanup block deliberately has no Boolean result for the surrounding finally
+            }
+        }
+    }
+
+    /** Registers under the same lock stop() uses to close admission. A handler racing session
+     * teardown therefore either joins the stop snapshot or is rejected before opening upstream. */
+    private fun trackFlattenedStream(stream: HlsFlattenedStream, servingSession: String): Boolean =
+        synchronized(flattenedStreamsLock) {
+            if (acceptingFlattenedStreams && httpServer.isRunning && sessionToken == servingSession) {
+                flattenedStreams.add(stream)
+            } else {
+                false
+            }
+        }
+
+    /**
+     * Answers a HEAD, which asks what a resource is rather than for it.
+     *
+     * This used to answer a TS MIME for every channel without checking. Falling back to the
+     * manifest is routine on this path - encrypted segments, an fMP4 init, a variant that cannot be
+     * read - so a renderer that HEADs first was told MPEG-TS and then handed an M3U8 on the GET,
+     * which is the exact mismatch [serveUpstreamPlaylist]'s own KDoc records going into the field:
+     * "the receiver going permanently silent after its very first playlist fetch".
+     *
+     * False here falls through to the manifest exactly as it does for a GET, so the two answers
+     * agree. The cost is one upstream fetch on a request whose whole purpose is to ask this
+     * question.
+     */
+    private fun announceFlattened(
+        stream: HlsFlattenedStream,
+        output: OutputStream,
+        headers: Map<String, String>,
+    ): Boolean {
+        if (!stream.canFlatten()) return false
+        responseServing.writeHeaders(output, HTTP_OK, "OK", headers)
+        return true
     }
 
     private fun serveUnwrappedStream(
@@ -431,37 +598,25 @@ class ProxyServer(
             header("User-Agent", resource.userAgent)
             resource.referrer?.let { header("Referer", it) }
         }.build()
-        val mediaResponse = fetchUpstreamOrRespondError(unwrapRequest, resourceId, output) ?: return
-        val shouldRemux = runCatching { shouldRemuxUpstream(mediaResponse) }
-            .onFailure { runCatching { mediaResponse.close() } }
-            .getOrThrow()
-        if (shouldRemux) {
-            serveRemuxedUpstream(resourceId, mediaResponse, method, output)
-        } else {
-            mediaResponse.use { servePassthrough(resourceId, it, method, output) }
+        val upstream = fetchUpstreamOrRespondError(unwrapRequest, resourceId, output) ?: return
+        try {
+            val mediaResponse = upstream.response
+            val shouldRemux = runCatchingNonFatal { ProxyRouteSelector.shouldRemuxRaw(mediaResponse, remuxEnabled) }
+                .onFailure { runCatchingNonFatal { mediaResponse.close() } }
+                .getOrThrow()
+            if (shouldRemux) {
+                serveRemuxedUpstream(resourceId, mediaResponse, method, output)
+            } else {
+                mediaResponse.use { responseServing.servePassthrough(resourceId, it, method, output) }
+            }
+        } finally {
+            releaseUpstreamCall(upstream.call)
         }
     }
 
     internal fun servePlaylist(response: Response, method: String, output: OutputStream, parent: ResourceEntry) {
-        val text = readPlaylistText(response, output) ?: return
+        val text = responseServing.readPlaylistText(response, output) ?: return
         serveRewrittenPlaylist(text, response.request.url.toString(), method, output, parent)
-    }
-
-    /** Null means an error response has already been written to [output]. */
-    private fun readPlaylistText(response: Response, output: OutputStream): String? {
-        val body = response.body
-        if (body == null) {
-            httpServer.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
-            return null
-        }
-        return when (val bounded = BoundedTextReader.readText(body.byteStream(), MAX_PLAYLIST_BYTES)) {
-            is BoundedReadResult.Success -> bounded.text
-            BoundedReadResult.SizeLimitExceeded -> {
-                AppLog.w(TAG) { "Upstream playlist exceeded $MAX_PLAYLIST_BYTES bytes; rejecting" }
-                httpServer.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
-                null
-            }
-        }
     }
 
     private fun serveRewrittenPlaylist(
@@ -472,81 +627,26 @@ class ProxyServer(
         parent: ResourceEntry,
     ) {
         var rewrittenCount = 0
-        val rewritten = M3u8Rewriter.rewrite(text, finalUrl) { absoluteUrl ->
+        val rewritten = resourceRegistry.rewriteManifest(text, finalUrl, parent) { resourceId ->
             rewrittenCount++
-            val type = if (looksLikePlaylist(absoluteUrl)) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_MEDIA
-            buildLocalUrl(resourceRegistry.register(type, absoluteUrl, parent.userAgent, parent.referrer))
+            buildLocalUrl(resourceId)
+        }
+        if (rewritten == null) {
+            responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Manifest resource budget exceeded")
+            return
         }
         // The remux path logs every playlist poll and segment; this one logged nothing at all, so an
         // ordinary HLS cast - the common case - left no trace of whether the receiver ever fetched
         // anything. A field capture of a failing cast was unreadable for exactly that reason.
-        AppLog.d(TAG) { "Rewritten playlist served: $rewrittenCount urls rewritten, ${rewritten.length}B" }
-        writePlaylistText(rewritten, method, output)
+        //
+        // It is now rolled up rather than written per poll - see
+        // [com.uacastplayer.proxy.ProxyServeRollup] for the two reports where this one sentence,
+        // every four seconds, had emptied the log of everything else. A playlist that rewrote
+        // nothing keeps its own line: the receiver is being handed a manifest with no urls it can
+        // fetch, which is a failure, not traffic.
+        responseServing.writeRewrittenPlaylist(rewritten, rewrittenCount, method, output)
     }
 
-    private fun servePassthrough(resourceId: String, response: Response, method: String, output: OutputStream) {
-        // A non-2xx here is forwarded to the receiver as-is (below) - which looks identical to a
-        // genuine codec/network failure on the sender's own logs, since the receiver just goes
-        // IDLE/ERROR a moment later either way. This confirmed-single-connection-per-account
-        // origin is expected to reject an occasional segment fetch under rapid channel switching
-        // (multiple proxy fetches racing for the one slot) - this line is what tells that apart
-        // from a genuine proxy defect on the next field capture.
-        // Logs resourceId (an opaque SHA fingerprint), never the upstream request URL/path - an
-        // Xtream-style origin commonly carries the account username/password AS the URL path
-        // segments, not just as a query param, so even a bare encodedPath here would have leaked
-        // credentials into the diagnostics report.
-        if (!response.isSuccessful) {
-            AppLog.w(TAG) { "Passthrough upstream returned ${response.code} for resource $resourceId" }
-        }
-        val headers = linkedMapOf("Content-Type" to (response.header("Content-Type") ?: "application/octet-stream"))
-        response.header("Content-Range")?.let { headers["Content-Range"] = it }
-        response.header("Accept-Ranges")?.let { headers["Accept-Ranges"] = it }
-        response.header("Content-Length")?.let { headers["Content-Length"] = it }
-        httpServer.writeHeaders(output, response.code, response.message.ifEmpty { "OK" }, headers)
-        // Logged in a finally, and on success too, because a successful passthrough used to log
-        // nothing at all: only the remux path reported its segments. That left the single most
-        // important question about a failing cast - did the receiver ever pull any media, or only
-        // the playlist? - unanswerable from a field capture, and two of them were lost to it.
-        // The finally is what makes a receiver that hangs up mid-segment distinguishable from one
-        // that never asked: a partial byte count is the evidence for the first.
-        val copied = LongArray(1)
-        try {
-            if (method == "GET") {
-                response.body?.byteStream()?.use { copyCounting(it, output, copied) }
-            }
-            output.flush()
-        } finally {
-            AppLog.d(TAG) { "Passthrough served: ${response.code}, ${copied[0]}B of resource $resourceId" }
-        }
-    }
-
-    /**
-     * Copies [input] to [output], accumulating the running total into [progress]. The count has to
-     * live outside the call rather than being returned: a return value only arrives once the whole
-     * body is through, and the case worth diagnosing is precisely the one where it is not - a
-     * receiver that takes 200KB of a segment and hangs up reads as zero bytes otherwise.
-     */
-    private fun copyCounting(input: InputStream, output: OutputStream, progress: LongArray) {
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            output.write(buffer, 0, read)
-            progress[0] += read
-            bytesServed.addAndGet(read.toLong())
-        }
-    }
-
-    /** Constant-time so a client fishing for the session token can't learn anything from how
-     * quickly a guess gets rejected. */
-    private fun isSessionToken(candidate: String): Boolean =
-        MessageDigest.isEqual(candidate.toByteArray(Charsets.UTF_8), sessionToken.toByteArray(Charsets.UTF_8))
-
-    /** Only a hint for how to pre-register a URL discovered inside a playlist, before it's ever
-     * been fetched - what actually gets served for it is decided from the real response by
-     * [PlaylistDetector] once that request comes in (see [serveRequest]). */
-    private fun looksLikePlaylist(url: String): Boolean {
-        val path = url.substringBefore('?').lowercase()
-        return path.endsWith(".m3u8") || path.endsWith(".m3u")
-    }
 }
+
+private data class TrackedUpstreamResponse(val call: Call, val response: Response)

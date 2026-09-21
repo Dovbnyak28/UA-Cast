@@ -2,14 +2,22 @@ package com.uacastplayer.data.cast
 
 import com.uacastplayer.proxy.TsPacketSegmenter
 import com.uacastplayer.proxy.TsSegment
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.LockSupport
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import okio.BufferedSource
+import okio.Source
+import okio.Timeout
+import okio.buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -106,7 +114,61 @@ private fun fakeResponse(bytes: ByteArray): Response =
         .body(bytes.toResponseBody("video/mp2t".toMediaType()))
         .build()
 
+/** Reproduces Okio AsyncTimeout's close/read race without relying on timing inside Okio itself:
+ * read blocks until Response.close() reaches the source, then throws the same AssertionError that
+ * AsyncTimeout can emit while stop() is concurrently tearing down a live response. */
+private class ConcurrentCloseAssertionBody : ResponseBody() {
+    val readStarted = CountDownLatch(1)
+    private val closed = CountDownLatch(1)
+    private val responseSource: BufferedSource = object : Source {
+        override fun read(sink: Buffer, byteCount: Long): Long {
+            readStarted.countDown()
+            while (closed.count > 0L) {
+                LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1))
+            }
+            throw AssertionError("simulated AsyncTimeout close/read race")
+        }
+
+        override fun timeout(): Timeout = Timeout.NONE
+
+        override fun close() {
+            closed.countDown()
+        }
+    }.buffer()
+
+    override fun contentType() = "video/mp2t".toMediaType()
+    override fun contentLength(): Long = -1L
+    override fun source(): BufferedSource = responseSource
+}
+
+private fun fakeResponse(body: ResponseBody): Response =
+    Response.Builder()
+        .request(Request.Builder().url("https://origin.example/raw.ts").build())
+        .protocol(Protocol.HTTP_1_1)
+        .code(200)
+        .message("OK")
+        .body(body)
+        .build()
+
 class RawTsRemuxSessionTest {
+
+    @Test
+    fun `stop survives an AsyncTimeout assertion from a response closed during read`() {
+        val body = ConcurrentCloseAssertionBody()
+        val session = RawTsRemuxSession(
+            resourceId = "resource-1",
+            initialResponse = fakeResponse(body),
+            httpClient = OkHttpClient(),
+            segmentUrl = { _, sequence -> "seg$sequence.ts" },
+        )
+
+        session.start()
+        assertTrue("reader never entered the response body", body.readStarted.await(5, TimeUnit.SECONDS))
+        session.stop()
+        session.awaitStopped()
+
+        assertTrue("concurrent response close crashed the reader thread", session.hasEnded)
+    }
 
     @Test
     fun `reads a raw TS body, cuts a segment at the keyframe past the target, and serves it back`() {
@@ -129,6 +191,24 @@ class RawTsRemuxSessionTest {
         } finally {
             session.stop()
         }
+    }
+
+    @Test
+    fun `stopping the upstream reader keeps completed segments servable for handoff`() {
+        val session = RawTsRemuxSession(
+            resourceId = "resource-1",
+            initialResponse = fakeResponse(syntheticTsStream()),
+            httpClient = OkHttpClient(),
+            segmentUrl = { _, sequence -> "seg$sequence.ts" },
+        )
+        session.start()
+        session.awaitInitialPlaylist()
+
+        session.stop()
+        session.awaitStopped()
+
+        assertNotNull(session.segmentBytes(0))
+        assertTrue(session.currentPlaylist().contains("seg0.ts"))
     }
 
     /** Always throws from [feed] - stands in for the *next* not-yet-found bounds bug in
@@ -186,6 +266,41 @@ class RawTsRemuxSessionTest {
         // see its doc); awaitStopped() is what waits for the thread to actually unwind. readLoop's
         // single exit point sets the flag - the same exit the reconnect-give-up path goes through,
         // which is what ProxyServer's dead-session check actually exists for.
+        session.awaitStopped()
+        assertTrue(session.hasEnded)
+    }
+
+    @Test
+    fun `stop cancels a reconnect that is still waiting for response headers`() {
+        val reconnectStarted = CountDownLatch(1)
+        val reconnectCancelled = CountDownLatch(1)
+        val reconnectingClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                reconnectStarted.countDown()
+                while (!chain.call().isCanceled()) {
+                    // Ignore the reader-thread interrupt deliberately. Classic socket I/O does;
+                    // the regression being proved is that stop() cancels the Call itself.
+                    LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10))
+                }
+                reconnectCancelled.countDown()
+                throw IOException("cancelled reconnect")
+            }
+            .build()
+        val session = RawTsRemuxSession(
+            resourceId = "resource-1",
+            initialResponse = fakeResponse(syntheticTsStream()),
+            httpClient = reconnectingClient,
+            segmentUrl = { _, sequence -> "seg$sequence.ts" },
+        )
+
+        session.start()
+        assertTrue("reader never reached reconnect", reconnectStarted.await(5, TimeUnit.SECONDS))
+        session.stop()
+
+        assertTrue(
+            "stopped remux left the reconnect Call active",
+            reconnectCancelled.await(1, TimeUnit.SECONDS),
+        )
         session.awaitStopped()
         assertTrue(session.hasEnded)
     }

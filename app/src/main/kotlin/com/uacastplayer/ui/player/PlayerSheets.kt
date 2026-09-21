@@ -5,15 +5,20 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -26,6 +31,11 @@ import com.uacastplayer.player.SelectableTrack
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.SleepTimerDialog
 import com.uacastplayer.ui.epg.EpgGuideSheet
+import com.uacastplayer.ui.theme.BodyText
+import com.uacastplayer.ui.theme.ButtonLabel
+import com.uacastplayer.ui.theme.Caption
+import com.uacastplayer.ui.theme.Title
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** The player's five independent dialogs/sheets (sleep timer, audio/subtitle track pickers,
@@ -73,7 +83,8 @@ internal fun PlayerDialogs(
         TrackPickerDialog(
             title = stringResource(R.string.player_audio_track),
             tracks = uiState.audioTracks,
-            onSelect = { viewModel.selectAudioTrack(it); onDismissAudioDialog() },
+            isLoading = uiState.isBuffering,
+            onSelect = { viewModel.tracks.selectAudio(it); onDismissAudioDialog() },
             onDismiss = onDismissAudioDialog,
         )
     }
@@ -83,8 +94,8 @@ internal fun PlayerDialogs(
             title = stringResource(R.string.player_subtitle_track),
             tracks = uiState.textTracks,
             offLabel = stringResource(R.string.player_subtitle_off),
-            onSelectOff = { viewModel.clearTextTrack(); onDismissSubtitleDialog() },
-            onSelect = { viewModel.selectTextTrack(it); onDismissSubtitleDialog() },
+            onSelectOff = { viewModel.tracks.clearText(); onDismissSubtitleDialog() },
+            onSelect = { viewModel.tracks.selectText(it); onDismissSubtitleDialog() },
             onDismiss = onDismissSubtitleDialog,
         )
     }
@@ -92,10 +103,22 @@ internal fun PlayerDialogs(
     if (showQualityDialog) {
         AlertDialog(
             onDismissRequest = onDismissQualityDialog,
-            title = { Text(stringResource(R.string.player_quality)) },
+            title = {
+                Text(
+                    stringResource(R.string.player_quality),
+                    style = Title,
+                    color = UaTheme.palette.labelPrimary,
+                )
+            },
             text = { QualityDetails(uiState.badges) },
             confirmButton = {
-                TextButton(onClick = onDismissQualityDialog) { Text(stringResource(R.string.common_back)) }
+                TextButton(onClick = onDismissQualityDialog) {
+                    Text(
+                        stringResource(R.string.common_close),
+                        style = ButtonLabel,
+                        color = UaTheme.palette.azure,
+                    )
+                }
             },
         )
     }
@@ -104,6 +127,8 @@ internal fun PlayerDialogs(
         EpgGuideSheet(
             channel = currentChannel,
             epgData = epgState.data,
+            isLoading = epgState.isLoading,
+            hasError = epgState.hasError,
             nowMillis = epgState.nowMillis,
             onDismiss = onDismissGuideSheet,
         )
@@ -118,25 +143,35 @@ internal fun TrackPickerDialog(
     onSelectOff: (() -> Unit)? = null,
     onSelect: (SelectableTrack) -> Unit,
     onDismiss: () -> Unit,
+    isLoading: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, style = Title, color = UaTheme.palette.labelPrimary) },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (tracks.isEmpty()) {
+                    Text(
+                        stringResource(if (isLoading) R.string.player_tracks_loading else R.string.player_tracks_empty),
+                        style = BodyText,
+                        color = UaTheme.palette.labelSecondary,
+                    )
+                }
                 if (offLabel != null && onSelectOff != null) {
                     val isOffSelected = tracks.none { it.isSelected }
                     Text(
                         text = offLabel,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = BodyText,
+                        color = UaTheme.palette.labelPrimary,
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(selected = isOffSelected, onClick = onSelectOff, role = Role.RadioButton)
+                            .heightIn(min = 48.dp)
                             .padding(vertical = 12.dp),
                     )
                 }
                 tracks.forEach { track ->
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(
@@ -144,30 +179,41 @@ internal fun TrackPickerDialog(
                                 onClick = { onSelect(track) },
                                 role = Role.RadioButton,
                             )
+                            .heightIn(min = 48.dp)
                             .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        RadioButton(selected = track.isSelected, onClick = null)
+                        Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = track.label,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = BodyText,
                             color = if (track.isSelected) {
                                 UaTheme.palette.azure
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                UaTheme.palette.labelPrimary
                             },
                         )
                         trackDetailLabel(track)?.let { detail ->
                             Text(
                                 text = detail,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = Caption,
                                 color = UaTheme.palette.labelSecondary,
                             )
+                        }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_back)) }
+            TextButton(onClick = onDismiss) {
+                Text(
+                    stringResource(R.string.common_close),
+                    style = ButtonLabel,
+                    color = UaTheme.palette.azure,
+                )
+            }
         },
     )
 }
@@ -219,15 +265,20 @@ internal fun QualityDetails(badges: PlaybackBadgesState) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = videoParts.joinToString(" · ").ifBlank { stringResource(R.string.player_quality_unknown) },
-            style = MaterialTheme.typography.bodyLarge,
+            style = BodyText,
+            color = UaTheme.palette.labelPrimary,
         )
         if (audioParts.isNotEmpty()) {
             Text(
                 text = stringResource(R.string.player_quality_audio_section),
-                style = MaterialTheme.typography.labelMedium,
+                style = Caption,
                 color = UaTheme.palette.labelSecondary,
             )
-            Text(text = audioParts.joinToString(" · "), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = audioParts.joinToString(" · "),
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+            )
         }
     }
 }
@@ -248,5 +299,5 @@ private fun formatKhz(hz: Int): String {
     // An on-screen label in the track sheet, never parsed or persisted - so a locale's own decimal
     // separator ("44,1" in uk or de) is the right thing to show here, not a defect to stamp out.
     if (khz == khz.toInt().toFloat()) return khz.toInt().toString()
-    return "%.1f".format(khz) // locale-ok: human-read label only, see above
+    return String.format(Locale.getDefault(), "%.1f", khz)
 }

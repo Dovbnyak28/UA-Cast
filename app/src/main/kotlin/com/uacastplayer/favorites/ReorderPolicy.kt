@@ -16,12 +16,14 @@ object ReorderPolicy {
      * compute an index outside the list bounds (e.g. dragging past the first/last row).
      */
     fun <T> move(items: List<T>, fromIndex: Int, toIndex: Int): List<T> {
-        if (fromIndex == toIndex) return items
-        if (fromIndex !in items.indices || toIndex !in items.indices) return items
-        val mutable = items.toMutableList()
-        val item = mutable.removeAt(fromIndex)
-        mutable.add(toIndex, item)
-        return mutable
+        val canMove = fromIndex != toIndex && fromIndex in items.indices && toIndex in items.indices
+        return if (canMove) {
+            items.toMutableList().apply {
+                add(toIndex, removeAt(fromIndex))
+            }
+        } else {
+            items
+        }
     }
 
     /**

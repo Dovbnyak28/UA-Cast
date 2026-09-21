@@ -10,6 +10,39 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+/** Local opt-in fixture. The generator is not cacheable; shipping variants never register it. */
+@org.gradle.work.DisableCachingByDefault(because = "The local playlist may contain private stream credentials")
+abstract class GenerateTemporaryPlaylistAssets : DefaultTask() {
+    @get:InputFile
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val playlistFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val directory = outputDirectory.get().asFile
+        check(directory.isDirectory || directory.mkdirs()) { "Cannot create temporary fixture directory" }
+        val target = directory.resolve("temporary-playlist.m3u8")
+        val source = playlistFile.orNull?.asFile
+        if (source == null) {
+            // Removing the opt-in must also remove a fixture left by an earlier debug build.
+            check(!target.exists() || target.delete()) { "Cannot remove previous temporary fixture" }
+        } else {
+            check(source.length() in 1..8_388_608) { "Temporary playlist must be between 1 byte and 8 MiB" }
+            source.copyTo(target, overwrite = true)
+        }
+    }
+}
+
+val temporaryPlaylistAssets = tasks.register<GenerateTemporaryPlaylistAssets>("generateTemporaryPlaylistAssets") {
+    val localPath = providers.gradleProperty("uacast.temporaryPlaylist")
+    if (localPath.isPresent) playlistFile.set(layout.projectDirectory.file(localPath.get()))
+    outputDirectory.set(layout.buildDirectory.dir("generated/temporaryPlaylistAssets/debug"))
+}
+
 /**
  * Whether this invocation is producing an Android App Bundle rather than APKs - see the `splits`
  * block, which has to switch itself off when it is.
@@ -40,8 +73,9 @@ android {
         targetSdk = 36
         // CI overrides these via -Puacast.versionCode/-Puacast.versionName; the defaults below
         // are what local (non-CI) builds get.
-        versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 9
-        versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.0"
+        versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 15
+        versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.6"
+        buildConfigField("boolean", "SELF_UPDATER_ENABLED", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -51,6 +85,15 @@ android {
             // release APK's 22.6MB of native code (FFmpeg via nextlib, see libs.nextlib.media3ext)
             // for an audience of nobody.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+        }
+    }
+
+    // Package the reviewed legal documents in the APK as well as in the repository. The in-app
+    // Privacy Policy screen reads this same HTML, so the copy shown to users cannot silently drift
+    // away from the copy published for the store listing.
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(rootProject.file("legal"))
         }
     }
 
@@ -113,6 +156,23 @@ android {
             if (releaseSigning.storeFile != null) {
                 signingConfig = releaseSigning
             }
+            val signingMissing = releaseSigning.storeFile?.isFile != true ||
+                releaseSigning.storePassword.isNullOrBlank() ||
+                releaseSigning.keyAlias.isNullOrBlank() ||
+                releaseSigning.keyPassword.isNullOrBlank()
+            if (
+                (project.findProperty("uacast.requireSigning") as String?)?.toBoolean() == true &&
+                    signingMissing
+            ) {
+                throw GradleException(
+                    "Release signing is required but UACAST_STORE_FILE/UACAST_* credentials are missing",
+                )
+            }
+        }
+        create("play") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "SELF_UPDATER_ENABLED", "false")
         }
         debug {
             isMinifyEnabled = false
@@ -139,6 +199,20 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            // These third-party binaries are pre-stripped (no .debug_* or .symtab sections),
+            // but AGP still tries to invoke an NDK strip tool for them. Keeping only this explicit
+            // list avoids a noisy no-op when the NDK is not installed and does not widen the rule
+            // to future native dependencies that may actually contain debug symbols.
+            keepDebugSymbols += listOf(
+                "**/libandroidx.graphics.path.so",
+                "**/libavcodec.so",
+                "**/libavutil.so",
+                "**/libmedia3ext.so",
+                "**/libswresample.so",
+                "**/libswscale.so",
+            )
+        }
     }
 
     lint {
@@ -164,17 +238,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            kotlin.srcDirs("src/main/kotlin")
-        }
-        getByName("test") {
-            kotlin.srcDirs("src/test/kotlin")
-        }
-        getByName("androidTest") {
-            kotlin.srcDirs("src/androidTest/kotlin")
-        }
-    }
 }
 
 kotlin {
@@ -209,6 +272,22 @@ private val abiVersionCodeOffsets = mapOf<String?, Int>(
 
 androidComponents {
     onVariants { variant ->
+        if (variant.name == "debug") {
+            variant.sources.assets?.addGeneratedSourceDirectory(
+                temporaryPlaylistAssets,
+                GenerateTemporaryPlaylistAssets::outputDirectory,
+            )
+        }
+        // The Baseline Profile plugin creates these variants after the Android extension is
+        // evaluated, so a conventional static source-set lookup cannot see them. Register through
+        // the Variant API at the point they actually exist. The same registration also attaches
+        // the manifest overlay; generated source sets do not discover it on their own.
+        if (variant.name == "benchmarkRelease" || variant.name == "nonMinifiedRelease") {
+            // Register through AGP's Java source API: Kotlin Android also compiles `.kt` files
+            // from these directories, while its parallel Kotlin source-set API is deprecated.
+            variant.sources.java?.addStaticSourceDirectory("src/benchmarkFixtures/kotlin")
+            variant.sources.manifests.addStaticManifestFile("src/${variant.name}/AndroidManifest.xml")
+        }
         variant.outputs.forEach { output ->
             val abi = output.filters
                 .find { it.filterType == FilterConfiguration.FilterType.ABI }
@@ -229,6 +308,7 @@ baselineProfile {
 }
 
 dependencies {
+    implementation(project(":core"))
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(libs.androidx.core.ktx)
@@ -267,10 +347,11 @@ dependencies {
 
     baselineProfile(project(":baselineprofile"))
 
-    // Debug-only: instruments Activity/Fragment/ViewModel and reports retained instances. Kept out
-    // of release entirely (debugImplementation). See block 1.0 of the leak-fix plan - this is what
-    // makes a leaked PlayerViewModel/ExoPlayer visible the day it appears instead of via an OOM.
-    debugImplementation(libs.leakcanary.android)
+    // LeakCanary used to sit here, debug-only. Removed after never reporting anything: the leak it
+    // was brought in for - the double ExoPlayer - had already been found by hand, and what keeps
+    // that particular one from coming back is PlayerViewModel's own `liveInstances` counter, which
+    // fails loudly in every debug build and in the unit tests. The cost was paid on every debug run
+    // in heap dumps and build time. If a leak is suspected again, this is one line to put back.
 
     implementation(libs.play.billing)
 
@@ -319,16 +400,17 @@ dependencies {
 }
 
 /**
- * Compose-rule tests can only run against the debug variant, so the release unit-test task skips
+ * Compose-rule tests can only run against the debug variant, so release-like unit-test tasks skip
  * them.
  *
  * `createComposeRule()` launches `androidx.activity.ComponentActivity`, declared solely by the
  * `compose-ui-test-manifest` artifact - a `debugImplementation` dependency, since it exists to host
  * tests and has no business in a release build. Its manifest entry is merged into the debug manifest
- * only, so under `testReleaseUnitTest` these fail at rule setup with "Unable to resolve activity for
- * Intent ... androidx.activity.ComponentActivity", which says nothing about variants and reads like
- * a broken test. CI runs `verifyRoborazziDebug` (the whole debug suite plus golden verification), so
- * nothing goes uncovered by excluding them here.
+ * only, so under `testReleaseUnitTest` or `testPlayUnitTest` these fail at rule setup with "Unable
+ * to resolve activity for Intent ... androidx.activity.ComponentActivity", which says nothing
+ * about variants and reads like a broken test. CI and the signed-release workflow run
+ * `verifyRoborazziDebug` (the whole debug suite plus golden verification), so nothing goes
+ * uncovered by excluding them from either release-like task.
  *
  * By category rather than class-name pattern so renaming or moving a test cannot quietly drop it
  * back into the release run - see [com.uacastplayer.testing.RequiresComposeTestManifest].
@@ -339,7 +421,7 @@ tasks.withType<Test>().configureEach {
     // Matched by name inside this lazy block rather than tasks.named("testReleaseUnitTest"): AGP
     // registers the per-variant test tasks itself, and they do not exist yet while this file is
     // being evaluated.
-    if (name == "testReleaseUnitTest") {
+    if (name == "testReleaseUnitTest" || name == "testPlayUnitTest") {
         useJUnit { excludeCategories(composeTestManifestCategory) }
     }
     // Resolved lazily through a provider so the 203MB artifact is only fetched when tests actually
@@ -357,6 +439,3 @@ tasks.withType<Test>().configureEach {
         }
     )
 }
-
-
-

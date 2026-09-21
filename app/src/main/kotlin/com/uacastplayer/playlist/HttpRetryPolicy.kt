@@ -12,11 +12,13 @@ object HttpRetryPolicy {
     private const val BASE_DELAY_MILLIS = 500L
     private const val MAX_DELAY_MILLIS = 4000L
     private const val MAX_BACKOFF_SHIFT = 10
+    private const val HTTP_SERVER_ERROR_MIN = 500
+    private const val HTTP_SERVER_ERROR_MAX = 599
 
     fun shouldRetry(attemptNumber: Int, isNetworkError: Boolean, httpStatusCode: Int? = null): Boolean {
-        if (attemptNumber >= MAX_ATTEMPTS) return false
-        if (isNetworkError) return true
-        return httpStatusCode != null && httpStatusCode in 500..599
+        val isTransientHttpFailure =
+            httpStatusCode != null && httpStatusCode in HTTP_SERVER_ERROR_MIN..HTTP_SERVER_ERROR_MAX
+        return attemptNumber < MAX_ATTEMPTS && (isNetworkError || isTransientHttpFailure)
     }
 
     /**

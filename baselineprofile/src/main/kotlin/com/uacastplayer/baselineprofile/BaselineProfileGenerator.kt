@@ -22,12 +22,10 @@ private const val GATE_TIMEOUT_MILLIS = 5_000L
  * walking it composes Home, Channels, Favorites and Settings in one pass, which is exactly the set
  * a first-time user reaches and the set the old profile missed.
  *
- * **What still cannot be covered here.** `ui/player` needs a channel to play, and a profile run
- * starts from a fresh install with no playlist - the tour's own player and EPG steps fall back to
- * screenshots for the same reason. `PlayerScreen` is the app's most expensive composable (13MB of
- * JIT compilation, measured on a Mi A2), so this is a real gap and not a tidy one: closing it would
- * mean a playlist the generator could load, which means credentials in the repository. It is left
- * open deliberately and recorded here rather than in someone's head.
+ * After the first-run journey, a variant-only fixture installs a credential-free playlist/EPG
+ * snapshot through production codecs. The generator then restarts the app and reaches Channels,
+ * first player launch, fullscreen and the guide. The fixture activities exist only in the
+ * throwaway benchmark/non-minified variants; release and debug APKs do not contain a backdoor.
  *
  * None of these screens have testTags, and this module drives the app as a black box via UiAutomator
  * (no Compose semantics across the process/APK boundary), so selection goes by accessibility
@@ -62,24 +60,40 @@ class BaselineProfileGenerator {
 
         // Language picker: pick whichever language sorts first (AppLanguage.entries order) - which
         // one doesn't matter for what gets profiled, every language renders through the same code.
-        device.wait(Until.hasObject(By.clazz("android.widget.RadioButton")), GATE_TIMEOUT_MILLIS)
-        device.findObject(By.clazz("android.widget.RadioButton"))?.click()
+        check(
+            device.wait(Until.hasObject(By.clazz("android.widget.RadioButton")), GATE_TIMEOUT_MILLIS),
+        ) { "Timed out waiting for the language picker" }
+        requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.RadioButton")), GATE_TIMEOUT_MILLIS)) {
+            "Language picker reported ready but exposed no RadioButton"
+        }.click()
         device.waitForIdle()
-        device.findObject(By.clazz("android.widget.Button"))?.click()
+        requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.Button")), GATE_TIMEOUT_MILLIS)) {
+            "Language picker exposed no Continue button"
+        }.click()
 
         // Terms gate: Button(accept) is composed before OutlinedButton(decline), so it's first in
         // tree order - see TermsScreen's mandatory-gate branch. Taking the last one here would
         // decline and call finish(), ending the run instead of the gate.
-        device.wait(Until.hasObject(By.clazz("android.widget.Button")), GATE_TIMEOUT_MILLIS)
-        device.findObjects(By.clazz("android.widget.Button")).firstOrNull()?.click()
+        check(
+            device.wait(Until.hasObject(By.clazz("android.widget.Button")), GATE_TIMEOUT_MILLIS),
+        ) { "Timed out waiting for the Terms gate" }
+        requireNotNull(
+            device.wait(Until.findObject(By.clazz("android.widget.Button")), GATE_TIMEOUT_MILLIS),
+        ) {
+            "Terms gate reported ready but exposed no action button"
+        }.click()
 
         // The tour, one card at a time. The forward action is the trailing filled Button on every
         // card, so this takes the last node rather than the first - the leading one is Skip, which
         // would end the tour on the welcome card and profile none of what follows.
-        repeat(TOUR_CARDS) {
-            device.wait(Until.hasObject(By.clazz("android.widget.Button")), GATE_TIMEOUT_MILLIS)
+        repeat(TOUR_CARDS) { cardIndex ->
+            check(
+                device.wait(Until.hasObject(By.clazz("android.widget.Button")), GATE_TIMEOUT_MILLIS),
+            ) { "Timed out waiting for tour card ${cardIndex + 1}/$TOUR_CARDS" }
             val actions = device.findObjects(By.clazz("android.widget.Button"))
-            if (actions.isEmpty()) return@repeat
+            check(actions.isNotEmpty()) {
+                "Tour card ${cardIndex + 1}/$TOUR_CARDS reported ready but exposed no action button"
+            }
             actions.last().click()
             // Each step animates the spotlight to its target and may switch the bottom destination
             // on the way, so the next card is not composed until this settles.
@@ -87,7 +101,25 @@ class BaselineProfileGenerator {
         }
 
         // Home, past every gate and with the tour dismissed.
-        device.wait(Until.hasObject(By.pkg(packageName).depth(0)), GATE_TIMEOUT_MILLIS)
+        check(
+            device.wait(Until.hasObject(By.pkg(packageName).depth(0)), GATE_TIMEOUT_MILLIS),
+        ) { "Timed out waiting for Home after completing the tour" }
+        device.waitForIdle()
+
+        val driver = BenchmarkAppDriver(device)
+        driver.prepareFixture(BenchmarkAppDriver.MODE_PROFILE, clearPackage = false)
+        startActivityAndWait()
+        driver.openChannels()
+        driver.openFirstGroup()
+        driver.openFirstPlayer()
+        driver.clickDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
+        driver.waitForDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
+        driver.clickDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
+        driver.waitForDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
+        driver.exitPlayerToChannelList()
+        driver.openFirstChannelActions()
+        driver.clickText(BenchmarkAppDriver.GUIDE_LABEL)
+        driver.waitForText(BenchmarkAppDriver.FIRST_PROGRAMME)
         device.waitForIdle()
     }
 }

@@ -51,12 +51,14 @@ class PremiumRepositoryTest {
 
     private class StubProvider(private val catalogue: List<BillingProduct> = emptyList()) : BillingProvider {
         val connectionFlow = MutableStateFlow(BillingConnectionState.DISCONNECTED)
-        val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
+        val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>?>(emptySet())
         var acknowledged = mutableListOf<PurchaseRecord>()
+        var acknowledgementAttempts = mutableListOf<PurchaseRecord>()
+        var acknowledgementFailures = emptySet<String>()
         var catalogueQueries = 0
 
         override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
-        override val purchases: StateFlow<Set<PurchaseRecord>> = purchasesFlow.asStateFlow()
+        override val purchases: StateFlow<Set<PurchaseRecord>?> = purchasesFlow.asStateFlow()
         override suspend fun connect() = Unit
         override suspend fun products(): List<BillingProduct> {
             catalogueQueries++
@@ -65,8 +67,27 @@ class PremiumRepositoryTest {
         override suspend fun purchase(product: BillingProduct, launchContext: Any?) = PurchaseResult.Unavailable
         override suspend fun restore() = PurchaseResult.Unavailable
         override suspend fun acknowledge(purchase: PurchaseRecord) {
+            acknowledgementAttempts += purchase
+            if (purchase.productId in acknowledgementFailures) {
+                throw IllegalStateException("billing acknowledgement failed")
+            }
             acknowledged += purchase
         }
+    }
+
+    private class FailingProvider : BillingProvider {
+        private val connectionFlow = MutableStateFlow(BillingConnectionState.DISCONNECTED)
+        private val purchasesFlow = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
+
+        override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
+        override val purchases: StateFlow<Set<PurchaseRecord>> = purchasesFlow.asStateFlow()
+        override suspend fun connect(): Unit = throw IllegalStateException("connect failed")
+        override suspend fun products(): List<BillingProduct> = throw IllegalStateException("catalogue failed")
+        override suspend fun purchase(product: BillingProduct, launchContext: Any?): PurchaseResult =
+            throw IllegalStateException("purchase failed")
+        override suspend fun restore(): PurchaseResult = throw IllegalStateException("restore failed")
+        override suspend fun acknowledge(purchase: PurchaseRecord): Unit =
+            throw IllegalStateException("acknowledge failed")
     }
 
     private fun purchase(
@@ -75,6 +96,18 @@ class PremiumRepositoryTest {
         id: String = "product",
         needsAck: Boolean = false,
     ) = PurchaseRecord(id, tier, now, expires, needsAck)
+
+    @Test fun connectedButUnknownOwnershipPreservesCachedPaidLicenseUntilARealAnswer() = runTest {
+        val storage = FakeStorage(storedLicense = License(LicenseTier.LIFETIME))
+        val provider = StubProvider()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = null
+        val repository = PremiumRepository(provider, storage, scope) { now }
+        repository.loadInitial()
+        assertEquals(LicenseTier.LIFETIME, storage.storedLicense?.tier)
+        provider.purchasesFlow.value = emptySet()
+        assertEquals(LicenseTier.FREE, storage.storedLicense?.tier)
+    }
 
     @Test
     fun aFreshInstallIsGrantedATrialAndItIsRemembered() = runTest {
@@ -216,6 +249,71 @@ class PremiumRepositoryTest {
 
         assertEquals(1, provider.acknowledged.size)
         assertEquals("lifetime", provider.acknowledged.single().productId)
+    }
+
+    /**
+     * **Every** purchase needing acknowledgement gets one, not only the best of them.
+     *
+     * Acknowledgement used to be sent for whichever purchase `bestOf` selected - the one that
+     * decides the licence. That is the wrong set: Play refunds each unacknowledged purchase on its
+     * own three-day clock, and it does not care which of them this app considered best. So a user
+     * who owns two - an active subscription beside a lifetime bought on top of it, or two whose
+     * first acknowledgement failed on a bad connection - had one of them quietly reversed while
+     * keeping the features, and the developer lost the money without anything failing anywhere.
+     *
+     * Both are unacknowledged here because that is the shape that loses money; the usual case, where
+     * the older one was acknowledged long ago, loses nothing either way.
+     */
+    @Test
+    fun everyUnacknowledgedPurchaseGetsAcknowledged() = runTest {
+        val provider = StubProvider()
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = setOf(
+            purchase(LicenseTier.LIFETIME, id = "lifetime", needsAck = true),
+            purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "yearly", needsAck = true),
+        )
+
+        assertEquals(
+            "both purchases must be acknowledged, or Play refunds the one that was not",
+            setOf("lifetime", "yearly"),
+            provider.acknowledged.map { it.productId }.toSet(),
+        )
+    }
+
+    @Test
+    fun oneFailedAcknowledgementDoesNotPreventTheRemainingPurchaseFromBeingAttempted() = runTest {
+        val provider = StubProvider().apply { acknowledgementFailures = setOf("first") }
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = linkedSetOf(
+            purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "first", needsAck = true),
+            purchase(LicenseTier.LIFETIME, id = "second", needsAck = true),
+        )
+
+        assertEquals(listOf("first", "second"), provider.acknowledgementAttempts.map { it.productId })
+        assertEquals(listOf("second"), provider.acknowledged.map { it.productId })
+    }
+
+    /** The control: an acknowledgement already given must not be sent again on every store update -
+     * `applyPurchases` runs on each connection and each refresh. */
+    @Test
+    fun aPurchaseAlreadyAcknowledgedIsLeftAlone() = runTest {
+        val provider = StubProvider()
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+
+        repository.loadInitial()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = setOf(
+            purchase(LicenseTier.LIFETIME, id = "lifetime", needsAck = false),
+            purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "yearly", needsAck = true),
+        )
+
+        assertEquals(listOf("yearly"), provider.acknowledged.map { it.productId })
     }
 
     /** Nothing else notices that a trial has ended - a running app has to re-resolve it against
@@ -365,5 +463,19 @@ class PremiumRepositoryTest {
         assertTrue(provider.purchases.value.isEmpty())
         assertTrue(provider.products().isEmpty())
         assertEquals(PurchaseResult.Unavailable, provider.restore())
+    }
+
+    @Test
+    fun unexpectedProviderFailuresStayInsideTheRepositoryBoundary() = runTest {
+        val stored = License(LicenseTier.LIFETIME, expiresAtMillis = null, source = "lifetime")
+        val repository = PremiumRepository(FailingProvider(), FakeStorage(stored), scope) { now }
+
+        repository.loadInitial()
+
+        assertEquals(BillingConnectionState.DISCONNECTED, repository.connection.value)
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
+        assertTrue(repository.products().isEmpty())
+        assertTrue(repository.purchase("premium_monthly", null) is PurchaseResult.Failed)
+        assertTrue(repository.restore() is PurchaseResult.Failed)
     }
 }

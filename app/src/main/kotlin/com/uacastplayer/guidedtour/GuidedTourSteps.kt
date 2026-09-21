@@ -57,6 +57,8 @@ object GuidedTourSteps {
             id = "cast",
             titleRes = R.string.guided_tour_cast_title,
             descriptionRes = R.string.guided_tour_cast_body,
+            // Cast is intentionally available only inside the active player. Until a channel is
+            // playing this step remains text-only, just like the player and EPG steps above.
             target = GuidedTourTarget.Element(GuidedTourKeys.CAST_BUTTON),
             destination = BottomDestination.CHANNELS,
         ),

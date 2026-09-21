@@ -1,5 +1,4 @@
 package com.uacastplayer.ui.player
-import com.uacastplayer.ui.theme.UaTheme
 
 import android.app.Activity
 import android.app.PictureInPictureParams
@@ -11,8 +10,8 @@ import android.provider.Settings
 import android.util.Rational
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import androidx.media3.common.VideoSize
-import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,25 +29,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.player.BrightnessGestureStart
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.RadiusField
+import com.uacastplayer.ui.theme.UaTheme
+import kotlin.math.roundToInt
+
+private const val TAG = "PlayerGestureLayer"
+private const val MIN_WINDOW_BRIGHTNESS = 0.01f
 
 internal const val DEFAULT_BRIGHTNESS_LEVEL = 0.5f
 
 internal enum class GestureIndicatorKind { BRIGHTNESS, VOLUME }
 
 internal fun AudioManager?.currentVolumeFraction(): Float {
-    if (this == null) return DEFAULT_BRIGHTNESS_LEVEL
-    val max = getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-    if (max <= 0) return DEFAULT_BRIGHTNESS_LEVEL
-    return getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max.toFloat()
+    return this?.let { manager ->
+        val max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        max.takeIf { it > 0 }?.let {
+            manager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / it.toFloat()
+        }
+    } ?: DEFAULT_BRIGHTNESS_LEVEL
 }
 
 internal fun applyWindowBrightness(activity: Activity, level: Float) {
     val window = activity.window
     val params = window.attributes
-    params.screenBrightness = level.coerceIn(0.01f, 1f)
+    params.screenBrightness = level.coerceIn(MIN_WINDOW_BRIGHTNESS, 1f)
     window.attributes = params
 }
 
@@ -71,10 +78,50 @@ internal fun initialBrightnessLevel(activity: Activity): Float {
     return BrightnessGestureStart.level(activity.window.attributes.screenBrightness, systemBrightness)
 }
 
-internal fun applyStreamVolume(audioManager: AudioManager, level: Float) {
+internal fun applyStreamVolume(audioManager: AudioManager, level: Float) = applyStreamVolume(
+    max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+    level = level,
+    setVolume = { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) },
+)
+
+/** Button presses follow the actual stream, including hardware/route changes and platform limits. */
+internal fun stepStreamVolume(audioManager: AudioManager, increase: Boolean): Float {
     val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+    val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+    val target = (current + if (increase) 1 else -1).coerceIn(0, max)
+    setStreamVolumeSafely(target) { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
+    return audioManager.currentVolumeFraction()
+}
+
+/**
+ * The volume drag, with the one call that can refuse handed in.
+ *
+ * `AudioManager.setStreamVolume` documents a `SecurityException` "if the volume change triggers a
+ * Do Not Disturb change and the caller is not granted notification policy access". This app does
+ * not hold `ACCESS_NOTIFICATION_POLICY` and has no business asking for it, so with Do Not Disturb
+ * in its total-silence mode - where media is silenced too - a drag on the right-hand side of the
+ * fullscreen player is a documented way to throw an unchecked exception straight out of a pointer
+ * handler on the main thread. The gesture is discoverable and unlabelled, so the first thing a user
+ * with Do Not Disturb on learns about it is the app closing mid-programme.
+ *
+ * Refused is not failed: Do Not Disturb is holding the volume where the user put it, and the right
+ * answer is to leave it there. Steppers read the real value back after each request; a drag
+ * retains sub-step travel until completion, then reads the platform value back too.
+ *
+ * Taking [setVolume] as a function rather than the manager is what makes the refusal testable at
+ * all - the same seam, for the same reason, as `UpdateInstallController`'s downloader and installer.
+ */
+internal fun applyStreamVolume(max: Int, level: Float, setVolume: (Int) -> Unit) {
     val target = (level * max).toInt().coerceIn(0, max)
-    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+    setStreamVolumeSafely(target, setVolume)
+}
+
+private fun setStreamVolumeSafely(target: Int, setVolume: (Int) -> Unit) {
+    try {
+        setVolume(target)
+    } catch (e: SecurityException) {
+        AppLog.w(TAG) { "Do Not Disturb refused the volume change: ${e.javaClass.simpleName}" }
+    }
 }
 
 /** Thin vertical fill bar shown while dragging in the brightness/volume zones of the fullscreen
@@ -157,11 +204,13 @@ internal object PipController {
      */
     private const val MIN_SCALED_ASPECT = 419
     private const val MAX_SCALED_ASPECT = 2390
+    private const val FALLBACK_ASPECT_WIDTH = 16
+    private const val FALLBACK_ASPECT_HEIGHT = 9
 
     /** Used when the stream has not reported a size yet (nothing decoded, or an audio-only
      * channel). 16:9 is the right guess for "unknown TV channel"; it is wrong as a *constant*,
      * which is what it used to be. */
-    private val FALLBACK_ASPECT = Rational(16, 9)
+    private val FALLBACK_ASPECT = Rational(FALLBACK_ASPECT_WIDTH, FALLBACK_ASPECT_HEIGHT)
 
     /**
      * Display aspect ratio for [width] x [height] sample dimensions with pixel aspect
@@ -209,8 +258,16 @@ internal object PipController {
      */
     fun syncParams(activity: Activity, videoSize: VideoSize, sourceRectHint: Rect?, autoEnter: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        runCatching {
+        runCatchingNonFatal {
             activity.setPictureInPictureParams(buildParams(videoSize, sourceRectHint, autoEnter))
+        }
+    }
+
+    /** Auto-enter belongs to the expanded video surface, not to the surviving Activity. */
+    fun disableAutoEnter(activity: Activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        runCatchingNonFatal {
+            activity.setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
         }
     }
 

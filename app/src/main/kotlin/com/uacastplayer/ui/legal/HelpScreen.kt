@@ -21,13 +21,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +36,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
@@ -44,6 +46,9 @@ import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.raisedSurface
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Static, "lite" Q&A-style help: what the app's main pieces are and how they relate, for a user who
@@ -55,9 +60,13 @@ fun HelpScreen(
     onBackClick: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     modifier: Modifier = Modifier,
+    ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
     val context = LocalContext.current
     var diagnosticsReport by remember { mutableStateOf<String?>(null) }
+    // Hoisted out of the dialog block below, because building the report needs it too - see the
+    // button's onClick. Bound to this composition, so leaving Help mid-build cancels the work.
+    val diagnosticsScope = rememberCoroutineScope()
 
     // "How things work" first, in the order a new user meets them, then the three
     // troubleshooting entries, then where the data lives. The DLNA entry sits directly under the
@@ -133,12 +142,17 @@ fun HelpScreen(
             }
         }
 
-        OutlinedButton(
-            onClick = { diagnosticsReport = onBuildDiagnosticsReport() },
+        SecondaryButton(
+            text = stringResource(R.string.help_send_diagnostics_button),
+            // Off the main thread: the report reads the crash file and the filesystem's free space,
+            // and walks the whole guide to count its programmes. See SettingsScreen's copy of this.
+            onClick = {
+                diagnosticsScope.launch {
+                    diagnosticsReport = withContext(ioDispatcher) { onBuildDiagnosticsReport() }
+                }
+            },
             modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
-        ) {
-            Text(stringResource(R.string.help_send_diagnostics_button))
-        }
+        )
     }
 
     diagnosticsReport?.let { report ->
@@ -152,9 +166,8 @@ fun HelpScreen(
             onCancel = { diagnosticsReport = null },
             onSend = {
                 diagnosticsReport = null
-                sendDiagnostics(context, report, chooserTitle)
+                diagnosticsScope.launch { sendDiagnostics(context, report, chooserTitle) }
             },
         )
     }
 }
-

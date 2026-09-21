@@ -1,5 +1,6 @@
 package com.uacastplayer.backup
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -25,14 +26,14 @@ object BackupCodec {
     }
 
     /**
-     * The whole body is guarded, not just the initial [JSONObject] construction: `runCatching`
+     * The whole body is guarded, not just the initial [JSONObject] construction: `runCatchingNonFatal`
      * around that alone left every accessor below it free to throw, and one did - see
      * [toObjectList]. This file is user-visible and meant to be hand-editable, so "unusable input
      * yields null" has to hold for the entire parse, not for its first line.
      */
     fun decode(text: String): BackupData? {
         if (text.isBlank()) return null
-        return runCatching {
+        return runCatchingNonFatal {
             JSONObject(text)
                 .takeIf { it.optInt("version", -1) == CURRENT_VERSION }
                 ?.let { root ->
@@ -57,6 +58,32 @@ object BackupCodec {
      */
     private fun JSONArray.toObjectList(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 
+    /**
+     * A field's value, or null when it is absent, explicitly `null`, or blank - the three things
+     * this format treats identically.
+     *
+     * `optString` on its own is not enough, and the reason is that the two `org.json`
+     * implementations in play here disagree. Measured directly on `{"a":null}`, same call:
+     *
+     * - the reference `org.json`, which `testImplementation(libs.org.json)` puts under the unit
+     *   tests, answers `""`;
+     * - Android's, which is what runs on a phone, answers `"null"` - four characters, because
+     *   `optString` goes through `JSON.toString(opt(name))` and `JSONObject.NULL.toString()` is
+     *   `"null"`.
+     *
+     * Every "is this field present" decision below is a blank check, so on a device those checks
+     * were being handed a non-blank string for a field that was explicitly null: a favorite whose
+     * `tvgId` is the word "null" matches no EPG channel, and - worse - a *required* field that is
+     * explicitly null passed the check that exists to skip it, importing an entry whose stream URL
+     * is the word "null". A backup this app writes never contains one, since `putOpt` drops nulls;
+     * a hand-edited or third-party file is exactly what [decode] is written to survive.
+     *
+     * `isNull` is the one accessor both implementations agree on for this, and it is true for an
+     * absent name as well as an explicit null.
+     */
+    private fun JSONObject.stringOrNull(name: String): String? =
+        if (isNull(name)) null else optString(name).ifBlank { null }
+
     private fun sourceToJson(source: BackupPlaylistSource): JSONObject = JSONObject().apply {
         put("id", source.id)
         put("type", source.type)
@@ -66,15 +93,15 @@ object BackupCodec {
     }
 
     private fun sourceFromJson(json: JSONObject): BackupPlaylistSource? {
-        val id = json.optString("id")
-        val type = json.optString("type")
-        val location = json.optString("location")
-        if (id.isBlank() || type.isBlank() || location.isBlank()) return null
+        val id = json.stringOrNull("id")
+        val type = json.stringOrNull("type")
+        val location = json.stringOrNull("location")
+        if (id == null || type == null || location == null) return null
         return BackupPlaylistSource(
             id = id,
             type = type,
             location = location,
-            displayName = json.optString("displayName").ifBlank { null },
+            displayName = json.stringOrNull("displayName"),
             addedAtEpochMillis = json.optLong("addedAtEpochMillis", 0L),
         )
     }
@@ -86,20 +113,28 @@ object BackupCodec {
         putOpt("tvgId", favorite.tvgId)
         putOpt("groupTitle", favorite.groupTitle)
         put("addedAtMillis", favorite.addedAtMillis)
+        putOpt("tvgName", favorite.tvgName)
+        putOpt("tvgLogo", favorite.tvgLogo)
+        putOpt("userAgent", favorite.userAgent)
+        putOpt("referrer", favorite.referrer)
     }
 
     private fun favoriteFromJson(json: JSONObject): BackupFavorite? {
-        val key = json.optString("key")
-        val displayName = json.optString("displayName")
-        val streamUrl = json.optString("streamUrl")
-        if (key.isBlank() || displayName.isBlank() || streamUrl.isBlank()) return null
+        val key = json.stringOrNull("key")
+        val displayName = json.stringOrNull("displayName")
+        val streamUrl = json.stringOrNull("streamUrl")
+        if (key == null || displayName == null || streamUrl == null) return null
         return BackupFavorite(
             key = key,
             displayName = displayName,
             streamUrl = streamUrl,
-            tvgId = json.optString("tvgId").ifBlank { null },
-            groupTitle = json.optString("groupTitle").ifBlank { null },
+            tvgId = json.stringOrNull("tvgId"),
+            groupTitle = json.stringOrNull("groupTitle"),
             addedAtMillis = json.optLong("addedAtMillis", 0L),
+            tvgName = json.stringOrNull("tvgName"),
+            tvgLogo = json.stringOrNull("tvgLogo"),
+            userAgent = json.stringOrNull("userAgent"),
+            referrer = json.stringOrNull("referrer"),
         )
     }
 
@@ -112,10 +147,10 @@ object BackupCodec {
     }
 
     private fun settingsFromJson(json: JSONObject): BackupSettings = BackupSettings(
-        iconDisplayMode = json.optString("iconDisplayMode").ifBlank { null },
-        listDensity = json.optString("listDensity").ifBlank { null },
-        bufferSize = json.optString("bufferSize").ifBlank { null },
-        epgSourceId = json.optString("epgSourceId").ifBlank { null },
-        epgCustomUrl = json.optString("epgCustomUrl").ifBlank { null },
+        iconDisplayMode = json.stringOrNull("iconDisplayMode"),
+        listDensity = json.stringOrNull("listDensity"),
+        bufferSize = json.stringOrNull("bufferSize"),
+        epgSourceId = json.stringOrNull("epgSourceId"),
+        epgCustomUrl = json.stringOrNull("epgCustomUrl"),
     )
 }

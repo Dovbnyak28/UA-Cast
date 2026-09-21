@@ -1,5 +1,6 @@
 package com.uacastplayer.epg
 
+import com.uacastplayer.core.io.readCountField
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
@@ -11,11 +12,11 @@ import java.io.OutputStream
  * What came back off disk: either the parsed guide (v2, the format written today) or the raw XMLTV
  * document a previous version cached (v1).
  */
-sealed class DecodedEpgSnapshot {
-    abstract val header: EpgSnapshotHeader
+sealed interface DecodedEpgSnapshot {
+    val header: EpgSnapshotHeader
 
     /** Ready to use as-is - no XML, no gzip, no parse. */
-    data class Parsed(override val header: EpgSnapshotHeader, val data: EpgData) : DecodedEpgSnapshot()
+    data class Parsed(override val header: EpgSnapshotHeader, val data: EpgData) : DecodedEpgSnapshot
 
     /**
      * A v1 snapshot. [documentStream] is the decode input itself, left positioned right after the
@@ -25,7 +26,7 @@ sealed class DecodedEpgSnapshot {
     data class Document(
         override val header: EpgSnapshotHeader,
         val documentStream: InputStream,
-    ) : DecodedEpgSnapshot()
+    ) : DecodedEpgSnapshot
 }
 
 /**
@@ -110,21 +111,26 @@ object EpgSnapshotCodec {
             programmesDropped = input.readBoolean(),
         )
 
-        val channelCount = input.readInt()
+        val channelCount = input.readCountField(XmlTvParser.MAX_CHANNELS)
         val channels = ArrayList<EpgChannel>(channelCount)
+        val aliases = XmlTvChannelNames()
         repeat(channelCount) {
             val id = input.readUTF()
-            val displayNameCount = input.readInt()
-            val displayNames = ArrayList<String>(displayNameCount)
-            repeat(displayNameCount) { displayNames += input.readUTF() }
-            channels += EpgChannel(id, displayNames, input.readNullableUTF())
+            // Old v2 files may predate alias budgets. Consume their layout but retain bounded
+            // channel metadata, just like XML parsing; no cache format migration is required.
+            val displayNameCount = input.readCountField()
+            aliases.beginChannel()
+            repeat(displayNameCount) { aliases.add(input.readUTF().take(XmlTvParser.MAX_TEXT_LENGTH)) }
+            channels += EpgChannel(id, aliases.finishChannel(), input.readNullableUTF())
         }
 
-        val groupCount = input.readInt()
+        // One group per channel id, so the channel ceiling bounds this too.
+        val groupCount = input.readCountField(XmlTvParser.MAX_CHANNELS)
         val programmesByChannelId = LinkedHashMap<String, List<EpgProgramme>>(groupCount)
         repeat(groupCount) {
             val channelId = input.readUTF()
-            val programmeCount = input.readInt()
+            // A single channel cannot hold more than the whole file's ceiling.
+            val programmeCount = input.readCountField(XmlTvParser.MAX_PROGRAMMES)
             val programmes = ArrayList<EpgProgramme>(programmeCount)
             repeat(programmeCount) {
                 programmes += EpgProgramme(
@@ -139,7 +145,8 @@ object EpgSnapshotCodec {
             programmesByChannelId[channelId] = programmes
         }
 
-        return DecodedEpgSnapshot.Parsed(header, EpgData(EpgIndex(channels), programmesByChannelId, truncation))
+        val boundedTruncation = truncation.copy(channelsDropped = truncation.channelsDropped || aliases.limited)
+        return DecodedEpgSnapshot.Parsed(header, EpgData(EpgIndex(channels), programmesByChannelId, boundedTruncation))
     }
 
     private fun decodeV1(input: DataInputStream, rawInput: InputStream): DecodedEpgSnapshot.Document {

@@ -1,0 +1,446 @@
+package com.uacastplayer.data.cast
+
+import com.uacastplayer.log.AppLog
+import com.uacastplayer.playlist.BoundedReadResult
+import com.uacastplayer.playlist.BoundedTextReader
+import com.uacastplayer.proxy.HlsFlattenPolicy
+import com.uacastplayer.proxy.HlsMediaPlaylist
+import com.uacastplayer.proxy.HlsMediaPlaylistParser
+import com.uacastplayer.proxy.HlsReplayCursor
+import com.uacastplayer.proxy.HlsReplayProgress
+import com.uacastplayer.proxy.MAX_HLS_PLAYLIST_BYTES
+import com.uacastplayer.proxy.M3u8Rewriter
+import com.uacastplayer.proxy.MpegTsSniffer
+import java.io.IOException
+import java.io.OutputStream
+import okhttp3.Call
+import okhttp3.OkHttpClient
+import okhttp3.Request
+
+private const val TAG = "HlsFlattenedStream"
+
+/**
+ * Replays an HLS channel to one client as a single, endless MPEG-TS response.
+ *
+ * A DLNA renderer plays a stream, not a manifest - see [HlsFlattenPolicy] for the field report this
+ * exists because of. So for a receiver that cannot read HLS, this app does the HLS client's own job
+ * on the phone: fetch the media playlist, fetch its segments in order, write their bytes into the
+ * one response, refresh the playlist, repeat until the client hangs up.
+ *
+ * **Nothing is buffered.** Each segment is streamed straight from the origin socket to the client
+ * socket in 64KB chunks, which is what keeps this affordable on the phones that need it most - see
+ * `HeapBudget`, written from a device whose entire heap is 128MB. The cost is one segment's worth
+ * of latency, which for live television nobody is seeking through is not a cost at all.
+ *
+ * The write is the pacing. A TS stream carries no rate signal of its own, so a renderer consumes it
+ * as fast as the socket allows; writing only what the playlist has published means the origin's own
+ * publishing rate throttles this, and the renderer's buffer does the rest. If a client stops
+ * reading, the socket write blocks and this loop blocks with it, which is the desired behaviour -
+ * it stops fetching upstream too.
+ */
+internal class HlsFlattenedStream(
+    private val httpClient: OkHttpClient,
+    private val playlistUrl: String,
+    private val userAgent: String,
+    private val referrer: String?,
+    /**
+     * Checked either side of every wait, and the loop stops the moment it says no.
+     *
+     * The hazard is the one `ProxyResourceRegistry.startRemuxSession` already names for the remux
+     * path - "a background thread reading the upstream live stream indefinitely with no owner left
+     * to ever stop it" - and this loop is a second place it could happen. Nothing else here would
+     * notice a session ending: the client socket is only discovered to be gone by a *write*
+     * failing, and this loop spends most of its time not writing.
+     *
+     * **Stated precisely, because it was measured rather than assumed**: `ProxyServer.stop()` tears
+     * the pool down with `shutdownNow()`, whose interrupt makes the next `Thread.sleep` here throw
+     * on its own - so the loop does already end shortly after a stop without this. What this adds
+     * is not depending on that. An interrupt flag survives only as long as nothing between here and
+     * the sleep swallows it, and everything between here and the sleep is OkHttp and a socket; a
+     * library that catches `InterruptedException` without restoring the flag would turn a bounded
+     * wait into an unbounded one. This check asks the owner directly, and it also ends the loop at
+     * the first opportunity rather than after however long the segment fetch in progress takes.
+     */
+    private val isRunning: () -> Boolean,
+    private val maxPlaylistBytes: Int = MAX_HLS_PLAYLIST_BYTES,
+    private val progress: HlsReplayProgress = HlsReplayProgress(),
+) {
+
+    @Volatile private var stopped = false
+    @Volatile private var activeCall: Call? = null
+
+    /** Bytes written to the client, for the caller's logging. */
+    var bytesWritten: Long = 0
+        private set
+
+    /** Cancels the playlist/segment request currently holding this replay worker, if any. Thread
+     * interruption alone does not reliably wake socket I/O; ProxyServer calls this for every
+     * tracked flattened response before it tears its worker pool down. */
+    fun stop() {
+        stopped = true
+        activeCall?.cancel()
+    }
+
+    /**
+     * Whether this channel can be replayed as a stream at all, without replaying any of it.
+     *
+     * For a HEAD, which asks what a resource is rather than for it. Answering "MPEG-TS" and then
+     * serving a manifest on the GET is a mismatch a DLNA renderer does not recover from, so the
+     * question has to be actually asked - one playlist fetch, two if it is a master.
+     *
+     * It is not a promise. A channel can pass this and still serve nothing, because whether the
+     * segments themselves are reachable is only discovered by reaching for them (see [writeTo]).
+     * What it rules out is the deterministic half: encrypted or byte-range segments, an fMP4 init,
+     * an empty/unreadable playlist, or a master with no supported variant inside the probe budget.
+     */
+    fun canFlatten(): Boolean = resolveMediaPlaylist() != null
+
+    /**
+     * Runs until the client disconnects, the origin stops publishing, or the playlist turns out to
+     * be one that cannot be replayed this way.
+     *
+     * Returns false when nothing could be written at all - the caller has not sent headers yet at
+     * that point, so it can still fall back to serving the manifest.
+     */
+    fun writeTo(output: OutputStream, onHeadersNeeded: () -> Unit): Boolean {
+        val opening = resolveMediaPlaylist() ?: return false
+        // Two URLs, not one, and they are only the same when nothing redirected. [requestUrl] is what
+        // gets re-fetched every refresh - the original, so a rotating token or a rebalanced edge is
+        // re-followed each time rather than pinned to whichever CDN answered first. [base] is what
+        // that fetch actually resolved to, and is the only correct thing to resolve a relative
+        // segment URI against. Every other playlist path in this app already works this way; see
+        // `finalUrl` in [ProxyServer.servePlaylist].
+        val requestUrl = opening.requestUrl
+        var base = opening.base
+        var playlist: HlsMediaPlaylist? = opening.playlist
+        var cursor = HlsReplayCursor()
+        var headersSent = false
+
+        while (playlist != null) {
+            val current = playlist
+            val selection = cursor.select(current)
+            cursor = selection.cursor
+            if (selection.resetDetected) {
+                AppLog.w(TAG) {
+                    "HLS media sequence stayed behind the replay cursor; resuming from the restarted live window"
+                }
+            }
+            val absolute = selection.segmentUris
+                .asSequence()
+                .mapNotNull { M3u8Rewriter.resolveUrl(base, it) }
+            // all(), not a loop with a break: it stops on the first false, which is exactly the
+            // "client hung up, stop fetching" behaviour wanted, and says so in one line.
+            val clientGone = !absolute.all { segmentUrl ->
+                streamSegment(segmentUrl, output) {
+                    if (!headersSent) {
+                        onHeadersNeeded()
+                        headersSent = true
+                    }
+                }
+            }
+            cursor = cursor.afterServing(current)
+            // Nothing written on a whole pass over the playlist means this route cannot serve this
+            // channel, and the caller is still free to fall back to the manifest - but only for as
+            // long as no headers have gone out. Without this the loop would keep polling a playlist
+            // whose every segment is refused (see [streamSegment]: a refusal is a glitch to skip,
+            // not an end) and the renderer would hold an endless, empty, perfectly valid-looking
+            // response. A stream that plays nothing is worse than a manifest that might.
+            // `break` rather than a return, and they are the same thing here: `headersSent` is what
+            // this function returns, and it is false.
+            if (!hasViableResponse(headersSent)) break
+            playlist = when {
+                clientGone -> null
+                // A finished playlist will never grow, so there is nothing left to wait for. Rare
+                // for a live channel and ordinary for a catch-up one.
+                current.hasEndList -> {
+                    AppLog.d(TAG) { "Flattened stream reached the end of a finished playlist" }
+                    null
+                }
+                // Checked *before* the sleep as well as after it: the cheap case is a session that
+                // was already over when this iteration began, and waiting out a target duration to
+                // discover that is exactly the delay this exists to avoid.
+                !stillRunning() -> null
+                !sleepInterruptibly(HlsFlattenPolicy.refreshDelayMillis(current)) -> null
+                !stillRunning() -> null
+                // The base moves with the refresh: a redirect can land on a different edge from one
+                // refresh to the next, and the segment URIs in the body that came back are relative
+                // to where that body came from.
+                else -> fetchPlaylist(requestUrl)?.also { base = it.base }?.playlist
+            }
+        }
+        return headersSent
+    }
+
+    private fun hasViableResponse(headersSent: Boolean): Boolean = when {
+        !headersSent -> {
+            AppLog.w(TAG) { "Flattened stream served no bytes on its first pass; leaving it to the manifest" }
+            false
+        }
+        !progress.mayContinue(bytesWritten) -> {
+            AppLog.w(TAG) { "Ending flattened response after its no-progress budget expired" }
+            false
+        }
+        else -> true
+    }
+
+    /**
+     * A fetched playlist and where it came from.
+     *
+     * [requestUrl] is what was asked for; [base] is where the response finally came from after any
+     * redirects, and the two differ constantly on IPTV origins - an Xtream-style `.m3u8` typically
+     * answers 302 to a tokenised CDN path, and a master playlist's variants almost always do. Every
+     * segment URI in the body is relative to [base]; resolving them against [requestUrl] instead
+     * builds URLs on the wrong host or the wrong directory, and the origin answers 404 to all of
+     * them. [streamSegment] treats a refused segment as a glitch worth skipping, so the failure is
+     * not an error at all - it is a stream that connects, stays connected, and plays nothing.
+     */
+    private data class Fetched(val requestUrl: String, val base: String, val playlist: HlsMediaPlaylist)
+
+    /**
+     * The media playlist to replay, following at most one level of master playlist.
+     *
+     * One level, not a recursive loop: a master pointing at a master is not a useful media variant,
+     * and an unbounded follow is a redirect loop waiting to happen against a hostile origin.
+     * Variants stay in the master's preference order, but a rejected first entry must not hide a
+     * later plain MPEG-TS variant. Real masters commonly lead with fMP4, encryption, or an edge that
+     * is temporarily unavailable while still offering a compatible fallback.
+     */
+    private fun resolveMediaPlaylist(): Fetched? {
+        val first = fetchPlaylist(playlistUrl) ?: return null
+        return when (val verdict = HlsFlattenPolicy.verdictFor(first.playlist)) {
+            HlsFlattenPolicy.Verdict.Ok -> first
+            is HlsFlattenPolicy.Verdict.Unsupported -> {
+                AppLog.d(TAG) { "Not flattening this channel: ${verdict.reason}" }
+                null
+            }
+            HlsFlattenPolicy.Verdict.NeedsVariant -> resolveVariant(first)
+        }
+    }
+
+    private fun resolveVariant(master: Fetched): Fetched? {
+        // Against the master's own base, for the same reason the segments are: a master that
+        // redirected lists its variants relative to where it landed.
+        val variantUrls = master.playlist.segmentUris.asSequence()
+            .mapNotNull { M3u8Rewriter.resolveUrl(master.base, it) }
+            .distinct()
+            .take(MAX_MASTER_VARIANTS_TO_PROBE)
+        for (variantUrl in variantUrls) {
+            val variant = fetchPlaylist(variantUrl) ?: continue
+            val verdict = HlsFlattenPolicy.verdictFor(variant.playlist)
+            if (verdict == HlsFlattenPolicy.Verdict.Ok) return variant
+            AppLog.d(TAG) { "Skipping an HLS master variant that cannot be flattened: $verdict" }
+        }
+        return null
+    }
+
+    private fun fetchPlaylist(url: String): Fetched? = try {
+        executeCall(url) { response ->
+            if (!response.isSuccessful) {
+                AppLog.w(TAG) { "Flattened stream playlist refresh returned HTTP ${response.code}" }
+                null
+            } else {
+                // response.request, not the url asked for: OkHttp follows redirects itself and this
+                // is the request that finally answered.
+                when (val bounded = BoundedTextReader.readText(response.body.byteStream(), maxPlaylistBytes)) {
+                    is BoundedReadResult.Success -> Fetched(
+                        url,
+                        response.request.url.toString(),
+                        HlsMediaPlaylistParser.parse(bounded.text),
+                    )
+                    BoundedReadResult.SizeLimitExceeded -> {
+                        AppLog.w(TAG) { "Flattened stream playlist exceeded $maxPlaylistBytes bytes; rejecting" }
+                        null
+                    }
+                }
+            }
+        }
+    } catch (e: IOException) {
+        AppLog.w(TAG) { "Flattened stream playlist refresh failed: ${e.javaClass.simpleName}" }
+        null
+    }
+
+    /**
+     * False once the client has gone or the origin has - either way there is nothing left to do,
+     * and the loop above stops rather than fetching a stream nobody is reading.
+     *
+     * [onBytesComing] fires only after the first non-empty read from the origin. That ordering is
+     * the whole point of it: it is what commits the response to being a flattened stream, and
+     * committing on a segment that is 404 or an empty HTTP 200 leaves the renderer holding an
+     * endless empty body with no way back to the manifest.
+     */
+    private fun streamSegment(url: String, output: OutputStream, onBytesComing: () -> Unit): Boolean = try {
+        executeCall(url) { response ->
+            if (!response.isSuccessful) {
+                // One refused segment is not the end of a channel: an origin that limits concurrent
+                // connections rejects the occasional fetch, and the next one usually succeeds. The
+                // gap is a glitch, which is better than ending the stream over it.
+                AppLog.w(TAG) { "Flattened stream segment returned HTTP ${response.code}; skipping it" }
+                true
+            } else {
+                val copied = copyToClient(
+                    input = response.body.byteStream(),
+                    output = output,
+                    onFirstBytes = onBytesComing,
+                )
+                if (!copied) {
+                    AppLog.w(TAG) { "Flattened stream segment was empty or not MPEG-TS; skipping it" }
+                }
+                true
+            }
+        }
+    } catch (e: ReceiverStreamException) {
+        // A renderer closing its socket is a normal end-of-consumer signal, not an origin outage.
+        // Keeping this separate from the origin path is what makes a VIDAA capture actionable.
+        AppLog.d(TAG) {
+            "Flattened stream receiver disconnected: ${e.cause?.javaClass?.simpleName ?: e.javaClass.simpleName}, " +
+                "delivered=${bytesWritten}B"
+        }
+        false
+    } catch (e: OriginStreamException) {
+        AppLog.w(TAG) {
+            "Flattened stream origin failed: ${e.cause?.javaClass?.simpleName ?: e.javaClass.simpleName}, " +
+                "delivered=${bytesWritten}B"
+        }
+        false
+    } catch (e: IOException) {
+        // Call setup failures (DNS, connect timeout, TLS) do not pass through copyToClient and are
+        // therefore origin-side by definition. Keep the generic fallback for an unexpected I/O
+        // implementation so a new stream adapter cannot make this path crash.
+        AppLog.w(TAG) {
+            "Flattened stream origin request failed: ${e.javaClass.simpleName}, delivered=${bytesWritten}B"
+        }
+        false
+    }
+
+    /**
+     * False when the wait was interrupted, which is `shutdownNow()` tearing the pool down - the one
+     * signal that reaches a sleeping thread at all.
+     *
+     * The flag is restored rather than swallowed: this runs on a pooled thread that goes back to
+     * serving other connections, and a cleared interrupt would leave the next thing it does unaware
+     * the pool is shutting down.
+     */
+    private fun sleepInterruptibly(millis: Long): Boolean = try {
+        Thread.sleep(millis)
+        true
+    } catch (_: InterruptedException) {
+        Thread.currentThread().interrupt()
+        AppLog.d(TAG) { "Flattened stream interrupted while waiting for the next playlist" }
+        false
+    }
+
+    /** False leaves the segment uncommitted: a CDN login/error page returned as HTTP 200 must not
+     * make the proxy promise `video/mp2t` and remove the manifest fallback before TS bytes exist. */
+    private fun copyToClient(
+        input: java.io.InputStream,
+        output: OutputStream,
+        onFirstBytes: () -> Unit,
+    ): Boolean {
+        val chunk = ByteArray(CHUNK_BYTES)
+        val buffered = readInitialBytes(input, chunk)
+        if (buffered == null || !MpegTsSniffer.looksLikeMpegTs(chunk, buffered)) return false
+
+        writeInitialBytes(output, chunk, checkNotNull(buffered), onFirstBytes)
+        bytesWritten += buffered
+        bytesWritten += copyRemaining(input, output, chunk)
+        flushReceiver(output)
+        return true
+    }
+
+    private fun readInitialBytes(input: java.io.InputStream, chunk: ByteArray): Int? {
+        var buffered = 0
+        while (buffered <= TS_PACKET_SIZE_BYTES) {
+            val read = try {
+                input.read(chunk, buffered, chunk.size - buffered)
+            } catch (error: IOException) {
+                throw OriginStreamException(error)
+            }
+            if (read == -1) return null
+            if (read > 0) buffered += read
+        }
+        return buffered
+    }
+
+    private fun writeInitialBytes(
+        output: OutputStream,
+        chunk: ByteArray,
+        buffered: Int,
+        onFirstBytes: () -> Unit,
+    ) {
+        try {
+            onFirstBytes()
+            output.write(chunk, 0, buffered)
+        } catch (error: IOException) {
+            throw ReceiverStreamException(error)
+        }
+    }
+
+    private fun copyRemaining(
+        input: java.io.InputStream,
+        output: OutputStream,
+        chunk: ByteArray,
+    ): Long {
+        var copied = 0L
+        while (true) {
+            val read = try {
+                input.read(chunk)
+            } catch (error: IOException) {
+                throw OriginStreamException(error)
+            }
+            if (read == -1) return copied
+            if (read > 0) {
+                try {
+                    output.write(chunk, 0, read)
+                } catch (error: IOException) {
+                    throw ReceiverStreamException(error)
+                }
+                copied += read
+            }
+        }
+    }
+
+    private fun flushReceiver(output: OutputStream) {
+        try {
+            output.flush()
+        } catch (error: IOException) {
+            throw ReceiverStreamException(error)
+        }
+    }
+
+    private fun newCall(url: String) = httpClient.newCall(
+        Request.Builder().url(url).apply {
+            header("User-Agent", userAgent)
+            referrer?.let { header("Referer", it) }
+        }.build(),
+    )
+
+    /** Publishes the Call before checking ownership, closing the race where stop() landed after a
+     * refresh was chosen but before the call existed. Only the replay worker writes [activeCall];
+     * stop() may read and cancel it from the session thread. */
+    private fun <T> executeCall(url: String, readResponse: (okhttp3.Response) -> T): T {
+        val call = newCall(url)
+        activeCall = call
+        return try {
+            // Do not consult the external ownership callback here: its contract is one check per
+            // replay pass, and callers may derive state while answering it. ProxyServer publishes
+            // teardown through stop(), whose flag/cancel pair is the race barrier for this call.
+            if (stopped) call.cancel()
+            call.execute().use(readResponse)
+        } finally {
+            if (activeCall === call) activeCall = null
+        }
+    }
+
+    private fun stillRunning(): Boolean = !stopped && isRunning()
+
+    /** Distinguishes an origin read/connect failure from a renderer that abandoned its socket. */
+    private class OriginStreamException(cause: IOException) : IOException(cause)
+
+    private class ReceiverStreamException(cause: IOException) : IOException(cause)
+
+    private companion object {
+        const val TS_PACKET_SIZE_BYTES = 188
+        const val CHUNK_BYTES = 64 * 1024
+        const val MAX_MASTER_VARIANTS_TO_PROBE = 8
+    }
+}

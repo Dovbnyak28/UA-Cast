@@ -8,13 +8,14 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import com.uacastplayer.MainActivity
 import com.uacastplayer.R
-import com.uacastplayer.core.i18n.withAppLocale
+import com.uacastplayer.data.prefs.withAppLocale
 import com.uacastplayer.data.cast.CastWakeLocks
 import com.uacastplayer.dlna.DlnaSessionRepository
 import com.uacastplayer.log.AppLog
@@ -40,8 +41,8 @@ private const val EXTRA_TARGET = "target"
 
 /**
  * Which cast target the proxy session being protected belongs to - the only thing this service
- * needs to tell them apart, and only so the notification's Stop action ends the right one. The two
- * are mutually exclusive (see docs/DLNA.md), so at most one is ever current.
+ * needs to tell them apart, both for owner-scoped teardown and so the notification's Stop action
+ * ends the session currently shown in the notification.
  */
 enum class CastProxyTarget { CHROMECAST, DLNA }
 
@@ -57,41 +58,49 @@ class CastProxyService : Service() {
 
     private val wakeLocks by lazy { CastWakeLocks(applicationContext) }
     private val localizedContext by lazy { applicationContext.withAppLocale() }
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Read on ACTION_END_SESSION, written on ACTION_START. Kept on the service rather than carried
-    // in the Stop button's PendingIntent: a PendingIntent built once and reused would keep the
-    // extras of whichever session created it, so a DLNA session started after a Chromecast one
-    // would hand its Stop button the wrong target.
-    private var target = CastProxyTarget.CHROMECAST
+    private var ownership = CastProxyOwnership()
+    private val notificationDetails = mutableMapOf<CastProxyTarget, NotificationDetails>()
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        runningInstance = this
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // startForeground() must run before anything else in this method - the 5s ANR window
         // applies regardless of which action we were started with.
         ensureNotificationChannel()
+        val commandTarget = intent.targetOrDefault()
         val channelTitle = intent?.getStringExtra(EXTRA_CHANNEL_TITLE).orEmpty()
         val receiverName = intent?.getStringExtra(EXTRA_RECEIVER_NAME).orEmpty()
-        startForeground(NOTIFICATION_ID, buildNotification(channelTitle, receiverName))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(channelTitle, receiverName, commandTarget),
+        )
 
         when (intent?.action) {
             ACTION_END_SESSION -> {
-                AppLog.d(TAG) { "Stop action tapped - ending the $target session" }
-                when (target) {
+                AppLog.d(TAG) { "Stop action tapped - ending the $commandTarget session" }
+                when (commandTarget) {
                     CastProxyTarget.CHROMECAST -> CastSessionRepository.getInstance(applicationContext).endSession()
                     CastProxyTarget.DLNA -> DlnaSessionRepository.getInstance(applicationContext).stop()
                 }
-                stopServiceForeground()
+                removeOwner(commandTarget)
             }
             ACTION_STOP_FOREGROUND -> {
-                AppLog.d(TAG) { "Proxy no longer needed - stopping the foreground service only" }
-                stopServiceForeground()
+                AppLog.d(TAG) { "$commandTarget proxy no longer needs foreground protection" }
+                removeOwner(commandTarget)
             }
             else -> {
-                target = intent?.getStringExtra(EXTRA_TARGET)
-                    ?.let { name -> CastProxyTarget.entries.firstOrNull { it.name == name } }
-                    ?: CastProxyTarget.CHROMECAST
-                wakeLocks.acquire()
+                val hadOwners = ownership.activeTargets.isNotEmpty()
+                ownership = CastProxyOwnershipPolicy.started(ownership, commandTarget)
+                notificationDetails[commandTarget] = NotificationDetails(channelTitle, receiverName)
+                if (!hadOwners) wakeLocks.acquire()
+                refreshNotification()
             }
         }
 
@@ -100,55 +109,82 @@ class CastProxyService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun stopServiceForeground() {
-        wakeLocks.release()
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
+    private fun removeOwner(target: CastProxyTarget) {
+        ownership = CastProxyOwnershipPolicy.stopped(ownership, target)
+        notificationDetails -= target
+        if (ownership.activeTargets.isEmpty()) {
+            wakeLocks.release()
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else {
+            refreshNotification()
+        }
+    }
+
+    private fun refreshNotification() {
+        val target = ownership.displayedTarget ?: return
+        val details = notificationDetails[target] ?: NotificationDetails("", "")
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(details.channelTitle, details.receiverName, target),
+        )
     }
 
     override fun onDestroy() {
+        if (runningInstance === this) runningInstance = null
+        mainHandler.removeCallbacksAndMessages(null)
+        ownership = CastProxyOwnership()
+        notificationDetails.clear()
         wakeLocks.release()
         super.onDestroy()
     }
 
     private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(NOTIFICATION_CHANNEL_ID) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                localizedContext.getString(R.string.cast_session_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ),
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getSystemService(NotificationManager::class.java)
+                ?.takeIf { it.getNotificationChannel(NOTIFICATION_CHANNEL_ID) == null }
+                ?.createNotificationChannel(
+                    NotificationChannel(
+                        NOTIFICATION_CHANNEL_ID,
+                        localizedContext.getString(R.string.cast_session_channel_name),
+                        NotificationManager.IMPORTANCE_LOW,
+                    ),
+                )
+        }
     }
 
-    private fun buildNotification(channelTitle: String, receiverName: String): Notification {
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).setFlags(
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP,
-            ),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
+    private fun buildNotification(
+        channelTitle: String,
+        receiverName: String,
+        target: CastProxyTarget,
+    ): Notification {
+        // Resolve the launcher activity by package so this cast-layer service does not depend on
+        // the app-root MainActivity. The launcher intent is explicit and therefore remains
+        // resolvable on API 30+ even with package-visibility restrictions.
+        val contentIntent = packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+            PendingIntent.getActivity(
+                this,
+                0,
+                intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
         val stopPendingIntent = PendingIntent.getService(
             this,
-            0,
-            endSessionIntent(this),
+            target.ordinal + 1,
+            endSessionIntent(this, target),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_cast)
             .setContentTitle(channelTitle.ifEmpty { localizedContext.getString(R.string.app_name) })
             .setContentText(localizedContext.getString(R.string.cast_session_notification_text, receiverName))
-            .setContentIntent(contentIntent)
             .addAction(0, localizedContext.getString(R.string.cast_session_stop_action), stopPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        if (contentIntent != null) builder.setContentIntent(contentIntent)
+        return builder.build()
     }
 
     companion object {
@@ -164,11 +200,17 @@ class CastProxyService : Service() {
             putExtra(EXTRA_TARGET, target.name)
         }
 
-        private fun stopForegroundIntent(context: Context): Intent =
-            Intent(context, CastProxyService::class.java).apply { action = ACTION_STOP_FOREGROUND }
+        private fun stopForegroundIntent(context: Context, target: CastProxyTarget): Intent =
+            Intent(context, CastProxyService::class.java).apply {
+                action = ACTION_STOP_FOREGROUND
+                putExtra(EXTRA_TARGET, target.name)
+            }
 
-        private fun endSessionIntent(context: Context): Intent =
-            Intent(context, CastProxyService::class.java).apply { action = ACTION_END_SESSION }
+        private fun endSessionIntent(context: Context, target: CastProxyTarget): Intent =
+            Intent(context, CastProxyService::class.java).apply {
+                action = ACTION_END_SESSION
+                putExtra(EXTRA_TARGET, target.name)
+            }
 
         fun start(
             context: Context,
@@ -181,9 +223,24 @@ class CastProxyService : Service() {
 
         /** Called 1:1 with [com.uacastplayer.data.cast.ProxyServer.stop] - tears down only this
          * service's own foreground/wake-lock lifetime, never the Cast session itself (see
-         * [ACTION_STOP_FOREGROUND]). */
-        fun stop(context: Context) {
-            startForegroundServiceSafely(context, stopForegroundIntent(context))
+         * [ACTION_STOP_FOREGROUND]). When the service is already alive, dispatch directly to its
+         * main thread. Starting a foreground service just to deliver a stop command is forbidden
+         * from the background on Android 12+ and used to leave the wake locks running silently. */
+        fun stop(
+            context: Context,
+            target: CastProxyTarget = CastProxyTarget.CHROMECAST,
+        ) {
+            val service = runningInstance
+            if (service != null) {
+                service.mainHandler.post {
+                    if (runningInstance === service) service.removeOwner(target)
+                }
+            } else {
+                // There is no owner to remove if the service has not been created (or was already
+                // destroyed). stopService is safe from the background and also cancels a pending
+                // start request without attempting another restricted FGS launch.
+                context.stopService(Intent(context, CastProxyService::class.java))
+            }
         }
 
         /**
@@ -202,5 +259,17 @@ class CastProxyService : Service() {
                 AppLog.w(TAG) { "Foreground service start not allowed: ${e.javaClass.simpleName}" }
             }
         }
+
+        @Volatile
+        private var runningInstance: CastProxyService? = null
     }
+
+    private data class NotificationDetails(
+        val channelTitle: String,
+        val receiverName: String,
+    )
 }
+
+private fun Intent?.targetOrDefault(): CastProxyTarget = this?.getStringExtra(EXTRA_TARGET)
+    ?.let { name -> CastProxyTarget.entries.firstOrNull { it.name == name } }
+    ?: CastProxyTarget.CHROMECAST

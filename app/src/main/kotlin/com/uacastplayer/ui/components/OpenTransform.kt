@@ -8,7 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import com.uacastplayer.ui.theme.DurEnter
+import com.uacastplayer.ui.theme.DUR_ENTER
 import com.uacastplayer.ui.theme.EaseSpring
 
 /** How small the screen starts. Small enough to read as opening outward, large enough that nothing
@@ -39,7 +39,7 @@ private const val OPEN_ORIGIN_Y = 0.28f
 @Composable
 fun Modifier.openTransform(key: Any?): Modifier {
     val progress = remember(key) { Animatable(0f) }
-    LaunchedEffect(key) { progress.animateTo(1f, tween(DurEnter, easing = EaseSpring)) }
+    LaunchedEffect(key) { progress.animateTo(1f, tween(DUR_ENTER, easing = EaseSpring)) }
 
     return this.graphicsLayer {
         val value = progress.value

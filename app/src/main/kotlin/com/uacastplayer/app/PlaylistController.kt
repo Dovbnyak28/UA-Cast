@@ -6,24 +6,31 @@ import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.data.playlist.PlaylistOutcome
 import com.uacastplayer.data.playlist.PlaylistOutcomeReducer
 import com.uacastplayer.data.playlist.PlaylistRepository
+import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceAddResult
+import com.uacastplayer.playlist.PlaylistSourceLabel
 import com.uacastplayer.playlist.PlaylistSourcePolicy
 import com.uacastplayer.playlist.PlaylistSourceRemovalResult
 import com.uacastplayer.playlist.PlaylistSourceType
+import com.uacastplayer.playlist.PlaylistSourceSaveState
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.playlist.XtreamUrlBuilder
+import java.util.concurrent.atomic.AtomicLong
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+
+private const val TAG = "PlaylistController"
 
 /**
  * Owns every saved [PlaylistSource] plus the currently active playlist's load state - moved out of
@@ -74,19 +81,45 @@ class PlaylistController(
      * routed through here; cancelling persistence would lose data rather than a stale result.
      */
     private var loadJob: Job? = null
+    private val loadGeneration = AtomicLong()
+
+    /**
+     * Source-list writes can overlap because [PlaylistRepository.saveSources] moves to IO. A user
+     * removing several sources quickly used to launch one save per tap, and whichever IO task
+     * happened to finish last won on disk - even when it represented an older list. The mutex
+     * keeps the physical writes exclusive, while the generation lets superseded waiters skip
+     * their stale write. A write already in progress may finish, but the newest generation always
+     * follows it and becomes the final durable state.
+     */
+    val sourcePersistence = PlaylistSourcePersistence(
+        scope, playlistRepository, { _playlistSources.value }, ::publishSourceSave,
+    )
 
     var channelCount: Int = 0
         private set
 
-    private fun launchLoad(block: suspend () -> Unit) {
+    private fun launchLoad(kind: String, block: suspend () -> Unit) {
+        val generation = loadGeneration.incrementAndGet()
         loadJob?.cancel()
-        loadJob = scope.launch { block() }
+        loadJob = scope.launch {
+            AppLog.d(TAG) { "Playlist load $generation ($kind) started" }
+            try {
+                block()
+                AppLog.d(TAG) { "Playlist load $generation ($kind) completed" }
+            } catch (cancelled: CancellationException) {
+                AppLog.d(TAG) { "Playlist load $generation ($kind) cancelled" }
+                throw cancelled
+            } catch (failure: IOException) {
+                AppLog.w(TAG) { "Playlist persistence failed: ${failure.javaClass.simpleName}" }
+                applyPlaylistOutcome(PlaylistOutcome.StorageError)
+            }
+        }
     }
 
     /** Restores the active source's cached snapshot at startup, migrating a pre-multi-playlist
      * legacy snapshot into the sources list first if needed. Called once from AppViewModel.init. */
     fun loadInitialSource() {
-        launchLoad {
+        launchLoad("initial") {
             var sources = playlistRepository.loadSources()
             if (sources.isEmpty()) {
                 // Upgrading from before multi-playlist support (or a fresh install with nothing
@@ -94,26 +127,29 @@ class PlaylistController(
                 val migrated = playlistRepository.migrateLegacySnapshotIfNeeded()
                 if (migrated != null) {
                     sources = listOf(migrated.copy(displayName = preferences.playlistDisplayName))
-                    playlistRepository.saveSources(sources)
+                    val sourcesSaved = playlistRepository.saveSources(sources)
                     setActivePlaylistSourceId(migrated.id)
                     // Only now, and deliberately last: until the source list naming the migrated
                     // snapshot is on disk, the legacy file is the only record that the playlist
                     // exists. Dying between the two used to lose it (see
                     // PlaylistRepository.migrateLegacySnapshotIfNeeded); dying after this line
                     // loses nothing, because everything it pointed at has already been written.
-                    playlistRepository.discardLegacySnapshot()
+                    if (sourcesSaved) playlistRepository.discardLegacySnapshot()
                 }
             }
             _playlistSources.value = sources
-            val activeId = preferences.activePlaylistSourceId ?: sources.firstOrNull()?.id
+            val activeId = preferences.activePlaylistSourceId
+                ?.takeIf { preferredId -> sources.any { source -> source.id == preferredId } }
+                ?: sources.firstOrNull()?.id
             if (activeId != null) {
-                setActivePlaylistSourceId(activeId)
-                playlistRepository.restoreSnapshot(activeId)?.let { applyPlaylistOutcome(it, fromCache = true) }
+                val source = sources.first { it.id == activeId }
+                selectSource(source)
+                loadSavedSource(source)
             }
         }
     }
 
-    fun setActivePlaylistSourceId(id: String?) {
+    private fun setActivePlaylistSourceId(id: String?) {
         preferences.activePlaylistSourceId = id
         _activePlaylistSourceId.value = id
     }
@@ -125,30 +161,33 @@ class PlaylistController(
      * neither of which set one).
      */
     fun setPlaylistDisplayName(name: String) {
-        val pending = pendingNewSource ?: return
+        val pending = pendingNewSource ?: run { sourcePersistence.retry(); return }
+        if (!_playlistState.value.sourceReadyToSave) return
         pendingNewSource = null
-        val effectiveName = name.ifBlank {
-            if (pending.type == PlaylistSourceType.XTREAM) XtreamUrlBuilder.serverHost(pending.location) else null
-        }
+        _playlistState.value = _playlistState.value.copy(sourceReadyToSave = false)
+        // What the user typed, else what the source already knows about itself (a picked file
+        // carries its own name - see loadPlaylistFromFile), else one derived from where it came
+        // from. The last step used to be an Xtream-only special case; PlaylistSourceLabel answers
+        // for every type, which is what stops a URL playlist falling through to its own SHA-256.
+        val effectiveName = name.ifBlank { null }
+            ?: pending.displayName
+            ?: PlaylistSourceLabel.forLocation(pending.type, pending.location)
         val newSource = pending.copy(displayName = effectiveName)
         when (val result = PlaylistSourcePolicy.add(_playlistSources.value, newSource)) {
             is PlaylistSourceAddResult.Added -> {
                 _playlistSources.value = result.sources
                 setActivePlaylistSourceId(newSource.id)
                 _playlistState.value = _playlistState.value.copy(displayName = newSource.displayName)
-                scope.launch { playlistRepository.saveSources(result.sources) }
+                persistSources(result.sources)
             }
-            // Already loaded and shown - it just won't be remembered as a saved source, so
-            // switching away would lose it. Rare (10 sources is a lot) and no dedicated UI for it
-            // yet; see the Block 3 changelog note.
-            PlaylistSourceAddResult.LimitReached -> Unit
+            PlaylistSourceAddResult.LimitReached -> publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
         }
     }
 
     fun loadPlaylistFromUrl(url: String) {
         if (url.isBlank()) return
         val trimmed = url.trim()
-        pendingNewSource = newPendingSource(PlaylistSourceType.URL, trimmed)
+        if (!beginSourceAdd(newPendingSource(PlaylistSourceType.URL, trimmed))) return
         startUrlLoad(trimmed)
     }
 
@@ -162,18 +201,44 @@ class PlaylistController(
         if (server.isBlank() || username.isBlank() || password.isBlank()) return
         val playlistUrl = XtreamUrlBuilder.playlistUrl(server, username, password)
         val epgUrl = XtreamUrlBuilder.epgUrl(server, username, password)
-        pendingNewSource = newPendingSource(PlaylistSourceType.XTREAM, playlistUrl)
+        if (!beginSourceAdd(newPendingSource(PlaylistSourceType.XTREAM, playlistUrl))) return
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
-        launchLoad {
+        launchLoad("xtream") {
             applyPlaylistOutcome(playlistRepository.loadFromUrl(playlistUrl, extraEpgUrls = listOf(epgUrl)))
         }
     }
 
     fun loadPlaylistFromFile(uri: Uri) {
-        pendingNewSource = newPendingSource(PlaylistSourceType.FILE, uri.toString())
+        // Asked while the grant from the picker is still current - a saved source outlives it, and
+        // the provider will not answer later. Without this the only label a file playlist ever had
+        // was its own SHA-256 (see PlaylistSourceLabel).
+        val pending = newPendingSource(PlaylistSourceType.FILE, uri.toString())
+        if (!beginSourceAdd(pending)) return
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
-        launchLoad {
+        launchLoad("file") {
+            val name = playlistRepository.documentName(uri)
+            if (pendingNewSource === pending) pendingNewSource = pending.copy(displayName = name)
             applyPlaylistOutcome(playlistRepository.loadFromFile(uri))
+        }
+    }
+
+    /**
+     * Abandons only a brand-new source being loaded by the add-playlist flow.
+     *
+     * The screen may be left with Back while its network request is running. Letting that request
+     * finish applies channels, but the screen that calls [setPlaylistDisplayName] is already gone,
+     * so no source ever names the resulting snapshot. Cancelling the job stops state application;
+     * deleting through the repository's mutation coordinator also wins over an AtomicFile write
+     * that was already too far into IO to observe cancellation.
+     */
+    fun cancelPendingSourceAdd() {
+        val pending = pendingNewSource ?: return
+        pendingNewSource = null
+        loadJob?.cancel()
+        loadJob = null
+        _playlistState.value = _playlistState.value.copy(isLoading = false, sourceReadyToSave = false)
+        if (_playlistSources.value.none { it.id == pending.id }) {
+            scope.launch { playlistRepository.deleteSnapshot(pending.id) }
         }
     }
 
@@ -190,24 +255,35 @@ class PlaylistController(
     /** Switches to an already-saved source (see Home's source-switcher bottom sheet) - shows its
      * cached snapshot instantly when one exists instead of always re-fetching over the network. */
     fun switchPlaylistSource(source: PlaylistSource) {
+        selectSource(source)
+        launchLoad("switch") { loadSavedSource(source) }
+    }
+
+    private fun selectSource(source: PlaylistSource) {
+        pendingNewSource = null
         setActivePlaylistSourceId(source.id)
-        _playlistState.value = _playlistState.value.copy(
+        channelCount = 0
+        // Keeping the previous source's channels here would label A as B if loading B fails.
+        // Refresh uses startUrlLoad and deliberately retains the same source's usable channels.
+        _playlistState.value = PlaylistUiState(
             isLoading = true,
-            error = null,
             displayName = source.displayName,
+            sourceUrl = source.location.takeIf { source.type != PlaylistSourceType.FILE },
+            sourceSaveState = _playlistState.value.sourceSaveState,
         )
-        launchLoad {
-            val cached = playlistRepository.restoreSnapshot(source.id)
-            if (cached != null) {
-                applyPlaylistOutcome(cached, fromCache = true)
+    }
+
+    private suspend fun loadSavedSource(source: PlaylistSource) {
+        val cached = playlistRepository.restoreSnapshot(source.id)
+        if (cached != null) {
+            applyPlaylistOutcome(cached, fromCache = true)
+        } else {
+            val outcome = if (source.type == PlaylistSourceType.FILE) {
+                playlistRepository.loadFromFile(source.location.toUri())
             } else {
-                val outcome = if (source.type == PlaylistSourceType.FILE) {
-                    playlistRepository.loadFromFile(source.location.toUri())
-                } else {
-                    playlistRepository.loadFromUrl(source.location)
-                }
-                applyPlaylistOutcome(outcome)
+                playlistRepository.loadFromUrl(source.location)
             }
+            applyPlaylistOutcome(outcome)
         }
     }
 
@@ -218,27 +294,74 @@ class PlaylistController(
         val previousActiveId = preferences.activePlaylistSourceId
         val result = PlaylistSourcePolicy.remove(_playlistSources.value, previousActiveId, id)
         if (result !is PlaylistSourceRemovalResult.Removed) return
+        // A load for the source being removed must not outlive it. It writes a snapshot when it
+        // finishes (PlaylistRepository.persistIfLoaded), so a load still in flight would put the
+        // deleted playlist back on screen and re-create the file deleted below - orphaned this
+        // time, since no source names it any more, so nothing will ever delete it again.
+        //
+        // Only the active source can be the one loading, so removing any other must leave that load
+        // alone. Cancelled rather than awaited: a load stuck in a socket read does not stop until
+        // its timeout, and holding the save behind that would risk losing the removal itself if the
+        // process died meanwhile - a worse failure than the one being fixed. The branch below that
+        // switches to another source cancels this again through launchLoad, harmlessly.
+        if (previousActiveId == id) loadJob?.cancel()
         _playlistSources.value = result.sources
-        scope.launch {
-            playlistRepository.saveSources(result.sources)
-            playlistRepository.deleteSnapshot(id)
-        }
+        sourcePersistence.markForDeletion(id)
         setActivePlaylistSourceId(result.newActiveId)
         when {
-            result.newActiveId == null -> _playlistState.value = PlaylistUiState()
+            result.newActiveId == null -> {
+                channelCount = 0
+                _playlistState.value = PlaylistUiState()
+            }
             // The removed source was the active one and a different source took over - load it.
             result.newActiveId != previousActiveId ->
                 result.sources.firstOrNull { it.id == result.newActiveId }?.let(::switchPlaylistSource)
             else -> Unit // Removed a source that wasn't active - nothing else to reload.
         }
+        persistSources(result.sources)
     }
 
     /** Wholesale-replaces the saved sources list from a backup import merge (see
      * [com.uacastplayer.backup.BackupMergePolicy]) and persists it - the merged list is already
-     * computed by the caller, this just applies and saves it. */
-    fun applyImportedSources(sources: List<PlaylistSource>) {
+     * computed by the caller, this just applies and saves it. The returned job lets callers that
+     * require a durable boundary (notably process-restarting instrumentation) wait for the write. */
+    fun applyImportedSources(sources: List<PlaylistSource>, activateIfNeeded: Boolean = false): Job {
         _playlistSources.value = sources
-        scope.launch { playlistRepository.saveSources(sources) }
+        if (sources.isEmpty()) {
+            loadJob?.cancel()
+            pendingNewSource = null
+            channelCount = 0
+            setActivePlaylistSourceId(null)
+            _playlistState.value = PlaylistUiState()
+        } else if (activateIfNeeded && !_playlistState.value.hasChannels) {
+            val source = sources.firstOrNull { it.id == _activePlaylistSourceId.value } ?: sources.first()
+            switchPlaylistSource(source)
+        }
+        return persistSources(sources)
+    }
+
+    private val persistSources: (List<PlaylistSource>) -> Job = sourcePersistence::write
+
+    suspend fun awaitSourcesPersistence(): Boolean {
+        return sourcePersistence.awaitPersistence()
+    }
+
+    private fun publishSourceSave(state: PlaylistSourceSaveState) {
+        _playlistState.value = _playlistState.value.copy(sourceSaveState = state)
+    }
+
+    /** Check capacity before download, but allow updating an existing source at the limit. */
+    private fun beginSourceAdd(source: PlaylistSource): Boolean {
+        if (PlaylistSourcePolicy.add(_playlistSources.value, source) == PlaylistSourceAddResult.LimitReached) {
+            publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
+            return false
+        }
+        pendingNewSource = source
+        _playlistState.value = _playlistState.value.copy(sourceReadyToSave = false)
+        if (_playlistState.value.sourceSaveState != PlaylistSourceSaveState.FAILED) {
+            publishSourceSave(PlaylistSourceSaveState.IDLE)
+        }
+        return true
     }
 
     private fun newPendingSource(type: PlaylistSourceType, location: String): PlaylistSource = PlaylistSource(
@@ -251,7 +374,7 @@ class PlaylistController(
 
     private fun startUrlLoad(url: String) {
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
-        launchLoad {
+        launchLoad("url") {
             applyPlaylistOutcome(playlistRepository.loadFromUrl(url))
         }
     }
@@ -282,13 +405,14 @@ class PlaylistController(
 
     private suspend fun applyPlaylistOutcome(rawOutcome: PlaylistOutcome, fromCache: Boolean = false) {
         val outcome = rawOutcome.withKnownSourceUrl()
-        if (outcome is PlaylistOutcome.Loaded) {
+        val loadedChannels = if (outcome is PlaylistOutcome.Loaded) {
             // Off the main thread: `scope` is the ViewModel's (Dispatchers.Main.immediate), and
             // this flattens every group of a playlist that routinely runs to tens of thousands of
             // channels - an allocation that size does not belong in the frame that applies a load.
-            val channels = withContext(Dispatchers.Default) { outcome.groups.flatMap { it.channels } }
-            channelCount = channels.size
-            onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
+            // The resulting list is also stored in PlaylistUiState and reused by every screen.
+            withPlaylistCpu { outcome.groups.flatMap { it.channels } }
+        } else {
+            null
         }
         // Looked up by source id rather than a single flat preference, since there can now be
         // several saved sources each with their own name (see PlaylistSource). A brand-new source
@@ -296,12 +420,24 @@ class PlaylistController(
         // this point - setPlaylistDisplayName patches displayName in directly once it's known,
         // same as it always has.
         val displayName = (outcome as? PlaylistOutcome.Loaded)?.sourceFingerprint
-            ?.let { id -> _playlistSources.value.firstOrNull { it.id == id }?.displayName }
-        _playlistState.value = PlaylistOutcomeReducer.reduce(
+            ?.let { id -> _playlistSources.value.firstOrNull { it.id == id } }
+            // The name the user gave it, or one derived from where it came from. Never the id: that
+            // is a SHA-256, and the screens used to print its first eight characters as the title.
+            ?.let { source -> source.displayName ?: PlaylistSourceLabel.forLocation(source.type, source.location) }
+        val nextState = PlaylistOutcomeReducer.reduce(
             current = _playlistState.value,
             outcome = outcome,
             fromCache = fromCache,
             displayName = displayName,
+            loadedChannels = loadedChannels,
+        )
+        if (outcome is PlaylistOutcome.Loaded && !loadedChannels.isNullOrEmpty()) {
+            val channels = checkNotNull(loadedChannels)
+            channelCount = channels.size
+            onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
+        }
+        _playlistState.value = nextState.copy(
+            sourceReadyToSave = pendingNewSource != null && nextState.error == null && nextState.hasChannels,
         )
         onStateChanged()
     }

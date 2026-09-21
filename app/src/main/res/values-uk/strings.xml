@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="player_remote_controls_notice">Під час трансляції параметрами відтворення керує телевізор. Скористайтеся керуванням пристроєм.</string>
+    <string name="playlist_error_storage">Не вдалося зберегти плейлист. Попередню копію збережено. Звільніть місце та перезапустіть додаток для повторної спроби.</string>
+    <string name="player_levels">Яскравість і гучність</string>
     <string name="app_name">UA Cast Player</string>
 
     <!-- Language picker (first run) -->
@@ -16,12 +19,14 @@
     <string name="nav_channels">Канали</string>
     <string name="nav_favorites">Улюблені</string>
     <string name="nav_settings">Налаштування</string>
+    <string name="nav_settings_compact">Налашт.</string>
 
     <!-- Home screen -->
     <string name="home_subtitle">Ваше телебачення</string>
     <string name="home_empty_message">Плейлист ще не додано</string>
     <string name="home_empty_subtitle">Додайте посилання на M3U або M3U8 плейлист, щоб переглядати канали.</string>
     <string name="home_active_playlist_label">Активний плейлист</string>
+    <string name="playlist_unnamed">Плейліст із файлу</string>
     <string name="home_restored_from_cache">Відновлено з кешу</string>
     <plurals name="home_stat_channels" tools:ignore="ImpliedQuantity">
         <item quantity="one">Канал</item>
@@ -54,29 +59,35 @@
 
     <!-- Add playlist screen -->
     <string name="add_playlist_title">Додати плейлист</string>
-    <string name="add_playlist_name_hint">Назва плейлиста</string>
+    <string name="add_playlist_name_hint">Назва плейлиста (необов’язково)</string>
     <string name="add_playlist_url_hint">URL плейлиста</string>
+    <string name="add_playlist_url_error">Введіть повну адресу з http:// або https://</string>
     <string name="add_playlist_helper">Підтримуються M3U, M3U8, TXT плейлисти. URL має починатися з http:// або https://.</string>
     <string name="add_playlist_status_label">Статус</string>
-    <string name="add_playlist_status_empty">Вставте URL плейлиста M3U або M3U8</string>
-    <string name="add_playlist_status_empty_xtream">Введіть адресу сервера, логін і пароль</string>
     <string name="add_playlist_status_loading">Завантаження…</string>
-    <string name="add_playlist_status_ready">Готово до завантаження</string>
     <string name="add_playlist_status_no_channels">Завантажено, але каналів не знайдено — перевірте посилання</string>
     <string name="add_playlist_save_button">Завантажити та зберегти</string>
     <string name="add_playlist_file_button">Завантажити з файлу</string>
-    <string name="add_playlist_tip">Порада: вставте посилання M3U / M3U8 від вашого провайдера, або завантажте файл плейлиста з пристрою.</string>
+    <string name="add_playlist_tip">Використовуйте плейлист або обліковий запис від вашого ТВ-провайдера. Застосунок не надає власних каналів.</string>
     <string name="add_playlist_type_url">URL M3U</string>
     <string name="add_playlist_type_file">Файл</string>
     <string name="add_playlist_type_xtream">Xtream</string>
     <string name="add_playlist_xtream_server_hint">Адреса сервера (з портом)</string>
+    <string name="add_playlist_server_error">Введіть URL сервера або host:port</string>
     <string name="add_playlist_xtream_username_hint">Логін</string>
     <string name="add_playlist_xtream_password_hint">Пароль</string>
+    <string name="add_playlist_password_show">Показати</string>
+    <string name="add_playlist_password_hide">Сховати</string>
+    <string name="add_playlist_xtream_cleartext_warning">Цей сервер використовує незашифрований HTTP. Логін, пароль і посилання на потоки можуть прочитати або змінити під час передавання. Використовуйте https://, якщо провайдер його підтримує.</string>
+    <string name="add_playlist_url_cleartext_warning">Цей плейлист використовує незашифрований HTTP. Його адресу, вбудовані дані доступу та завантажений вміст можуть прочитати або змінити під час передавання. Використовуйте HTTPS, якщо провайдер його підтримує.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Поки що немає каналів</string>
-    <string name="channels_empty_subtitle">Додайте плейлист у Налаштуваннях, щоб побачити канали тут</string>
+    <string name="channels_empty_subtitle">Додайте плейлист, щоб побачити тут канали</string>
+    <string name="channels_error_subtitle">Перевірте джерело та з’єднання, а потім повторіть</string>
+    <string name="common_retry">Спробувати ще раз</string>
     <string name="channels_search_hint">Пошук каналів</string>
+    <string name="channels_clear_search">Очистити пошук каналів</string>
     <string name="channels_groups_title">Групи каналів</string>
     <string name="channels_no_search_results">Немає каналів за запитом «%1$s»</string>
     <string name="channels_search_all_hint">Пошук по всіх каналах</string>
@@ -87,6 +98,7 @@
     <string name="channels_channel_guide">Гід</string>
     <string name="channels_channel_add_favorite">Додати в улюблені</string>
     <string name="channels_channel_remove_favorite">Прибрати з улюблених</string>
+    <string name="channels_more_actions">Інші дії з каналом</string>
     <string name="channels_channel_lock">Заблокувати канал</string>
     <string name="channels_channel_unlock">Розблокувати канал</string>
     <string name="channels_channel_locked">Заблоковано - торкніться, щоб ввести PIN</string>
@@ -108,6 +120,7 @@
     <string name="playlist_error_size_limit">Плейлист перевищує ліміт 8 МБ — це приблизно 45 000 каналів. Попросіть у провайдера менший список або розділений за категоріями.</string>
     <string name="playlist_error_http">Помилка сервера (код %1$d)</string>
     <string name="playlist_error_network">Помилка мережі, спробуйте ще раз</string>
+    <string name="playlist_error_empty">У цьому файлі немає каналів. Перевірте, чи це справді плейліст M3U, а не інший файл.</string>
 
     <!-- Channel group names -->
     <string name="group_ungrouped">Без групи</string>
@@ -134,9 +147,21 @@
     <string name="favorites_sort_alphabetical">За алфавітом</string>
     <string name="favorites_sort_recently_added">Нещодавно додані</string>
     <string name="favorites_sort_manual">Власний порядок</string>
+    <string name="favorites_manual_hint">Утримуйте канал, щоб перетягнути його на нову позицію.</string>
 
     <!-- Settings screen -->
-    <string name="settings_section_general">Загальні</string>
+    <string name="settings_section_general">Вигляд і мова</string>
+    <string name="settings_back_to_overview">До всіх налаштувань</string>
+    <string name="settings_page_general_summary">Тема, мова, вигляд каналів і логотипи</string>
+    <string name="settings_page_playlist_access">Плейлисти й телепрограма</string>
+    <string name="settings_page_playlist_summary">Джерела, приховані групи та телепрограма XMLTV</string>
+    <string name="settings_page_playback_summary">Буфер, перемикання каналів і робота батареї</string>
+    <string name="settings_page_parental_summary">PIN, заблоковані канали та відновлення доступу</string>
+    <string name="home_change_playlist">Змінити плейлист</string>
+    <string name="settings_page_data_storage">Дані та сховище</string>
+    <string name="settings_page_data_summary">Кеш, резервна копія, імпорт та експорт</string>
+    <string name="settings_page_help_about">Допомога та про застосунок</string>
+    <string name="settings_page_help_summary">Оновлення, навчання, діагностика й правова інформація</string>
     <string name="settings_section_playlist">Плейлист</string>
     <string name="settings_theme_label">Тема</string>
     <string name="theme_name_azure">Класична</string>
@@ -145,18 +170,18 @@
     <string name="settings_language_label">Мова</string>
     <string name="settings_icon_wifi_only_label">Завантажувати логотипи лише через Wi-Fi</string>
     <string name="settings_epg_source_label">Джерело телепрограми</string>
-    <string name="epg_source_rect_transparent">Прямокутні (прозорий фон)</string>
-    <string name="epg_source_square_dark">Квадратні (темний фон)</string>
-    <string name="epg_source_perfect_player">Perfect Player</string>
-    <string name="epg_source_rect_transparent_simple">Спрощений: прямокутні</string>
-    <string name="epg_source_square_dark_simple">Спрощений: квадратні</string>
+    <string name="epg_source_rect_transparent">it999 · epg2.xml.gz</string>
+    <string name="epg_source_square_dark">it999 · epg.xml.gz</string>
+    <string name="epg_source_perfect_player">it999 · pp.xml.gz</string>
+    <string name="epg_source_rect_transparent_simple">it999 · epg2.xml</string>
+    <string name="epg_source_square_dark_simple">it999 · epg.xml</string>
     <string name="settings_epg_truncated">Ця телепрограма більша, ніж застосунок може вмістити, тому останні канали в ній лишилися без передач. Спробуйте спрощене джерело вище.</string>
     <string name="settings_epg_suggestion_hint">У плейлисті знайдено EPG-адресу</string>
     <string name="settings_epg_suggestion_action">Використати</string>
     <string name="settings_detail_level_label">Рівень деталізації</string>
     <string name="settings_detail_level_full">Повний</string>
     <string name="settings_detail_level_balanced">Збалансований</string>
-    <string name="settings_detail_level_data_saver">Економія трафіку</string>
+    <string name="settings_detail_level_data_saver">Мінімально</string>
     <string name="settings_icon_display_mode_tier_default_hint">Знижено автоматично для економії ресурсів на цьому пристрої</string>
     <string name="settings_channel_layout_label">Розкладка</string>
     <string name="channel_layout_list">Список</string>
@@ -176,6 +201,7 @@
     <string name="settings_icon_sources_remove">Прибрати джерело</string>
     <string name="settings_icon_sources_error_invalid">Введіть повну URL-адресу http(s)</string>
     <string name="settings_icon_sources_error_duplicate">Це джерело вже додано</string>
+    <string name="settings_icon_sources_error_limit">Можна додати до 16 джерел іконок</string>
     <string name="settings_section_parental_control">Батьківський контроль</string>
     <string name="parental_control_set_up">Встановити PIN-код</string>
     <string name="parental_control_manage_locked">Заблоковані канали (%1$d)</string>
@@ -193,15 +219,21 @@
     <string name="settings_section_playback">Відтворення</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="settings_section_data">Дані</string>
-    <string name="settings_data_hint">Збережіть плейлисти, улюблені канали та основні налаштування у файл, або відновіть їх на іншому пристрої. Кеш ніколи не включається.</string>
+    <string name="settings_data_hint">Збережіть плейлисти, улюблені канали та основні налаштування. Файл не зашифрований і може містити дані доступу провайдера та приватні посилання на потоки.</string>
     <string name="settings_data_export">Експортувати</string>
+    <string name="settings_data_export_warning_title">Експортувати конфіденційні дані?</string>
+    <string name="settings_data_export_warning_message">Ця резервна копія не зашифрована. Вона може містити IPTV-логіни, паролі, токени доступу та приватні посилання на потоки. Зберігайте й передавайте її як пароль.</string>
+    <string name="settings_data_export_confirm">Усе одно експортувати</string>
     <string name="settings_data_import">Імпортувати</string>
     <string name="settings_data_import_summary">Імпортовано: %1$d плейлисти, %2$d улюблених</string>
+    <string name="settings_data_export_success">Резервну копію успішно експортовано</string>
+    <string name="settings_data_export_failure">Не вдалося експортувати резервну копію. Перевірте доступ до сховища й повторіть спробу.</string>
     <string name="cache_playlist_label">Кеш плейлиста</string>
     <string name="cache_epg_label">Кеш телепрограми</string>
     <string name="cache_icons_label">Кеш логотипів</string>
     <string name="cache_coil_label">Кеш зображень</string>
     <string name="cache_clear_button">Очистити</string>
+    <string name="add_playlist_clear_url">Очистити URL плейлиста</string>
     <string name="settings_device_tier_label">Визначений рівень пристрою</string>
     <string name="device_tier_low_end">Базовий</string>
     <string name="device_tier_mid_range">Стандартний</string>
@@ -211,13 +243,15 @@
     <string name="settings_help_body">UA Cast Player — це особистий IPTV-плеєр. Додайте плейлист на вкладці «Канали» (за посиланням або файлом), оберіть джерело телепрограми й торкніться будь-якого каналу. Кнопка Cast транслює на Chromecast або Google TV; сусідня кнопка дістається до телевізорів, які працюють через DLNA. Якщо потік не відтворюється на пристрої напряму, додаток повторює спробу через проміжний сервер на вашому телефоні.</string>
     <string name="settings_open_help">Детальна довідка</string>
     <string name="settings_open_terms">Умови використання</string>
+    <string name="settings_open_privacy_policy">Політика конфіденційності</string>
     <string name="settings_send_diagnostics">Надіслати журнал роботи розробнику</string>
     <string name="settings_send_button">Надіслати</string>
-    <string name="settings_diagnostics_routing_label">Ефективність маршрутизації (лише локально, на цьому пристрої)</string>
+    <string name="settings_diagnostics_routing_label">Ефективність трансляції (залишається на цьому пристрої)</string>
     <string name="settings_diagnostics_route_direct">Напряму</string>
     <string name="settings_diagnostics_route_remux">Ремукс</string>
     <string name="settings_diagnostics_route_rewrite">Проксі-переписування</string>
     <string name="settings_diagnostics_route_line">%1$s: спроб %2$d, відтворено %3$d, невдало %4$d</string>
+    <string name="settings_diagnostics_route_never_cast">З цього пристрою ще нічого не транслювали.</string>
     <string name="settings_open_button">Відкрити</string>
 
     <!-- Help screen -->
@@ -248,13 +282,14 @@
     <string name="help_cast_errors_body">Телефон і телевізор розуміють різні формати. «відео … не підтримується» або «аудіо … не підтримується» прямо називає формат, від якого відмовився ваш пристрій — найчастіше це аудіо AC-3 та відео MPEG-2 або HEVC. Додаток не може їх перетворити: він передає потік, а не перекодовує його. Пошукайте той самий канал в іншій якості — там часто інша звукова доріжка. «Не вдалося транслювати цей канал» без назви формату означає, що ресивер відмовився з іншої причини. «Резервна трансляція недоступна в цій мережі» — Wi-Fi не видав телефону адреси IPv4, тому проміжний сервер не може запуститись. У всіх цих випадках канал продовжує грати на телефоні.</string>
     <string name="help_send_diagnostics_button">Надіслати діагностику</string>
     <string name="diagnostics_preview_title">Звіт діагностики</string>
-    <string name="diagnostics_preview_body_hint">Звіт містить технічні дані пристрою та журнал останніх дій — без плейлістів, логінів і адрес. Прочитайте його нижче: він відкриється у вашій поштовій програмі, адресований розробнику, і нічого не піде, доки ви не натиснете «Надіслати» там.</string>
+    <string name="diagnostics_preview_body_hint">Звіт містить технічні дані пристрою та журнал останніх дій. URL плейлистів, облікові дані й токени доступу маскуються, але у звіті можуть залишитися назви серверів провайдерів, локальні мережеві адреси, назви каналів і дані пристрою. Прочитайте його нижче: Android відкриє вибір поштової або іншої програми для поширення, де це можливо вже з адресою розробника, і нічого не піде, доки ви не оберете програму й не натиснете «Надіслати» там.</string>
     <string name="diagnostics_preview_send">Надіслати</string>
     <string name="diagnostics_preview_cancel">Скасувати</string>
     <string name="diagnostics_share_chooser_title">Надіслати звіт діагностики через</string>
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Умови використання</string>
+    <string name="privacy_policy_title">Політика конфіденційності</string>
     <string name="terms_intro">Встановлюючи або використовуючи UA Cast Player («застосунок»), ви погоджуєтеся з цими Умовами використання. Якщо ви не погоджуєтеся — не користуйтеся застосунком.</string>
     <string name="terms_s1_title">1. Що таке цей застосунок</string>
     <string name="terms_s1_body">UA Cast Player — це універсальний плеєр для M3U/M3U8 плейлистів, які ви додаєте самостійно, та відправник для Google Cast. Застосунок не надає, не продає, не добирає і не перевіряє жодного власного каналу, фільму чи медіаконтенту — кожен потік походить із посилання або файлу, який ви вказали самі.</string>
@@ -288,10 +323,14 @@
     <string name="player_mini_close">Закрити плеєр</string>
     <string name="player_mini_on_tv_badge">На ТВ</string>
     <string name="cast_status_connected">Трансляція</string>
+    <string name="player_chromecast_cast">Транслювати на Chromecast</string>
+    <string name="player_chromecast_connected">Підключено до Chromecast</string>
     <string name="player_audio_track">Аудіо</string>
     <string name="player_subtitle_track">Субтитри</string>
     <string name="player_subtitle_off">Вимкнено</string>
     <string name="player_fatal_error">Цей канал зараз недоступний</string>
+    <string name="player_retry">Повторити цей канал</string>
+    <string name="player_auto_skip_progress">Канал недоступний — пробуємо наступний (%1$d/%2$d)</string>
     <string name="audio_layout_mono">Моно</string>
     <string name="audio_layout_stereo">Стерео</string>
     <string name="audio_layout_surround_5_1">Об\'ємний звук 5.1</string>
@@ -304,9 +343,10 @@
     <string name="player_volume_decrease">Зменшити гучність, зараз %1$d відсотків</string>
     <string name="player_volume_increase">Збільшити гучність, зараз %1$d відсотків</string>
     <string name="player_back_to_channels">Назад до каналів</string>
+    <string name="player_toggle_controls">Показати або сховати елементи керування</string>
     <string name="player_next_channels_title">Наступні канали</string>
     <string name="player_view_all">Дивитися всі</string>
-    <string name="player_quality">Якість відео</string>
+    <string name="player_quality">Про потік</string>
     <!-- Two short words rather than one long one: this is a label in the player's six-item quick
          settings row, where each item gets a sixth of the width. "Співвідношення" is a single
          14-character word - no word boundary to wrap at, so Compose broke it mid-word as
@@ -364,7 +404,6 @@
     <string name="common_confirm">Підтвердити</string>
     <string name="common_cancel">Скасувати</string>
     <!-- DLNA casting -->
-    <string name="player_dlna_cast">Транслювати на інший пристрій (DLNA)</string>
     <string name="dlna_sheet_title">Інші пристрої (DLNA)</string>
     <string name="dlna_sheet_searching">Пошук пристроїв…</string>
     <string name="dlna_sheet_no_devices">Пристроїв не знайдено</string>
@@ -396,6 +435,9 @@
     <string name="guided_tour_settings_body">Мова й тема, розмір буфера, іконки каналів, батьківський контроль, резервна копія та оновлення. Тут же живе і це навчання, якщо схочете пройти ще раз.</string>
 
     <string name="settings_section_tutorial">Навчання</string>
+    <string name="settings_search_hint">Пошук у налаштуваннях</string>
+    <string name="settings_search_clear">Очистити пошук налаштувань</string>
+    <string name="settings_search_no_results">Немає налаштувань за запитом «%1$s»</string>
     <string name="settings_tutorial_label">Інтерактивний тур</string>
     <string name="settings_tutorial_button">Показати</string>
     <string name="settings_tutorial_hint_unseen">Короткий огляд основних можливостей.</string>
@@ -403,17 +445,34 @@
 
     <string name="dlna_volume">Гучність телевізора</string>
     <string name="dlna_volume_value">%1$d%%</string>
+    <string name="epg_today">Сьогодні</string>
+    <string name="epg_previous_day">Назад</string>
+    <string name="epg_next_day">Далі</string>
+    <string name="epg_jump_today">Сьогодні</string>
+    <string name="epg_timezone">Часовий пояс: %1$s</string>
+    <string name="home_make_it_yours_title">Налаштуйте головний екран</string>
+    <string name="home_make_it_yours_body">Додавайте в улюблені канали, які дивитеся часто, щоб відкривати їх одним дотиком.</string>
 
     <string name="update_banner_title">Доступна нова версія</string>
     <string name="update_banner_message">Версію %1$s можна завантажити.</string>
+    <string name="update_banner_message_page_only">Версію %1$s опубліковано без APK — відкриється сторінка релізу.</string>
     <string name="update_banner_action">Відкрити реліз</string>
     <string name="settings_section_updates">Оновлення</string>
-    <string name="settings_update_hint">Застосунок перевіряє нову версію раз на тиждень, коли ви його відкриваєте. Він нічого не завантажує і не встановлює сам — кнопка нижче відкриває сторінку релізу у браузері.</string>
+    <string name="settings_update_hint">Застосунок перевіряє нову версію раз на тиждень, коли ви його відкриваєте. Якщо до релізу прикріплено APK, він може завантажити й встановити його — файл звіряється з релізом і має бути підписаний тим самим розробником, що й ваша копія, інакше буде відхилений. Ви завжди можете натомість відкрити сторінку релізу у браузері.</string>
     <string name="settings_update_check_button">Перевірити оновлення</string>
     <string name="settings_update_checking">Перевіряємо…</string>
     <string name="settings_update_up_to_date">У вас найновіша версія.</string>
     <string name="settings_update_available">Доступна версія %1$s.</string>
     <string name="settings_update_failed">Не вдалося перевірити. Спробуйте пізніше.</string>
+    <string name="settings_update_install_button">Завантажити й встановити</string>
+    <string name="settings_update_downloading">Завантаження…</string>
+    <string name="settings_update_downloading_percent">Завантаження… %1$d%%</string>
+    <string name="settings_update_launching">Готово. Підтвердьте встановлення на екрані.</string>
+    <string name="settings_update_needs_permission">Щоб встановлювати звідси, дозвольте UA Cast встановлювати застосунки.</string>
+    <string name="settings_update_grant_permission_button">Відкрити налаштування</string>
+    <string name="settings_update_untrusted">Цей файл підписано не тим розробником, що вашу копію, тому його не встановлено. Завантажте його зі сторінки релізу.</string>
+    <string name="settings_update_corrupt">Завантажений файл пошкоджено. Спробуйте ще раз.</string>
+    <string name="settings_update_install_failed">Не вдалося встановити. Спробуйте ще раз.</string>
 
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Безкоштовна версія</string>
@@ -429,6 +488,8 @@
     <string name="premium_unlock_later">Не зараз</string>
     <string name="premium_restore">Відновити покупки</string>
     <string name="premium_no_store">Купувати поки нічого — застосунок не опубліковано в магазині. На час пробного періоду Premium відкритий усім.</string>
+    <string name="premium_no_play_on_device">На цьому пристрої немає Google Play, тож купувати тут нічого — усі функції Premium відкриті. Це навмисно, а не недогляд.</string>
+    <string name="premium_store_offers_nothing">Google Play зараз нічого не пропонує. Поки так — функції Premium лишаються відкритими.</string>
     <string name="premium_restore_nothing">На цьому акаунті Google немає що відновлювати.</string>
     <string name="premium_already_owned">Це вже куплено. Натисніть «Відновити покупки».</string>
     <string name="premium_store_unreachable">Не вдалося звʼязатися з Google Play. Перевірте зʼєднання та спробуйте ще раз.</string>
@@ -443,4 +504,41 @@
     <string name="feature_custom_epg">Власне джерело телепрограми</string>
     <string name="feature_custom_icons">Власні джерела логотипів</string>
     <string name="settings_developer_license">Розробнику: стан ліцензії</string>
+    <string name="settings_data_import_persistence_failure">Частину імпортованих даних не вдалося зберегти. Звільніть місце та повторіть імпорт резервної копії перед закриттям застосунку.</string>
+    <string name="playlist_remove_confirmation">Видалити «%1$s» зі збережених плейлистів? Щоб додати його знову, знадобиться адреса або файл.</string>
+    <string name="playlist_remove_active_confirmation">Видалити активний плейлист «%1$s»? Буде вибрано інший збережений плейлист або список каналів стане порожнім. Для відновлення знадобиться адреса або файл.</string>
+    <string name="player_tracks_loading">Доріжки ще завантажуються. Залиште це вікно відкритим або спробуйте після початку відтворення.</string>
+    <string name="player_tracks_empty">У цьому потоці немає доступних для вибору доріжок.</string>
+    <string name="epg_guide_loading">Завантаження телепрограми…</string>
+    <string name="epg_guide_error">Не вдалося завантажити телепрограму. Перевірте з’єднання та джерело EPG у налаштуваннях.</string>
+    <string name="epg_guide_no_match">У цьому джерелі EPG немає розкладу для каналу. Виберіть інше джерело в налаштуваннях.</string>
+    <string name="epg_guide_empty_day">На цю дату немає програм. Виберіть інший день.</string>
+    <string name="dlna_connecting_device">Підключення до %1$s…</string>
+    <string name="dlna_connection_failed">Не вдалося почати відтворення на %1$s. Телевізор може бути недоступним або не підтримувати цей потік.</string>
+    <string name="dlna_network_hint">Телефон і телевізор мають бути в одній мережі Wi-Fi. Перевірте, чи увімкнено приймання медіа на телевізорі.</string>
+    <string name="dlna_search_again">Шукати знову</string>
+    <string name="settings_visual_section">Вигляд і логотипи</string>
+    <string name="settings_detail_level_hint">Впливає лише на деталізацію списку та завантаження логотипів. Якість відео й витрати трафіку відеопотоку не змінюються.</string>
+    <string name="player_devices">На телевізор</string>
+    <string name="player_more_controls">Ще</string>
+    <string name="player_search_channels">Знайти канал</string>
+    <string name="player_channels_loading">Завантаження каналів…</string>
+    <string name="player_channels_no_results">Каналів не знайдено</string>
+    <string name="favorites_search">Пошук в улюблених</string>
+    <string name="favorites_edit">Редагувати улюблені</string>
+    <string name="favorites_move_up">Перемістити вище</string>
+    <string name="favorites_move_down">Перемістити нижче</string>
+    <string name="favorites_remove_confirm">Вилучити «%1$s» з улюблених? Його можна знову додати зі списку каналів.</string>
+    <string name="settings_epg_custom_active">Джерело з плейлиста / власне</string>
+    <string name="settings_epg_variants_hint">Готові файли надає it999. Назви файлів позначають варіанти; покриття каналів залежить від постачальника. Вибір варіанта замінить поточне джерело.</string>
+    <string name="nav_large_home">Дім</string>
+    <string name="nav_large_channels">ТБ</string>
+    <string name="nav_large_favorites">Зірки</string>
+    <string name="nav_large_settings">Опції</string>
+    <string name="playlist_sources_saving">Зберігаємо зміни плейлистів…</string>
+    <string name="playlist_sources_save_failed">Зміни не збережено. Спробуйте ще раз перед закриттям застосунку.</string>
+    <string name="playlist_sources_retry_save">Повторити збереження</string>
+    <string name="playlist_sources_limit">Можна зберегти до %1$d плейлистів. Видаліть один, перш ніж додавати інший.</string>
+    <string name="download_banner_expand">Показати деталі завантажень</string>
+    <string name="download_banner_collapse">Приховати деталі завантажень</string>
 </resources>

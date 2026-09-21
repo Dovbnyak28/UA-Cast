@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,11 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -55,12 +58,12 @@ import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.BodyRegular
-import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.PillText
-import com.uacastplayer.ui.theme.PressScaleIcon
-import com.uacastplayer.ui.theme.PressScalePlay
-import com.uacastplayer.ui.theme.PressScaleRound
+import com.uacastplayer.ui.theme.PRESS_SCALE_ICON
+import com.uacastplayer.ui.theme.PRESS_SCALE_PLAY
+import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
 import com.uacastplayer.ui.theme.PlayButtonSize
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusSeg
@@ -70,11 +73,70 @@ import androidx.compose.ui.unit.Dp
 import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.SecondaryButtonStyle
 import com.uacastplayer.ui.theme.TabLabel
+import com.uacastplayer.ui.theme.TouchTargetMin
 import com.uacastplayer.ui.theme.UaCastTheme
 private const val GHOST_BUTTON_PRESSED_ALPHA = 0.12f
+private const val DISABLED_CONTROL_ALPHA = 0.38f
+private const val PILL_SHAPE_PERCENT = 50
 // The app is dark-only (see UaCastTheme's KDoc) - previews below use this instead of Studio's
 // default white canvas so raisedSurface/sunkenSurface depth cues are visible at a glance.
 private const val PREVIEW_BACKGROUND = 0xFF0B0B12L
+
+/** Full-strength app action, replacing theme-dependent Material Button chrome. */
+@Composable
+fun PrimaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    leadingIcon: ImageVector? = null,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) PRESS_SCALE_ROUND else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
+        label = "primaryButtonScale",
+    )
+    val shape = if (UaTheme.palette.pillButtons) {
+        RoundedCornerShape(PILL_SHAPE_PERCENT)
+    } else {
+        RoundedCornerShape(RadiusItem)
+    }
+    Row(
+        modifier = modifier
+            .heightIn(min = TouchTargetMin)
+            .scale(scale)
+            .let { base ->
+                if (enabled) {
+                    base.raisedSurface(shape, UaTheme.palette.accentGradient, shadow = false)
+                } else {
+                    base.raisedSurface(shape, UaTheme.palette.surface2, shadow = false)
+                }
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val contentColor = if (enabled) UaTheme.palette.accentOnFill else UaTheme.palette.labelTertiary
+        leadingIcon?.let {
+            Icon(it, contentDescription = null, tint = contentColor, modifier = Modifier.size(20.dp))
+        }
+        Text(
+            text = text,
+            style = BodyRegular,
+            color = contentColor,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = if (leadingIcon != null) Modifier.padding(start = 8.dp) else Modifier,
+        )
+    }
+}
 
 /**
  * Colors for `OutlinedTextField` that give it the app's "sunken"/recessed input look and an
@@ -104,17 +166,19 @@ fun GradientPlayButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    enabled: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScalePlay else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed) PRESS_SCALE_PLAY else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "playButtonScale",
     )
     Box(
         modifier = modifier
             .size(PlayButtonSize)
+            .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
             .scale(scale)
             // One of the three places in the app allowed to glow - see docs/DESIGN_SYSTEM.md "§D
             // Depth". The edge-highlight border below is the same raisedSurface(fill = Brush)
@@ -125,13 +189,20 @@ fun GradientPlayButton(
             .background(UaTheme.palette.accentGradient)
             .border(1.dp, UaTheme.palette.edgeHighlightAccent, CircleShape)
             .clickable(
+                enabled = enabled,
+                role = Role.Button,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(26.dp))
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = UaTheme.palette.accentOnFill,
+            modifier = Modifier.size(26.dp),
+        )
     }
 }
 
@@ -142,23 +213,29 @@ fun RoundIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    onClickLabel: String? = contentDescription,
+    enabled: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScaleRound else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed) PRESS_SCALE_ROUND else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "roundButtonScale",
     )
     Box(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .size(RoundButtonSize)
+            .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
             .scale(scale)
             .raisedSurface(CircleShape, pressedSurface(UaTheme.palette.surface1, pressed), shadow = false)
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = onClickLabel,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
@@ -179,6 +256,7 @@ fun SmallRoundIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    onClickLabel: String? = contentDescription,
     tint: Color = UaTheme.palette.labelPrimary,
     background: Color = UaTheme.palette.surface1,
     /** The glyph inside the circle. Raise it for an icon that has to hold its own beside the
@@ -189,8 +267,8 @@ fun SmallRoundIconButton(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScaleIcon else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed) PRESS_SCALE_ICON else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "smallIconButtonScale",
     )
     Box(
@@ -202,6 +280,8 @@ fun SmallRoundIconButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = onClickLabel,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
@@ -231,7 +311,7 @@ fun StatusPill(text: String, variant: StatusPillVariant, modifier: Modifier = Mo
         style = PillText,
         color = color,
         modifier = modifier
-            .clip(RoundedCornerShape(50))
+            .clip(RoundedCornerShape(PILL_SHAPE_PERCENT))
             .background(color.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
@@ -239,7 +319,11 @@ fun StatusPill(text: String, variant: StatusPillVariant, modifier: Modifier = Mo
 
 /** §5.5 - a status dot with a soft glow matching route health. */
 @Composable
-fun GlowStatusDot(variant: StatusPillVariant, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = com.uacastplayer.ui.theme.StatusDotSize) {
+fun GlowStatusDot(
+    variant: StatusPillVariant,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = com.uacastplayer.ui.theme.StatusDotSize,
+) {
     val color = when (variant) {
         StatusPillVariant.Good -> UaTheme.palette.routeGreen
         StatusPillVariant.Proxy -> UaTheme.palette.routeAmber
@@ -275,15 +359,23 @@ fun SegmentedControl(
     modifier: Modifier = Modifier,
 ) {
     val palette = UaTheme.palette
-    val containerShape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusSeg)
-    val segmentShape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusSegInner)
+    val containerShape = if (palette.pillButtons) {
+        RoundedCornerShape(PILL_SHAPE_PERCENT)
+    } else {
+        RoundedCornerShape(RadiusSeg)
+    }
+    val segmentShape = if (palette.pillButtons) {
+        RoundedCornerShape(PILL_SHAPE_PERCENT)
+    } else {
+        RoundedCornerShape(RadiusSegInner)
+    }
 
     var containerSizePx by remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
     val segmentWidthPx = if (options.isEmpty()) 0 else containerSizePx.width / options.size
     val density = androidx.compose.ui.platform.LocalDensity.current
     val offsetX by animateDpAsState(
         targetValue = with(density) { (segmentWidthPx * selectedIndex).toDp() },
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "segmentOffset",
     )
 
@@ -342,21 +434,25 @@ fun SegmentedControl(
 /** §5.6 - thin non-interactive progress track used inside list rows, and a bold interactive variant for the player. */
 @Composable
 fun TrackProgress(progress: Float, modifier: Modifier = Modifier, bold: Boolean = false) {
-    val height = if (bold) com.uacastplayer.ui.theme.ProgressHeightBold else com.uacastplayer.ui.theme.ProgressHeightThin
+    val height = if (bold) {
+        com.uacastplayer.ui.theme.ProgressHeightBold
+    } else {
+        com.uacastplayer.ui.theme.ProgressHeightThin
+    }
     Box(
         // flat by design: a progress track reads as a groove the fill moves along, not raised
         // chrome - and it's used inside list rows, where shadows are forbidden regardless.
         modifier = modifier
             .fillMaxWidth()
             .height(height)
-            .clip(RoundedCornerShape(50))
+            .clip(RoundedCornerShape(PILL_SHAPE_PERCENT))
             .background(UaTheme.palette.surface2),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .height(height)
-                .clip(RoundedCornerShape(50))
+                .clip(RoundedCornerShape(PILL_SHAPE_PERCENT))
                 .background(UaTheme.palette.accentGradient),
         )
     }
@@ -375,19 +471,25 @@ fun SecondaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    leadingIcon: ImageVector? = null,
 ) {
     val palette = UaTheme.palette
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) PressScaleRound else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed && enabled) PRESS_SCALE_ROUND else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "secondaryButtonScale",
     )
-    val shape = if (palette.pillButtons) RoundedCornerShape(50) else RoundedCornerShape(RadiusItem)
+    val shape = if (palette.pillButtons) {
+        RoundedCornerShape(PILL_SHAPE_PERCENT)
+    } else {
+        RoundedCornerShape(RadiusItem)
+    }
     val isGhost = palette.secondaryButtonStyle == SecondaryButtonStyle.GHOST
     Box(
         modifier = modifier
+            .heightIn(min = TouchTargetMin)
             .scale(scale)
             .let { m ->
                 if (isGhost) {
@@ -410,11 +512,23 @@ fun SecondaryButton(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            style = BodyRegular,
-            color = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary,
-        )
+        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            leadingIcon?.let {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Text(
+                text = text,
+                style = BodyRegular,
+                color = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = if (leadingIcon != null) Modifier.padding(start = 8.dp) else Modifier,
+            )
+        }
     }
 }
 
@@ -428,8 +542,8 @@ fun TabBarLabel(text: String, selected: Boolean) {
         text = text,
         style = TabLabel,
         color = if (selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
-        maxLines = 1,
-        softWrap = false,
+        maxLines = 2,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     )
 }

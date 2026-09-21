@@ -1,6 +1,8 @@
 package com.uacastplayer.parentalcontrol
 
-import com.uacastplayer.favorites.MiniJson
+import com.uacastplayer.core.json.JsonDecodeResult
+import com.uacastplayer.core.json.MiniJson
+import com.uacastplayer.core.json.jsonDecodeResult
 
 private const val FIELD_CHANNEL_KEY = "channelKey"
 
@@ -14,9 +16,12 @@ object LockedChannelsCodec {
     fun encode(keys: Set<String>): String =
         MiniJson.writeArrayOfObjects(keys.map { key -> linkedMapOf(FIELD_CHANNEL_KEY to key) })
 
-    fun decode(json: String): Set<String> = try {
+    fun decode(json: String): Set<String> = when (val result = decodeResult(json)) {
+        is JsonDecodeResult.Success -> result.value
+        is JsonDecodeResult.Malformed -> emptySet()
+    }
+
+    internal fun decodeResult(json: String): JsonDecodeResult<Set<String>> = jsonDecodeResult {
         MiniJson.parseArrayOfObjects(json).mapNotNull { it[FIELD_CHANNEL_KEY] }.toSet()
-    } catch (_: Exception) {
-        emptySet()
     }
 }

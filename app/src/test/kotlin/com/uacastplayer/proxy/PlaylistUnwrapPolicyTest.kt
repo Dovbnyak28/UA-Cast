@@ -67,4 +67,16 @@ class PlaylistUnwrapPolicyTest {
         assertNull(PlaylistUnwrapPolicy.unwrapTarget("#EXTM3U\n", BASE))
         assertNull(PlaylistUnwrapPolicy.unwrapTarget("", BASE))
     }
+
+    @Test
+    fun `an HLS-labelled error body is not unwrapped as a stream URL`() {
+        assertNull(PlaylistUnwrapPolicy.unwrapTarget("Access denied", BASE))
+    }
+
+    @Test
+    fun `a UTF-8 BOM does not prevent a valid wrapper from being unwrapped`() {
+        val wrapper = "\uFEFF#EXTM3U\n#EXTINF:-1,Channel\nhttp://origin.example/live/stream"
+
+        assertEquals("http://origin.example/live/stream", PlaylistUnwrapPolicy.unwrapTarget(wrapper, BASE))
+    }
 }

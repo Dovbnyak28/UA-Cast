@@ -1,11 +1,233 @@
 # Changelog
 
-Versions are marked in two places, which must move together: the local defaults in
-`app/build.gradle.kts` and `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`. CI appends
-its run number to both (see `docs/RELEASING.md`), so a CI artifact reads `0.9.0.<run>` with a
-`versionCode` of the run number - the values below are what a local build produces.
+Versions are marked in three places, which must move together: the local defaults in
+`app/build.gradle.kts`, `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
+changelog. CI appends its run number to both build values (see `docs/RELEASING.md`), so a CI
+artifact reads `0.9.6.<run>` with a `versionCode` of the run number - the values below are what a
+local build produces.
 
-## 0.9.0 - unreleased
+## 0.9.6
+
+`versionCode` 15. Maintenance release with a reconciled release branch and complete CI coverage.
+
+- Integrated the current `master` history without dropping the release line's tested playback,
+  casting, DLNA, proxy and update fixes.
+- Aligned DLNA proxy instrumentation assertions with the Hisense VIDAA-compatible MPEG-TS MIME.
+- Verified JVM, release packaging and API 24/30/36 instrumentation gates.
+
+## 0.9.5
+
+`versionCode` 14. More usable DLNA volume control.
+
+- Reworked the volume row into a dedicated card with a full-width 48dp touch target, clearer TV-volume label, and a stable percentage chip.
+- Kept the renderer-reported volume as the source of truth while dragging and after SOAP updates.
+
+## 0.9.4
+
+`versionCode` 13. DLNA compatibility fix for Hisense VIDAA live playback.
+
+- Added the standard DLNA MPEG-TS MIME and live-stream feature headers to flattened HLS responses.
+- Framed flattened live responses with HTTP/1.1 chunked transfer and a keep-alive connection so
+  VIDAA can distinguish an active stream from a failed close-delimited response.
+- Added regression coverage for DLNA GET/HEAD headers, chunk framing and terminator handling.
+
+## 0.9.3
+
+`versionCode` 12. Patch fixes after v0.9.2; no new user-facing capability is introduced.
+
+### Fixed
+
+- **Setting or verifying a parental PIN could crash on Android 7 (API 24/25).** Devices without
+  the platform PBKDF2-SHA256 factory now derive the identical hash using the supported HMAC
+  primitive, preserving the existing salt format and 120,000-iteration work factor.
+- **A reset or timeout while reading an HLS manifest could silently drop the receiver socket.**
+  The proxy now returns HTTP 502 before any success headers or partial playlist can be sent.
+- **Backup import could replace favorites before their startup read completed.** Imports now
+  wait for the initial favorites load before merging, retaining existing entries on slow storage.
+- **Player restoration could bypass channel restrictions.** Opening waits for parental-control
+  initialization, and process restoration filters the whole navigation list, not just its first item.
+- **Recreating the Activity could reload an already retained player.** The UI request now survives
+  recreation and reattaches without replacing the media item or resetting playback recovery state.
+- **An old logo failure could hide a successfully downloaded icon.** Cache invalidation now retires
+  in-flight publishers, and a failed duplicate cannot overwrite an existing positive cache entry.
+- **Player controls at large font sizes and system volume boundaries were inconsistent.** Channel
+  labels wrap with explicit ellipsis, volume steps read the current device level, and closing the
+  expanded player revokes automatic picture-in-picture entry.
+- **Hostile playlists and proxy manifests could overrun practical processing budgets.** Parsing,
+  HLS resource expansion and proxy admission now enforce bounds with cancellation and regression coverage.
+- **Cast recovery could reload after the receiver had already recovered.** Scheduled recovery is
+  now tied to the active session identity, so a stale callback cannot interrupt healthy playback.
+- **A debounced channel switch could target an old playlist.** Pending work is invalidated when
+  the playlist changes, preventing a late switch from opening the wrong stream.
+- **Playlist failures could retain credentials in diagnostic state.** Network error details now
+  keep only the exception type rather than the provider URL and its query parameters.
+- **Icon prefetch progress could lose increments under real concurrency.** Progress updates are
+  atomic, and equivalent resolver candidates are deduplicated before work starts.
+- **Logo cache state could outlive custom-source changes or disk trimming.** Memory entries are
+  invalidated whenever the underlying source or disk cache changes.
+- **Rapid DLNA device switches could leave the old renderer playing or publish stale state.**
+  Device handoff now stops prior targets and commits only the latest connection generation.
+- **A stale Cast media-status callback could describe the previous channel.** Receiver updates are
+  now accepted only for the current session and expected content item, so an old PLAYING/ERROR
+  status cannot cancel the new channel's watchdog or overwrite its UI state.
+- **Cast SDK load validation could throw on the main thread.** Synchronous request-rejection
+  exceptions are converted into the same recoverable failure path as an asynchronous load result.
+
+### Changed
+
+- Android CI separates unit/screenshot, quality, release packaging and API 24/30/36 instrumentation
+  jobs. A manual `workflow_dispatch` entry point is available for release-candidate verification.
+- Android-free policies now compile in the JVM `core` module, with dependency-direction checks
+  and an empty Detekt baseline maintained by the quality gate.
+- Device UI audit captures support API 24/25, and instrumentation output is retained as a CI
+  artifact even when adb or the test runner reports a failure.
+- Network test fixtures consume complete HTTP headers and explicitly close connections; DLNA
+  request assertions use snapshot iteration while callback threads append new requests.
+
+## 0.9.2
+
+`versionCode` 11. Fixes only, and every one of them is a fault that is in the 0.9.1 APK people are
+holding - checked against that release's own commit rather than assumed. Three of them close the
+app outright.
+
+### Fixed
+
+- **Channel logos could disappear for valid provider URLs.** Some IPTV playlists supplied
+  protocol-relative or HTML-escaped artwork URLs, which were rejected or requested with the wrong
+  query string before the fallback chain could help. Those URLs are now canonicalized safely,
+  malformed candidates are skipped so EPG/custom sources can be tried, AVIF artwork is recognized,
+  and `CACHE_LIMITED` devices warm a bounded set of priority logos instead of waiting for a row to
+  be scrolled into view.
+
+- **Logo prefetch could duplicate work or wait for the wrong network.** Equivalent URL spellings
+  were treated as different in-memory jobs, and a failed prefetch watched only for Wi-Fi even when
+  the setting allowed mobile data. Cache keys now use the resolver's canonical URL form, while
+  recovery watches for any internet-capable network and lets the Wi-Fi-only gate decide eligibility.
+
+- **Whitespace around M3U metadata could split otherwise identical channels.** Quoted `tvg-id`,
+  `tvg-name`, `tvg-logo` and `group-title` values are now trimmed at the parser boundary, keeping
+  grouping, EPG matching and generated logo URLs stable across provider formatting differences.
+
+- **Opening the TV guide could close the app.** The guide sheet keyed its rows on a programme's
+  start time, and a `LazyColumn` does not draw a duplicate row for a repeated key - it throws
+  `IllegalArgumentException` out of composition. Nothing between the XMLTV file and that list ever
+  promised those keys differ: the parser keeps every `<programme>` element it is handed and the
+  repository only sorts them, so a feed that merges several providers - which is most of them -
+  repeats entries as a matter of course. A repeat carrying no stop time is a second way in, since a
+  programme with no stop falls back to its start. Rows now carry their position in the key as well.
+
+- **A programme airing at the same time as another vanished from the guide.** The day's lineup was
+  three independent filters over one list - has finished, is the first one airing, starts later -
+  and those only divide up a day in which at most one programme is on at a time. Overlapping
+  listings are ordinary, and the second of two matched none of the three, so it was in neither the
+  past, the present nor the upcoming list. Those three lists are everything the guide draws.
+
+- **A refused install left the app asking for a confirmation that was no longer on screen.** Google
+  Play Protect rejects a sideloaded APK by default, which is the ordinary first outcome for an app
+  published outside the store - measured on a Mi A2 against the real 0.9.1 release. The install
+  simply did not happen, and "confirm the install on screen" stayed up for good with nothing to
+  press; only restarting the app cleared it. The system's verdict on a committed session now
+  reaches the screen that is waiting for it.
+
+- **Picking a file could close the app on a device that has no file picker.** "Choose a playlist
+  file", "export a backup" and "import a backup" called the system picker directly, and
+  `ACTION_OPEN_DOCUMENT` is a package (`DocumentsUI`) rather than part of Android: a ROM built
+  without it, a managed profile whose policy disables it, and Android TV all resolve nothing, which
+  throws from the tap. Now the button does nothing on such a device instead - and on the playlist
+  screen it was never the only way in, since a URL or an Xtream login reach the same place.
+
+- **A volume swipe while Do Not Disturb was on could close the app.** Setting the media volume
+  raises a `SecurityException` when the change would touch Do Not Disturb and the app has no
+  notification-policy access - which this app does not ask for and should not. In the total-silence
+  mode, where media is silenced too, that is what an ordinary drag on the right-hand side of the
+  player did. The refusal is now left alone: Do Not Disturb is holding the volume where its owner
+  put it.
+
+- **An imported backup could contain the word "null" where a value should be.** The `org.json` that
+  runs on a phone and the one this project's tests run against disagree about a field written as an
+  explicit `null`: one reads it as empty, the other as the four-character string `"null"`. Every
+  "is this field filled in" check in the backup reader is an emptiness check, so a *required* field
+  written as null passed the check that exists to reject it - importing a favourite whose stream
+  address is the word "null", which looks ordinary in the list and plays nothing. Backups this app
+  writes never contain one; a hand-edited or third-party file is what the reader is built to
+  survive.
+
+- **The same disagreement in the update check**, where the document is GitHub's own API response
+  rather than a local file. Most of it survived by luck, but a release published without a page
+  link would have offered `"null"` to a browser as its release page - the fallback offer for every
+  release this app cannot install by itself.
+
+- **A malformed byte offset into the stream segmenter read past the end of its buffer.** The bounds
+  check added before comparing, and that addition overflows, so at the top of the integer range the
+  check passed and the read threw. No path in the app reaches it today; it is closed because that
+  check is the only thing standing between the segmenter and a caller that gets an offset wrong,
+  and it was failing at exactly the value it exists for.
+
+### Changed
+
+- The proxy's byte parsers - the ones pointed at a third-party origin - now have the same
+  fuzz-testing net the playlist and guide parsers have had. It matters more there: the raw-TS
+  session deliberately catches everything around the segmenter so a corrupt packet ends one read
+  rather than the process, which also means a genuine fault in it never crashes and never reports.
+  It reconnects, and the user sees a channel that rebuffers with a log line blaming the network.
+  That net is what found the overflow above.
+
+## 0.9.1
+
+`versionCode` 10. **The first version to actually reach anyone.** 0.9.0 below was never published -
+its section stays as written, because everything in it ships here for the first time and a reader
+holding this APK needs both. What follows is only what changed after it.
+
+### Fixed
+
+- **A DLNA channel that connected, stayed connected, and played nothing.** The HLS-to-TS route
+  resolved every relative segment URI against the URL it *asked for* rather than the one the
+  playlist *came from*. An IPTV `.m3u8` answering 302 to a tokenised CDN path is the norm and a
+  master playlist's variants redirect almost always, so segments were fetched from the wrong
+  directory and the origin refused all of them - which this route deliberately treats as a glitch
+  to skip rather than the end of a channel. No error appeared anywhere.
+
+- **The same route committed its response before it had a single byte.** Headers went out before
+  the first segment was even requested, so a channel whose segments all failed produced a valid
+  200 with an endless empty body, and the manifest fallback that exists for exactly that case was
+  already unreachable.
+
+- **A HEAD on that route answered with nothing at all.** The proxy wraps its socket in a buffered
+  stream and closes the *socket*, so a response that never flushed was never sent. A renderer
+  asking what the resource is got a connection that opened and shut empty. `writeHeaders` now
+  flushes itself, which also gets the status line onto the wire without waiting for a segment.
+
+- **And when it did answer, it answered wrongly.** The HEAD announced `video/mp2t` for every
+  channel without checking whether flattening was possible - it routinely is not - so a renderer
+  committed to MPEG-TS and was then handed an M3U8 on the GET.
+
+- **The diagnostics share sheet could not read the file it was previewing.** The attachment
+  travelled as `EXTRA_STREAM` with a read grant, which reaches the app the user picks but not the
+  chooser itself - a separate process that reads the file first, to draw its name. The share sheet
+  showed no file name on the one screen whose job is to say what is about to leave the phone.
+
+- **The cache screen under-reported by three orders of magnitude.** A guide download the process
+  died part-way through is the largest thing this app leaves on disk, and it was invisible to the
+  only screen that offers to remove anything: a device carrying 747MB of stranded downloads was
+  told its guide cache was 9.5 MB, and Clear removed none of them.
+
+- **The update banner promised a download it had no way to perform.** Its message was
+  unconditional while its button was not: with no APK attached to a release it can only open the
+  release page, and saying "ready to download" over that is what sent people to GitHub's source
+  archives in the first place.
+
+### Changed
+
+- Instrumented coverage went from 9 tests to 49, on a real phone: the proxy over a socket, both
+  stream-rewriting routes, the DLNA control stack against a fake UPnP renderer, the update chain
+  including the signature gate - which cannot be tested off a device at all - and the player's
+  video-fit setting.
+
+- Diagnostics reports now name the video fit mode. A report arrived saying fullscreen video was
+  "stretched too much" and could not answer which of the three modes was in force, which is the one
+  question that would have settled it.
+
+## 0.9.0 - superseded by 0.9.1 without ever being published
 
 `versionCode` 9. Renumbered from 0.3.0 while still unreleased, and the jump past 0.4-0.8 is
 deliberate rather than an accident of counting: what this section describes is not a third
@@ -182,6 +404,36 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
     rest of the process. Since only a connected store is allowed to speak about what is owned, a
     cancellation would never have been noticed and a purchase made on another device never picked
     up until the app was restarted.
+
+  **A device with no Google Play keeps every premium feature, and now says so.** An Android TV box
+  without GMS, a de-Googled phone, a sideloaded copy on hardware Play never shipped to: none of them
+  can buy anything, so none of them is withheld anything. That was already true and was silent,
+  which made it read as a loophole rather than a decision. For an IPTV player these are not fringe
+  devices — the manifest carries leanback entries and `PlayBillingProvider` names the case in as
+  many words — so the alternative, closing the gates after a grace period, would have taken features
+  from the one audience proven unable to pay for them.
+
+  It also fixes a sentence that was about to become false. With nothing to buy, the premium screen
+  said "this app is not published in a store" — true today, and a lie the day it is published, told
+  to exactly those users. There are three reasons a catalogue can be empty and they now get three
+  answers: no store in this build, no store on this device, or a store that answered with nothing —
+  the last being a console that is not ready, which somebody can actually fix.
+
+  **A stored licence now carries a tag that says this app wrote it.** Editing
+  `uacast_prefs.xml` on a rooted phone - `license_tier=LIFETIME`, no expiry - used to be the whole
+  attack. The licence and its HMAC are one value now, keyed from the Android Keystore where the key
+  cannot be read out, so the file can still be changed but not re-tagged, and a record that does not
+  verify resolves to the free tier exactly as an unrecognised tier already did. One value rather
+  than two on purpose: a tag stored beside the licence is defeated by deleting the tag.
+
+  A licence written before this exists is adopted once and rewritten with a tag, so nobody who has
+  paid loses anything on the update. A device whose Keystore will not co-operate stores the record
+  untagged and is believed - refusing there would revoke a licence over an OEM's crypto rather than
+  over any tampering.
+
+  It does not end the argument, and is not meant to: the same root that edits the file can patch the
+  check out of the APK. It removes the version that needs no tools. Verified on a Mi A2: a legacy
+  trial survived the update and was re-tagged, and a record forged to LIFETIME was refused.
 
   **A feature that was being sold and gated nowhere is no longer sold.** `RAW_TS_REMUX` — relaying a
   stream a receiver cannot play directly — was listed on the premium screen, with a name and a lock
@@ -530,6 +782,29 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   and a SOAP fault are small fixed documents, but they arrive from a device on the LAN that nobody
   here wrote, and `ResponseBody.string()` reads to the end of the stream. These were the last two
   unbounded network reads in the app; everything else has had a cap for a while.
+
+- **A playlist nobody named was called by its own SHA-256.** Naming is optional when a playlist is
+  added, and the fallback was the source id — a hash of the location, which the home screen printed
+  as "6368ffd4" in its largest type under the words "Active playlist". The source switcher had the
+  same gap and showed the raw `content://` URI. A name is now derived from where the playlist came
+  from — host and file for a URL, the server for Xtream — with the query string dropped, because a
+  `get.php` URL carries a username and password and a label sits on a screen people show to a room.
+  A picked file is named after the file, asked of the document provider while the grant is still
+  current; anything still unnamed says "playlist from a file".
+
+  Found on a real phone, on the author's own playlist. The screenshot fixture had passed no name at
+  all, so the golden recorded the fallback of the day and pinned it in place as if it were design.
+
+- **The emailed diagnostics report carried three lines of log.** `LogBuffer` only ever held what
+  this app logged through `AppLog`, in memory, for one process — so a report sent after restarting
+  the app said almost nothing, and even a full one said nothing about media3, the Cast SDK or
+  OkHttp, which is where playback actually fails. The report now goes as an attachment carrying the
+  process's own logcat: 10KB rather than three lines, measured on the device.
+
+  Every line of it is sanitized first, and that matters more here than in `AppLog`: these lines come
+  from libraries that know nothing about the rule, and media3 logs stream URLs — which for an Xtream
+  playlist are the user's credentials. Verified on the phone: no raw URL survives, only redaction
+  markers.
 
 - **A DLNA cast survived losing the network it was being served over — on screen only.** A DLNA cast
   is not a link to a service, it is an address: the TV was handed `http://<this phone>:<port>/…` and

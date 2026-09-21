@@ -1,7 +1,7 @@
 package com.uacastplayer.performance
 
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

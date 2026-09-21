@@ -59,7 +59,7 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CardTitle
-import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
@@ -76,7 +76,7 @@ private const val TAG = "GuidedTour"
 /** How much of the screen the scrim takes. Dark enough that the hole reads as the only lit thing,
  * light enough that the user can still tell which screen they are on - the point of highlighting a
  * live element rather than showing a picture of one. */
-private const val SCRIM_ALPHA = 0.82f
+private const val SCRIM_ALPHA = 0.68f
 
 /** Breathing room around the highlighted element, so the hole does not clip the edge of its own
  * touch target. */
@@ -129,8 +129,8 @@ fun GuidedTourOverlay(
 ) {
     AnimatedVisibility(
         visible = state.isVisible,
-        enter = fadeIn(tween(DurPress, easing = EaseSpring)),
-        exit = fadeOut(tween(DurPress, easing = EaseSpring)),
+        enter = fadeIn(tween(DUR_PRESS, easing = EaseSpring)),
+        exit = fadeOut(tween(DUR_PRESS, easing = EaseSpring)),
         modifier = modifier,
     ) {
         // Back leaves from the welcome card and steps backwards everywhere else. It never falls
@@ -179,7 +179,7 @@ private fun GuidedTourScrim(
     // Fades the hole in rather than snapping it. A step with no target keeps a plain, even dim.
     val holeAlpha by animateFloatAsState(
         targetValue = if (spotlight == null) 0f else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "guidedTourSpotlight",
     )
 

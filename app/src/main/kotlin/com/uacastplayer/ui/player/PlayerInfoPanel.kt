@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,10 +28,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.player.IndexedChannel
 import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.player.PlayerUiState
@@ -65,29 +68,32 @@ internal fun PillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     iconTrailing: Boolean = false,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val tint = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary
         if (!iconTrailing) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = UaTheme.palette.labelPrimary,
+                tint = tint,
                 modifier = Modifier.size(18.dp).padding(end = 8.dp),
             )
         }
-        Text(text = label, style = Caption, color = UaTheme.palette.labelPrimary)
+        Text(text = label, style = Caption, color = tint)
         if (iconTrailing) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = UaTheme.palette.labelPrimary,
+                tint = tint,
                 modifier = Modifier.size(18.dp).padding(start = 8.dp),
             )
         }
@@ -95,7 +101,7 @@ internal fun PillButton(
 }
 
 /** Shown while casting has some reason it isn't reaching the receiver - either a codec
- * [com.uacastplayer.cast.CastCompatibilityPolicy] flagged as incompatible, or the receiver
+ * [com.uacastplayer.core.cast.CastCompatibilityPolicy] flagged as incompatible, or the receiver
  * rejecting/erroring on the proxy fallback for any other reason. Local playback keeps playing
  * regardless, this only explains why the receiver isn't. Clears itself once the relevant
  * [PlayerUiState] field goes back to its default (new channel, cast disconnect, or - for a codec
@@ -134,8 +140,11 @@ internal fun ChannelInfoCard(
     // playing rather than being the same grey box for all 2863 of them. Skipped entirely on a theme
     // that paints no wallpaper texture: Midnight is true black on purpose, and any wash at all is
     // the one thing it exists not to have.
-    val artworkTone = rememberArtworkTone(channel = channel, resolveIcon = resolveIcon)
-        .takeIf { UaTheme.palette.wallpaperTexture }
+    val artworkTone = rememberArtworkTone(
+        channel = channel,
+        resolveIcon = resolveIcon,
+        enabled = UaTheme.palette.wallpaperTexture,
+    )
     val cardShape = RoundedCornerShape(RadiusCard)
 
     Row(
@@ -163,66 +172,28 @@ internal fun ChannelInfoCard(
 @Composable
 internal fun QuickSettingsRow(
     onAudioClick: () -> Unit,
-    onSubtitlesClick: () -> Unit,
-    onQualityClick: () -> Unit,
-    onAspectRatioClick: () -> Unit,
     onGuideClick: () -> Unit,
-    onPreviousChannelClick: (() -> Unit)? = null,
+    onMoreClick: () -> Unit,
+    showAudio: Boolean = true,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenHPadding, vertical = GapM)
-            .raisedSurface(
-                RoundedCornerShape(RadiusCard),
-                UaTheme.palette.surface1,
-                edgeColor = UaTheme.palette.hairline,
-                shadow = true,
-            )
-            .padding(vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Only shown once there's actually somewhere to jump back to - see
-        // PlayerUiState.hasPreviousChannel. Each item gets an equal weight() share of the row so a
-        // 6th item (this one) doesn't squeeze the others' labels into character-by-character wrap -
-        // see docs/DESIGN_SYSTEM.md "§E Equal-share rows".
-        onPreviousChannelClick?.let {
+        if (showAudio) {
             QuickSettingItem(
-                AppIcons.Refresh,
-                stringResource(R.string.player_previous_channel),
-                it,
-                modifier = Modifier.weight(1f),
+                AppIcons.AudioTrack,
+                stringResource(R.string.player_audio_track),
+                onAudioClick,
+                Modifier.weight(1f),
             )
         }
+        QuickSettingItem(AppIcons.Guide, stringResource(R.string.player_tv_guide), onGuideClick, Modifier.weight(1f))
         QuickSettingItem(
-            AppIcons.Storage,
-            stringResource(R.string.player_audio_track),
-            onAudioClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.HelpCircle,
-            stringResource(R.string.player_subtitle_track),
-            onSubtitlesClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.Image,
-            stringResource(R.string.player_quality),
-            onQualityClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.Fullscreen,
-            stringResource(R.string.player_aspect_ratio),
-            onAspectRatioClick,
-            modifier = Modifier.weight(1f),
-        )
-        QuickSettingItem(
-            AppIcons.Tv,
-            stringResource(R.string.player_tv_guide),
-            onGuideClick,
-            modifier = Modifier.weight(1f),
+            AppIcons.More,
+            stringResource(R.string.player_more_controls),
+            onMoreClick,
+            Modifier.weight(1f),
         )
     }
 }
@@ -234,7 +205,10 @@ private fun RowScope.QuickSettingItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.clickable(onClick = onClick)) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+    ) {
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -272,6 +246,7 @@ internal fun NextChannelsRail(
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
     onSelect: (IndexedChannel) -> Unit,
+    onViewAll: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(top = GapM)) {
         Row(
@@ -283,8 +258,15 @@ internal fun NextChannelsRail(
                 text = stringResource(R.string.player_next_channels_title),
                 style = Title,
                 color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.weight(1f),
             )
-            Text(text = stringResource(R.string.player_view_all), style = Caption, color = UaTheme.palette.accentText)
+            androidx.compose.material3.TextButton(onClick = onViewAll) {
+                Text(
+                    text = stringResource(R.string.player_view_all),
+                    style = Caption,
+                    color = UaTheme.palette.accentText,
+                )
+            }
         }
         LazyRow(
             modifier = Modifier.fillMaxWidth().padding(top = GapM, start = ScreenHPadding, end = ScreenHPadding),
@@ -295,7 +277,11 @@ internal fun NextChannelsRail(
                     // Inside a LazyRow - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
                         .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
-                        .clickable { onSelect(indexed) }
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = indexed.channel.displayName,
+                            onClick = { onSelect(indexed) },
+                        )
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -309,7 +295,9 @@ internal fun NextChannelsRail(
                         text = indexed.channel.displayName,
                         style = Caption,
                         color = UaTheme.palette.labelPrimary,
-                        maxLines = 1,
+                        minLines = 2,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 8.dp).width(96.dp),
                         textAlign = TextAlign.Center,
                     )
@@ -331,7 +319,7 @@ internal fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifi
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Fullscreen, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Icon(AppIcons.AspectRatio, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
         Text(
             text = stringResource(ResizeModeCycle.labelRes(mode)),
             color = Color.White,
@@ -342,12 +330,18 @@ internal fun ResizeModeToast(mode: PlayerResizeMode, modifier: Modifier = Modifi
 }
 
 @Composable
-internal fun InlineVideoControls(isPlaying: Boolean, onPlayPause: () -> Unit, onToggleFullscreen: () -> Unit) {
+internal fun InlineVideoControls(
+    wantsToPlay: Boolean,
+    canControlPlayback: Boolean,
+    onPlayPause: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+) {
     Box(modifier = Modifier.fillMaxSize()) {
         GradientPlayButton(
-            icon = if (isPlaying) AppIcons.Pause else AppIcons.Play,
+            icon = if (wantsToPlay) AppIcons.Pause else AppIcons.Play,
             onClick = onPlayPause,
-            contentDescription = playPauseLabel(isPlaying),
+            enabled = canControlPlayback,
+            contentDescription = playPauseLabel(wantsToPlay),
             modifier = Modifier.align(Alignment.Center),
         )
         SmallRoundIconButton(

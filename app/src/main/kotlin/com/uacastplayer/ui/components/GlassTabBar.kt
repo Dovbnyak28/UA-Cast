@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,38 +25,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
-import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
-import com.uacastplayer.ui.theme.GlassTabBarHeight
+import com.uacastplayer.ui.theme.navigationBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
-import com.uacastplayer.ui.theme.PressScaleIcon
+import com.uacastplayer.ui.theme.PRESS_SCALE_ICON
 import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.raisedSurface
 
-data class TabBarItem(
-    val label: String,
-    val icon: ImageVector,
-    val selected: Boolean,
-    val onClick: () -> Unit,
-    /** Registers this tab as a guided-tour target under the given name; null for tabs the tour
-     * never points at, which is most of them. See [com.uacastplayer.guidedtour.GuidedTourKeys]. */
-    val tourKey: String? = null,
-)
+private const val LARGE_LABEL_FONT_SCALE = 1.5f
 
 /** §5.10 - bottom navigation chrome: floating rounded glass bar with a highlight pill on the selected tab. */
 @Composable
 fun GlassTabBar(items: List<TabBarItem>, modifier: Modifier = Modifier) {
     val glassTone = UaTheme.palette.glassTone
+    val barHeight = navigationBarHeight(LocalDensity.current.fontScale)
 
     Row(
         modifier = modifier
@@ -64,21 +57,22 @@ fun GlassTabBar(items: List<TabBarItem>, modifier: Modifier = Modifier) {
             .padding(horizontal = 12.dp, vertical = GlassTabBarVerticalPadding)
             .clip(RoundedCornerShape(24.dp))
             .background(glassTone)
-            .height(GlassTabBarHeight),
+            .height(barHeight),
     ) {
         for (item in items) {
-            TabBarButton(item = item, modifier = Modifier.weight(1f))
+            TabBarButton(item = item, modifier = Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
 
 @Composable
 private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
+    val largeText = LocalDensity.current.fontScale >= LARGE_LABEL_FONT_SCALE
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScaleIcon else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed) PRESS_SCALE_ICON else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "tabScale",
     )
     Column(
@@ -108,18 +102,27 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
                         Modifier
                     },
                 )
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+                .padding(horizontal = if (largeText) 2.dp else 6.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
                 item.icon,
-                contentDescription = item.label,
+                contentDescription = item.contentDescription,
                 // Selected pill is now a full-strength accentGradient (see the Modifier above),
                 // not a translucent tint - needs accentOnFill's contrast, same as TabBarLabel.
                 tint = if (item.selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
-                modifier = Modifier.height(26.dp).padding(bottom = 2.dp),
+                modifier = Modifier
+                    .height(26.dp)
+                    .padding(bottom = 2.dp),
             )
-            TabBarLabel(text = item.label, selected = item.selected)
+            TabBarLabel(
+                text = if (largeText) {
+                    item.largeTextLabel
+                } else {
+                    item.label
+                },
+                selected = item.selected,
+            )
         }
     }
 }

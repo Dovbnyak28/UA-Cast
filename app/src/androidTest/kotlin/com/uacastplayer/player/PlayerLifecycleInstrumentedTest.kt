@@ -2,6 +2,7 @@ package com.uacastplayer.player
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -28,6 +29,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Instrumented regression coverage for the double-ExoPlayer leak (see the Session A fix in
@@ -41,6 +43,91 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class PlayerLifecycleInstrumentedTest {
+    @Test fun sleepExpiryCancelsDeferredForegroundResumeUntilExplicitPlay() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            // The empty synthetic HLS may have already reached its terminal error screen.
+            // Expire during a fresh preparation; terminal errors correctly require Retry, not Play.
+            model.start(listOf(checkNotNull(model.uiState.value.currentChannel)), 0)
+            assertTrue(!model.uiState.value.fatalError)
+            model.onEnterBackground(false)
+            model.sleepTimer.start(kotlin.time.Duration.ZERO)
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            model.onReturnToForeground()
+            assertTrue(!model.player.playWhenReady)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertEquals(null, model.sleepTimer.remainingMillis.value)
+            model.togglePlayback()
+            assertTrue(model.player.playWhenReady)
+        }
+    }
+
+    @Test fun existingPlayerObservesNavigationPreferenceChanges() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val preferences = com.uacastplayer.data.prefs.AppPreferences(activity)
+            val originalWrap = preferences.wrapAroundEnabled
+            val originalSkip = preferences.autoSkipDeadEnabled
+            try {
+                val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                preferences.wrapAroundEnabled = false
+                assertTrue(!model.uiState.value.canGoPrevious)
+                preferences.wrapAroundEnabled = true
+                assertTrue(model.uiState.value.canGoPrevious)
+                preferences.autoSkipDeadEnabled = !originalSkip
+                assertEquals(!originalSkip, model.autoSkipDeadEnabled)
+                val first = checkNotNull(model.uiState.value.currentChannel)
+                model.start(listOf(first, first.copy(displayName = "Last")), 1)
+                assertTrue(model.uiState.value.nextChannelsPreview.isNotEmpty())
+                preferences.wrapAroundEnabled = false
+                assertTrue(model.uiState.value.nextChannelsPreview.isEmpty())
+                assertTrue(!model.uiState.value.canGoNext)
+            } finally {
+                preferences.wrapAroundEnabled = originalWrap
+                preferences.autoSkipDeadEnabled = originalSkip
+            }
+        }
+    }
+    @Test fun bufferingPauseAndRapidTogglesFollowEngineIntent() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            model.player.playWhenReady = true
+            model.start(listOf(com.uacastplayer.playlist.M3uChannel("Preparing", server.playlistUrl())), 0)
+            // The playback thread cannot finish preparation inside this Main-thread transaction.
+            assertTrue(model.player.playWhenReady)
+            assertTrue(!model.player.isPlaying)
+            assertTrue(model.uiState.value.wantsToPlay)
+            assertTrue(PlaybackActivity.isActive.value)
+            model.togglePlayback()
+            assertTrue(!model.player.playWhenReady)
+            assertTrue(!model.uiState.value.wantsToPlay)
+            assertTrue(!PlaybackActivity.isActive.value)
+            repeat(30) { model.togglePlayback() }
+            assertTrue(!model.player.playWhenReady)
+            model.releasePlayback()
+            model.togglePlayback()
+            assertTrue(!model.uiState.value.canControlPlayback)
+            assertTrue(!PlaybackActivity.isActive.value)
+        }
+    }
+
+    @Test fun localToggleCannotStealPlaybackFromEitherRemoteProtocol() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            model.player.pause()
+            model.setRemoteCastingForLifecycleTest(chromecast = false, dlna = true)
+            repeat(5) { model.togglePlayback() }
+            assertTrue(!model.player.playWhenReady)
+            assertTrue(!model.uiState.value.canControlPlayback)
+            assertTrue(PlaybackActivity.isActive.value)
+            model.setRemoteCastingForLifecycleTest(chromecast = true, dlna = false)
+            model.togglePlayback()
+            assertTrue(!model.player.playWhenReady)
+            model.setRemoteCastingForLifecycleTest(chromecast = false, dlna = false)
+        }
+    }
 
     @get:Rule
     val composeTestRule = createAndroidComposeRule<MainActivity>()
@@ -61,7 +148,7 @@ class PlayerLifecycleInstrumentedTest {
             skipOnboarding(activity)
             loadTestPlaylist(activity, server)
         }
-        composeTestRule.waitForChannelsLoaded()
+        composeTestRule.waitForChannelsLoaded(server)
         composeTestRule.openChannelViaSearch("Channel 1")
     }
 
@@ -75,18 +162,46 @@ class PlayerLifecycleInstrumentedTest {
     private fun backButton(): SemanticsNodeInteraction =
         composeTestRule.onNodeWithContentDescription(composeTestRule.activity.getString(R.string.common_back))
 
+    private fun closePlayerFromScreen() {
+        backButton().performClick()
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        composeTestRule.onNodeWithContentDescription(
+            composeTestRule.activity.getString(R.string.player_mini_close),
+        ).performClick()
+    }
+
+    @Test
+    fun onScreenBackCollapsesJustLikeSystemBack_andCloseReleasesPlayback() {
+        var original: PlayerViewModel? = null
+        composeTestRule.activityRule.scenario.onActivity { original = ViewModelProvider(it)[PlayerViewModel::class.java] }
+        backButton().performClick()
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        composeTestRule.activityRule.scenario.onActivity {
+            val current = ViewModelProvider(it)[PlayerViewModel::class.java]
+            assertTrue(original === current)
+            assertEquals("Channel 1", current.uiState.value.currentChannel?.displayName)
+        }
+        composeTestRule.onNodeWithContentDescription(
+            composeTestRule.activity.getString(R.string.player_mini_close),
+        ).performClick()
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertDoesNotExist()
+        composeTestRule.activityRule.scenario.onActivity {
+            assertEquals(null, ViewModelProvider(it)[PlayerViewModel::class.java].uiState.value.currentChannel)
+        }
+    }
+
     /** Scenario 1: open -> close, 10 times. Checked after every cycle, not just at the end - a
      * regression that only shows up on, say, the 7th reopen must not be missed. */
     @Test
     fun openCloseTenCycles_neverLeaksASecondInstance() {
         assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
-        backButton().performClick() // close outright (Event.Close)
+        closePlayerFromScreen()
         composeTestRule.waitForIdle()
 
         repeat(9) {
             composeTestRule.tapChannelRow("Channel 1") // reopen (Event.Open)
             assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
-            backButton().performClick() // close (Event.Close)
+            closePlayerFromScreen()
             composeTestRule.waitForIdle()
         }
     }
@@ -94,12 +209,11 @@ class PlayerLifecycleInstrumentedTest {
     /**
      * Whether the player intends to play, which is what [BackgroundPlaybackPolicy] acts on.
      *
-     * Deliberately not `isPlaying`. [FakeOriginServer] serves a sentence of ASCII where a transport
-     * stream should be - enough for a data source to connect to, and nothing a decoder will ever
-     * render - so `isPlaying` is false throughout this suite no matter what the app does. Asserting
-     * on it made these tests unpassable by construction, and because the first one wedged the
-     * process it took the rest of the class down with it. `playWhenReady` is the flag pause() and
-     * play() move, so it is both the honest signal here and the one production reads.
+     * Deliberately not `isPlaying`. [FakeOriginServer] serves a valid but empty HLS VOD - enough for
+     * a data source to complete cleanly, with no frame a decoder could ever render - so `isPlaying`
+     * is false throughout this suite no matter what the app does. Asserting on it made these tests
+     * unpassable by construction. `playWhenReady` is the flag pause() and play() move, so it is both
+     * the honest signal here and the one production reads.
      *
      * One `onActivity` per read, never nested: it posts to the main thread and blocks until it
      * returns, so calling it from inside another one deadlocks - which is precisely what happened.
@@ -110,6 +224,33 @@ class PlayerLifecycleInstrumentedTest {
             wants = ViewModelProvider(activity)[PlayerViewModel::class.java].player.playWhenReady
         }
         return wants
+    }
+
+    @Test
+    fun sleepTimerSurvivesCollapsingThePlayer() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val viewModel = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            viewModel.player.play()
+            viewModel.sleepTimer.start(3.seconds)
+        }
+        Espresso.pressBack()
+        // System Back is dispatched outside Compose's idling resources. Observe its result;
+        // do not treat Espresso returning as proof that the collapsed tree is already mounted.
+        composeTestRule.waitUntil(8_000) {
+            composeTestRule.onAllNodes(androidx.compose.ui.test.hasTestTag(UiTestTags.MINI_PLAYER_BAR))
+                .fetchSemanticsNodes().size == 1
+        }
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        // A synthetic stream can stop independently of the timer. Wait for the actual expiry,
+        // then assert its playback effect, rather than mistaking an unrelated stop for expiry.
+        composeTestRule.waitUntil(8_000) {
+            var expired = false
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                expired = ViewModelProvider(activity)[PlayerViewModel::class.java].sleepTimer.remainingMillis.value == null
+            }
+            expired
+        }
+        assertTrue(!wantsToPlay())
     }
 
     /**
@@ -215,6 +356,16 @@ class PlayerLifecycleInstrumentedTest {
         composeTestRule.activityRule.scenario.recreate()
         composeTestRule.waitForIdle()
 
+        // A retained VM alone is insufficient: the old saved-state mirror erased the player
+        // request on recreation, leaving the engine alive with no PlayerHost/video surface. The
+        // fixture intentionally serves an empty HLS stream, which puts the player into its
+        // terminal-error card and hides the ordinary fullscreen toggle. Match the stable exit
+        // affordance instead; it proves that PlayerHost is mounted in both success and error UI.
+        val playerExit = composeTestRule.activity.getString(R.string.player_back_to_channels)
+        composeTestRule.waitUntil(10_000) {
+            composeTestRule.onAllNodes(hasText(playerExit)).fetchSemanticsNodes().isNotEmpty()
+        }
+
         composeTestRule.activityRule.scenario.onActivity { activity ->
             val instanceAfterRecreate = ViewModelProvider(activity)[PlayerViewModel::class.java]
             assertTrue(
@@ -224,6 +375,40 @@ class PlayerLifecycleInstrumentedTest {
             assertEquals("Channel 1", instanceAfterRecreate.uiState.value.currentChannel?.displayName)
         }
         assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
+    }
+
+    /** The persisted restore key must follow a Next/Previous switch, not only the channel that
+     * originally opened the player. This catches a subtle rotation/process-death regression that
+     * is invisible when the first channel is still current. */
+    @Test
+    fun configurationChange_retainsMostRecentlySwitchedChannel() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            ViewModelProvider(activity)[PlayerViewModel::class.java].navigation.requestSwitch(1)
+        }
+        composeTestRule.waitUntil(10_000) {
+            composeTestRule.activityRule.scenario.run {
+                var current: String? = null
+                onActivity { activity ->
+                    current = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                        .uiState.value.currentChannel?.displayName
+                }
+                current == "Channel 2"
+            }
+        }
+
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+        val playerExit = composeTestRule.activity.getString(R.string.player_back_to_channels)
+        composeTestRule.waitUntil(10_000) {
+            composeTestRule.onAllNodes(hasText(playerExit)).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            assertEquals(
+                "Channel 2",
+                ViewModelProvider(activity)[PlayerViewModel::class.java]
+                    .uiState.value.currentChannel?.displayName,
+            )
+        }
     }
 
     /**

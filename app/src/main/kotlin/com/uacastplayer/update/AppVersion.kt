@@ -47,24 +47,19 @@ data class AppVersion(
          * component. Null is deliberately not "0.0.0": a tag nobody can parse must not be treated
          * as an ancient version and silently offered as an update to everyone.
          */
-        // Guard clauses, one per way a string can fail to be a version. Folding them into a single
-        // exit would nest this three deep and hide which check rejected what.
-        @Suppress("ReturnCount")
         fun parse(raw: String): AppVersion? {
             val trimmed = raw.trim().removePrefix("v").removePrefix("V")
-            if (trimmed.isEmpty()) return null
-
             val dash = trimmed.indexOf('-')
             val numericPart = if (dash >= 0) trimmed.substring(0, dash) else trimmed
-            val preRelease = if (dash >= 0) trimmed.substring(dash + 1).takeIf { it.isNotEmpty() } else null
-
-            val numbers = numericPart.split('.').map { component ->
-                // toIntOrNull accepts a leading '+' and '-'; neither belongs in a version component,
-                // and '-' cannot appear here anyway since it started the pre-release suffix.
-                if (component.isEmpty() || !component.all { it.isDigit() }) return null
-                component.toIntOrNull() ?: return null
+            val rawPreRelease = if (dash >= 0) trimmed.substring(dash + 1) else null
+            val components = numericPart.split('.')
+            val numbers = components.mapNotNull { component ->
+                // toIntOrNull accepts a leading '+'; it does not belong in a version component.
+                component.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()
             }
-            return AppVersion(numbers, preRelease)
+            val numericPartValid = trimmed.isNotEmpty() && numbers.size == components.size
+            val preReleaseValid = rawPreRelease == null || rawPreRelease.isNotEmpty()
+            return if (numericPartValid && preReleaseValid) AppVersion(numbers, rawPreRelease) else null
         }
     }
 }

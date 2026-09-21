@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="player_remote_controls_notice">Playback settings are controlled by the TV. Use the device controls while casting.</string>
+    <string name="playlist_error_storage">Could not save the playlist. Your previous copy is safe. Free up storage and restart the app to retry.</string>
+    <string name="player_levels">Brightness and volume</string>
     <string name="app_name">UA Cast Player</string>
 
     <!-- Language picker (first run) -->
@@ -16,12 +19,14 @@
     <string name="nav_channels">Channels</string>
     <string name="nav_favorites">Favorites</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_settings_compact">Settings</string>
 
     <!-- Home screen -->
     <string name="home_subtitle">Your TV</string>
     <string name="home_empty_message">No playlist added yet</string>
     <string name="home_empty_subtitle">Add an M3U or M3U8 playlist link to view channels.</string>
     <string name="home_active_playlist_label">Active playlist</string>
+    <string name="playlist_unnamed">Playlist from a file</string>
     <string name="home_restored_from_cache">Restored from cache</string>
     <!-- The count is rendered separately, above the label, so these carry the noun alone. Still
          plurals: the number governs the label's form, and a fixed one reads as "1 Channels" here
@@ -51,29 +56,35 @@
 
     <!-- Add playlist screen -->
     <string name="add_playlist_title">Add playlist</string>
-    <string name="add_playlist_name_hint">Playlist name</string>
+    <string name="add_playlist_name_hint">Playlist name (optional)</string>
     <string name="add_playlist_url_hint">Playlist URL</string>
+    <string name="add_playlist_url_error">Enter a complete http:// or https:// address</string>
     <string name="add_playlist_helper">M3U, M3U8, and TXT playlists are supported. The URL must start with http:// or https://.</string>
     <string name="add_playlist_status_label">Status</string>
-    <string name="add_playlist_status_empty">Paste an M3U or M3U8 playlist URL</string>
-    <string name="add_playlist_status_empty_xtream">Enter the server address, login, and password</string>
     <string name="add_playlist_status_loading">Loading…</string>
-    <string name="add_playlist_status_ready">Ready to load</string>
     <string name="add_playlist_status_no_channels">Loaded, but no channels were found - check the link</string>
     <string name="add_playlist_save_button">Download and save</string>
     <string name="add_playlist_file_button">Load from file</string>
-    <string name="add_playlist_tip">Tip: paste the M3U / M3U8 link from your provider, or upload a playlist file from your device.</string>
+    <string name="add_playlist_tip">Use a playlist or account provided by your TV provider. This app does not provide channels.</string>
     <string name="add_playlist_type_url">M3U URL</string>
     <string name="add_playlist_type_file">File</string>
     <string name="add_playlist_type_xtream">Xtream</string>
     <string name="add_playlist_xtream_server_hint">Server address (with port)</string>
+    <string name="add_playlist_server_error">Enter a server URL or host:port</string>
     <string name="add_playlist_xtream_username_hint">Username</string>
     <string name="add_playlist_xtream_password_hint">Password</string>
+    <string name="add_playlist_password_show">Show</string>
+    <string name="add_playlist_password_hide">Hide</string>
+    <string name="add_playlist_xtream_cleartext_warning">This server uses unencrypted HTTP. Your username, password, and stream links can be read or changed in transit. Use https:// when your provider supports it.</string>
+    <string name="add_playlist_url_cleartext_warning">This playlist uses unencrypted HTTP. Its address, embedded credentials, and downloaded contents can be read or changed in transit. Use HTTPS when your provider supports it.</string>
 
     <!-- Channels screen -->
     <string name="channels_empty_message">No channels yet</string>
-    <string name="channels_empty_subtitle">Add a playlist in Settings to see channels here</string>
+    <string name="channels_empty_subtitle">Add a playlist to see channels here</string>
+    <string name="channels_error_subtitle">Check the source and connection, then try again</string>
+    <string name="common_retry">Try again</string>
     <string name="channels_search_hint">Search channels</string>
+    <string name="channels_clear_search">Clear channel search</string>
     <string name="channels_groups_title">Channel groups</string>
     <string name="channels_no_search_results">No channels match "%1$s"</string>
     <string name="channels_search_all_hint">Search all channels</string>
@@ -84,6 +95,7 @@
     <string name="channels_channel_guide">Guide</string>
     <string name="channels_channel_add_favorite">Add to favorites</string>
     <string name="channels_channel_remove_favorite">Remove from favorites</string>
+    <string name="channels_more_actions">More channel actions</string>
     <string name="channels_channel_lock">Lock channel</string>
     <string name="channels_channel_unlock">Unlock channel</string>
     <string name="channels_channel_locked">Locked - tap to enter PIN</string>
@@ -101,6 +113,7 @@
     <string name="playlist_error_size_limit">Playlist is larger than the 8 MB limit — that is roughly 45,000 channels. Ask your provider for a smaller list, or one split by category.</string>
     <string name="playlist_error_http">Server error (code %1$d)</string>
     <string name="playlist_error_network">Network error, please try again</string>
+    <string name="playlist_error_empty">This file contains no channels. Check that it is an M3U playlist rather than another kind of file.</string>
 
     <!-- Channel group names -->
     <string name="group_ungrouped">Ungrouped</string>
@@ -127,9 +140,21 @@
     <string name="favorites_sort_alphabetical">Alphabetical</string>
     <string name="favorites_sort_recently_added">Recently added</string>
     <string name="favorites_sort_manual">Custom order</string>
+    <string name="favorites_manual_hint">Press and hold a channel to drag it into a new position.</string>
 
     <!-- Settings screen -->
-    <string name="settings_section_general">General</string>
+    <string name="settings_section_general">Appearance and language</string>
+    <string name="settings_back_to_overview">Back to all settings</string>
+    <string name="settings_page_general_summary">Theme, language, channel layout, and logos</string>
+    <string name="settings_page_playlist_access">Playlists and TV guide</string>
+    <string name="settings_page_playlist_summary">Sources, hidden groups, and XMLTV guide</string>
+    <string name="settings_page_playback_summary">Buffer, channel switching, and battery behavior</string>
+    <string name="settings_page_parental_summary">PIN, locked channels, and access recovery</string>
+    <string name="home_change_playlist">Change playlist</string>
+    <string name="settings_page_data_storage">Data &amp; storage</string>
+    <string name="settings_page_data_summary">Cache, backup, import, and export</string>
+    <string name="settings_page_help_about">Help &amp; about</string>
+    <string name="settings_page_help_summary">Updates, tutorial, diagnostics, and legal information</string>
     <string name="settings_section_playlist">Playlist</string>
     <string name="settings_theme_label">Theme</string>
     <string name="theme_name_azure">Classic</string>
@@ -138,18 +163,18 @@
     <string name="settings_language_label">Language</string>
     <string name="settings_icon_wifi_only_label">Fetch channel logos on Wi-Fi only</string>
     <string name="settings_epg_source_label">TV guide source</string>
-    <string name="epg_source_rect_transparent">Rectangular (transparent)</string>
-    <string name="epg_source_square_dark">Square (dark background)</string>
-    <string name="epg_source_perfect_player">Perfect Player</string>
-    <string name="epg_source_rect_transparent_simple">Simplified: rectangular</string>
-    <string name="epg_source_square_dark_simple">Simplified: square</string>
+    <string name="epg_source_rect_transparent">it999 · epg2.xml.gz</string>
+    <string name="epg_source_square_dark">it999 · epg.xml.gz</string>
+    <string name="epg_source_perfect_player">it999 · pp.xml.gz</string>
+    <string name="epg_source_rect_transparent_simple">it999 · epg2.xml</string>
+    <string name="epg_source_square_dark_simple">it999 · epg.xml</string>
     <string name="settings_epg_truncated">This guide is larger than the app can hold, so the last channels in it have no programmes. Try a simplified source above.</string>
     <string name="settings_epg_suggestion_hint">An EPG address was found in the playlist</string>
     <string name="settings_epg_suggestion_action">Use</string>
     <string name="settings_detail_level_label">Detail level</string>
     <string name="settings_detail_level_full">Full</string>
     <string name="settings_detail_level_balanced">Balanced</string>
-    <string name="settings_detail_level_data_saver">Data saver</string>
+    <string name="settings_detail_level_data_saver">Minimal</string>
     <string name="settings_icon_display_mode_tier_default_hint">Turned down automatically to save resources on this device</string>
     <string name="settings_channel_layout_label">Layout</string>
     <string name="channel_layout_list">List</string>
@@ -169,6 +194,7 @@
     <string name="settings_icon_sources_remove">Remove source</string>
     <string name="settings_icon_sources_error_invalid">Enter a full http(s) URL</string>
     <string name="settings_icon_sources_error_duplicate">That source is already added</string>
+    <string name="settings_icon_sources_error_limit">You can add up to 16 icon sources</string>
     <string name="settings_section_parental_control">Parental control</string>
     <string name="parental_control_set_up">Set up PIN lock</string>
     <string name="parental_control_manage_locked">Locked channels (%1$d)</string>
@@ -186,15 +212,21 @@
     <string name="settings_section_playback">Playback</string>
     <string name="settings_section_cache">Cache</string>
     <string name="settings_section_data">Data</string>
-    <string name="settings_data_hint">Back up your saved playlists, favorites, and key settings to a file, or restore them on another device. Caches are never included.</string>
+    <string name="settings_data_hint">Back up saved playlists, favorites, and key settings. The file is not encrypted and may contain provider credentials and private stream links.</string>
     <string name="settings_data_export">Export</string>
+    <string name="settings_data_export_warning_title">Export sensitive data?</string>
+    <string name="settings_data_export_warning_message">This backup is not encrypted. It can contain IPTV usernames, passwords, access tokens, and private stream links. Store and share it like a password.</string>
+    <string name="settings_data_export_confirm">Export anyway</string>
     <string name="settings_data_import">Import</string>
     <string name="settings_data_import_summary">Imported: %1$d playlists, %2$d favorites</string>
+    <string name="settings_data_export_success">Backup exported successfully</string>
+    <string name="settings_data_export_failure">Could not export the backup. Check storage access and try again.</string>
     <string name="cache_playlist_label">Playlist cache</string>
     <string name="cache_epg_label">TV guide cache</string>
     <string name="cache_icons_label">Channel logo cache</string>
     <string name="cache_coil_label">Image cache</string>
     <string name="cache_clear_button">Clear</string>
+    <string name="add_playlist_clear_url">Clear playlist URL</string>
     <string name="settings_device_tier_label">Detected device tier</string>
     <string name="device_tier_low_end">Basic</string>
     <string name="device_tier_mid_range">Standard</string>
@@ -204,13 +236,15 @@
     <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. The Cast button plays on a Chromecast or Google TV; the button beside it reaches TVs that use DLNA instead. If a stream cannot play on the receiver directly, the app retries through a local relay on your phone.</string>
     <string name="settings_open_help">Detailed help</string>
     <string name="settings_open_terms">Terms of Use</string>
+    <string name="settings_open_privacy_policy">Privacy Policy</string>
     <string name="settings_send_diagnostics">Send an activity log to the developer</string>
     <string name="settings_send_button">Send</string>
-    <string name="settings_diagnostics_routing_label">Routing effectiveness (local only, this device)</string>
+    <string name="settings_diagnostics_routing_label">Cast routing effectiveness (stays on this device)</string>
     <string name="settings_diagnostics_route_direct">Direct</string>
     <string name="settings_diagnostics_route_remux">Remux</string>
     <string name="settings_diagnostics_route_rewrite">Proxy rewrite</string>
     <string name="settings_diagnostics_route_line">%1$s: %2$d attempted, %3$d played, %4$d failed</string>
+    <string name="settings_diagnostics_route_never_cast">Nothing has been cast from this device yet.</string>
     <!-- Generic "Open" action for LinkRow (Help/Terms) - distinct from settings_battery_optimization_button,
          which is specific to the battery optimization row and must not be reused elsewhere. -->
     <string name="settings_open_button">Open</string>
@@ -243,13 +277,14 @@
     <string name="help_cast_errors_body">The phone and the receiver do not decode the same formats. «… video isn\'t supported» or «… audio isn\'t supported» names the format your device refused - AC-3 audio and MPEG-2 or HEVC video are the usual ones. The app cannot convert them: it relays the stream, it does not re-encode it. Look for the same channel in another quality, which often carries different audio. «Couldn\'t cast this channel» with no format named means the receiver rejected the stream for some other reason. «Backup streaming isn\'t available on this network» means the Wi-Fi gave your phone no IPv4 address, so the relay cannot run. In every one of these cases the channel keeps playing on the phone.</string>
     <string name="help_send_diagnostics_button">Send diagnostics</string>
     <string name="diagnostics_preview_title">Diagnostics report</string>
-    <string name="diagnostics_preview_body_hint">This report contains technical device data and a recent activity log — no playlists, no logins, no addresses. Read it below; it opens in your mail app addressed to the developer, and nothing is sent until you press send there.</string>
+    <string name="diagnostics_preview_body_hint">This report contains technical device data and a recent activity log. Playlist URLs, login credentials, and access tokens are redacted, but the report may still include provider host names, local network addresses, channel names, and device details. Read it below; Android will open a mail/share chooser, pre-addressed where supported, and nothing is sent until you choose an app and press send there.</string>
     <string name="diagnostics_preview_send">Send</string>
     <string name="diagnostics_preview_cancel">Cancel</string>
     <string name="diagnostics_share_chooser_title">Send diagnostics report via</string>
 
     <!-- Terms of Use screen -->
     <string name="terms_title">Terms of Use</string>
+    <string name="privacy_policy_title">Privacy Policy</string>
     <string name="terms_intro">By installing or using UA Cast Player (\"the app\"), you agree to these Terms of Use. If you do not agree, do not use the app.</string>
     <string name="terms_s1_title">1. What this app is</string>
     <string name="terms_s1_body">UA Cast Player is a general-purpose player for M3U/M3U8 playlists that you provide, and a Google Cast sender. It does not host, provide, sell, curate, or verify any channel, movie, or media content of its own - every stream comes from a link or file you supply yourself.</string>
@@ -283,10 +318,14 @@
     <string name="player_mini_close">Close player</string>
     <string name="player_mini_on_tv_badge">On TV</string>
     <string name="cast_status_connected">Casting</string>
+    <string name="player_chromecast_cast">Cast to Chromecast</string>
+    <string name="player_chromecast_connected">Connected to Chromecast</string>
     <string name="player_audio_track">Audio</string>
     <string name="player_subtitle_track">Subtitles</string>
     <string name="player_subtitle_off">Off</string>
     <string name="player_fatal_error">This channel isn\'t available right now</string>
+    <string name="player_retry">Retry this channel</string>
+    <string name="player_auto_skip_progress">Channel unavailable — trying the next one (%1$d/%2$d)</string>
     <string name="audio_layout_mono">Mono</string>
     <string name="audio_layout_stereo">Stereo</string>
     <string name="audio_layout_surround_5_1">5.1 surround</string>
@@ -299,9 +338,10 @@
     <string name="player_volume_decrease">Decrease volume, currently %1$d percent</string>
     <string name="player_volume_increase">Increase volume, currently %1$d percent</string>
     <string name="player_back_to_channels">Back to channels</string>
+    <string name="player_toggle_controls">Show or hide player controls</string>
     <string name="player_next_channels_title">Next channels</string>
     <string name="player_view_all">View all</string>
-    <string name="player_quality">Quality</string>
+    <string name="player_quality">Stream information</string>
     <string name="player_aspect_ratio">Aspect ratio</string>
     <string name="player_buffering">Buffering…</string>
     <string name="player_recovering_playback">Recovering playback…</string>
@@ -355,7 +395,6 @@
     <string name="common_confirm">Confirm</string>
     <string name="common_cancel">Cancel</string>
     <!-- DLNA casting -->
-    <string name="player_dlna_cast">Cast to other devices (DLNA)</string>
     <string name="dlna_sheet_title">Other devices (DLNA)</string>
     <string name="dlna_sheet_searching">Searching for devices…</string>
     <string name="dlna_sheet_no_devices">No devices found</string>
@@ -387,6 +426,9 @@
     <string name="guided_tour_settings_body">Language and theme, buffer size, channel icons, parental control, backup and updates. The tutorial lives here too, if you want it again.</string>
 
     <string name="settings_section_tutorial">Tutorial</string>
+    <string name="settings_search_hint">Search settings</string>
+    <string name="settings_search_clear">Clear settings search</string>
+    <string name="settings_search_no_results">No settings match “%1$s”</string>
     <string name="settings_tutorial_label">Guided tour</string>
     <string name="settings_tutorial_button">Show</string>
     <string name="settings_tutorial_hint_unseen">A short walkthrough of the main features.</string>
@@ -395,16 +437,35 @@
     <string name="dlna_volume">TV volume</string>
     <string name="dlna_volume_value">%1$d%%</string>
 
+    <string name="epg_today">Today</string>
+    <string name="epg_previous_day">Previous</string>
+    <string name="epg_next_day">Next</string>
+    <string name="epg_jump_today">Today</string>
+    <string name="epg_timezone">Time zone: %1$s</string>
+
+    <string name="home_make_it_yours_title">Make Home yours</string>
+    <string name="home_make_it_yours_body">Star channels you watch often and they will appear here for one-tap access.</string>
+
     <string name="update_banner_title">A new version is available</string>
     <string name="update_banner_message">Version %1$s is ready to download.</string>
+    <string name="update_banner_message_page_only">Version %1$s was published without an APK - the release page will open.</string>
     <string name="update_banner_action">Open release</string>
     <string name="settings_section_updates">Updates</string>
-    <string name="settings_update_hint">The app checks for a new version once a week when you open it. It never downloads or installs anything on its own — the button below opens the release page in your browser.</string>
+    <string name="settings_update_hint">The app checks for a new version once a week when you open it. If a release has an APK attached, it can download and install it for you — the file is checked against the release and must be signed by the same developer as the copy you have, or it is refused. You can always open the release page in your browser instead.</string>
     <string name="settings_update_check_button">Check for updates</string>
     <string name="settings_update_checking">Checking…</string>
     <string name="settings_update_up_to_date">You have the latest version.</string>
     <string name="settings_update_available">Version %1$s is available.</string>
     <string name="settings_update_failed">Could not check. Try again later.</string>
+    <string name="settings_update_install_button">Download and install</string>
+    <string name="settings_update_downloading">Downloading…</string>
+    <string name="settings_update_downloading_percent">Downloading… %1$d%%</string>
+    <string name="settings_update_launching">Ready. Confirm the installation on screen.</string>
+    <string name="settings_update_needs_permission">To install from here, allow UA Cast to install apps.</string>
+    <string name="settings_update_grant_permission_button">Open settings</string>
+    <string name="settings_update_untrusted">This file was not signed by the same developer as your copy, so it was not installed. Download it from the release page instead.</string>
+    <string name="settings_update_corrupt">The download is damaged. Try again.</string>
+    <string name="settings_update_install_failed">Could not install. Try again.</string>
 
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Free version</string>
@@ -420,6 +481,8 @@
     <string name="premium_unlock_later">Not now</string>
     <string name="premium_restore">Restore purchases</string>
     <string name="premium_no_store">There is nothing to buy yet — this app is not published in a store. Premium is unlocked for everyone during the trial.</string>
+    <string name="premium_no_play_on_device">There is no Google Play on this device, so there is nothing to buy here — every premium feature is open. That is deliberate, not an oversight.</string>
+    <string name="premium_store_offers_nothing">Google Play has nothing to offer right now. Premium features stay open until it does.</string>
     <string name="premium_restore_nothing">Nothing to restore on this Google account.</string>
     <string name="premium_already_owned">You already own this. Tap “Restore purchases”.</string>
     <string name="premium_store_unreachable">Could not reach Google Play. Check your connection and try again.</string>
@@ -434,4 +497,41 @@
     <string name="feature_custom_epg">Your own TV guide source</string>
     <string name="feature_custom_icons">Your own logo sources</string>
     <string name="settings_developer_license">Developer: license state</string>
+    <string name="settings_data_import_persistence_failure">Some imported data could not be saved. Free up storage and import the backup again before closing the app.</string>
+    <string name="playlist_remove_confirmation">Remove “%1$s” from saved playlists? You will need its address or file to add it again.</string>
+    <string name="playlist_remove_active_confirmation">Remove active playlist “%1$s”? Another saved playlist will be selected, or the channel list will become empty. You will need its address or file to restore it.</string>
+    <string name="player_tracks_loading">Tracks are still loading. Keep this window open or try again when playback starts.</string>
+    <string name="player_tracks_empty">No selectable tracks in this stream.</string>
+    <string name="epg_guide_loading">Loading the TV guide…</string>
+    <string name="epg_guide_error">The TV guide could not be loaded. Check your connection and the EPG source in Settings.</string>
+    <string name="epg_guide_no_match">This EPG source has no schedule for this channel. Choose another source in Settings.</string>
+    <string name="epg_guide_empty_day">No programmes for this date. Try another day.</string>
+    <string name="dlna_connecting_device">Connecting to %1$s…</string>
+    <string name="dlna_connection_failed">Could not start playback on %1$s. The TV may be unavailable or may not support this stream.</string>
+    <string name="dlna_network_hint">Keep the phone and TV on the same Wi-Fi network. Check that media sharing is enabled on the TV.</string>
+    <string name="dlna_search_again">Search again</string>
+    <string name="settings_visual_section">Appearance and logos</string>
+    <string name="settings_detail_level_hint">Controls list detail and logo downloads only. Video quality and video data usage do not change.</string>
+    <string name="player_devices">Watch on TV</string>
+    <string name="player_more_controls">More</string>
+    <string name="player_search_channels">Find a channel</string>
+    <string name="player_channels_loading">Loading channels…</string>
+    <string name="player_channels_no_results">No matching channels</string>
+    <string name="favorites_search">Search favorites</string>
+    <string name="favorites_edit">Edit favorites</string>
+    <string name="favorites_move_up">Move up</string>
+    <string name="favorites_move_down">Move down</string>
+    <string name="favorites_remove_confirm">Remove “%1$s” from favorites? You can add it again from the channel list.</string>
+    <string name="settings_epg_custom_active">Playlist / custom source</string>
+    <string name="settings_epg_variants_hint">Preset files come from it999. File names distinguish variants; channel coverage depends on the provider. Selecting a preset replaces the current source.</string>
+    <string name="nav_large_home">Home</string>
+    <string name="nav_large_channels">TV</string>
+    <string name="nav_large_favorites">Fav.</string>
+    <string name="nav_large_settings">Prefs</string>
+    <string name="playlist_sources_saving">Saving playlist changes…</string>
+    <string name="playlist_sources_save_failed">Changes were not saved. Retry before closing the app.</string>
+    <string name="playlist_sources_retry_save">Retry saving</string>
+    <string name="playlist_sources_limit">You can save up to %1$d playlists. Remove one before adding another.</string>
+    <string name="download_banner_expand">Show download details</string>
+    <string name="download_banner_collapse">Hide download details</string>
 </resources>

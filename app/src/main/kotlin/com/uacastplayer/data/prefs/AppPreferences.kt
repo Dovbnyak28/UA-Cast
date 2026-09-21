@@ -5,22 +5,47 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.i18n.LanguageResolver
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
+import com.uacastplayer.core.settings.PlayerResizeMode
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.guidedtour.GuidedTourStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
-import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.performance.HeapBudget
+import com.uacastplayer.core.security.LicenseRecordCodec
+import com.uacastplayer.data.security.LicenseIntegrity
+import com.uacastplayer.favorites.FavoritesSortOrder
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseStorage
 import com.uacastplayer.premium.LicenseTier
 import com.uacastplayer.update.UpdateCheckStorage
+
+private const val TAG = "AppPreferences"
 
 /**
  * Small, synchronous wrapper around the app's single general-settings [SharedPreferences] file.
  * Values here are all tiny scalars; there is no need for the AtomicFile/versioned-snapshot
  * machinery used by the playlist/EPG/favorites caches.
  */
-class AppPreferences(context: Context) :
-    ParentalControlPinStorage,
+class AppPreferences(
+    context: Context,
+    /**
+     * Whether this device can tag a licence at all - the one fact that tells an untagged record
+     * written here apart from one somebody stripped the tag off. Injected only so both answers can
+     * be tested: no Keystore exists under Robolectric, so a test could otherwise never reach the
+     * device-can-tag half of that decision. Every caller in the app takes the default.
+     */
+    private val canTagLicense: () -> Boolean = LicenseIntegrity::isAvailable,
+    /**
+     * The heap this app may grow into, for [effectiveBufferSize]. Injected for the same reason as
+     * [canTagLicense]: the unit-test harness runs with a 512MB heap, so a test could otherwise never
+     * reach the tight-heap branch at all. Every caller in the app takes the default.
+     */
+    private val maxHeapBytes: () -> Long = { Runtime.getRuntime().maxMemory() },
+) : ParentalControlPinStorage,
     UpdateCheckStorage,
     LicenseStorage,
     GuidedTourStorage {
@@ -32,10 +57,11 @@ class AppPreferences(context: Context) :
         get() = LanguageResolver.fromStoredCode(prefs.getString(KEY_LANGUAGE, null))
         set(value) = prefs.edit { putString(KEY_LANGUAGE, value.code) }
 
-    /** Selectable visual style - see docs/DESIGN_SYSTEM.md "Themes". */
-    var appTheme: AppTheme
-        get() = AppTheme.fromId(prefs.getString(KEY_APP_THEME, null))
-        set(value) = prefs.edit { putString(KEY_APP_THEME, value.name) }
+    /** Persisted ID of the selected visual style. Mapping that ID to the UI's `AppTheme` belongs
+     * to `ui.theme.AppThemePreference`, so the data layer never depends on UI types. */
+    var appThemeId: String?
+        get() = prefs.getString(KEY_APP_THEME, null)
+        set(value) = prefs.edit { putString(KEY_APP_THEME, value) }
 
     val hasChosenLanguage: Boolean
         get() = prefs.contains(KEY_LANGUAGE)
@@ -97,6 +123,31 @@ class AppPreferences(context: Context) :
         get() = BufferSize.fromId(prefs.getString(KEY_BUFFER_SIZE, null))
         set(value) = prefs.edit { putString(KEY_BUFFER_SIZE, value.name) }
 
+    /** Once true, the user's explicit choice above wins forever over the heap-computed default -
+     * the same contract [hasChosenIconDisplayMode] and [hasChosenListDensity] have, and for the
+     * same reason: see [com.uacastplayer.performance.HeapBudget.defaultBufferSize], which now
+     * computes one per device rather than every device getting MEDIUM. */
+    val hasChosenBufferSize: Boolean
+        get() = prefs.contains(KEY_BUFFER_SIZE)
+
+    /**
+     * The buffer size to actually *use* - the user's choice when they made one, and otherwise the
+     * one this device's heap can afford.
+     *
+     * **Read this, not [bufferSize], anywhere the value is going to be acted on.** The raw property
+     * above is the stored value and answers a different question: it is what the backup exports and
+     * what `hasChosenBufferSize` is about. It falls back to a flat `MEDIUM` for every device,
+     * because that is what "nothing stored" means in storage terms.
+     *
+     * The distinction is not academic - it was a live defect. When the heap-derived default was
+     * introduced it was resolved inside `SettingsController`, so the Settings screen showed the
+     * smaller buffer while `PlayerViewModel`, which reads its own value straight from preferences,
+     * went on allocating the larger one. The device the default exists for kept the 16MB that
+     * helped run it out of memory, and the screen said otherwise.
+     */
+    val effectiveBufferSize: BufferSize
+        get() = if (hasChosenBufferSize) bufferSize else HeapBudget.defaultBufferSize(maxHeapBytes())
+
     /** Global video fit/fill/zoom preset - see [PlayerResizeMode]. */
     var playerResizeMode: PlayerResizeMode
         get() = PlayerResizeMode.fromId(prefs.getString(KEY_PLAYER_RESIZE_MODE, null))
@@ -113,6 +164,22 @@ class AppPreferences(context: Context) :
     var autoSkipDeadEnabled: Boolean
         get() = prefs.getBoolean(KEY_AUTO_SKIP_DEAD, true)
         set(value) = prefs.edit { putBoolean(KEY_AUTO_SKIP_DEAD, value) }
+
+    /** Android delivers preference changes on Main. Closing also rejects an already posted callback. */
+    fun observePlaybackChanges(onChange: () -> Unit): AutoCloseable {
+        val active = java.util.concurrent.atomic.AtomicBoolean(true)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                null, KEY_WRAP_AROUND, KEY_AUTO_SKIP_DEAD -> if (active.get()) onChange()
+                else -> Unit
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return AutoCloseable {
+            active.set(false)
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
 
     /** Once true, the automatic first-cast-session battery optimization hint never shows again on its own. */
     var hasSeenBatteryOptimizationHint: Boolean
@@ -217,27 +284,93 @@ class AppPreferences(context: Context) :
      * more generous than a valid one.
      */
     override var storedLicense: License?
-        get() {
-            val storedTier = prefs.getString(KEY_LICENSE_TIER, null) ?: return null
-            val tier = LicenseTier.entries.firstOrNull { it.name == storedTier } ?: LicenseTier.FREE
-            val expiry = if (prefs.contains(KEY_LICENSE_EXPIRY)) prefs.getLong(KEY_LICENSE_EXPIRY, 0L) else null
-            return License(tier, expiry, prefs.getString(KEY_LICENSE_SOURCE, null))
-        }
-        set(value) = prefs.edit {
+        get() = readTaggedLicense() ?: adoptLegacyLicense()
+        set(value) {
             if (value == null) {
-                remove(KEY_LICENSE_TIER)
-                remove(KEY_LICENSE_EXPIRY)
-                remove(KEY_LICENSE_SOURCE)
-            } else {
-                putString(KEY_LICENSE_TIER, value.tier.name)
-                putString(KEY_LICENSE_SOURCE, value.source)
-                if (value.expiresAtMillis == null) {
-                    remove(KEY_LICENSE_EXPIRY)
-                } else {
-                    putLong(KEY_LICENSE_EXPIRY, value.expiresAtMillis)
-                }
+                prefs.edit { remove(KEY_LICENSE_RECORD); removeLegacyLicenseKeys() }
+                return
+            }
+            val payload = LicenseRecordCodec.payload(value.tier.name, value.expiresAtMillis, value.source)
+            val mac = LicenseIntegrity.sign(payload)
+            prefs.edit {
+                // A device that cannot tag stores the payload with an empty tag rather than nothing:
+                // the licence is what the user paid for, and a Keystore that will not co-operate is
+                // not a reason to forget it. [licenseFrom] believes such a record back only while
+                // this device still cannot tag - see the note there for why that condition is the
+                // whole difference between an honest untagged record and a stripped tag.
+                putString(KEY_LICENSE_RECORD, LicenseRecordCodec.encode(payload, mac.orEmpty()))
+                removeLegacyLicenseKeys()
             }
         }
+
+    /**
+     * The licence, if the record on disk is one this app wrote.
+     *
+     * A record whose tag does not match is not repaired and not reported - it resolves to
+     * [License.FREE], the same answer an unrecognised tier already gets. Silence is deliberate: the
+     * person who edited the file is the only one who would read a message about it, and the honest
+     * outcome for the app is simply not to believe it.
+     */
+    private fun readTaggedLicense(): License? =
+        prefs.getString(KEY_LICENSE_RECORD, null)?.let(::licenseFrom)
+
+    /**
+     * One record, believed or not.
+     *
+     * The three ways it can fail to be this app's - not a record at all, too few fields, a tag that
+     * does not match - are one decision rather than three, because they have one answer.
+     *
+     * **An empty tag is answered by asking the device, not by a fixed rule**, because the two things
+     * it can mean pull in opposite directions. Written by the setter, it means this device could not
+     * produce a tag, and refusing it would revoke a licence the user paid for - which
+     * [LicenseIntegrity] states plainly is the worse bug of the two. Written by hand, it is the
+     * cheapest attack there is: open the file, delete everything after the last separator, keep the
+     * tier. [canTagLicense] is what separates them, and it is why [LicenseIntegrity.isAvailable]
+     * exists. So on any device that can tag - which is very nearly all of them - a missing tag is
+     * still a missing licence, and only a device that genuinely cannot tag believes an untagged one.
+     *
+     * The cost of drawing it here: a device that could not tag when the record was written and can
+     * tag by the time it is read - a Keystore repaired by a system update - drops to the free tier,
+     * and its owner restores the purchase to get it back. The alternative, re-signing whatever is
+     * found untagged, would hand every stripped tag a fresh valid one, which is the whole attack.
+     */
+    private fun licenseFrom(stored: String): License {
+        val decoded = LicenseRecordCodec.decode(stored)
+        val fields = decoded?.first?.split('|').orEmpty()
+        val tagIsGood = when {
+            decoded == null -> false
+            decoded.second.isEmpty() -> !canTagLicense()
+            else -> LicenseIntegrity.verify(decoded.first, decoded.second)
+        }
+        val ours = tagIsGood && fields.size >= LICENSE_FIELD_COUNT
+        if (!ours) {
+            AppLog.w(TAG) { "The stored licence is not one this app wrote; treating it as free" }
+            return License.FREE
+        }
+        val tier = LicenseTier.entries.firstOrNull { it.name == fields[0] } ?: LicenseTier.FREE
+        return License(tier, fields[1].toLongOrNull(), fields[2].takeIf { it != "-" })
+    }
+
+    /**
+     * A licence written before records were tagged, adopted once and rewritten as one.
+     *
+     * The alternative - refusing anything untagged - would drop every existing paying install to
+     * the free tier on the launch after an update, which is a far worse bug than the tampering this
+     * is meant to make expensive. After this runs once there is no untagged form left to fall back
+     * to, so removing a tag from then on removes the licence with it.
+     */
+    private fun adoptLegacyLicense(): License? {
+        val storedTier = prefs.getString(KEY_LICENSE_TIER, null) ?: return null
+        val tier = LicenseTier.entries.firstOrNull { it.name == storedTier } ?: LicenseTier.FREE
+        val expiry = if (prefs.contains(KEY_LICENSE_EXPIRY)) prefs.getLong(KEY_LICENSE_EXPIRY, 0L) else null
+        return License(tier, expiry, prefs.getString(KEY_LICENSE_SOURCE, null)).also { storedLicense = it }
+    }
+
+    private fun SharedPreferences.Editor.removeLegacyLicenseKeys() {
+        remove(KEY_LICENSE_TIER)
+        remove(KEY_LICENSE_EXPIRY)
+        remove(KEY_LICENSE_SOURCE)
+    }
 
     /** Set once, the first time a store answers with a non-empty catalogue, and never cleared -
      * see [LicenseStorage.storeHasEverOfferedProducts] for why it is remembered rather than asked. */
@@ -286,6 +419,8 @@ class AppPreferences(context: Context) :
         const val KEY_LICENSE_TIER = "license_tier"
         const val KEY_LICENSE_EXPIRY = "license_expires_at"
         const val KEY_LICENSE_SOURCE = "license_source"
+        const val KEY_LICENSE_RECORD = "license_record"
+        const val LICENSE_FIELD_COUNT = 3
         const val KEY_STORE_HAS_OFFERED = "store_has_offered_products"
         const val KEY_CLOCK_HIGH_WATER_MARK = "clock_high_water_mark"
     }

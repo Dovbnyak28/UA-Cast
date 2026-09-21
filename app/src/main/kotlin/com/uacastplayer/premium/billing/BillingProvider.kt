@@ -28,7 +28,9 @@ interface BillingProvider {
      * and leaves this at its last known value rather than clearing it, because clearing it would
      * read as a refund.
      */
-    val purchases: StateFlow<Set<PurchaseRecord>>
+    // null means ownership has not been authoritatively queried (or the latest query failed).
+    // Connected transport plus null must never revoke a cached entitlement.
+    val purchases: StateFlow<Set<PurchaseRecord>?>
 
     /** Opens the connection and starts populating [purchases]. Safe to call more than once. */
     suspend fun connect()

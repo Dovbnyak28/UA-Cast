@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the one directory diagnostics reports are written to, and only inside the cache. The app's
+     real storage - playlists, the EPG snapshot, the stored licence - is deliberately not reachable
+     through this provider, so a mis-addressed grant cannot hand any of it to another app. -->
+<paths>
+    <cache-path name="diagnostics" path="diagnostics/" />
+</paths>

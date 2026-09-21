@@ -25,8 +25,35 @@ RUNNER="$PACKAGE.test/androidx.test.runner.AndroidJUnitRunner"
 APP_APK="app/build/outputs/apk/debug/app-universal-debug.apk"
 TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 
-if [ -z "$(adb devices | sed '1d' | grep -w device || true)" ]; then
-    echo "run-instrumented-tests: no device or emulator attached" >&2
+mapfile -t authorized_devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+if [ "${#authorized_devices[@]}" -eq 0 ]; then
+    echo "run-instrumented-tests: no authorized device or emulator attached" >&2
+    exit 1
+fi
+if [ -n "${ADB_SERIAL:-}" ]; then
+    if ! printf '%s\n' "${authorized_devices[@]}" | grep -Fxq "$ADB_SERIAL"; then
+        printf 'run-instrumented-tests: ADB_SERIAL is not an authorized device: %s\n' \
+            "$ADB_SERIAL" >&2
+        printf 'run-instrumented-tests: authorized devices: %s\n' \
+            "${authorized_devices[*]}" >&2
+        exit 1
+    fi
+    DEVICE_SERIAL="$ADB_SERIAL"
+elif [ "${#authorized_devices[@]}" -gt 1 ]; then
+    printf 'run-instrumented-tests: expected one authorized device, found: %s\n' \
+        "${authorized_devices[*]}" >&2
+    echo "run-instrumented-tests: set ADB_SERIAL to choose one" >&2
+    exit 1
+else
+    DEVICE_SERIAL="${authorized_devices[0]}"
+fi
+
+# Fixtures replace saved sources. Never run them against real phone data by default.
+# The Windows helper moves files/preferences aside and restores them even on failure.
+device_is_emulator=$(adb -s "$DEVICE_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')
+if [ "$device_is_emulator" != "1" ] && [ "${ALLOW_DEVICE_DATA_REPLACEMENT:-0}" != "1" ]; then
+    echo "Physical-device fixtures replace playlists. Use scripts/run-preserved-device-tests.ps1." >&2
+    echo "Only for a disposable test device: explicitly set ALLOW_DEVICE_DATA_REPLACEMENT=1." >&2
     exit 1
 fi
 
@@ -34,19 +61,43 @@ fi
 
 # The debug variant is split per ABI (see the splits block in app/build.gradle.kts), so there is no
 # plain app-debug.apk - the universal one is the only build that fits any device.
-adb install -r "$APP_APK"
-adb install -r "$TEST_APK"
+adb -s "$DEVICE_SERIAL" install -r "$APP_APK"
+adb -s "$DEVICE_SERIAL" install -r "$TEST_APK"
+
+# A locked or sleeping OEM handset can keep MainActivity resumed while hiding its window. That
+# makes Compose tests time out without telling us anything about the app. Wake the display and
+# dismiss only a non-secure keyguard; a secure lock is left untouched and the runner will report
+# the actionable timeout instead of changing the user's lock settings. Stop both packages so a
+# previous failed runner cannot leave a hidden Activity window behind.
+adb -s "$DEVICE_SERIAL" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+adb -s "$DEVICE_SERIAL" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
+adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE.test" >/dev/null 2>&1 || true
 
 echo "Running $RUNNER"
-output=$(adb shell am instrument -w "$RUNNER" 2>&1)
-echo "$output"
+report_dir="app/build/reports/instrumented"
+mkdir -p "$report_dir"
+# Stream progress to CI and disk instead of retaining everything in a command substitution.
+# If the emulator hangs or the job is cancelled, the completed tests remain diagnosable.
+set +e
+adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1 | tee "$report_dir/runner.txt"
+runner_statuses=("${PIPESTATUS[@]}")
+set -e
+if [ "${runner_statuses[0]}" -ne 0 ]; then
+    echo "run-instrumented-tests: adb runner command failed with status ${runner_statuses[0]}" >&2
+    exit "${runner_statuses[0]}"
+fi
+if [ "${runner_statuses[1]}" -ne 0 ]; then
+    echo "run-instrumented-tests: failed to persist the instrumentation report" >&2
+    exit "${runner_statuses[1]}"
+fi
 
-if printf '%s' "$output" | grep -q "FAILURES!!!"; then
+if grep -q "FAILURES!!!" "$report_dir/runner.txt"; then
     echo "run-instrumented-tests: the suite reported failures" >&2
     exit 1
 fi
 
-if ! printf '%s' "$output" | grep -qE "OK \([0-9]+ tests?\)"; then
+if ! grep -Eq "OK \([0-9]+ tests?\)" "$report_dir/runner.txt"; then
     echo "run-instrumented-tests: the runner never reported a passing result - treating as failure" >&2
     exit 1
 fi

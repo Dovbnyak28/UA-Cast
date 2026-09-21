@@ -1,5 +1,6 @@
 package com.uacastplayer.playlist
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -39,6 +40,30 @@ class ChannelGrouperTest {
         val result = ChannelGrouper.group(channels)
         val titles = result.map { (it.group as ChannelGroup.Custom).rawTitle }
         assertEquals(listOf("Alpha Group", "zeta group"), titles)
+    }
+
+    /**
+     * The list a viewer scrolls to find their folder, ordered by an alphabet that is not theirs.
+     * `rawTitle.lowercase()` compares UTF-16 code units: Ґ is U+0490, past я, and Є/І/Ї are
+     * U+0404-0407, in a block that also lands past я. The test above was the only cover this sort
+     * had, and it used English words.
+     */
+    @Test
+    fun `custom groups follow the Ukrainian alphabet, not UTF-16 order`() {
+        val channels = listOf(
+            channel("C1", "Ялта"),
+            channel("C2", "Ґазда"),
+            channel("C3", "Інтер"),
+            channel("C4", "Атлант"),
+            channel("C5", "Єдині"),
+        )
+
+        val result = ChannelGrouper.group(channels, Locale.forLanguageTag("uk"))
+
+        assertEquals(
+            listOf("Атлант", "Ґазда", "Єдині", "Інтер", "Ялта"),
+            result.map { (it.group as ChannelGroup.Custom).rawTitle },
+        )
     }
 
     @Test

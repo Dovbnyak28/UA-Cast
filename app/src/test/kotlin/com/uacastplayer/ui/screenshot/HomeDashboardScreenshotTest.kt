@@ -63,6 +63,10 @@ class HomeDashboardScreenshotTest {
                 ),
             ),
             activePlaylistId = "6368ffd4",
+            // A name, because that is what the card is for. This fixture used to pass none, so the
+            // golden recorded the fallback of the day - the first eight characters of a SHA-256 -
+            // and pinned the bug in place as if it were the design.
+            displayName = "iptv.example.com/list.m3u",
             restoredFromCache = true,
         ),
         // Pinned rather than defaulted: EpgUiState.nowMillis defaults to the wall clock, which
@@ -125,4 +129,28 @@ class HomeDashboardScreenshotTest {
     @Test
     @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
     fun homeDashboard_midnight() = capture("home_dashboard_midnight", AppTheme.MIDNIGHT)
+
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun homeDashboard_newUser_explainsFavoritesNextStep() {
+        val newUserContent = content.copy(favorites = emptyList())
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Box(
+                    Modifier
+                        .size(width = 411.dp, height = 891.dp)
+                        .background(UaTheme.palette.void),
+                ) {
+                    HomeScreen(
+                        content = newUserContent,
+                        source = source,
+                        resolveIcon = { null },
+                        onChannelSelected = { _, _ -> },
+                        onOpenChannels = {},
+                    )
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/home_dashboard_personalization_uk.png")
+    }
 }

@@ -1,6 +1,7 @@
 package com.uacastplayer.proxy
 
 import java.net.URI
+import java.net.URISyntaxException
 
 /**
  * Rewrites an HLS playlist so every reference it makes (segment URIs, `URI="..."` attributes on
@@ -18,7 +19,7 @@ object M3u8Rewriter {
      * the local proxy URL to substitute, or null to leave the reference unrewritten.
      */
     fun rewrite(playlist: String, baseUrl: String, mapUrl: (String) -> String?): String {
-        return playlist.split("\n").joinToString("\n") { rawLine ->
+        return playlist.removePrefix(UTF8_BOM).split("\n").joinToString("\n") { rawLine ->
             val line = rawLine.trimEnd('\r')
             when {
                 line.isBlank() -> line
@@ -38,10 +39,8 @@ object M3u8Rewriter {
         resolveAndMap(line.trim(), baseUrl, mapUrl) ?: line
 
     private fun resolveAndMap(reference: String, baseUrl: String, mapUrl: (String) -> String?): String? {
-        if (reference.isBlank()) return null
-        val absolute = resolveUrl(baseUrl, reference) ?: return null
-        if (!isSupportedScheme(absolute)) return null
-        return mapUrl(absolute)
+        val absolute = reference.takeUnless(String::isBlank)?.let { resolveUrl(baseUrl, it) }
+        return absolute?.let(mapUrl)
     }
 
     /** IPTV playlists routinely carry unencoded spaces in paths ("live tv/chan 1.ts"), which
@@ -53,15 +52,18 @@ object M3u8Rewriter {
             ?: resolveStrict(encodeSpaces(baseUrl), encodeSpaces(reference))
 
     private fun resolveStrict(baseUrl: String, reference: String): String? = try {
-        URI(baseUrl).resolve(URI(reference)).toString()
-    } catch (_: Exception) {
+        URI(baseUrl).resolve(URI(reference)).takeIf(::isSupportedHttpUrl)?.toString()
+    } catch (_: URISyntaxException) {
         null
     }
 
     private fun encodeSpaces(url: String): String = url.replace(" ", "%20")
 
-    private fun isSupportedScheme(url: String): Boolean {
-        val scheme = url.substringBefore(':', missingDelimiterValue = "").lowercase()
-        return scheme == "http" || scheme == "https"
-    }
+    private fun isSupportedHttpUrl(uri: URI): Boolean =
+        uri.isAbsolute &&
+            uri.host?.isNotBlank() == true &&
+            uri.port in -1..MAX_TCP_PORT &&
+            (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true))
+
+    private const val MAX_TCP_PORT = 65_535
 }

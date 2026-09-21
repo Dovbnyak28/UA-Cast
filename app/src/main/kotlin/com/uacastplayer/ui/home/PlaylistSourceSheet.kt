@@ -2,31 +2,50 @@ package com.uacastplayer.ui.home
 import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.playlist.PlaylistSource
+import com.uacastplayer.playlist.PlaylistSourceLabel
 import com.uacastplayer.playlist.PlaylistSourceType
+import com.uacastplayer.playlist.PlaylistSourceSaveState
+import com.uacastplayer.playlist.PlaylistSourcePolicy
+import com.uacastplayer.ui.playlist.PlaylistPersistenceStatus
+import com.uacastplayer.ui.components.PrimaryButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
 
@@ -44,9 +63,26 @@ fun PlaylistSourceSheet(
     onRemove: (PlaylistSource) -> Unit,
     onAddNew: () -> Unit,
     onDismiss: () -> Unit,
+    saveState: PlaylistSourceSaveState = PlaylistSourceSaveState.IDLE,
+    onRetrySave: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    var pendingRemovalId by rememberSaveable { mutableStateOf<String?>(null) }
+    val pendingRemoval = sources.firstOrNull { it.id == pendingRemovalId }
+    pendingRemoval?.let { source ->
+        PlaylistSourceRemovalDialog(
+            name = source.displayName ?: stringResource(R.string.playlist_unnamed),
+            isActive = source.id == activeId,
+            onConfirm = { pendingRemovalId = null; onRemove(source) },
+            onDismiss = { pendingRemovalId = null },
+        )
+    }
+    val orderedSources = remember(sources) { sources.sortedByDescending { it.addedAtEpochMillis } }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = UaTheme.palette.surface2,
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = GapM)) {
             Text(
                 text = stringResource(R.string.home_playlist_sources_title),
@@ -54,33 +90,83 @@ fun PlaylistSourceSheet(
                 color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(bottom = GapM),
             )
-            // Most recently added first, same ordering PlaylistSourcePolicy.remove's fallback uses.
-            for (source in sources.sortedByDescending { it.addedAtEpochMillis }) {
-                PlaylistSourceRow(
-                    source = source,
-                    isActive = source.id == activeId,
-                    onSelect = { onSelect(source) },
-                    onRemove = { onRemove(source) },
-                )
+            PlaylistPersistenceStatus(saveState, onRetrySave)
+            val atCapacity = sources.size >= PlaylistSourcePolicy.MAX_SOURCES
+            if (atCapacity) {
+                Text(stringResource(R.string.playlist_sources_limit, PlaylistSourcePolicy.MAX_SOURCES))
             }
-            Button(onClick = onAddNew, modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
-                Icon(AppIcons.Plus, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text(stringResource(R.string.home_add_playlist_button))
+            LazyColumn(modifier = Modifier.weight(1f, fill = false).testTag("playlist-source-list")) {
+                items(orderedSources, key = { it.id }) { source ->
+                    PlaylistSourceRow(
+                        source = source,
+                        isActive = source.id == activeId,
+                        onSelect = { onSelect(source) },
+                        onRemove = { pendingRemovalId = source.id },
+                    )
+                }
             }
+            PrimaryButton(
+                text = stringResource(R.string.home_add_playlist_button),
+                onClick = onAddNew,
+                enabled = !atCapacity && saveState != PlaylistSourceSaveState.SAVING,
+                leadingIcon = AppIcons.Plus,
+                modifier = Modifier.fillMaxWidth().padding(top = GapM),
+            )
         }
     }
 }
 
 @Composable
+internal fun PlaylistSourceRemovalDialog(
+    name: String,
+    isActive: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.home_playlist_source_remove)) },
+        text = {
+            Text(stringResource(
+                if (isActive) R.string.playlist_remove_active_confirmation else R.string.playlist_remove_confirmation,
+                name,
+            ))
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.home_playlist_source_remove)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+    )
+}
+
+@Composable
 private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelect: () -> Unit, onRemove: () -> Unit) {
+    val shape = RoundedCornerShape(RadiusItem)
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onSelect).padding(vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                if (isActive) UaTheme.palette.accentGradientTop.copy(alpha = 0.10f)
+                else UaTheme.palette.surface1,
+            )
+            .clickable(role = Role.RadioButton, onClickLabel = source.displayName, onClick = onSelect)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = isActive, onClick = onSelect)
+        RadioButton(
+            selected = isActive,
+            onClick = null,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = UaTheme.palette.azure,
+                unselectedColor = UaTheme.palette.labelSecondary,
+            ),
+        )
         Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
             Text(
-                text = source.displayName ?: source.location,
+                text = source.displayName
+                    ?: PlaylistSourceLabel.forLocation(source.type, source.location)
+                    ?: stringResource(R.string.playlist_unnamed),
                 style = BodyText,
                 color = UaTheme.palette.labelPrimary,
                 maxLines = 1,
@@ -91,7 +177,7 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
             Icon(
                 AppIcons.Delete,
                 contentDescription = stringResource(R.string.home_playlist_source_remove),
-                tint = MaterialTheme.colorScheme.error,
+                tint = UaTheme.palette.routeRed,
             )
         }
     }

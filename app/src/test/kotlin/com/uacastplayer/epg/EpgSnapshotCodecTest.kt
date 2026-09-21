@@ -53,6 +53,13 @@ class EpgSnapshotCodecTest {
         assertEquals(data.programmesByChannelId, decoded.data.programmesByChannelId)
     }
 
+    @Test fun `old snapshots cannot bypass the new per channel alias budget`() {
+        val names = (0..100).map { "Name $it" }
+        val decoded = roundTrip(dataOf(listOf(EpgChannel("one", names, null)), emptyMap()))
+        assertEquals(XmlTvChannelNames.MAX_PER_CHANNEL, decoded.data.index.channels.single().displayNames.size)
+        assertTrue(decoded.data.truncation.any)
+    }
+
     /** The layout writes each channel id once per group precisely so this holds: a channel's whole
      * schedule shares one String rather than allocating one per programme, which is what keeps
      * 250,000 rows affordable. */

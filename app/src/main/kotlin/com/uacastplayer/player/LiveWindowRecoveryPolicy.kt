@@ -13,11 +13,11 @@ private const val MAX_RECOVERIES_IN_WINDOW = 3
  */
 object LiveWindowRecoveryPolicy {
 
-    sealed class Decision {
+    sealed interface Decision {
         /** [newHistory] is the recovery-attempt timestamp history to keep for the next call -
          * already pruned to [RECOVERY_WINDOW_MILLIS] and with this attempt appended. */
-        data class Recover(val newHistory: List<Long>) : Decision()
-        data object GiveUp : Decision()
+        data class Recover(val newHistory: List<Long>) : Decision
+        data object GiveUp : Decision
     }
 
     fun onBehindLiveWindow(nowMillis: Long, history: List<Long>): Decision {

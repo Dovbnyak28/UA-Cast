@@ -20,6 +20,7 @@ import androidx.media3.common.util.UnstableApi
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.player.PlayerViewModel
+import com.uacastplayer.player.PlayerRequest
 import com.uacastplayer.playlist.M3uChannel
 import java.io.File
 
@@ -57,11 +58,11 @@ data class PlayerEnrichmentState(
 @OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun PlayerHost(
-    channels: List<M3uChannel>,
-    startIndex: Int,
+    request: PlayerRequest,
     collapsed: Boolean,
     onExit: () -> Unit,
     onTapCollapsed: () -> Unit,
+    onCollapse: () -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
     castArtworkUrl: (M3uChannel) -> String?,
     favoriteActions: PlayerFavoriteActions,
@@ -70,6 +71,8 @@ fun PlayerHost(
 ) {
     val (isFavorite, onToggleFavorite) = favoriteActions
     val (epgState, iconPrefetchState) = enrichment
+    val channels = request.channels
+    val startIndex = request.startIndex
 
     val viewModel: PlayerViewModel = viewModel()
 
@@ -77,8 +80,8 @@ fun PlayerHost(
     // AppViewModel, so a fresh instance each recomposition would carry identical behavior while
     // restarting playback. It reads EPG/settings state at call time, so the one captured here does
     // not go stale as the EPG loads.
-    LaunchedEffect(channels, startIndex) {
-        viewModel.start(channels, startIndex, castArtworkUrl)
+    LaunchedEffect(request) {
+        viewModel.start(channels, startIndex, castArtworkUrl, request)
     }
 
     // The Activity-scoped ViewModel outlives this composable, so its ExoPlayer would otherwise keep
@@ -138,7 +141,8 @@ fun PlayerHost(
         } else {
             PlayerScreen(
                 viewModel = viewModel,
-                onExit = onExit,
+                channels = channels,
+                onExit = onCollapse,
                 isFavorite = isFavorite,
                 onToggleFavorite = onToggleFavorite,
                 resolveIcon = resolveIcon,

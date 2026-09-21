@@ -167,4 +167,15 @@ class CrashLogTest {
         assertTrue(report.contains("the second one"))
         assertFalse(report.contains("the first one"))
     }
+
+    @Test
+    fun aPathologicalThrowableIsTruncatedToABoundedReport() {
+        install()
+
+        crashWith(IllegalStateException("x".repeat(100_000)))
+
+        val report = CrashLog.read()!!
+        assertTrue(report.contains("[stack trace truncated]"))
+        assertTrue(report.length < 70_000)
+    }
 }

@@ -1,5 +1,10 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.CastCompatibilityPolicy
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.TsProgramInfoParser
+import com.uacastplayer.core.cast.TsSourceKind
+import com.uacastplayer.core.cast.VideoCodec
 import com.uacastplayer.data.cast.TsSourceClassifier
 import org.junit.Assert.assertEquals
 import org.junit.Test

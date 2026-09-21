@@ -1,5 +1,6 @@
 package com.uacastplayer.data.cast
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.proxy.LiveHlsPlaylistBuilder
 import com.uacastplayer.proxy.RemuxReconnectPolicy
@@ -9,6 +10,7 @@ import com.uacastplayer.proxy.TsSegment
 import com.uacastplayer.proxy.TsSegmenter
 import java.io.InputStream
 import kotlin.concurrent.thread
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Response
 
@@ -24,11 +26,12 @@ private const val REMUX_READ_CHUNK_BYTES = 64 * 1024
 private const val REMUX_READER_JOIN_TIMEOUT_MILLIS = 1_000L
 private const val TS_PACKET_SIZE = 188
 private const val TS_SYNC_BYTE = 0x47
+private const val BYTE_MASK = 0xFF
 
 /**
  * Owns one continuous upstream raw-TS read for the lifetime of a "raw TS remux" channel (see
  * docs/PROXY_RULES.md "Raw TS remux"): a single background thread reads the origin response body
- * in chunks, resyncs to TS packet boundaries the same way [com.uacastplayer.cast.TsProgramInfoParser]
+ * in chunks, resyncs to TS packet boundaries the same way [com.uacastplayer.core.cast.TsProgramInfoParser]
  * does (a live HTTP stream isn't guaranteed to start exactly on a sync byte), feeds each packet to
  * a [TsSegmenter], and appends completed segments to a [RemuxSegmentBuffer] that [ProxyServer]
  * serves segment/playlist requests from. [initialResponse] is this session's own to close - callers
@@ -67,6 +70,11 @@ internal class RawTsRemuxSession(
     // response a no-op rather than a leak.
     @Volatile private var currentResponse = initialResponse
 
+    /** A reconnect still waiting for response headers is the one socket [currentResponse] cannot
+     * close. Publishing its Call lets [stop] retire it immediately instead of leaving an abandoned
+     * remux reader and IPTV connection alive until OkHttp's timeout. */
+    @Volatile private var reconnectCall: Call? = null
+
     fun start() {
         readerThread = thread(name = "ProxyServer-remux-$resourceId") { readLoop() }
     }
@@ -79,17 +87,17 @@ internal class RawTsRemuxSession(
      * Deliberately does NOT wait for the reader thread to unwind. Every production caller reaches
      * this from `ProxyResourceRegistry`, whose teardown paths (session end, receiver error, channel
      * switch) all run on the main thread via `CastSessionRepository.applyResult` - and while
-     * closing the response normally unblocks the reader in microseconds, a reader parked inside
-     * OkHttp's `execute()` mid-reconnect is NOT unblocked by [Thread.interrupt] at all (classic
-     * socket I/O ignores it), so a join there burned its full timeout on the main thread, twice
-     * over when a draining session was also alive, inside `remuxLock`. Nothing on the registry side
+     * closing the response normally unblocks the reader in microseconds. A reader parked inside
+     * OkHttp's `execute()` mid-reconnect is not unblocked by [Thread.interrupt] (classic socket I/O
+     * ignores it), so [reconnectCall] is cancelled separately below. Nothing on the registry side
      * needs the reader to have finished: the session is unreferenced by then and [readLoop]'s
      * remaining work touches only its own state. Use [awaitStopped] where the wait is actually
      * wanted (and the caller is not the main thread).
      */
     fun stop() {
         running = false
-        runCatching { currentResponse.close() } // unblocks a blocking read() inside readLoop()
+        runCatchingNonFatal { currentResponse.close() } // unblocks a blocking read() inside readLoop()
+        reconnectCall?.cancel() // unblocks execute() while a reconnect is awaiting headers
         readerThread?.interrupt() // unblocks a Thread.sleep() during a reconnect backoff wait
     }
 
@@ -100,7 +108,7 @@ internal class RawTsRemuxSession(
     fun awaitStopped() {
         val thread = readerThread ?: return
         if (thread !== Thread.currentThread()) {
-            runCatching { thread.join(REMUX_READER_JOIN_TIMEOUT_MILLIS) }
+            runCatchingNonFatal { thread.join(REMUX_READER_JOIN_TIMEOUT_MILLIS) }
         }
     }
 
@@ -151,23 +159,18 @@ internal class RawTsRemuxSession(
         var carry = ByteArray(0)
         var shouldContinue = true
         while (running && shouldContinue) {
-            val input = currentResponse.body?.byteStream()
-            if (input != null) {
-                carry = readUntilDisconnected(input, carry)
-                runCatching { currentResponse.close() }
-                shouldContinue = running && reconnect()
-                if (shouldContinue) carry = ByteArray(0) // stale trailing partial-packet bytes
-            } else {
-                AppLog.w(TAG) { "Raw TS remux for $resourceId: upstream response had no body" }
-                shouldContinue = false
-            }
+            val input = currentResponse.body.byteStream()
+            carry = readUntilDisconnected(input, carry)
+            runCatchingNonFatal { currentResponse.close() }
+            shouldContinue = running && reconnect()
+            if (shouldContinue) carry = ByteArray(0) // stale trailing partial-packet bytes
         }
         // Idempotent last-resort close: normally currentResponse is already closed above, but a
         // stop() that lands while attemptReconnect is mid-flight can leave the freshly swapped-in
         // response unclosed (stop() closed the OLD one, the loop then exits on !running before
         // ever reading the new one) - field-confirmed as OkHttp connection-leak warnings against
         // the upstream segment hosts.
-        runCatching { currentResponse.close() }
+        runCatchingNonFatal { currentResponse.close() }
         segmenter.flush()?.let(::addSegment)
         hasEnded = true
     }
@@ -197,7 +200,7 @@ internal class RawTsRemuxSession(
         System.arraycopy(initialCarry, 0, workBuffer, 0, carryLength)
         try {
             while (running) {
-                val read = input.read(workBuffer, carryLength, REMUX_READ_CHUNK_BYTES)
+                val read = readUpstreamChunk(input, workBuffer, carryLength) ?: break
                 if (read == -1) return workBuffer.copyOf(carryLength)
                 carryLength = consumePackets(workBuffer, carryLength + read)
             }
@@ -205,6 +208,22 @@ internal class RawTsRemuxSession(
             AppLog.e(TAG, e) { "Raw TS remux reader for $resourceId lost the connection or hit a parsing error" }
         }
         return workBuffer.copyOf(carryLength)
+    }
+
+    /** Okio's `AsyncTimeout` can throw [AssertionError] when another thread closes a response in
+     * the tiny window between its timeout check and timeout registration. [stop] deliberately
+     * performs exactly that concurrent close to unblock a live stream, so treat this one I/O-edge
+     * failure as an ordinary disconnect only after the session has been stopped. An assertion
+     * while the session is still active remains fatal: it may indicate a real invariant violation
+     * and must not be hidden by the remux parser's broad non-fatal recovery path. */
+    private fun readUpstreamChunk(input: InputStream, buffer: ByteArray, offset: Int): Int? = try {
+        input.read(buffer, offset, REMUX_READ_CHUNK_BYTES)
+    } catch (error: AssertionError) {
+        if (running) throw error
+        AppLog.w(TAG) {
+            "Raw TS remux reader for $resourceId stopped during a concurrent upstream close"
+        }
+        null
     }
 
     /** Backoff-retries the upstream connection (see [RemuxReconnectPolicy]) and marks the next
@@ -236,14 +255,33 @@ internal class RawTsRemuxSession(
      * [reconnect]'s loop tells those apart via [running], which [stop] clears first. */
     private fun attemptReconnect(delayMillis: Long, attempt: Int): Boolean {
         if (!sleepUnlessInterrupted(delayMillis)) return false
-        val newResponse = runCatching { httpClient.newCall(currentResponse.request).execute() }.getOrNull()
-        val usable = newResponse != null && newResponse.isSuccessful && newResponse.body != null
+        val call = httpClient.newCall(currentResponse.request)
+        reconnectCall = call
+        return try {
+            // stop() can land between the backoff ending and this reference being published. This
+            // post-publication check closes that window before execute can open a fresh connection.
+            if (!running) {
+                call.cancel()
+                false
+            } else {
+                executeReconnect(call, attempt)
+            }
+        } finally {
+            if (reconnectCall === call) reconnectCall = null
+        }
+    }
+
+    private fun executeReconnect(call: Call, attempt: Int): Boolean {
+        val newResponse = runCatchingNonFatal { call.execute() }.getOrNull()
+        val usable = running && newResponse != null && newResponse.isSuccessful
         if (usable) {
             currentResponse = requireNotNull(newResponse)
             AppLog.d(TAG) { "Raw TS remux for $resourceId: reconnected upstream" }
         } else {
-            runCatching { newResponse?.close() }
-            AppLog.w(TAG) { "Raw TS remux for $resourceId: reconnect attempt $attempt failed" }
+            runCatchingNonFatal { newResponse?.close() }
+            if (running) {
+                AppLog.w(TAG) { "Raw TS remux for $resourceId: reconnect attempt $attempt failed" }
+            }
         }
         return usable
     }
@@ -259,14 +297,14 @@ internal class RawTsRemuxSession(
     }
 
     /** Extracts every complete, sync-aligned packet from `data[0, length)` (byte-scanning forward
-     * to resync after any misaligned byte, same idea as [com.uacastplayer.cast.TsProgramInfoParser]),
+     * to resync after any misaligned byte, same idea as [com.uacastplayer.core.cast.TsProgramInfoParser]),
      * feeding each to [segmenter] directly at its offset - no per-packet copy, see [TsSegmenter.feed].
      * Shifts any trailing incomplete packet to the front of [data] in place and returns its length,
      * ready for the next read to land right after it. */
     private fun consumePackets(data: ByteArray, length: Int): Int {
         var offset = 0
         while (offset + TS_PACKET_SIZE <= length) {
-            if ((data[offset].toInt() and 0xFF) == TS_SYNC_BYTE) {
+            if ((data[offset].toInt() and BYTE_MASK) == TS_SYNC_BYTE) {
                 segmenter.feed(data, offset)?.let(::addSegment)
                 offset += TS_PACKET_SIZE
             } else {

@@ -18,6 +18,8 @@ data class BillingProduct(
     val tier: LicenseTier,
     val title: String,
     val formattedPrice: String,
+    /** Play subscription offer token paired with [formattedPrice], null for one-time products. */
+    val offerToken: String? = null,
 )
 
 /** A purchase the user holds according to the store. */

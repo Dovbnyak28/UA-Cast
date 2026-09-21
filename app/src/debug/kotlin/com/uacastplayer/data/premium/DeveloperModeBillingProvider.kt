@@ -61,13 +61,15 @@ class DeveloperModeBillingProvider(
 
     companion object {
         private const val DAY = 24L * 60 * 60 * 1000
+        private const val MONTH_DAYS = 30
+        private const val YEAR_DAYS = 365
 
         /** The states the developer menu offers, in the order it lists them. */
         val STATES = listOf("FREE", "TRIAL", "PREMIUM", "LIFETIME", "EXPIRED", "REFUND", "OFFLINE")
 
         private fun expiryFor(tier: LicenseTier): Long? = when (tier) {
-            LicenseTier.MONTHLY -> System.currentTimeMillis() + 30 * DAY
-            LicenseTier.YEARLY -> System.currentTimeMillis() + 365 * DAY
+            LicenseTier.MONTHLY -> System.currentTimeMillis() + MONTH_DAYS * DAY
+            LicenseTier.YEARLY -> System.currentTimeMillis() + YEAR_DAYS * DAY
             else -> null
         }
 
@@ -100,7 +102,7 @@ class DeveloperModeBillingProvider(
                 "PREMIUM" -> {
                     storage.storedLicense = null
                     DeveloperModeBillingProvider(
-                        purchases0 = setOf(record("dev_monthly", LicenseTier.MONTHLY, now + 30 * DAY, now)),
+                        purchases0 = setOf(record("dev_monthly", LicenseTier.MONTHLY, now + MONTH_DAYS * DAY, now)),
                     )
                 }
 

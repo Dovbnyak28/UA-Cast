@@ -3,21 +3,30 @@ package com.uacastplayer.data.playlist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.CancellationSignal
+import android.provider.OpenableColumns
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.log.AppLog
-import com.uacastplayer.playlist.BoundedBytesResult
-import com.uacastplayer.playlist.BoundedTextReader
+import com.uacastplayer.core.io.BoundedByteReader
+import com.uacastplayer.core.io.BoundedBytesResult
 import com.uacastplayer.playlist.CharsetDetector
 import com.uacastplayer.playlist.PlaylistLoadResult
 import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 private const val TAG = "PlaylistFileLoader"
 
 /** Reads a playlist selected through the Storage Access Framework, capping the read size. */
-class PlaylistFileLoader(private val context: Context) {
+class PlaylistFileLoader(
+    private val context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     /**
      * Asks to keep reading [uri] after this process ends.
@@ -32,10 +41,37 @@ class PlaylistFileLoader(private val context: Context) {
      * the app exactly where it was before, reading from a grant that lasts as long as the task.
      */
     fun rememberAccess(uri: Uri) {
-        runCatching {
+        runCatchingNonFatal {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }.onFailure { e ->
             AppLog.w(TAG) { "No persistable access to the picked file: ${e.javaClass.simpleName}" }
+        }
+    }
+
+    /**
+     * The file name the document provider knows [uri] by, or null if it will not say.
+     *
+     * A Storage Access Framework URI carries nothing readable - the user's own playlist is
+     * `content://com.android.providers.downloads.documents/document/msf%3A965`, where the last
+     * segment is a row id in someone else's database. The name lives behind the provider, and this
+     * is the only way to ask for it: `playlist.m3u8` instead of a hash on the home screen.
+     *
+     * Asked once, when the playlist is added, and stored - not looked up on every render. The
+     * answer needs the read grant, and a saved playlist outlives grants (see [rememberAccess]).
+     */
+    suspend fun documentName(uri: Uri): String? = withContext(ioDispatcher) {
+        suspendCancellableCoroutine { continuation ->
+            val signal = CancellationSignal()
+            continuation.invokeOnCancellation { signal.cancel() }
+            val name = runCatchingNonFatal {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null, signal)
+                    ?.use { cursor ->
+                        val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+                    }
+                    ?.takeIf { it.isNotBlank() }
+            }.getOrNull()
+            continuation.resume(name)
         }
     }
 
@@ -54,14 +90,15 @@ class PlaylistFileLoader(private val context: Context) {
      * shipped once already.
      */
     @Suppress("TooGenericExceptionCaught")
-    suspend fun load(uri: Uri): PlaylistLoadResult = withContext(Dispatchers.IO) {
+
+    suspend fun load(uri: Uri): PlaylistLoadResult = withContext(ioDispatcher) {
         try {
             val stream = context.contentResolver.openInputStream(uri)
                 ?: return@withContext PlaylistLoadResult.ReadError("Unable to open file")
             stream.use {
                 // A local file (picked via the Storage Access Framework) has no Content-Type to
                 // consult - always sniff the bytes.
-                when (val bounded = BoundedTextReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
+                when (val bounded = BoundedByteReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
                     is BoundedBytesResult.Success -> PlaylistLoadResult.Success(CharsetDetector.decode(bounded.bytes))
                     BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
                 }
@@ -71,7 +108,9 @@ class PlaylistFileLoader(private val context: Context) {
             throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Cannot read the picked playlist: ${e.javaClass.simpleName}" }
-            PlaylistLoadResult.ReadError(e.message)
+            // The same class name the log line above already uses, not e.message - see
+            // PlaylistLoadResult.ReadError's own doc for why.
+            PlaylistLoadResult.ReadError(e.javaClass.simpleName)
         }
     }
 }

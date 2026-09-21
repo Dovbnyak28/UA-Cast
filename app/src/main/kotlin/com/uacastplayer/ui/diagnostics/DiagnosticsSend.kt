@@ -1,29 +1,37 @@
 package com.uacastplayer.ui.diagnostics
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.net.toUri
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.diagnostics.DiagnosticsArchive
 import com.uacastplayer.diagnostics.DiagnosticsEmail
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.UaTheme
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 
 private const val TAG = "DiagnosticsSend"
 
@@ -55,6 +63,50 @@ fun diagnosticsEmailIntent(report: String): Intent =
     }
 
 /**
+ * The same email with the full log attached.
+ *
+ * `ACTION_SENDTO` cannot carry a stream, so an attachment means `ACTION_SEND` and the chooser that
+ * comes with it - which is the trade this makes only when there is something worth attaching. The
+ * body stays the readable summary either way; the file is the summary plus the process's own log,
+ * which is where the libraries that actually fail write their side of the story.
+ */
+internal fun diagnosticsEmailIntentWithLog(report: String, attachment: Uri): Intent =
+    Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(DiagnosticsEmail.RECIPIENT))
+        putExtra(Intent.EXTRA_SUBJECT, DiagnosticsEmail.subject(BuildConfig.VERSION_NAME, android.os.Build.MODEL))
+        putExtra(Intent.EXTRA_TEXT, report)
+        putExtra(Intent.EXTRA_STREAM, attachment)
+        // The receiving app gets to read this one file and nothing else, for as long as it holds
+        // the intent. Without this the attachment arrives as a URI it has no permission to open.
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // The same URI a second time, as clip data, which is not redundant: the flag above travels
+        // with `EXTRA_STREAM` to the app the user *picks*, but the chooser itself is a separate
+        // process - `android:uid=1000` - and it reads the attachment before anyone has picked
+        // anything, to draw the file's name and thumbnail in the preview. `EXTRA_STREAM` is an
+        // extra, invisible to that grant; `clipData` is the field the framework does propagate.
+        //
+        // A ZTE Blade A34 field log has both halves of this, twice:
+        //   SecurityException: Permission Denial: reading FileProvider uri
+        //     content://com.uacastplayer.debug.diagnostics/diagnostics/ua-cast-log-....txt
+        //     from pid=1720, uid=1000 ... requires the provider be exported, or grantUriPermission()
+        //   ChooserActivity: Could not load (...) thumbnail/name for preview. If desired, consider
+        //     using Intent#createChooser ... and set your Intent's clipData and flags in accordance
+        //     with that method's documentation
+        // The send still worked - Gmail opened with the file attached - so nothing here was ever
+        // going to be reported as broken. What the user saw was a share sheet that showed no file
+        // name, on the one screen whose whole job is to say what is about to leave their phone.
+        //
+        // `newRawUri`, not `newUri`: the latter asks the ContentResolver for the MIME type, which is
+        // a call into a provider that can throw - and this is the "something is broken, send me the
+        // log" button, the last place that may crash. The framework's own
+        // `Intent.migrateExtraStreamToClipData` uses the raw form here too, and the intent already
+        // states its type on the line above. The label is the file name, which is what the chooser
+        // shows if it cannot query the provider itself.
+        clipData = ClipData.newRawUri(attachment.lastPathSegment, attachment)
+    }
+
+/**
  * Opens [diagnosticsEmailIntent], or falls back to a plain share sheet.
  *
  * A phone with no mail app at all is unusual but real - a stripped ROM, a work profile, a TV box -
@@ -62,7 +114,31 @@ fun diagnosticsEmailIntent(report: String): Intent =
  * such a user can still get the report out through whatever they do have, and the failure that
  * remains after that is one nothing can fix: no app on the device can send anything.
  */
-fun sendDiagnostics(context: Context, report: String, chooserTitle: String) {
+suspend fun sendDiagnostics(
+    context: Context,
+    report: String,
+    chooserTitle: String,
+    ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
+    // Written first, because whether there is a file decides which intent is used. A device that
+    // will not give up its log still sends the summary, which is how this worked before.
+    //
+    // Off the main thread, and it has to be: this creates a directory, lists and deletes the
+    // previous reports, spawns `logcat` as a subprocess, reads and sanitizes its whole output and
+    // writes about half a megabyte - and it used to do all of it inside an onClick. Measured on a
+    // Mi A2, the subprocess alone took 330ms for 5,166 lines, before any of the rest; the sanitize
+    // pass over a real 4,046-line field log is 4ms, so the cost is the process and the I/O, not the
+    // filtering. Three to six hundred milliseconds of frozen UI, on the one button a user presses
+    // when they already think the app is broken.
+    //
+    // Everything after this line stays on the main thread, which is where startActivity belongs.
+    val attachment = withContext(ioDispatcher) { DiagnosticsArchive.write(context, report) }
+    if (attachment != null) {
+        val withLog = Intent.createChooser(diagnosticsEmailIntentWithLog(report, attachment), chooserTitle)
+        runCatchingNonFatal { context.startActivity(withLog) }
+            .onSuccess { return }
+            .onFailure { AppLog.w(TAG) { "Nothing could take the report with its log; sending the summary" } }
+    }
     try {
         context.startActivity(diagnosticsEmailIntent(report))
     } catch (_: ActivityNotFoundException) {
@@ -73,16 +149,30 @@ fun sendDiagnostics(context: Context, report: String, chooserTitle: String) {
             putExtra(Intent.EXTRA_SUBJECT, DiagnosticsEmail.subject(BuildConfig.VERSION_NAME, android.os.Build.MODEL))
             putExtra(Intent.EXTRA_TEXT, report)
         }
-        runCatching { context.startActivity(Intent.createChooser(fallback, chooserTitle)) }
+        runCatchingNonFatal { context.startActivity(Intent.createChooser(fallback, chooserTitle)) }
             .onFailure { AppLog.w(TAG) { "Nothing on this device can send the report" } }
     }
 }
 
-/** Lets the user see exactly what "Send diagnostics" is about to send before any mail app opens -
+/**
+ * Lets the user see exactly what "Send diagnostics" is about to send before any mail app opens -
  * nothing is ever sent automatically, and this is the screen that makes that true rather than
- * merely stated. */
+ * merely stated.
+ *
+ * A [LazyColumn] over the report's lines rather than the whole report in one [Text], and the
+ * difference is a second of the user's time. A `verticalScroll` around a single `Text` has to lay
+ * out every line before it can draw the first, and this report is not small: the two field reports
+ * that exposed this were **520 lines, about 48KB**, the log ring alone being 500 of them. Both
+ * carried the proof of what that costs in their own attached logcat - `Davey! duration=1110ms` and
+ * `Skipped 63 frames` on a Mi A2, timestamped to the moment this dialog opened, twice, on two
+ * separate days. A lazy list lays out the twenty lines that are on screen.
+ *
+ * The whole report is still what gets sent; only the drawing is bounded.
+ */
 @Composable
 fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () -> Unit) {
+    // Split once per report, not once per recomposition - the dialog recomposes on every scroll.
+    val lines = remember(report) { report.lines() }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.diagnostics_preview_title)) },
@@ -93,13 +183,17 @@ fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () ->
                     style = BodyText,
                     color = UaTheme.palette.labelSecondary,
                 )
-                Box(
+                LazyColumn(
                     modifier = Modifier
                         .padding(top = GapM)
                         .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .testTag(UiTestTags.DIAGNOSTICS_PREVIEW_BODY),
                 ) {
-                    Text(text = report, style = BodyText, color = UaTheme.palette.labelPrimary)
+                    // Keyed by position: a report has repeated lines (blank ones especially), so
+                    // the line itself is not a unique key and using it would collapse them.
+                    items(count = lines.size) { index ->
+                        Text(text = lines[index], style = BodyText, color = UaTheme.palette.labelPrimary)
+                    }
                 }
             }
         },

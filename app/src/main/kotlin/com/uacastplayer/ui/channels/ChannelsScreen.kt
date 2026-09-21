@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -24,8 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.ChannelLayout
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.ChannelGroup
@@ -66,9 +68,10 @@ fun ChannelsScreen(
     onPinGroup: (String) -> Unit,
     onHideGroup: (String) -> Unit,
     onClearGroupOverride: (String) -> Unit,
+    onOpenAddPlaylist: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
+    val flatChannels = playlistState.channels
     val openChannel = rememberChannelOpener(flatChannels, onChannelSelected)
     var guideChannel by remember { mutableStateOf<M3uChannel?>(null) }
     // Long-press target for ChannelActionsSheet (Guide/Favorite/Lock) - separate from guideChannel,
@@ -87,6 +90,10 @@ fun ChannelsScreen(
     // itself). Storing the group's stable key (not the GroupedChannels/ChannelGroup value) keeps
     // this Saveable and lets the open group re-resolve against a reloaded playlist.
     var openGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Lives here, above the overview/single-group switch below, so that opening a group does not
+    // take the overview's scroll position with it - see GroupsOverviewGrid's `gridState`.
+    val overviewGridState = rememberLazyGridState()
     val openGroup = remember(playlistState.groups, openGroupKey) {
         openGroupKey?.let { key -> playlistState.groups.firstOrNull { groupDisplayKey(it.group) == key } }
     }
@@ -129,6 +136,7 @@ fun ChannelsScreen(
                 ChannelsContent(
                     playlistState = playlistState,
                     openGroup = openGroup,
+                    overviewGridState = overviewGridState,
                     epgState = epgState,
                     iconRefreshKey = iconRefreshKey,
                     resolveIcon = resolveIcon,
@@ -147,12 +155,15 @@ fun ChannelsScreen(
                     onPinGroup = onPinGroup,
                     onHideGroup = onHideGroup,
                     onClearGroupOverride = onClearGroupOverride,
+                    onOpenAddPlaylist = onOpenAddPlaylist,
+                    onRefreshPlaylist = onRefreshPlaylist,
                 )
             }
         } else {
             ChannelsContent(
                 playlistState = playlistState,
                 openGroup = openGroup,
+                overviewGridState = overviewGridState,
                 epgState = epgState,
                 iconRefreshKey = iconRefreshKey,
                 resolveIcon = resolveIcon,
@@ -171,6 +182,8 @@ fun ChannelsScreen(
                 onPinGroup = onPinGroup,
                 onHideGroup = onHideGroup,
                 onClearGroupOverride = onClearGroupOverride,
+                onOpenAddPlaylist = onOpenAddPlaylist,
+                onRefreshPlaylist = onRefreshPlaylist,
             )
         }
     }
@@ -179,6 +192,8 @@ fun ChannelsScreen(
         com.uacastplayer.ui.epg.EpgGuideSheet(
             channel = channel,
             epgData = epgState.data,
+            isLoading = epgState.isLoading,
+            hasError = epgState.hasError,
             nowMillis = epgState.nowMillis,
             onDismiss = { guideChannel = null },
         )
@@ -229,6 +244,7 @@ private fun rememberChannelOpener(
 private fun ChannelsContent(
     playlistState: PlaylistUiState,
     openGroup: GroupedChannels?,
+    overviewGridState: LazyGridState,
     epgState: EpgUiState,
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
@@ -247,6 +263,8 @@ private fun ChannelsContent(
     onPinGroup: (String) -> Unit,
     onHideGroup: (String) -> Unit,
     onClearGroupOverride: (String) -> Unit,
+    onOpenAddPlaylist: () -> Unit,
+    onRefreshPlaylist: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -258,6 +276,7 @@ private fun ChannelsContent(
                 if (group == null) {
                     GroupsOverviewGrid(
                         groups = playlistState.groups,
+                        gridState = overviewGridState,
                         layout = layout,
                         onLayoutChange = onChannelLayoutSelected,
                         onGroupClick = onOpenGroup,
@@ -293,7 +312,11 @@ private fun ChannelsContent(
             // A skeleton, not a spinner: this branch only runs on a *first* load (hasChannels wins
             // above), which is exactly when the user has no idea what is about to appear.
             playlistState.isLoading -> GroupsSkeletonGrid(layout = layout)
-            playlistState.error != null -> ErrorState(playlistState.error)
+            playlistState.error != null -> ErrorState(
+                error = playlistState.error,
+                retryExistingSource = playlistState.sourceUrl != null,
+                onRetry = if (playlistState.sourceUrl != null) onRefreshPlaylist else onOpenAddPlaylist,
+            )
             // No playlist loaded at all - unlike ErrorState (a load that failed) or the search's
             // NoSearchResults (a query with no matches), this dead end has no action button here:
             // that lives on Home (see HomeScreen's own empty state) rather than being duplicated.
@@ -301,21 +324,31 @@ private fun ChannelsContent(
                 icon = AppIcons.Channels,
                 title = stringResource(R.string.channels_empty_message),
                 subtitle = stringResource(R.string.channels_empty_subtitle),
+                primaryActionLabel = stringResource(R.string.home_add_playlist_button),
+                onPrimaryAction = onOpenAddPlaylist,
             )
         }
     }
 }
 
 @Composable
-private fun ErrorState(error: PlaylistError) {
+private fun ErrorState(error: PlaylistError, retryExistingSource: Boolean, onRetry: () -> Unit) {
     val message = when (error) {
         PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
         is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
         PlaylistError.Network -> stringResource(R.string.playlist_error_network)
+        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
+        PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
     }
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(message, style = BodyText, color = MaterialTheme.colorScheme.error)
-    }
+    EmptyState(
+        icon = AppIcons.HelpCircle,
+        title = message,
+        subtitle = stringResource(R.string.channels_error_subtitle),
+        primaryActionLabel = stringResource(
+            if (retryExistingSource) R.string.common_retry else R.string.home_add_playlist_button,
+        ),
+        onPrimaryAction = onRetry,
+    )
 }
 
 

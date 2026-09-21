@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.components
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
@@ -19,6 +20,8 @@ import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.update.AppVersion
 import com.uacastplayer.update.GitHubRelease
+import com.uacastplayer.update.ReleaseApk
+import com.uacastplayer.update.UpdateInstallState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -43,17 +46,40 @@ class UpdateBannerTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    /** No APK attached, so the banner falls back to offering the release page - which is what the
+     * assertions below about "Відкрити реліз" are about. */
     private val release = GitHubRelease(
         version = AppVersion.parse("v1.4.0")!!,
         tagName = "v1.4.0",
         releaseUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/tag/v1.4.0",
     )
 
+    private val apk = ReleaseApk(
+        downloadUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.4.0/uacast.apk",
+        sizeBytes = 40_000_000,
+        sha256 = null,
+    )
+
+    @Composable
+    private fun Banner(
+        release: GitHubRelease?,
+        installState: UpdateInstallState = UpdateInstallState.Idle,
+        onInstall: (ReleaseApk) -> Unit = {},
+        onOpen: (String) -> Unit = {},
+        onDismiss: () -> Unit = {},
+    ) = UpdateBanner(
+        release = release,
+        installState = installState,
+        onInstall = onInstall,
+        onOpen = onOpen,
+        onDismiss = onDismiss,
+    )
+
     @Test
     fun nothingIsShownWhenThereIsNoUpdate() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                UpdateBanner(release = null, onOpen = {}, onDismiss = {})
+                Banner(release = null)
             }
         }
 
@@ -64,7 +90,7 @@ class UpdateBannerTest {
     fun theVersionIsNamedSoTheUserKnowsWhatTheyAreBeingOffered() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                UpdateBanner(release = release, onOpen = {}, onDismiss = {})
+                Banner(release = release.copy(apk = apk))
             }
         }
 
@@ -73,14 +99,81 @@ class UpdateBannerTest {
         composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertIsDisplayed()
     }
 
-    /** The one thing the banner exists to do. A URL other than the release's own would send the
-     * user to the wrong page, which no amount of the banner "appearing correctly" would catch. */
+    /**
+     * The message has to describe the button underneath it.
+     *
+     * This assertion used to be made against [release] - which has no APK - and so pinned the
+     * banner saying "Версію v1.4.0 можна завантажити" over a button that opens a web page. There is
+     * nothing to download in that state, and a release page whose most prominent downloads are
+     * GitHub's own source archives is precisely what a user asked us to stop sending them to.
+     *
+     * Seen on a device against the real repository: its one published release carries no assets at
+     * all, so this is the state the banner is actually in today, not a hypothetical one.
+     */
+    @Test
+    fun aReleaseWithNoApkDoesNotPromiseADownload() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Banner(release = release)
+            }
+        }
+
+        composeRule.onNodeWithText("Версію v1.4.0 опубліковано без APK — відкриється сторінка релізу.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertDoesNotExist()
+    }
+
+    /**
+     * The bug this banner had for as long as it existed: its one button opened the release page.
+     *
+     * That page's most prominent downloads are GitHub's own source archives - a zip and a tar.gz of
+     * the code - neither of which is installable, and the first of which is what a phone browser
+     * offers to save. So the only action the app offered about an update led to a file that cannot
+     * be one. When the release has an APK, the button installs it.
+     */
+    @Test
+    fun theActionInstallsTheApkWhenTheReleaseHasOne() {
+        var installed: ReleaseApk? = null
+        var opened: String? = null
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Banner(release = release.copy(apk = apk), onInstall = { installed = it }, onOpen = { opened = it })
+            }
+        }
+
+        composeRule.onNodeWithText("Завантажити й встановити").performClick()
+
+        assertEquals(apk, installed)
+        assertEquals("the page must not be opened as well", null, opened)
+    }
+
+    /** Progress is reported here rather than the button appearing to do nothing - a 40MB download
+     * on a phone connection is minutes, and the banner is where the user pressed. */
+    @Test
+    fun aRunningDownloadIsReportedInTheBanner() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Banner(
+                    release = release.copy(apk = apk),
+                    installState = UpdateInstallState.Downloading(bytesSoFar = 10_000_000, totalBytes = 40_000_000),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Завантаження… 25%").assertIsDisplayed()
+    }
+
+    /**
+     * The fallback, and the control for the test above: a release this build will not take an APK
+     * from (none attached, or several - see `ReleaseApkPolicy`) still offers the page, because then
+     * a human reading it is the only way through.
+     */
     @Test
     fun theActionOpensThatReleasesOwnPage() {
         var opened: String? = null
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                UpdateBanner(release = release, onOpen = { opened = it }, onDismiss = {})
+                Banner(release = release, onOpen = { opened = it })
             }
         }
 
@@ -94,7 +187,7 @@ class UpdateBannerTest {
         var dismissals = 0
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                UpdateBanner(release = release, onOpen = {}, onDismiss = { dismissals++ })
+                Banner(release = release, onDismiss = { dismissals++ })
             }
         }
 
@@ -111,7 +204,7 @@ class UpdateBannerTest {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, 2.0f)) {
                 UaCastTheme(AppTheme.CINEMA) {
-                    UpdateBanner(release = release, onOpen = {}, onDismiss = {})
+                    Banner(release = release)
                 }
             }
         }
@@ -138,16 +231,19 @@ class UpdateBannerTest {
         val current = mutableStateOf<GitHubRelease?>(release)
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                UpdateBanner(release = current.value, onOpen = {}, onDismiss = {})
+                Banner(release = current.value)
             }
         }
-        composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertIsDisplayed()
+        // The page-only wording, because [release] carries no APK - which text it is does not matter
+        // to this test, only that the same one is still there mid-animation.
+        val message = "Версію v1.4.0 опубліковано без APK — відкриється сторінка релізу."
+        composeRule.onNodeWithText(message).assertIsDisplayed()
 
         composeRule.mainClock.autoAdvance = false
         current.value = null
         composeRule.mainClock.advanceTimeByFrame()
 
         // Mid-exit: still the old text, not an empty line.
-        composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertExists()
+        composeRule.onNodeWithText(message).assertExists()
     }
 }

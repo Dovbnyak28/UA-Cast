@@ -1,18 +1,41 @@
 # Minimal overrides on top of detekt's default ruleset (buildUponDefaultConfig = true in
+# The checked-in config/detekt/baseline.xml currently has no active findings. The comments below
+# document intentional rule exclusions, not hidden violations.
+#
 # app/build.gradle.kts). Composable functions are idiomatically PascalCase, often take more than
 # six parameters (UI state + several callbacks is normal), and often run long by line count simply
 # because Compose UI trees are declarative - none of that is a style problem worth flagging, so
 # these three rules skip anything annotated @Composable rather than getting hand-tuned per finding
 # forever via the baseline. Everything else stays on defaults.
 complexity:
+  # Keep the maintainability gate explicit instead of inheriting thresholds invisibly from the
+  # Detekt version in the plugin. `ComplexMethod` was renamed to `CyclomaticComplexMethod` in
+  # Detekt 2; this is the same cyclomatic-complexity rule under its current name.
+  LargeClass:
+    active: true
+    allowedLines: 600
   LongMethod:
+    active: true
+    allowedLines: 60
     ignoreAnnotated: [Composable]
+  CyclomaticComplexMethod:
+    active: true
+    allowedComplexity: 14
+  NestedBlockDepth:
+    active: true
+    allowedDepth: 4
   LongParameterList:
     ignoreAnnotated: [Composable]
   # @Preview functions are always private (Android convention) and only ever called by tooling,
   # not other code in the file - counting them toward "does this file do too much" would be
   # counting the same public composables twice, once for the component and once for its preview.
   TooManyFunctions:
+    active: true
+    allowedFunctionsPerFile: 11
+    allowedFunctionsPerClass: 11
+    allowedFunctionsPerInterface: 11
+    allowedFunctionsPerObject: 11
+    allowedFunctionsPerEnum: 11
     ignorePrivate: true
 
 naming:
@@ -22,24 +45,24 @@ naming:
 style:
   # @Preview functions have no call site anywhere but Android Studio's preview renderer, so this
   # rule can never see them as "used" - same reasoning as TooManyFunctions.ignorePrivate above.
-  UnusedPrivateMember:
+  UnusedPrivateFunction:
     ignoreAnnotated: [Preview]
 
   # Two kinds of file where a number genuinely has no name worth giving it, so flagging them only
-  # ever produced baseline entries and @Suppress noise - 245 of the 391 grandfathered MagicNumber
-  # findings came from exactly these:
+  # used to produce baseline entries and @Suppress noise - most of the old MagicNumber findings
+  # came from exactly these:
   #
   #   AppIcons.kt      - ImageVector path geometry. `const val LOCK_SHACKLE_ARC_START_X = 2.2f`
   #                      names nothing; the coordinate only means anything as part of the path it
   #                      sits in. Adding one icon used to produce a fresh crop of violations that
-  #                      the baseline (recorded per snippet) could not cover, so each new icon
-  #                      needed its own @Suppress.
+  #                      a baseline recorded per snippet could not cover, so each new icon needed
+  #                      its own @Suppress.
   #   Color/*Palette   - colour channel literals. 0xFF0B0B12 is already the most readable form the
   #                      value has, and the surrounding property name is what carries the meaning.
   #
   # Deliberately NOT extended to the binary-protocol parsers (TsSegmenter, TsProgramInfoParser,
   # XmlTvTimeParser): a packet offset or bit mask there *does* deserve a name, and those findings
-  # staying in the baseline keeps that as visible debt rather than hiding it behind config.
+  # staying explicit keeps that as visible debt rather than hiding it behind config.
   #
   # NOTE: `excludes` REPLACES detekt's default list for the rule, it does not add to it - so the
   # test-source patterns below must be restated or every literal in every test file starts failing.

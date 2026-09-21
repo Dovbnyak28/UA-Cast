@@ -1,7 +1,7 @@
 package com.uacastplayer.player
 
 import androidx.media3.ui.AspectRatioFrameLayout
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test

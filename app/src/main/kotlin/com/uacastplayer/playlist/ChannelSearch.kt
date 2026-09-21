@@ -5,12 +5,12 @@ package com.uacastplayer.playlist
  * than a single already-open group. */
 data class ChannelSearchResult(val channel: M3uChannel, val group: ChannelGroup)
 
-sealed class ChannelSearchOutcome {
-    data class Matches(val results: List<ChannelSearchResult>) : ChannelSearchOutcome()
+sealed interface ChannelSearchOutcome {
+    data class Matches(val results: List<ChannelSearchResult>) : ChannelSearchOutcome
 
     /** Truncated to [ChannelSearch.MAX_RESULTS] - the caller shows a "refine your search" hint
      * alongside these instead of silently presenting a partial list as if it were complete. */
-    data class TooBroad(val results: List<ChannelSearchResult>) : ChannelSearchOutcome()
+    data class TooBroad(val results: List<ChannelSearchResult>) : ChannelSearchOutcome
 }
 
 /**
@@ -29,23 +29,34 @@ object ChannelSearch {
 
     fun search(groups: List<GroupedChannels>, query: String): ChannelSearchOutcome {
         val normalizedQuery = normalizeQuery(query)
+        if (normalizedQuery.isEmpty()) return ChannelSearchOutcome.Matches(emptyList())
         val results = mutableListOf<ChannelSearchResult>()
         var truncated = false
 
-        if (normalizedQuery.isNotEmpty()) {
-            outer@ for (grouped in groups) {
-                for (channel in grouped.channels) {
-                    if (!matches(channel, normalizedQuery)) continue
-                    if (results.size == MAX_RESULTS) {
-                        truncated = true
-                        break@outer
-                    }
-                    results += ChannelSearchResult(channel, grouped.group)
-                }
+        for (grouped in groups) {
+            if (appendMatches(grouped, normalizedQuery, results)) {
+                truncated = true
+                break
             }
         }
 
         return if (truncated) ChannelSearchOutcome.TooBroad(results) else ChannelSearchOutcome.Matches(results)
+    }
+
+    /** Adds matches in playlist order and reports whether there was at least one more result than
+     * the bounded output can hold. The extra match is observed but never added. */
+    private fun appendMatches(
+        grouped: GroupedChannels,
+        normalizedQuery: String,
+        results: MutableList<ChannelSearchResult>,
+    ): Boolean {
+        for (channel in grouped.channels) {
+            if (matches(channel, normalizedQuery)) {
+                if (results.size == MAX_RESULTS) return true
+                results += ChannelSearchResult(channel, grouped.group)
+            }
+        }
+        return false
     }
 
     private fun matches(channel: M3uChannel, normalizedQuery: String): Boolean =

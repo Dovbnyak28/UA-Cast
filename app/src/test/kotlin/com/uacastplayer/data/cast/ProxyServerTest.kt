@@ -1,6 +1,12 @@
 package com.uacastplayer.data.cast
 
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.Socket
+import java.net.URI
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.LockSupport
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -100,6 +106,28 @@ class ProxyServerTest {
     }
 
     @Test
+    fun `a malformed provider stream URL returns 502 instead of dropping the receiver socket`() {
+        val port = server.start(sessionToken = "test-session", host = "127.0.0.1")
+        val resourceId = server.registerPlaylist("not a valid url")
+        val target = URI(server.buildLocalUrl(resourceId))
+
+        val response = Socket("127.0.0.1", port).use { receiver ->
+            receiver.soTimeout = 3_000
+            receiver.getOutputStream().apply {
+                write(
+                    ("GET ${target.rawPath} HTTP/1.1\r\n" +
+                        "Host: 127.0.0.1\r\nConnection: close\r\n\r\n").toByteArray(),
+                )
+                flush()
+            }
+            receiver.getInputStream().readBytes().toString(Charsets.ISO_8859_1)
+        }
+
+        assertTrue(response.startsWith("HTTP/1.1 502 Bad Gateway"))
+        assertTrue(response.contains("Content-Length: 0"))
+    }
+
+    @Test
     fun `ensureStarted with the same token and host is a no-op that keeps existing resources`() {
         val firstPort = server.ensureStarted(sessionToken = "session-a", host = "127.0.0.1")
         server.registerPlaylist("https://origin.example/one.m3u8")
@@ -129,6 +157,48 @@ class ProxyServerTest {
         server.ensureStarted(sessionToken = "session-a", host = "127.0.0.1")
         val resourceId = server.registerPlaylist("https://origin.example/one.m3u8")
         assertTrue(server.buildLocalUrl(resourceId).startsWith("http://127.0.0.1:"))
+    }
+
+    @Test
+    fun `stop cancels an upstream call still waiting for response headers`() {
+        val upstreamStarted = CountDownLatch(1)
+        val upstreamCancelled = CountDownLatch(1)
+        val blockingClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                upstreamStarted.countDown()
+                while (!chain.call().isCanceled()) {
+                    LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10))
+                }
+                upstreamCancelled.countDown()
+                throw IOException("cancelled upstream")
+            }
+            .build()
+        val stoppableServer = ProxyServer(blockingClient)
+        val port = stoppableServer.start(sessionToken = "test-session", host = "127.0.0.1")
+        val resourceId = stoppableServer.registerPlaylist("https://origin.example/live.m3u8")
+        val target = URI(stoppableServer.buildLocalUrl(resourceId))
+
+        try {
+            Socket("127.0.0.1", port).use { receiver ->
+                receiver.getOutputStream().apply {
+                    write(
+                        ("GET ${target.rawPath} HTTP/1.1\r\n" +
+                            "Host: 127.0.0.1\r\nConnection: close\r\n\r\n").toByteArray(),
+                    )
+                    flush()
+                }
+                assertTrue("proxy never opened the upstream Call", upstreamStarted.await(3, TimeUnit.SECONDS))
+
+                stoppableServer.stop()
+
+                assertTrue(
+                    "proxy stop left its upstream Call active",
+                    upstreamCancelled.await(1, TimeUnit.SECONDS),
+                )
+            }
+        } finally {
+            stoppableServer.stop()
+        }
     }
 
     private fun servePlaylistOnce(method: String, output: ByteArrayOutputStream) {

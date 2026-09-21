@@ -82,7 +82,7 @@ Note API 36 requires **Java 21** (the provider records a required-JDK per SDK; A
 
 - `testOptions.unitTests.isIncludeAndroidResources = true` in `app/build.gradle.kts`, previously
   `false`. Screenshot tests render real Compose UI and need the merged resource table, not stubs.
-  This affects every unit test; the full suite (847) passes with it on.
+  This affects every unit test; the current debug suite (1940 tests) passes with it on.
 - `compose-ui-test-junit4` and `compose-ui-test-manifest` on the **unit-test** classpath, not just
   androidTest - Roborazzi drives the same `createComposeRule`.
 - `@Config(qualifiers = "w411dp-h891dp-xhdpi")` on the test class. Without a pinned surface,
@@ -106,8 +106,8 @@ Two things had to change to make that possible:
   nowhere else, and under the release variant these fail at rule setup with "Unable to resolve
   activity for Intent ... ComponentActivity". They are excluded by JUnit category
   (`RequiresComposeTestManifest`) rather than by class-name pattern, so moving or renaming a test
-  cannot quietly drop it back into the release run. Debug runs 868 tests, release 864 - the
-  difference is exactly those four.
+  cannot quietly drop it back into the release run. The current reports are 1940 debug tests and
+  1777 release tests; the release task intentionally excludes the Compose-manifest category.
 
 **The goldens were recorded on Windows and the runner is Linux.** That is still unverified: the
 first CI run is the experiment. Robolectric renders through the Skia and fonts bundled in the

@@ -1,6 +1,7 @@
 package com.uacastplayer.data.playlist
 
 import com.uacastplayer.playlist.PlaylistError
+import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 
 private const val ACTIVE_PLAYLIST_ID_LENGTH = 8
@@ -19,9 +20,16 @@ object PlaylistOutcomeReducer {
         outcome: PlaylistOutcome,
         fromCache: Boolean,
         displayName: String?,
+        loadedChannels: List<M3uChannel>? = null,
     ): PlaylistUiState = when (outcome) {
+        // Read successfully, and empty. Kept apart from the Loaded branch below rather than folded
+        // into it: everything downstream treats "no groups" as "no playlist yet", which is the
+        // right answer for a fresh install and the wrong one for a file the user just chose.
+        is PlaylistOutcome.Loaded if outcome.groups.all { it.channels.isEmpty() } ->
+            current.copy(isLoading = false, error = PlaylistError.Empty)
         is PlaylistOutcome.Loaded -> PlaylistUiState(
             groups = outcome.groups,
+            channels = loadedChannels ?: outcome.groups.flatMap { it.channels },
             isLoading = false,
             skippedLineCount = outcome.skippedLineCount,
             error = null,
@@ -29,8 +37,10 @@ object PlaylistOutcomeReducer {
             restoredFromCache = fromCache,
             displayName = displayName,
             sourceUrl = outcome.sourceUrl,
+            sourceSaveState = current.sourceSaveState,
         )
         PlaylistOutcome.SizeLimitExceeded -> current.copy(isLoading = false, error = PlaylistError.SizeLimitExceeded)
+        PlaylistOutcome.StorageError -> current.copy(isLoading = false, error = PlaylistError.Storage)
         is PlaylistOutcome.HttpError -> current.copy(isLoading = false, error = PlaylistError.Http(outcome.code))
         is PlaylistOutcome.ReadError -> current.copy(isLoading = false, error = PlaylistError.Network)
     }

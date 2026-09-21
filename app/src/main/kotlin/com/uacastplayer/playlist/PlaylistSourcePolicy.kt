@@ -1,16 +1,16 @@
 package com.uacastplayer.playlist
 
-sealed class PlaylistSourceAddResult {
-    data class Added(val sources: List<PlaylistSource>) : PlaylistSourceAddResult()
+sealed interface PlaylistSourceAddResult {
+    data class Added(val sources: List<PlaylistSource>) : PlaylistSourceAddResult
     /** At [PlaylistSourcePolicy.MAX_SOURCES] already, and [PlaylistSourcePolicy.add]'s incoming
      * source isn't just replacing one of the existing entries - the caller should tell the user
      * to remove one first rather than silently evicting their oldest saved source. */
-    data object LimitReached : PlaylistSourceAddResult()
+    data object LimitReached : PlaylistSourceAddResult
 }
 
-sealed class PlaylistSourceRemovalResult {
-    data class Removed(val sources: List<PlaylistSource>, val newActiveId: String?) : PlaylistSourceRemovalResult()
-    data object NotFound : PlaylistSourceRemovalResult()
+sealed interface PlaylistSourceRemovalResult {
+    data class Removed(val sources: List<PlaylistSource>, val newActiveId: String?) : PlaylistSourceRemovalResult
+    data object NotFound : PlaylistSourceRemovalResult
 }
 
 /**

@@ -1,5 +1,6 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.TsSourceKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
