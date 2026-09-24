@@ -3,23 +3,28 @@
 Versions are marked in three places, which must move together: the local defaults in
 `app/build.gradle.kts`, `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
 changelog. CI appends its run number to both build values (see `docs/RELEASING.md`), so a CI
-artifact reads `0.9.6.<run>` with a `versionCode` of the run number - the values below are what a
+artifact reads `0.9.7.<run>` with a `versionCode` of the run number - the values below are what a
 local build produces.
 
-## 0.9.6
+## 0.9.7
 
-`versionCode` 15. Stabilization release and first end-to-end test of the in-app GitHub update offer.
+`versionCode` 16. Stabilization release and first end-to-end test of the in-app GitHub update offer.
 
-- Integrated the current `master` history without dropping the release line's tested playback,
-  casting, DLNA, proxy and update fixes.
-- Aligned DLNA proxy instrumentation assertions with the Hisense VIDAA-compatible MPEG-TS MIME.
-- Verified JVM, release packaging and API 24/30/36 instrumentation gates.
 - Added a clearer update offer with release notes, a later reminder, and guarded APK staging before the Android install prompt.
 - Hardened playlist import, cache decoding, EPG parsing, backup restore, icon loading and network error handling against malformed or oversized inputs.
 - Tightened player, DLNA and local-proxy ownership during rapid switching, cancellation and shutdown; added regression tests for those races.
 - Refined first-run guidance, navigation, player controls, playlist errors and theme contrast.
 
 The Hisense VIDAA renderer still needs an end-to-end check on the physical TV; these automated checks cannot establish that its network error is resolved.
+
+## 0.9.6
+
+`versionCode` 15. Maintenance release with a reconciled release branch and complete CI coverage.
+
+- Integrated the current `master` history without dropping the release line's tested playback,
+  casting, DLNA, proxy and update fixes.
+- Aligned DLNA proxy instrumentation assertions with the Hisense VIDAA-compatible MPEG-TS MIME.
+- Verified JVM, release packaging and API 24/30/36 instrumentation gates.
 
 ## 0.9.5
 
