@@ -153,7 +153,7 @@ class ProxyFlattenInstrumentedTest {
         val request = startProxy(origin.urlFor("/live.m3u8")).build()
 
         client.newCall(request).execute().use { response ->
-            assertEquals("video/vnd.dlna.mpeg-tts", response.header("Content-Type"))
+            assertEquals("video/mpeg", response.header("Content-Type"))
             assertEquals(tsBytes().size, response.body.bytes().size)
         }
         assertEquals(
@@ -202,7 +202,7 @@ class ProxyFlattenInstrumentedTest {
 
         client.newCall(request).execute().use { response ->
             assertEquals(HTTP_OK, response.code)
-            assertEquals("video/vnd.dlna.mpeg-tts", response.header("Content-Type"))
+            assertEquals("video/mpeg", response.header("Content-Type"))
         }
         assertEquals("a HEAD must not pull any media", 0, origin.hitsFor("/a.ts"))
     }
