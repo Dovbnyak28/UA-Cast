@@ -4,10 +4,6 @@ set -euo pipefail
 # Keep documentation and source comments aligned with the package moves. Generated baseline
 # profiles intentionally retain a few historical symbols for runtime warm-up safety, so they are
 # excluded from this check.
-if ! command -v rg >/dev/null 2>&1; then
-  echo 'check-doc-references: required command rg is unavailable' >&2
-  exit 1
-fi
 # Optional roots make the failure boundary testable without altering production documentation.
 if [ "$#" -gt 0 ]; then
   readonly SEARCH_ROOTS=("$@")
@@ -23,9 +19,23 @@ readonly LEGACY_REFERENCES=(
   '(^|[^/[:alnum:]_])core/i18n/LocalizedContext'
 )
 
+# Ripgrep is preferred locally, but the GitHub Ubuntu runner does not guarantee it is installed.
+# Keep the same no-match/error exit semantics with the ubiquitous grep fallback.
+if command -v rg >/dev/null 2>&1; then
+  search_reference() {
+    rg -n "$1" "${SEARCH_ROOTS[@]}" --glob '!baseline-prof.txt' --glob '!build/**'
+  }
+elif command -v grep >/dev/null 2>&1; then
+  search_reference() {
+    grep -nRE --exclude=baseline-prof.txt --exclude-dir=build -- "$1" "${SEARCH_ROOTS[@]}"
+  }
+else
+  echo 'check-doc-references: neither rg nor grep is available' >&2
+  exit 1
+fi
+
 for reference in "${LEGACY_REFERENCES[@]}"; do
-  if rg -n "$reference" "${SEARCH_ROOTS[@]}" \
-    --glob '!baseline-prof.txt' --glob '!build/**'; then
+  if search_reference "$reference"; then
     echo "check-doc-references: stale path found: $reference" >&2
     exit 1
   else
