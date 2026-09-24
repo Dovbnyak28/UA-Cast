@@ -183,17 +183,10 @@ class ProxyFlattenInstrumentedTest {
         }
     }
 
-    /**
-     * A HEAD has to arrive at all, and then has to be true.
-     *
-     * Both halves failed on this path. The bytes sat in a `BufferedOutputStream` that nothing ever
-     * flushed while the socket was closed underneath it, so the renderer got a connection that
-     * opened and shut with nothing on it; and the answer, once it arrived, was the DLNA MPEG-TS
-     * MIME for
-     * every channel whether or not the GET could produce one.
-     */
+    /** HEAD must return the truthful TS profile without streaming a response body. It probes one
+     * segment prefix first, because the playlist alone cannot prove that the origin serves TS. */
     @Test
-    fun aHeadOnAFlattenableChannelAnnouncesTheStreamAndPullsNoMedia() {
+    fun aHeadOnAFlattenableChannelAnnouncesTheStreamAfterBoundedProbe() {
         val origin = Origin().also { this.origin = it }
         origin.route("/live.m3u8", "application/vnd.apple.mpegurl", mediaPlaylist("a.ts"))
         origin.route("/a.ts", "video/mp2t", tsBytes())
@@ -203,8 +196,9 @@ class ProxyFlattenInstrumentedTest {
         client.newCall(request).execute().use { response ->
             assertEquals(HTTP_OK, response.code)
             assertEquals("video/mpeg", response.header("Content-Type"))
+            assertEquals(0, response.body.bytes().size)
         }
-        assertEquals("a HEAD must not pull any media", 0, origin.hitsFor("/a.ts"))
+        assertEquals("HEAD should probe one segment, not stream the playlist", 1, origin.hitsFor("/a.ts"))
     }
 
     /** And the other side of it: a channel that cannot be flattened must name the manifest the GET
