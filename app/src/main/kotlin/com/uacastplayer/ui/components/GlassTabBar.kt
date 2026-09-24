@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
@@ -93,11 +94,15 @@ private fun TabBarButton(item: TabBarItem, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .then(
                     if (item.selected) {
-                        Modifier.raisedSurface(
-                            RoundedCornerShape(16.dp),
-                            UaTheme.palette.accentGradient,
-                            shadow = false,
-                        )
+                        val selectedShape = RoundedCornerShape(16.dp)
+                        val glow = UaTheme.palette.azureGlow.copy(alpha = 0.28f)
+                        Modifier
+                            .shadow(8.dp, selectedShape, ambientColor = glow, spotColor = glow)
+                            .raisedSurface(
+                                selectedShape,
+                                UaTheme.palette.accentGradient,
+                                shadow = false,
+                            )
                     } else {
                         Modifier
                     },

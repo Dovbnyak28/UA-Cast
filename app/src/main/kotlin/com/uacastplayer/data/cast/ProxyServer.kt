@@ -17,7 +17,9 @@ private const val HTTP_BAD_GATEWAY = 502
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 private const val HTTP_OK = 200
 private const val HTTP_NOT_FOUND = 404
-private const val DLNA_STREAM_CONTENT_TYPE = "video/vnd.dlna.mpeg-tts"
+// HLS .ts segments are forwarded as ordinary 188-byte packets. The DLNA vendor MIME describes
+// 192-byte timestamped packets and must not be advertised unless we actually produce those bytes.
+private const val DLNA_STREAM_CONTENT_TYPE = "video/mpeg"
 private const val DLNA_TRANSFER_MODE = "Streaming"
 private const val DLNA_CONTENT_FEATURES =
     "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=8D500000000000000000000000000000"
@@ -55,11 +57,13 @@ class ProxyServer(
         isRequestAuthorized = ::isAuthorizedRequest,
     )
     private val responseServing = ProxyResponseServing(httpServer, now)
-    private val flattenedStreamsLock = Any()
-    private val flattenedStreams = mutableSetOf<HlsFlattenedStream>()
+    // One ownership transaction for channel registration, flattened replay and ordinary Calls.
+    // Separate locks would allow a stale Call to join after the channel's cancellation snapshot.
+    private val producerLock = Any()
+    private val flattenedStreams = mutableMapOf<HlsFlattenedStream, RemuxRequestLease>()
     private var acceptingFlattenedStreams = false
-    private val upstreamCallsLock = Any()
-    private val upstreamCalls = mutableSetOf<Call>()
+    // Null denotes finite media requests which are allowed to finish during channel handoff.
+    private val upstreamCalls = mutableMapOf<Call, RemuxRequestLease?>()
     private var acceptingUpstreamCalls = false
 
     // Written from the main thread (start/ensureStarted, reached from CastSessionRepository on
@@ -150,20 +154,23 @@ class ProxyServer(
         this.flattenHlsToStream = flattenHlsToStream
         val port = httpServer.start()
         resourceRegistry.openSession()
-        synchronized(flattenedStreamsLock) { acceptingFlattenedStreams = true }
-        synchronized(upstreamCallsLock) { acceptingUpstreamCalls = true }
+        synchronized(producerLock) {
+            acceptingFlattenedStreams = true
+            acceptingUpstreamCalls = true
+        }
+        if (flattenHlsToStream) AppLog.d(TAG) { "DLNA proxy listening on $host:$port" }
         return port
     }
 
     @Synchronized
     fun stop() {
-        val callsToCancel = synchronized(upstreamCallsLock) {
+        val callsToCancel = synchronized(producerLock) {
             acceptingUpstreamCalls = false
-            upstreamCalls.toList().also { upstreamCalls.clear() }
+            upstreamCalls.keys.toList().also { upstreamCalls.clear() }
         }
-        val streamsToStop = synchronized(flattenedStreamsLock) {
+        val streamsToStop = synchronized(producerLock) {
             acceptingFlattenedStreams = false
-            flattenedStreams.toList().also { flattenedStreams.clear() }
+            flattenedStreams.keys.toList().also { flattenedStreams.clear() }
         }
         // First, while their worker threads and client sockets still exist: a flattened stream can
         // be blocked on the upstream socket, which neither shutdownNow() nor closing only the
@@ -178,7 +185,7 @@ class ProxyServer(
         val httpMetrics = httpServer.metricsSnapshot()
         val rejected = httpMetrics.rejectedPerIp + httpMetrics.rejectedAdmissionQueue +
             httpMetrics.rejectedResponseQueue + httpMetrics.unauthorizedRequests
-        if (rejected > 0 || httpMetrics.malformedRequests > 0) {
+        if (flattenHlsToStream || rejected > 0 || httpMetrics.malformedRequests > 0) {
             AppLog.d(TAG) {
                 "proxy admission: accepted=${httpMetrics.acceptedConnections}, rejected=$rejected, " +
                     "malformed=${httpMetrics.malformedRequests}"
@@ -193,7 +200,28 @@ class ProxyServer(
     fun confirmActiveSession() = resourceRegistry.confirmActiveSession()
 
     fun registerPlaylist(url: String, userAgent: String? = null, referrer: String? = null): String =
-        resourceRegistry.registerPlaylist(url, userAgent, referrer)
+        synchronized(producerLock) {
+            val id = resourceRegistry.registerPlaylist(url, userAgent, referrer)
+            val owner = resourceRegistry.captureRemuxLease(id)
+            cancelObsoleteUpstream(owner)
+            // A renderer's SOAP Stop may fail or leave its old HTTP request alive. Retire the
+            // previous producer here, atomically with admission of a new flattened response.
+            val obsolete = flattenedStreams.filterValues { it !== owner }.keys
+            obsolete.forEach { stream ->
+                stream.stop()
+                flattenedStreams.remove(stream)
+            }
+            id
+        }
+
+    /** Caller holds producerLock; already promised finite segments are not channel producers. */
+    private fun cancelObsoleteUpstream(owner: RemuxRequestLease?) {
+        val obsolete = upstreamCalls.filterValues { it != null && it !== owner }.keys
+        obsolete.forEach { call ->
+            call.cancel()
+            upstreamCalls.remove(call)
+        }
+    }
 
     /** True once [resourceId]'s first fetch decided to engage the raw-TS remux path rather than an
      * ordinary rewritten-HLS passthrough - see [fetchAndServeUpstreamResource]/[onRouteAttempted]. */
@@ -254,6 +282,12 @@ class ProxyServer(
             responseServing.writeError(output, HTTP_NOT_FOUND, "Not Found")
             return
         }
+        if (flattenHlsToStream && resource.type == RESOURCE_TYPE_PLAYLIST) {
+            // SOAP Play only proves the control command was accepted. This entry proves that the
+            // renderer could reach the phone's HTTP socket; omit URL/token and header values.
+            val hasRange = request.headers.containsKey("range")
+            AppLog.d(TAG) { "DLNA proxy root request: ${request.method}, range=$hasRange" }
+        }
         servePlaylistOrMediaResource(resourceId, resource, request, output)
     }
 
@@ -287,10 +321,14 @@ class ProxyServer(
         request: ParsedRequest,
         output: OutputStream,
     ) {
+        val remuxLease = resourceRegistry.captureRemuxLease(resourceId)
         val upstreamRequest = buildUpstreamRequest(resourceId, resource, request, output) ?: return
-        val upstream = fetchUpstreamOrRespondError(upstreamRequest, resourceId, output) ?: return
+        val upstream = fetchUpstreamOrRespondError(
+            upstreamRequest, resourceId, output, remuxLease, request.isConnectionOpen,
+            resource.type == RESOURCE_TYPE_PLAYLIST,
+        ) ?: return
         try {
-            routeUpstreamResponse(resourceId, resource, request, output, upstream.response)
+            routeUpstreamResponse(resourceId, resource, request, output, upstream.response, remuxLease)
         } finally {
             releaseUpstreamCall(upstream.call)
         }
@@ -321,6 +359,7 @@ class ProxyServer(
         request: ParsedRequest,
         output: OutputStream,
         response: Response,
+        remuxLease: RemuxRequestLease?,
     ) {
         if (!response.isSuccessful) {
             AppLog.w(TAG) { "Upstream fetch for resource $resourceId returned ${response.code}" }
@@ -349,22 +388,43 @@ class ProxyServer(
         // OkHttp "connection was leaked" warning against the origin host.
         var handedOff = false
         try {
-            val decision = ProxyRouteSelector.select(resource, response, remuxEnabled)
+            val decision = probeUpstreamOrRespondError(resourceId, output) {
+                ProxyRouteSelector.select(resource, response, remuxEnabled)
+            } ?: return
             decision.attemptedRoute?.let { route -> onRouteAttempted(resourceId, route) }
+            // Cancellation can arrive after sniffing buffered bytes; it need not trigger another
+            // socket read. Explicitly reject the retired root before serving or unwrapping it.
+            if (resource.type == RESOURCE_TYPE_PLAYLIST && !isCurrentChannel(resourceId, remuxLease)) {
+                responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
+                return
+            }
             handedOff = true
             // Each branch owns `response` from here: the playlist and passthrough paths close it
             // through their own use {}, and the remux path passes it to the session's reader.
             when (decision.route) {
                 UpstreamRoute.PLAYLIST ->
-                    serveUpstreamPlaylist(resourceId, resource, response, request.method, output)
+                    serveUpstreamPlaylist(resourceId, resource, response, request, output, remuxLease)
                 UpstreamRoute.REMUX ->
-                    serveRemuxedUpstream(resourceId, response, request.method, output)
+                    serveRemuxedUpstream(resourceId, response, request.method, output, remuxLease)
                 UpstreamRoute.PASSTHROUGH ->
                     response.use { responseServing.servePassthrough(resourceId, it, request.method, output) }
             }
         } finally {
             if (!handedOff) runCatchingNonFatal { response.close() }
         }
+    }
+
+    /** Only probes run here: no receiver headers/body have been committed yet. The caller owns
+     * the response and closes it on this early return. Never wrap body forwarding in this boundary,
+     * since a late failure must not append a second HTTP response to partially delivered media. */
+    private inline fun <T : Any> probeUpstreamOrRespondError(
+        resourceId: String, output: OutputStream, probe: () -> T,
+    ): T? = try {
+        probe()
+    } catch (error: IOException) {
+        AppLog.w(TAG) { "Upstream probe for resource $resourceId failed: ${error.javaClass.simpleName}" }
+        responseServing.writeError(output, HTTP_BAD_GATEWAY, "Bad Gateway")
+        null
     }
 
     /** Runs an upstream fetch, turning a network-level failure (refused/reset connection, timeout
@@ -379,9 +439,12 @@ class ProxyServer(
         request: Request,
         resourceId: String,
         output: OutputStream,
+        lease: RemuxRequestLease?,
+        isConnectionOpen: () -> Boolean,
+        requiresCurrentChannel: Boolean = true,
     ): TrackedUpstreamResponse? {
         val call = httpClient.newCall(request)
-        if (!trackUpstreamCall(call)) {
+        if (!trackUpstreamCall(call, resourceId, lease, isConnectionOpen, requiresCurrentChannel)) {
             call.cancel()
             responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
             return null
@@ -396,12 +459,26 @@ class ProxyServer(
         }
     }
 
-    private fun trackUpstreamCall(call: Call): Boolean = synchronized(upstreamCallsLock) {
-        if (acceptingUpstreamCalls && httpServer.isRunning) upstreamCalls.add(call) else false
+    private fun trackUpstreamCall(
+        call: Call, resourceId: String, lease: RemuxRequestLease?,
+        isConnectionOpen: () -> Boolean, requiresCurrentChannel: Boolean,
+    ): Boolean = synchronized(producerLock) {
+        val permitted = !requiresCurrentChannel || isCurrentChannel(resourceId, lease)
+        // Finite segments may drain across channel handoff, but not across server stop/start.
+        // The shared running flag can be true again when an old worker resumes before admission;
+        // its original socket is permanently closed by stop(), even if the token/URL is reused.
+        val connectionCanJoin = acceptingUpstreamCalls && httpServer.isRunning && isConnectionOpen()
+        if (connectionCanJoin && permitted) {
+            upstreamCalls[call] = lease.takeIf { requiresCurrentChannel }
+            true
+        } else false
     }
 
+    private fun isCurrentChannel(resourceId: String, lease: RemuxRequestLease?): Boolean =
+        lease != null && lease === resourceRegistry.captureRemuxLease(resourceId)
+
     private fun releaseUpstreamCall(call: Call) {
-        synchronized(upstreamCallsLock) { upstreamCalls.remove(call) }
+        synchronized(producerLock) { upstreamCalls.remove(call) }
     }
 
     /** Ownership of [response] passes to the remux session's background reader thread - it is
@@ -410,8 +487,10 @@ class ProxyServer(
      * while this request's upstream fetch was in flight (see [startRemuxSession]) - the session was
      * never started, [response] is already closed, and the client gets a clean 503 rather than a
      * playlist from a server that no longer exists. */
-    private fun serveRemuxedUpstream(resourceId: String, response: Response, method: String, output: OutputStream) {
-        val session = resourceRegistry.startRemuxSession(resourceId, response, ::buildRemuxSegmentUrl) {
+    private fun serveRemuxedUpstream(
+        resourceId: String, response: Response, method: String, output: OutputStream, remuxLease: RemuxRequestLease?,
+    ) {
+        val session = resourceRegistry.startRemuxSession(resourceId, response, remuxLease, ::buildRemuxSegmentUrl) {
             httpServer.isRunning
         }
         if (session == null) {
@@ -458,23 +537,26 @@ class ProxyServer(
         resourceId: String,
         resource: ResourceEntry,
         response: Response,
-        method: String,
+        request: ParsedRequest,
         output: OutputStream,
+        remuxLease: RemuxRequestLease?,
     ) {
+        val method = request.method
         val finalUrl = response.request.url.toString()
         val text = response.use { responseServing.readPlaylistText(it, output) } ?: return
         val unwrapTarget =
             if (unwrapWrapperPlaylists) PlaylistUnwrapPolicy.unwrapTarget(text, finalUrl) else null
         when {
-            unwrapTarget != null -> serveUnwrappedStream(resourceId, resource, unwrapTarget, method, output)
+            unwrapTarget != null ->
+                serveUnwrappedStream(resourceId, resource, unwrapTarget, request, output, remuxLease)
             // Tried before the rewrite, and falls through to it on any refusal - a receiver that
             // can read a manifest is no worse off than before, and one that cannot was getting
             // nothing playable at all. See HlsFlattenedStream.
-            flattenHlsToStream && serveFlattenedHls(resourceId, resource, finalUrl, method, output) -> Unit
+            flattenHlsToStream && serveFlattenedHls(resourceId, resource, finalUrl, method, output, remuxLease) -> Unit
             // Tried before the rewrite, and falls through to it on any refusal - a receiver that
             // can read a manifest is no worse off than before, and one that cannot was getting
             // nothing playable at all. See HlsFlattenedStream.
-            else -> serveRewrittenPlaylist(text, finalUrl, method, output, resource)
+            else -> serveRewrittenPlaylist(text, finalUrl, method, output, resource, remuxLease)
         }
     }
 
@@ -497,10 +579,11 @@ class ProxyServer(
         playlistUrl: String,
         method: String,
         output: OutputStream,
+        remuxLease: RemuxRequestLease?,
     ): Boolean {
         // VIDAA's native DLNA renderer probes live resources with HEAD/Range and is stricter than
-        // a normal HTTP client about the media profile. The MIME and DLNA feature headers describe
-        // the actual continuous TS response; they are intentionally limited to this DLNA-only
+        // a normal HTTP client about the media profile. The MIME describes the actual 188-byte TS
+        // packets, not DLNA's 192-byte timestamped variant. These headers are DLNA-only so Cast
         // flattened route so Chromecast keeps receiving ordinary HLS responses.
         val headers = mapOf(
             "Content-Type" to DLNA_STREAM_CONTENT_TYPE,
@@ -508,19 +591,19 @@ class ProxyServer(
             "contentFeatures.dlna.org" to DLNA_CONTENT_FEATURES,
             "Cache-Control" to "no-store, no-cache, must-revalidate",
         )
-        // Captured, then compared: the server being up is not enough on its own, because start()
-        // stops and rebinds for a genuinely new session and would read as running again. A loop
-        // left over from the previous session has to stop, and its token is what says it is left
-        // over.
-        val servingSession = sessionToken
+        // Reuse the ownership captured before the original fetch, not the current token. Both
+        // channel changes within one session and same-token restarts invalidate the old producer.
         val stream = HlsFlattenedStream(
             httpClient = httpClient,
             playlistUrl = playlistUrl,
             userAgent = resource.userAgent,
             referrer = resource.referrer,
-            isRunning = { httpServer.isRunning && sessionToken == servingSession },
+            isRunning = { httpServer.isRunning && remuxLease === resourceRegistry.captureRemuxLease(resourceId) },
         )
-        if (!trackFlattenedStream(stream, servingSession)) return false
+        if (!trackFlattenedStream(stream, resourceId, remuxLease)) {
+            responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
+            return true // Ownership rejection must not fall back to an obsolete manifest.
+        }
         val chunked = if (method == "GET") ChunkedOutputStream(output) else null
         var responseCommitted = false
         return try {
@@ -545,7 +628,7 @@ class ProxyServer(
         } finally {
             if (method == "GET" && responseCommitted) runCatching { chunked?.finish() }
             stream.stop()
-            synchronized(flattenedStreamsLock) {
+            synchronized(producerLock) {
                 flattenedStreams.remove(stream)
                 Unit // cleanup block deliberately has no Boolean result for the surrounding finally
             }
@@ -554,10 +637,16 @@ class ProxyServer(
 
     /** Registers under the same lock stop() uses to close admission. A handler racing session
      * teardown therefore either joins the stop snapshot or is rejected before opening upstream. */
-    private fun trackFlattenedStream(stream: HlsFlattenedStream, servingSession: String): Boolean =
-        synchronized(flattenedStreamsLock) {
-            if (acceptingFlattenedStreams && httpServer.isRunning && sessionToken == servingSession) {
-                flattenedStreams.add(stream)
+    private fun trackFlattenedStream(
+        stream: HlsFlattenedStream,
+        resourceId: String,
+        lease: RemuxRequestLease?,
+    ): Boolean =
+        synchronized(producerLock) {
+            val currentOwner = isCurrentChannel(resourceId, lease)
+            if (acceptingFlattenedStreams && httpServer.isRunning && currentOwner) {
+                flattenedStreams[stream] = checkNotNull(lease)
+                true
             } else {
                 false
             }
@@ -590,33 +679,40 @@ class ProxyServer(
         resourceId: String,
         resource: ResourceEntry,
         unwrapTarget: String,
-        method: String,
+        request: ParsedRequest,
         output: OutputStream,
+        remuxLease: RemuxRequestLease?,
     ) {
         AppLog.d(TAG) { "Unwrapping single-stream wrapper playlist for resource $resourceId" }
         val unwrapRequest = Request.Builder().url(unwrapTarget).apply {
             header("User-Agent", resource.userAgent)
             resource.referrer?.let { header("Referer", it) }
         }.build()
-        val upstream = fetchUpstreamOrRespondError(unwrapRequest, resourceId, output) ?: return
+        val upstream = fetchUpstreamOrRespondError(
+            unwrapRequest, resourceId, output, remuxLease, request.isConnectionOpen,
+        ) ?: return
+        var handedOff = false
         try {
             val mediaResponse = upstream.response
-            val shouldRemux = runCatchingNonFatal { ProxyRouteSelector.shouldRemuxRaw(mediaResponse, remuxEnabled) }
-                .onFailure { runCatchingNonFatal { mediaResponse.close() } }
-                .getOrThrow()
+            val shouldRemux = probeUpstreamOrRespondError(resourceId, output) {
+                ProxyRouteSelector.shouldRemuxRaw(mediaResponse, remuxEnabled)
+            } ?: return
+            handedOff = true
             if (shouldRemux) {
-                serveRemuxedUpstream(resourceId, mediaResponse, method, output)
+                serveRemuxedUpstream(resourceId, mediaResponse, request.method, output, remuxLease)
             } else {
-                mediaResponse.use { responseServing.servePassthrough(resourceId, it, method, output) }
+                mediaResponse.use { responseServing.servePassthrough(resourceId, it, request.method, output) }
             }
         } finally {
+            if (!handedOff) runCatchingNonFatal { upstream.response.close() }
             releaseUpstreamCall(upstream.call)
         }
     }
 
     internal fun servePlaylist(response: Response, method: String, output: OutputStream, parent: ResourceEntry) {
+        val lease = resourceRegistry.captureRemuxLease(parent.resourceId())
         val text = responseServing.readPlaylistText(response, output) ?: return
-        serveRewrittenPlaylist(text, response.request.url.toString(), method, output, parent)
+        serveRewrittenPlaylist(text, response.request.url.toString(), method, output, parent, lease)
     }
 
     private fun serveRewrittenPlaylist(
@@ -625,9 +721,10 @@ class ProxyServer(
         method: String,
         output: OutputStream,
         parent: ResourceEntry,
+        lease: RemuxRequestLease?,
     ) {
         var rewrittenCount = 0
-        val rewritten = resourceRegistry.rewriteManifest(text, finalUrl, parent) { resourceId ->
+        val rewritten = resourceRegistry.rewriteManifest(text, finalUrl, parent, lease) { resourceId ->
             rewrittenCount++
             buildLocalUrl(resourceId)
         }

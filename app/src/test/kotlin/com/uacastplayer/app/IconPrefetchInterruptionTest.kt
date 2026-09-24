@@ -318,18 +318,106 @@ class IconPrefetchInterruptionTest {
     }
 
     @Test
+    fun `a callback from a replaced network watcher cannot restart the current prefetch`() {
+        HeldIconServer().use { server ->
+            giveTheDeviceANetwork()
+            val preferences = AppPreferences(application).apply { iconWifiOnly = false }
+            val repository = IconRepository(application)
+            val callbacks = mutableListOf<() -> Unit>()
+            val controller = IconController(
+                preferences = preferences,
+                iconRepository = repository,
+                iconPrefetcher = IconPrefetcher(application, repository),
+                scope = scope,
+                onPrefetchFinished = {},
+                awaitNetwork = { callback ->
+                    callbacks += callback
+                    AutoCloseable { }
+                },
+            )
+            val channels = channelsPointingAt(server.url)
+            val context = IconController.PrefetchContext(firstGroupChannels = channels)
+
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE, context = context)
+            assertTrue(server.awaitRequestCount(1))
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE, context = context)
+            assertTrue(server.awaitRequestCount(2))
+            assertEquals(2, callbacks.size)
+
+            callbacks.first().invoke() // Android may deliver an already-queued callback after unregister.
+            assertFalse(
+                "an obsolete network event must not cancel the current prefetch",
+                server.awaitRequestCount(3),
+            )
+            assertTrue(controller.awaitRunning(true))
+            callbacks.last().invoke()
+            assertTrue("the current watcher still restarts on a fresh network", server.awaitRequestCount(3))
+            controller.dispose()
+        }
+    }
+
+    @Test
+    fun `a late obsolete watcher registration cannot restart the replacement prefetch`() {
+        HeldIconServer().use { server ->
+            giveTheDeviceANetwork()
+            val preferences = AppPreferences(application).apply { iconWifiOnly = false }
+            val repository = IconRepository(application)
+            val channels = channelsPointingAt(server.url)
+            val context = IconController.PrefetchContext(firstGroupChannels = channels)
+            var registrations = 0
+            lateinit var controller: IconController
+            controller = IconController(
+                preferences = preferences,
+                iconRepository = repository,
+                iconPrefetcher = IconPrefetcher(application, repository),
+                scope = scope,
+                onPrefetchFinished = {},
+                awaitNetwork = {
+                    registrations++
+                    if (registrations == 1) {
+                        // The second request wins while the first is still registering its watcher.
+                        controller.triggerPrefetch(channels, IconDisplayMode.CACHE, context = context)
+                        assertTrue(server.awaitRequestCount(1))
+                    }
+                    AutoCloseable { }
+                },
+            )
+
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE, context = context)
+            assertEquals(2, registrations)
+            assertFalse(
+                "the obsolete first trigger must not replace the newer prefetch",
+                server.awaitRequestCount(2),
+            )
+            assertTrue(controller.awaitRunning(true))
+            controller.dispose()
+        }
+    }
+
+    @Test
     fun `an unexpected prefetch callback failure clears progress instead of escaping`() {
         val controller = controller()
         val channels = channelsPointingAt("http://example.test/logo.png")
+        val callbackInvoked = CountDownLatch(1)
 
         controller.triggerPrefetch(
             channels = channels,
             iconDisplayMode = IconDisplayMode.CACHE,
-            epgIconUrlFor = { throw IllegalStateException("EPG index unavailable") },
+            epgIconUrlFor = {
+                callbackInvoked.countDown()
+                throw IllegalStateException("EPG index unavailable")
+            },
             context = IconController.PrefetchContext(firstGroupChannels = channels),
         )
 
-        assertFalse(controller.iconPrefetchState.value.isRunning)
+        assertTrue(
+            "prefetch never reached the failing callback",
+            callbackInvoked.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+        )
+        assertTrue(
+            "failure must clear the progress state after the asynchronous prefetch settles",
+            controller.awaitRunning(false),
+        )
         assertEquals(0, controller.iconPrefetchState.value.completedRuns)
     }
 

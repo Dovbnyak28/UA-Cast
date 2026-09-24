@@ -1,5 +1,7 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.net.HttpHeaderValuePolicy
+
 /**
  * Hand-rolled, dependency-free M3U/M3U8 parser. Deliberately tolerant of the many small dialect
  * differences seen in real-world IPTV playlists: a UTF-8 BOM, quoted or unquoted attribute
@@ -7,6 +9,9 @@ package com.uacastplayer.playlist
  * and the legacy `#EXTGRP:` tag as a fallback for `group-title`.
  */
 object M3uParser {
+
+    /** Bounds object amplification from a small playlist containing hundreds of thousands of entries. */
+    const val MAX_CHANNELS = 50_000
 
     private const val UTF8_BOM = "\uFEFF"
     private const val CANCELLATION_CHECK_INTERVAL_LINES = 256
@@ -36,6 +41,7 @@ object M3uParser {
             }
             val line = rawLine.trim()
             if (line.isNotEmpty()) state.accept(line)
+            if (state.channelLimitExceeded) break
         }
         checkCancellation()
         return state.finish()
@@ -50,6 +56,8 @@ object M3uParser {
         private var pendingUserAgent: String? = null
         private var pendingReferrer: String? = null
         private var epgUrls: List<String> = emptyList()
+        var channelLimitExceeded = false
+            private set
 
         fun accept(line: String) {
             when {
@@ -64,7 +72,7 @@ object M3uParser {
 
         fun finish(): M3uParseResult {
             if (pendingExtinf != null) skippedLineCount++
-            return M3uParseResult(channels, skippedLineCount, epgUrls)
+            return M3uParseResult(channels, skippedLineCount, epgUrls, channelLimitExceeded)
         }
 
         private fun acceptHeader(line: String) {
@@ -86,8 +94,8 @@ object M3uParser {
         private fun acceptVlcOption(line: String) {
             val option = parseExtVlcOpt(line.substring("#EXTVLCOPT:".length))
             when (option?.first?.lowercase()) {
-                "http-user-agent" -> pendingUserAgent = option.second.ifEmpty { null }
-                "http-referrer" -> pendingReferrer = option.second.ifEmpty { null }
+                "http-user-agent" -> pendingUserAgent = HttpHeaderValuePolicy.sanitize(option.second)
+                "http-referrer" -> pendingReferrer = HttpHeaderValuePolicy.sanitize(option.second)
             }
         }
 
@@ -96,8 +104,12 @@ object M3uParser {
             val displayName = extinf?.displayName ?: extinf?.tvgName ?: extinf?.tvgId
             if (extinf == null || displayName.isNullOrBlank()) {
                 skippedLineCount++
-            } else {
+            } else if (channels.size < MAX_CHANNELS) {
                 channels += extinf.toChannel(streamUrl, displayName)
+            } else {
+                // Reject the entire playlist upstream; a partial channel list looks valid and
+                // silently loses the rest of the user's provider data.
+                channelLimitExceeded = true
             }
             clearPendingChannel()
         }

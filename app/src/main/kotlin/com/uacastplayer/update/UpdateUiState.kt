@@ -15,12 +15,14 @@ enum class UpdateCheckOutcome { UP_TO_DATE, UPDATE_AVAILABLE, FAILED }
  * @param availableRelease the newest release, only when it is actually newer than the installed
  *   build. Null both before any check and when the app is up to date - the banner has no other
  *   condition to evaluate.
- * @param lastOutcome result of the most recent **manual** check only. An automatic weekly check
+ * @param promptRelease install invitation for a newly discovered or reminder-due APK release.
+ * @param lastOutcome result of the most recent **manual** check only. An automatic check
  *   that fails leaves this null, because a user who never asked anything should not be shown an
  *   error about it.
  */
 data class UpdateUiState(
     val isChecking: Boolean = false,
     val availableRelease: GitHubRelease? = null,
+    val promptRelease: GitHubRelease? = null,
     val lastOutcome: UpdateCheckOutcome? = null,
 )

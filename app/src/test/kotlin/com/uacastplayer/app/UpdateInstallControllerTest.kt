@@ -48,6 +48,7 @@ class UpdateInstallControllerTest {
         launch: InstallLaunch = InstallLaunch.Started(SESSION_ID),
     ) = UpdateInstallController(
         scope = scope,
+        installDispatcher = Dispatchers.Unconfined,
         download = { _, _ -> downloadCalls++; result },
         install = { installCalls++; launch },
         outcomes = outcomes,
@@ -68,6 +69,7 @@ class UpdateInstallControllerTest {
         val held = CompletableDeferred<UpdateDownload>()
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, onProgress ->
                 onProgress(400L, 1000L)
                 held.await()
@@ -92,6 +94,7 @@ class UpdateInstallControllerTest {
         val held = CompletableDeferred<UpdateDownload>()
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, _ -> downloadCalls++; held.await() },
             install = { InstallLaunch.Started(SESSION_ID) },
         )
@@ -162,6 +165,7 @@ class UpdateInstallControllerTest {
     fun `an unexpected downloader exception becomes a retryable failure`() {
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, _ -> throw IllegalStateException("provider failed") },
             install = { installCalls++; InstallLaunch.Started(SESSION_ID) },
             outcomes = outcomes,
@@ -177,6 +181,7 @@ class UpdateInstallControllerTest {
     fun `an unexpected installer exception becomes a retryable failure`() {
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, _ -> UpdateDownload.Ready(file) },
             install = { throw SecurityException("installer unavailable") },
             outcomes = outcomes,
@@ -206,6 +211,7 @@ class UpdateInstallControllerTest {
         val held = CompletableDeferred<UpdateDownload>()
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, onProgress -> onProgress(100L, 1000L); held.await() },
             install = { InstallLaunch.Started(SESSION_ID) },
         )
@@ -249,6 +255,7 @@ class UpdateInstallControllerTest {
         var late: ((Long, Long) -> Unit)? = null
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, onProgress -> late = onProgress; UpdateDownload.Ready(file) },
             install = { InstallLaunch.Started(SESSION_ID) },
         )
@@ -328,6 +335,7 @@ class UpdateInstallControllerTest {
         val held = CompletableDeferred<UpdateDownload>()
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, onProgress -> onProgress(10L, 1000L); held.await() },
             install = { InstallLaunch.Started(SESSION_ID) },
             outcomes = outcomes,
@@ -346,6 +354,7 @@ class UpdateInstallControllerTest {
         var nextSessionId = SESSION_ID
         val controller = UpdateInstallController(
             scope = scope,
+            installDispatcher = Dispatchers.Unconfined,
             download = { _, _ -> UpdateDownload.Ready(file) },
             install = { InstallLaunch.Started(nextSessionId++) },
             outcomes = outcomes,

@@ -343,7 +343,6 @@ class AppViewModel @JvmOverloads constructor(
         parentalControlController.loadInitial()
         // Sideload builds may check GitHub for updates; the Play variant deliberately has no
         // self-updater permission or UI (see build.gradle.kts and src/play/AndroidManifest.xml).
-        if (BuildConfig.SELF_UPDATER_ENABLED) updateController.checkOnLaunch()
         // Grants the first-launch trial if this device has never held a license, then starts
         // listening to whatever store there is.
         premiumRepository.loadInitial()

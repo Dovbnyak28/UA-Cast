@@ -40,6 +40,20 @@ private class FakeLockedChannelsStorage(
 private class FakePinStorage : ParentalControlPinStorage {
     override var parentalControlPinHash: String? = null
     override var parentalControlPinSalt: String? = null
+    var setRecordCalls = 0
+    var clearRecordCalls = 0
+
+    override fun setParentalControlPin(hash: String, salt: String) {
+        setRecordCalls++
+        parentalControlPinHash = hash
+        parentalControlPinSalt = salt
+    }
+
+    override fun clearParentalControlPin() {
+        clearRecordCalls++
+        parentalControlPinHash = null
+        parentalControlPinSalt = null
+    }
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -175,6 +189,18 @@ class ParentalControlControllerTest {
             first.parentalControlPinHash != second.parentalControlPinHash,
         )
         assertTrue(PinHasher.verify("1234", first.parentalControlPinSalt!!, first.parentalControlPinHash!!))
+    }
+
+    @Test
+    fun `setting and clearing a PIN use one storage transaction each`() = runTest(dispatcher) {
+        val pins = FakePinStorage()
+        val controller = controller(pins = pins)
+
+        assertTrue(controller.setPin("1234"))
+        controller.resetParentalControl()
+
+        assertEquals(1, pins.setRecordCalls)
+        assertEquals(1, pins.clearRecordCalls)
     }
 
     @Test

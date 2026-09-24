@@ -17,6 +17,8 @@
     <!-- Bottom navigation -->
     <string name="nav_home">Inicio</string>
     <string name="nav_channels">Canales</string>
+    <string name="nav_home_tab">Inicio</string>
+    <string name="nav_channels_tab">Ver</string>
     <string name="nav_favorites">Favoritos</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_settings_compact">Ajustes</string>
@@ -24,7 +26,7 @@
     <!-- Home screen -->
     <string name="home_subtitle">Tu televisión</string>
     <string name="home_empty_message">Aún no se ha añadido ninguna lista</string>
-    <string name="home_empty_subtitle">Añade un enlace de lista M3U o M3U8 para ver canales.</string>
+    <string name="home_empty_subtitle">La app no incluye canales. Añade un enlace M3U/M3U8, un archivo o el acceso Xtream de tu proveedor de TV.</string>
     <string name="home_active_playlist_label">Lista activa</string>
     <string name="playlist_unnamed">Lista desde un archivo</string>
     <string name="home_restored_from_cache">Restaurada desde la caché</string>
@@ -65,10 +67,14 @@
     <string name="add_playlist_status_no_channels">Se cargó, pero no se encontraron canales: comprueba el enlace</string>
     <string name="add_playlist_save_button">Descargar y guardar</string>
     <string name="add_playlist_file_button">Cargar desde archivo</string>
-    <string name="add_playlist_tip">Usa una lista o cuenta de tu proveedor de TV. Esta aplicación no proporciona canales.</string>
+    <string name="add_playlist_source_title">La aplicación no incluye canales</string>
+    <string name="add_playlist_tip">Pide a tu proveedor un enlace M3U/M3U8, un archivo o el acceso Xtream. UA Cast es un reproductor, no un servicio de TV.</string>
     <string name="add_playlist_type_url">URL M3U</string>
     <string name="add_playlist_type_file">Archivo</string>
     <string name="add_playlist_type_xtream">Xtream</string>
+    <string name="add_playlist_method_url_help">Pega el enlace de lista que te dio tu proveedor de TV.</string>
+    <string name="add_playlist_method_file_help">Elige un archivo de lista guardado en este dispositivo.</string>
+    <string name="add_playlist_method_xtream_help">Introduce el servidor y los datos de acceso de tu proveedor.</string>
     <string name="add_playlist_xtream_server_hint">Dirección del servidor (con puerto)</string>
     <string name="add_playlist_server_error">Introduce la URL del servidor o host:puerto</string>
     <string name="add_playlist_xtream_username_hint">Usuario</string>
@@ -80,7 +86,7 @@
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Todavía no hay canales</string>
-    <string name="channels_empty_subtitle">Añade una lista para ver los canales aquí</string>
+    <string name="channels_empty_subtitle">Añade una lista de tu proveedor de TV. UA Cast no incluye canales.</string>
     <string name="channels_error_subtitle">Comprueba la fuente y la conexión e inténtalo de nuevo</string>
     <string name="common_retry">Intentar de nuevo</string>
     <string name="channels_search_hint">Buscar canales</string>
@@ -113,6 +119,7 @@
     </plurals>
     <string name="playlist_loading">Cargando lista…</string>
     <string name="playlist_error_size_limit">La lista supera el límite de 8 MB, unos 45.000 canales. Pide a tu proveedor una lista más pequeña o dividida por categorías.</string>
+    <string name="playlist_error_channel_limit">La lista contiene más de 50.000 canales. Pide a tu proveedor una lista más pequeña o dividida por categorías.</string>
     <string name="playlist_error_http">Error del servidor (código %1$d)</string>
     <string name="playlist_error_network">Error de red, inténtalo de nuevo</string>
     <string name="playlist_error_empty">Este archivo no contiene canales. Comprueba que sea una lista M3U y no otro tipo de archivo.</string>
@@ -401,8 +408,10 @@
     <string name="dlna_stop_casting">Detener</string>
     <!-- Guided tour -->
     <string name="guided_tour_welcome_title">Te damos la bienvenida a UA Cast IPTV</string>
-    <string name="guided_tour_welcome_body">Un vistazo rápido a lo que puede hacer la aplicación.</string>
-    <string name="guided_tour_start">Empezar</string>
+    <string name="guided_tour_welcome_body">La app no incluye canales. Añade la lista o cuenta de tu proveedor de TV para empezar.</string>
+    <string name="guided_tour_add_playlist">Añadir lista</string>
+    <string name="guided_tour_start">Ver el recorrido</string>
+    <string name="guided_tour_not_now">Ahora no</string>
     <string name="guided_tour_skip">Omitir</string>
     <string name="guided_tour_back">Atrás</string>
     <string name="guided_tour_next">Siguiente</string>
@@ -448,8 +457,15 @@
     <string name="update_banner_message">La versión %1$s está lista para descargar.</string>
     <string name="update_banner_message_page_only">La versión %1$s se publicó sin APK: se abrirá la página de la versión.</string>
     <string name="update_banner_action">Abrir la versión</string>
+    <string name="update_offer_title">Hay una nueva versión disponible</string>
+    <string name="update_offer_message">La versión %1$s está lista. Tus listas y ajustes permanecerán en el dispositivo.</string>
+    <string name="update_offer_whats_new">Novedades</string>
+    <string name="update_offer_no_notes">No se incluyó una descripción de los cambios.</string>
+    <string name="update_offer_full_notes">Ver versión en GitHub</string>
+    <string name="update_offer_install">Actualizar</string>
+    <string name="update_offer_later">Recordármelo más tarde</string>
     <string name="settings_section_updates">Actualizaciones</string>
-    <string name="settings_update_hint">La aplicación busca una nueva versión una vez por semana al abrirla. Si una versión lleva un APK adjunto, puede descargarlo e instalarlo por ti: el archivo se comprueba con la versión publicada y debe estar firmado por el mismo desarrollador que tu copia, o se rechaza. Siempre puedes abrir la página de la versión en tu navegador.</string>
+    <string name="settings_update_hint">La aplicación busca una nueva versión una vez al día al abrirla. Si una versión lleva un APK adjunto, puede descargarlo e instalarlo por ti: el archivo se comprueba con la versión publicada y debe estar firmado por el mismo desarrollador que tu copia, o se rechaza. Siempre puedes abrir la página de la versión en tu navegador.</string>
     <string name="settings_update_check_button">Buscar actualizaciones</string>
     <string name="settings_update_checking">Comprobando…</string>
     <string name="settings_update_up_to_date">Tienes la última versión.</string>

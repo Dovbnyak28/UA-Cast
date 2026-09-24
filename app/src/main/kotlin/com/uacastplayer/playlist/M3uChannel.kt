@@ -19,4 +19,6 @@ data class M3uParseResult(
     /** From the `#EXTM3U` header's `url-tvg`/`x-tvg-url` attribute, if present - see
      * [com.uacastplayer.epg.EpgSourceAutoDetect] for what happens with these. */
     val epgUrls: List<String> = emptyList(),
+    /** True when the input contained more channels than [M3uParser.MAX_CHANNELS]. */
+    val channelLimitExceeded: Boolean = false,
 )

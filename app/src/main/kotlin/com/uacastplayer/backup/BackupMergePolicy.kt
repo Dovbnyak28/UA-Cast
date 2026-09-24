@@ -1,6 +1,7 @@
 package com.uacastplayer.backup
 
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.core.net.HttpHeaderValuePolicy
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
@@ -79,8 +80,8 @@ object BackupMergePolicy {
                 imported.addedAtMillis,
                 imported.tvgName,
                 imported.tvgLogo,
-                imported.userAgent,
-                imported.referrer,
+                HttpHeaderValuePolicy.sanitize(imported.userAgent),
+                HttpHeaderValuePolicy.sanitize(imported.referrer),
             )
         }
 

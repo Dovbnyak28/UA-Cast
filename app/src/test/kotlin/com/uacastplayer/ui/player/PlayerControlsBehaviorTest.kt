@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -21,9 +22,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
+import kotlinx.coroutines.Dispatchers
 import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.testing.RequiresComposeTestManifest
+import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.components.rememberArtworkTone
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -144,6 +147,59 @@ class PlayerControlsBehaviorTest {
             }, enabled = false)
         }
         rule.runOnIdle { assertEquals(0, resolutions) }
+    }
+
+    @Test fun `artwork tone resolves again when icon cache is refreshed`() {
+        var resolutions = 0
+        lateinit var refreshKey: MutableState<Int>
+        lateinit var channel: MutableState<M3uChannel>
+        rule.setContent {
+            refreshKey = remember { mutableStateOf(0) }
+            channel = remember { mutableStateOf(M3uChannel("Test", "https://example.test/live")) }
+            rememberArtworkTone(
+                channel = channel.value,
+                resolveIcon = {
+                    resolutions++
+                    null
+                },
+                ioDispatcher = Dispatchers.Unconfined,
+                refreshKey = refreshKey.value,
+            )
+        }
+
+        rule.runOnIdle {
+            assertEquals(1, resolutions)
+            refreshKey.value++
+        }
+        rule.runOnIdle { assertEquals(2, resolutions) }
+        rule.runOnIdle { channel.value = channel.value.copy(displayName = "Renamed") }
+        rule.runOnIdle { assertEquals(3, resolutions) }
+    }
+
+    @Test fun `channel icon re-resolves when metadata changes without a stream URL change`() {
+        var resolutions = 0
+        lateinit var channel: MutableState<M3uChannel>
+        rule.setContent {
+            channel = remember {
+                mutableStateOf(
+                    M3uChannel("Test", "https://example.test/live", tvgLogo = "https://example.test/old.png"),
+                )
+            }
+            UaCastTheme(AppTheme.CINEMA) {
+                ChannelIcon(channel.value, resolveIcon = {
+                    resolutions++
+                    null
+                })
+            }
+        }
+
+        rule.runOnIdle {
+            assertEquals(1, resolutions)
+            channel.value = channel.value.copy(tvgLogo = "https://example.test/new.png")
+        }
+        rule.runOnIdle { assertEquals(2, resolutions) }
+        rule.runOnIdle { channel.value = channel.value.copy(displayName = "Renamed") }
+        rule.runOnIdle { assertEquals(3, resolutions) }
     }
 
     @Test fun `level controls remain operable at two hundred percent font size`() {

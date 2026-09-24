@@ -51,6 +51,7 @@ class IconController(
     private val scope: CoroutineScope,
     private val onPrefetchFinished: () -> Unit,
     private val maintenanceDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    private val awaitNetwork: ((() -> Unit) -> AutoCloseable) = iconPrefetcher::awaitNetwork,
 ) {
     val sources = IconSourceController(iconRepository)
 
@@ -169,9 +170,16 @@ class IconController(
         // Register/unregister may synchronously call framework code. Keep it outside the lock:
         // callbacks are allowed to re-enter startPrefetchJob(), whose guard uses the same lock.
         previousWatcher?.close()
-        val newWatcher = iconPrefetcher.awaitNetwork {
-            iconRepository.retryTransientFailures()
-            startPrefetchJob()
+        val newWatcher = awaitNetwork {
+            val isCurrent = synchronized(prefetchLifecycleLock) {
+                !disposed && watcherGeneration == registrationGeneration
+            }
+            if (isCurrent) {
+                iconRepository.retryTransientFailures()
+                // A replacement trigger can race with retryTransientFailures above. Validate the
+                // watcher's generation again at the point where a job would be replaced.
+                startPrefetchJob(expectedWatcherGeneration = registrationGeneration)
+            }
         }
         val watcherIsCurrent = synchronized(prefetchLifecycleLock) {
             if (!disposed && watcherGeneration == registrationGeneration) {
@@ -182,12 +190,13 @@ class IconController(
             }
         }
         if (!watcherIsCurrent) newWatcher.close()
-        startPrefetchJob()
+        startPrefetchJob(expectedWatcherGeneration = registrationGeneration)
     }
 
-    private fun startPrefetchJob() {
+    private fun startPrefetchJob(expectedWatcherGeneration: Long? = null) {
         val job = synchronized(prefetchLifecycleLock) {
             if (disposed || activeIconCacheClears.isNotEmpty()) return
+            if (expectedWatcherGeneration != null && watcherGeneration != expectedWatcherGeneration) return
             iconPrefetchJob?.cancel()
             prefetchGeneration += 1
             val generation = prefetchGeneration

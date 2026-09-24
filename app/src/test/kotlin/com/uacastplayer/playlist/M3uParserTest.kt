@@ -68,6 +68,20 @@ class M3uParserTest {
     }
 
     @Test
+    fun `drops control characters from channel request headers`() {
+        val result = M3uParser.parse(
+            "#EXTM3U\n" +
+                "#EXTVLCOPT:http-user-agent=Agent\u0000Injected\n" +
+                "#EXTVLCOPT:http-referrer=https://site.example/\u007fpath\n" +
+                "#EXTINF:-1,Channel\n" +
+                "https://example.com/live.ts",
+        )
+
+        assertNull(result.channels.single().userAgent)
+        assertNull(result.channels.single().referrer)
+    }
+
+    @Test
     fun `strips a leading UTF-8 BOM`() {
         val result = M3uParser.parse(
             "﻿#EXTM3U\n#EXTINF:-1,Channel\nhttp://example.com/1.m3u8"
@@ -227,6 +241,23 @@ class M3uParserTest {
             """.trimIndent()
         )
         assertEquals(listOf("First", "Second"), result.channels.map { it.displayName })
+    }
+
+    @Test
+    fun `accepts the supported channel limit but rejects the next valid entry`() {
+        val playlist = buildString {
+            repeat(M3uParser.MAX_CHANNELS + 1) { index ->
+                append("#EXTINF:-1,Channel $index\nhttps://example.test/$index\n")
+            }
+        }
+
+        val result = M3uParser.parse(playlist)
+
+        assertEquals(M3uParser.MAX_CHANNELS, result.channels.size)
+        assertTrue(
+            "overflow must be explicit so callers do not publish a partial playlist",
+            result.channelLimitExceeded,
+        )
     }
 
     @Test

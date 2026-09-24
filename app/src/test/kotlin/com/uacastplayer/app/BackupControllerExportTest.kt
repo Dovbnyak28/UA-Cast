@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.backup.BackupCodec
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupExportResult
+import com.uacastplayer.backup.BackupFavorite
 import com.uacastplayer.backup.BackupSettings
 import com.uacastplayer.data.favorites.FavoritesRepository
 import java.io.ByteArrayOutputStream
@@ -18,12 +19,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.job
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -89,6 +93,32 @@ class BackupControllerExportTest {
     }
 
     @Test
+    fun `an export larger than the import limit is refused before opening the provider`() = runTest {
+        val written = ByteArrayOutputStream()
+        var openCount = 0
+        shadowOf(application.contentResolver).registerOutputStreamSupplier(uri) {
+            openCount++
+            written
+        }
+        val oversized = backup.copy(
+            favorites = listOf(
+                BackupFavorite(
+                    key = "large",
+                    displayName = "x".repeat(BackupController.MAX_BACKUP_BYTES),
+                    streamUrl = "https://example.test/live",
+                    tvgId = null,
+                    groupTitle = null,
+                    addedAtMillis = 0L,
+                ),
+            ),
+        )
+
+        assertFalse(controller().writeBackup(uri, oversized))
+        assertEquals(0, openCount)
+        assertEquals(0, written.size())
+    }
+
+    @Test
     fun `a provider runtime failure is converted to export failure`() = runTest {
         shadowOf(application.contentResolver).registerOutputStreamSupplier(uri) {
             throw IllegalArgumentException("provider rejected its own URI")
@@ -113,6 +143,36 @@ class BackupControllerExportTest {
 
         assertSame(expected, actual)
         assertNull(controller.backupExportResult.value)
+    }
+
+    @Test
+    fun `cancelling a blocking provider write closes its stream`() = runTest {
+        val writeStarted = CountDownLatch(1)
+        val closed = CountDownLatch(1)
+        shadowOf(application.contentResolver).registerOutputStreamSupplier(uri) {
+            object : OutputStream() {
+                override fun write(value: Int) {
+                    writeStarted.countDown()
+                    closed.await(5, TimeUnit.SECONDS)
+                }
+
+                override fun close() {
+                    closed.countDown()
+                }
+            }
+        }
+        val controller = controller()
+        val writing = async(Dispatchers.IO) {
+            controller.writeBackup(uri, backup, currentCoroutineContext().job)
+        }
+
+        assertTrue("provider write never started", writeStarted.await(1, TimeUnit.SECONDS))
+        writing.cancel()
+        assertTrue(
+            "cancelling backup export must close a blocking provider stream",
+            closed.await(1, TimeUnit.SECONDS),
+        )
+        writing.join()
     }
 
     @Test

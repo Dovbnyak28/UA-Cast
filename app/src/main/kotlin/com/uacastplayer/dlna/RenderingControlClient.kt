@@ -46,8 +46,8 @@ class RenderingControlClient(private val httpClient: OkHttpClient) {
 
     /**
      * Returns the response body on success, or null for every failure - a refused action, an
-     * unreachable renderer, a response OkHttp cannot parse. They are one thing to both callers: the
-     * volume did not change and there is nothing to show.
+     * unreachable renderer, a response OkHttp cannot parse. A missing reply does not prove the TV
+     * ignored the command: the repository reads the volume back even after this boundary fails.
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun post(controlUrl: String, action: String, envelope: String): String? {

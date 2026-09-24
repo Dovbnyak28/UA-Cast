@@ -38,10 +38,21 @@ object ChannelGrouper {
         checkCancellation: () -> Unit = {},
     ): List<GroupedChannels> {
         val byGroup = linkedMapOf<ChannelGroup, MutableList<M3uChannel>>()
+        // Normalization performs Unicode normalization and allocates intermediate strings. Real
+        // playlists repeat a small set of group-title values across thousands of channels, so
+        // memoize common exact values without letting provider-controlled titles grow this cache
+        // without bound.
+        val normalizedGroupCache = HashMap<String?, ChannelGroup>()
         checkCancellation()
         for ((index, channel) in channels.withIndex()) {
             if (index % CANCELLATION_CHECK_INTERVAL_CHANNELS == 0) checkCancellation()
-            val group = ChannelGroupNormalizer.normalize(channel.groupTitle)
+            val rawGroupTitle = channel.groupTitle
+            val group = normalizedGroupCache[rawGroupTitle] ?:
+                ChannelGroupNormalizer.normalize(rawGroupTitle).also { normalized ->
+                    if (normalizedGroupCache.size < MAX_NORMALIZED_GROUP_CACHE_ENTRIES) {
+                        normalizedGroupCache[rawGroupTitle] = normalized
+                    }
+                }
             byGroup.getOrPut(group) { mutableListOf() }.add(channel)
         }
 
@@ -59,4 +70,5 @@ object ChannelGrouper {
     }
 
     private const val CANCELLATION_CHECK_INTERVAL_CHANNELS = 256
+    private const val MAX_NORMALIZED_GROUP_CACHE_ENTRIES = 256
 }

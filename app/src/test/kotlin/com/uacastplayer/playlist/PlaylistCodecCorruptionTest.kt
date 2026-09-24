@@ -6,6 +6,7 @@ import java.io.DataOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -50,7 +51,7 @@ class PlaylistCodecCorruptionTest {
 
     @Test
     fun `a snapshot claiming more channels than exist is refused, not allocated for`() {
-        assertNull(PlaylistSnapshotCodec.decode(ByteArrayInputStream(snapshotV2Claiming(Int.MAX_VALUE))))
+        assertRejectedAsOversized(snapshotV2Claiming(Int.MAX_VALUE))
     }
 
     @Test
@@ -61,7 +62,7 @@ class PlaylistCodecCorruptionTest {
     /** The older format is still read on upgrade, so it needs the same treatment. */
     @Test
     fun `a v1 snapshot is guarded the same way`() {
-        assertNull(PlaylistSnapshotCodec.decode(ByteArrayInputStream(snapshotV1Claiming(Int.MAX_VALUE))))
+        assertRejectedAsOversized(snapshotV1Claiming(Int.MAX_VALUE))
         assertNull(PlaylistSnapshotCodec.decode(ByteArrayInputStream(snapshotV1Claiming(-1))))
     }
 
@@ -109,5 +110,14 @@ class PlaylistCodecCorruptionTest {
 
         assertEquals(50_000, decoded?.channels?.size)
         assertEquals("Channel 50000", decoded?.channels?.last()?.displayName)
+    }
+
+    private fun assertRejectedAsOversized(snapshot: ByteArray) {
+        try {
+            PlaylistSnapshotCodec.decode(ByteArrayInputStream(snapshot))
+            fail("oversized snapshot must be reported explicitly")
+        } catch (_: PlaylistChannelLimitExceededException) {
+            // The header is rejected before any channel records are read or allocated.
+        }
     }
 }

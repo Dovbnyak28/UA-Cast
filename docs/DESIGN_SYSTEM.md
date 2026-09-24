@@ -17,15 +17,15 @@ plain top-level constants.
 
 ## Color (`ui/theme/Color.kt`)
 
-- **Backgrounds** - `Void` (app background), `VoidElevated` (~2.5% brighter, elevated surfaces),
+- **Backgrounds** - `Void` (app background), `VoidElevated` (theme-tinted lift for elevated surfaces),
   `Surface1`/`Surface2` (card and row backgrounds, `Surface2` is the "raised" one - selected chip,
   pressed round button, progress track).
 - **Accent** - `Azure`/`Azure2`, and `AzureGradient` (linear gradient between them) for primary
-  actions (play button, selected segment glow).
+  actions (play button, selected navigation and selected segments).
 - **Route health semantics** - `RouteGreen`/`RouteAmber`/`RouteRed`, each with a matching `*Glow`
   color at low alpha for soft glows behind status dots.
-- **Text** - `LabelPrimary` (main text), `LabelSecondary` (secondary/hint text, ~60% alpha),
-  `LabelTertiary` (disabled, ~30% alpha).
+- **Text** - `LabelPrimary` (main text), `LabelSecondary` (secondary/hint text),
+  `LabelTertiary` (muted supporting/disabled labels, kept AA-readable on raised surfaces).
 - **Lines** - `Hairline`, a near-transparent white for 1dp borders/dividers.
 
 ## Spacing & shape (`ui/theme/Dimens.kt`)
@@ -148,6 +148,9 @@ dialog, so long localized choices do not require sideways scrolling. Short prese
 
 - Bottom navigation keeps visible labels at large font scales. `navigationBarHeight(fontScale)`
   is shared with mini-player positioning; changing one without the other would create overlap.
+  At ordinary sizes tabs use role/action wording (`Overview` / `Watch` in English; localized
+  equivalents) to distinguish the dashboard from the channel browser, while the screen heading and
+  spoken accessibility label retain the full destination names.
   At font scale 1.5 and above, `TabBarItem.largeTextLabel` supplies localized short words while
   `contentDescription` retains the full destination name. `LargeTextNavigationTest` verifies one-line,
   non-overflowing labels at 320dp / 200% in EN/UK/RU/ES; never hide the labels to make them fit.
@@ -166,26 +169,23 @@ dialog, so long localized choices do not require sideways scrolling. Short prese
 ## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `MidnightPalette.kt`, `Theme.kt`, `Background.kt`)
 
 The app has three selectable visual styles. Users pick one in Settings; it applies instantly,
-app-wide.
+app-wide. All retain a dark, low-distraction canvas for long viewing sessions, but use distinct,
+more legible surface tints and vivid accents so controls and hierarchy do not disappear into grey.
 
 | Theme | Background | Accent | Character |
 | --- | --- | --- | --- |
-| `AppTheme.AZURE` (default) | neutral near-black, textured | cool blue | unchanged from before themes existed |
-| `AppTheme.CINEMA` | warm charcoal, textured | champagne gold | bold sans display type, pill-shaped controls |
-| `AppTheme.MIDNIGHT` | true `#000000`, flat | muted pewter | no wallpaper texture, no vignette, maximum contrast |
+| `AppTheme.AZURE` | deep blue-black, textured | electric blue to mint | cool, crisp, modern |
+| `AppTheme.CINEMA` (default) | aubergine ink, textured | champagne to coral | warm, expressive, pill-shaped controls |
+| `AppTheme.MIDNIGHT` | true `#000000`, flat | lavender to ice blue | vivid OLED option, maximum contrast |
 
 They're deliberately spread across the axes rather than being three shades of the same idea: Azure
-and Cinema differ in *temperature* while painting the same faint wallpaper texture a few percent
-above black, so Midnight takes the axis both leave open - unlit, textureless, and the only one whose
-`void` is actually black.
+and Cinema differ in temperature and accent family while painting a faint wallpaper texture; the
+wallpaper hue follows the active accent. Midnight keeps the background truly unlit and textureless
+while adding color through controls, not by lifting its black canvas.
 
-**Midnight's accent is deliberately near-neutral, and that is the theme's idea rather than a
-compromise.** A saturated accent on true black is the loudest thing a phone screen can do: there is
-no ambient tone for it to sit against, so it glows. The first attempt was a violet and read as
-candy. At a fifth of normal saturation the chrome reads as chrome, and saturation belongs to the
-only things that should compete for the eye - `routeGreen`, `routeAmber`, `routeRed`. In this theme
-colour means status and nothing else, so a new element that wants attention has to earn it with
-contrast or size rather than by turning the accent up.
+**Midnight's vivid accents do not tint the canvas.** Lavender and ice-blue add a clear identity to
+active controls and selection, while the true-black background stays untouched for OLED viewing.
+Status remains separately encoded by `routeGreen`, `routeAmber` and `routeRed`.
 
 ### How it works
 
@@ -199,7 +199,9 @@ contrast or size rather than by turning the accent up.
   black actually `#000000` on an OLED panel: a texture drawn at 2% over black is still lit pixels.
 - **`appBackground(plain = true)`** uses the same early-return flat path for settings and the import
   form, regardless of theme. It preserves palette colors without loading decorative wallpaper or
-  allocating overlay brushes. Home and content screens keep their themed background.
+  allocating overlay brushes. Home and content screens keep their themed background plus two
+  static, low-opacity accent blooms (cached with `drawWithCache`; no animation clock or
+  animation-driven redraws).
 - **`LocalUaPalette`** (a `staticCompositionLocalOf<UaPalette>`) carries the active palette down
   the tree; **`UaTheme.palette`** is the `@Composable` accessor components actually call.
   `staticCompositionLocalOf` is deliberate, not an oversight - a theme switch is meant to force the
@@ -209,7 +211,7 @@ contrast or size rather than by turning the accent up.
   palette for `theme`, provides it via `LocalUaPalette`, and builds the Material3 `ColorScheme`
   from it too (so Material internals - ripples, `OutlinedTextField`, etc. - track the theme as
   well, even though new UI code shouldn't be reading `MaterialTheme.colorScheme.*` directly).
-- **`AppPreferences.appTheme`** (default `AppTheme.AZURE`) persists the choice.
+- **`AppPreferences.appTheme`** (default `AppTheme.CINEMA`) persists the choice.
   `AppViewModel.selectAppTheme` writes it and updates `AppUiState.appTheme`; `MainActivity` passes
   that straight into `UaCastTheme(theme = uiState.appTheme)`, so picking a theme in Settings
   recomposes the whole app on the spot - no restart.
@@ -279,12 +281,13 @@ without turning into a full skeuomorphic style.
   shadow re-triggers layer compositing on every scroll frame for every visible row. Use
   `raisedSurface(shadow = false)` (the default) for list rows; the gradient/border alone is cheap.
 
-### The three-glow rule
+### The focused-glow rule
 
-Only three places in the app may use an **accent-colored** glow (`spotColor`/`ambientColor` beyond
+Only four places in the app may use an **accent-colored** glow (`spotColor`/`ambientColor` beyond
 `UaPalette.shadowSoft`'s neutral tone): the play button (`GradientPlayButton`, `azureGlow`), the
-current-programme progress indicator, and the live indicator. Nowhere else - a glow on every raised
-surface reads as visual noise instead of drawing the eye to what's actually live/actionable.
+current-programme progress indicator, the live indicator, and the selected bottom-navigation pill.
+Nowhere else - a glow on every raised surface reads as visual noise instead of drawing the eye to
+what's actually live/actionable.
 `raisedSurface` itself never glows for this reason; a glowing control layers its own
 `.shadow(spotColor = ...)` separately, the same way `GradientPlayButton` already does.
 

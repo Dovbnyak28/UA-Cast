@@ -1,4 +1,4 @@
-name: Build signed Play artifact
+name: Build signed Play and GitHub artifacts
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: signed-play-release
+  group: signed-release
   cancel-in-progress: false
 
 jobs:
@@ -66,8 +66,8 @@ jobs:
           path: app/build/reports/
           retention-days: 14
 
-  signed-play-bundle:
-    name: Signed Play AAB
+  signed-artifacts:
+    name: Signed Play AAB and GitHub APK
     needs: instrumented
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -139,8 +139,10 @@ jobs:
       - name: Verify architecture, premium and Play policy surfaces
         shell: bash
         run: |
+          bash scripts/tests/check-detekt-baseline-test.sh
           bash scripts/check-detekt-baseline.sh
           bash scripts/check-architecture-boundaries.sh
+          bash scripts/tests/check-doc-references-test.sh
           bash scripts/check-doc-references.sh
           bash scripts/check-locale-format.sh
           bash scripts/check-no-hardcoded-colors.sh
@@ -168,11 +170,46 @@ jobs:
             exit 1
           fi
 
+      # Run separately: app/build.gradle.kts disables ABI splits for bundle tasks, while
+      # assembleRelease must produce the universal APK accepted by the self-updater.
+      - name: Build signed sideload APKs
+        run: >-
+          ./gradlew
+          :app:assembleRelease
+          --stacktrace
+          -Puacast.requireSigning=true
+          -Puacast.versionCode=$RELEASE_VERSION_CODE
+          -Puacast.versionName=$RELEASE_VERSION_NAME
+
+      - name: Verify universal APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*universal*.apk' -print -quit)
+          [ -n "$apk" ] || {
+            echo "Signed universal APK was not produced" >&2
+            exit 1
+          }
+          apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner -print -quit)
+          [ -n "$apksigner" ] || {
+            echo "Android apksigner is unavailable" >&2
+            exit 1
+          }
+          "$apksigner" verify --min-sdk-version 24 "$apk"
+
       - name: Upload signed Play bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: play-aab-signed-${{ inputs.version_name }}-${{ inputs.version_code }}
           path: app/build/outputs/bundle/play/*.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload signed GitHub APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: github-apk-signed-${{ inputs.version_name }}-${{ inputs.version_code }}
+          path: app/build/outputs/apk/release/*universal*.apk
           if-no-files-found: error
           retention-days: 14
 

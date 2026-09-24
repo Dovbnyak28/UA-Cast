@@ -130,6 +130,84 @@ class HlsFlattenedStreamTest {
         isRunning = isRunning,
     )
 
+    @Test
+    fun `HEAD eligibility requires a real MPEG TS segment`() {
+        val origin = Origin().also { this.origin = it }
+
+        assertTrue(streamFor(origin) { true }.canFlatten())
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
+        assertEquals(1, origin.hitsFor("/a.ts"))
+    }
+
+    @Test
+    fun `HEAD segment probe uses the same request semantics as playback`() {
+        val origin = Origin().also { this.origin = it }
+        val noRangeClient = client.newBuilder().addInterceptor { chain ->
+            if (chain.request().header("Range") != null) throw IOException("origin rejects Range requests")
+            chain.proceed(chain.request())
+        }.build()
+        val stream = HlsFlattenedStream(
+            httpClient = noRangeClient,
+            playlistUrl = origin.urlFor("/live.m3u8"),
+            userAgent = "test",
+            referrer = null,
+            isRunning = { true },
+        )
+
+        assertTrue("probe must not fail on origins that reject Range requests", stream.canFlatten())
+    }
+
+    @Test
+    fun `HEAD falls back when the playlist segment is missing`() {
+        val origin = Origin(segmentPath = "/gone.ts").also { this.origin = it }
+
+        assertFalse(streamFor(origin) { true }.canFlatten())
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
+        assertEquals(1, origin.hitsFor("/gone.ts"))
+    }
+
+    @Test
+    fun `HEAD falls back when a successful segment response is not MPEG TS`() {
+        val origin = Origin(segmentPayload = "<html>expired token</html>".toByteArray())
+            .also { this.origin = it }
+
+        assertFalse(streamFor(origin) { true }.canFlatten())
+        assertEquals(1, origin.hitsFor("/live.m3u8"))
+        assertEquals(1, origin.hitsFor("/a.ts"))
+    }
+
+    @Test
+    fun `HEAD skips unsupported segment references before applying its probe limit`() {
+        val playlist = """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:1
+            #EXTINF:1,
+            ftp://example.test/unsupported-1.ts
+            #EXTINF:1,
+            data:video/mp2t;base64,AAAA
+            #EXTINF:1,
+            ftp://example.test/unsupported-2.ts
+            #EXTINF:1,
+            /a.ts
+        """.trimIndent()
+        val origin = Origin(playlistOverride = playlist).also { this.origin = it }
+        var running = true
+        val stream = streamFor(origin) { running }
+
+        assertTrue("HEAD should find the playable TS after unsupported references", stream.canFlatten())
+        val body = ByteArrayOutputStream()
+        var announced = 0
+        val wrote = stream.writeTo(body) {
+            announced++
+            running = false
+        }
+
+        assertTrue("GET should make the same flattened-format decision as HEAD", wrote)
+        assertEquals(1, announced)
+        assertEquals(0x47, body.toByteArray().first().toInt() and 0xff)
+        assertEquals("the origin segment is probed for HEAD and then streamed for GET", 2, origin.hitsFor("/a.ts"))
+    }
+
     /**
      * The guard. An owner that says stop after the first pass must end the loop with the playlist
      * fetched exactly once - and the first pass still served, since the renderer was owed it.
@@ -227,6 +305,34 @@ class HlsFlattenedStreamTest {
         assertEquals(0L, stream.bytesWritten)
         assertEquals(1, origin.hitsFor("/a.ts"))
         assertEquals(1, origin.hitsFor("/live.m3u8"))
+    }
+
+    @Test
+    fun `GET and HEAD use the same bounded segment window before choosing the format`() {
+        val playlist = """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:1
+            #EXTINF:1,
+            /gone-1.ts
+            #EXTINF:1,
+            /gone-2.ts
+            #EXTINF:1,
+            /gone-3.ts
+            #EXTINF:1,
+            /a.ts
+        """.trimIndent()
+        val origin = Origin(segmentPath = "/a.ts", playlistOverride = playlist).also { this.origin = it }
+        val stream = streamFor(origin) { true }
+        var headers = 0
+
+        val wrote = stream.writeTo(ByteArrayOutputStream()) { headers++ }
+
+        assertFalse("GET must not select flattened TS outside HEAD's probe window", wrote)
+        assertEquals("no TS response headers may be committed", 0, headers)
+        assertEquals("the later working segment is outside the shared probe window", 0, origin.hitsFor("/a.ts"))
+        assertEquals(1, origin.hitsFor("/gone-1.ts"))
+        assertEquals(1, origin.hitsFor("/gone-2.ts"))
+        assertEquals(1, origin.hitsFor("/gone-3.ts"))
     }
 
     @Test

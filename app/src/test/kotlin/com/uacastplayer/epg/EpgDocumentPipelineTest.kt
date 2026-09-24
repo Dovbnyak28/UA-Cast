@@ -2,6 +2,8 @@ package com.uacastplayer.epg
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.FilterInputStream
+import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.zip.GZIPOutputStream
@@ -27,6 +29,51 @@ class EpgDocumentPipelineTest {
         assertEquals(plainData.index.channels, zippedData.index.channels)
         assertEquals(plainData.programmesByChannelId, zippedData.programmesByChannelId)
         assertEquals(listOf("Early", "Late"), plainData.programmesByChannelId.getValue("one").map { it.title })
+    }
+
+    @Test
+    fun `gzip signature is recognized when the input stream returns one byte at a time`() {
+        val zipped = ByteArrayOutputStream().also { output ->
+            GZIPOutputStream(output).use { it.write(xml().toByteArray()) }
+        }.toByteArray()
+        val shortReads = object : FilterInputStream(ByteArrayInputStream(zipped)) {
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                super.read(buffer, offset, minOf(length, 1))
+        }
+
+        val data = EpgDocumentPipeline.parse(
+            rawInput = shortReads,
+            nowMillis = now,
+            zoneId = ZoneOffset.UTC,
+            maxHeapBytes = Long.MAX_VALUE,
+        )
+
+        assertEquals(listOf("Early", "Late"), data.programmesByChannelId.getValue("one").map { it.title })
+    }
+
+    @Test
+    fun `compressed XML with an oversized start tag is rejected before SAX retains it`() {
+        val hostileXml = "<tv><channel id=\"${"x".repeat(MAX_HOSTILE_ATTRIBUTE_LENGTH)}\"/></tv>"
+        val zipped = ByteArrayOutputStream().also { output ->
+            GZIPOutputStream(output).use { it.write(hostileXml.toByteArray()) }
+        }.toByteArray()
+
+        val failure = runCatching { parse(zipped) }.exceptionOrNull()
+
+        assertTrue("Expected the markup safety limit to fail parsing, got $failure", failure != null)
+        assertTrue(
+            "The failure should come from the streaming markup guard",
+            generateSequence(failure) { it.cause }.any {
+                it is IOException && it.message.orEmpty().contains("XML markup exceeds")
+            },
+        )
+    }
+
+    @Test
+    fun `UTF-16 XML still parses through the guarded production pipeline`() {
+        val data = parse(xml().toByteArray(Charsets.UTF_16))
+
+        assertEquals(listOf("Early", "Late"), data.programmesByChannelId.getValue("one").map { it.title })
     }
 
     @Test
@@ -88,6 +135,7 @@ class EpgDocumentPipelineTest {
         "<programme start=\"$start\" stop=\"$stop\" channel=\"one\"><title>$title</title></programme>"
 
     private companion object {
+        const val MAX_HOSTILE_ATTRIBUTE_LENGTH = EpgDocumentPipeline.MAX_XML_MARKUP_BYTES * 8
         const val HEAP_BUDGET_FLOOR_PLUS_ONE = 40_001
     }
 }

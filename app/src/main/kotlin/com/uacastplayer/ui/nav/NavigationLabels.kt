@@ -12,3 +12,12 @@ internal fun BottomDestination.largeTextLabelRes(): Int = when (this) {
     BottomDestination.FAVORITES -> R.string.nav_large_favorites
     BottomDestination.SETTINGS -> R.string.nav_large_settings
 }
+
+/** Action-oriented labels distinguish the overview from the place where users actually watch. */
+@StringRes
+internal fun BottomDestination.tabLabelRes(): Int = when (this) {
+    BottomDestination.HOME -> R.string.nav_home_tab
+    BottomDestination.CHANNELS -> R.string.nav_channels_tab
+    BottomDestination.FAVORITES -> R.string.nav_favorites
+    BottomDestination.SETTINGS -> R.string.nav_settings_compact
+}

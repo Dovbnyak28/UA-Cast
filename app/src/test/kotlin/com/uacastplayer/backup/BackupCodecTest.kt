@@ -125,4 +125,37 @@ class BackupCodecTest {
         assertTrue(decoded?.sources.isNullOrEmpty())
         assertTrue(decoded?.favorites.isNullOrEmpty())
     }
+
+    @Test
+    fun `oversized object trees are refused before org json materializes them`() {
+        val text = buildString {
+            append("""{"version":1,"favorites":[""")
+            repeat(BackupJsonInputGuard.MAX_OBJECTS) { index ->
+                if (index > 0) append(',')
+                append("{}")
+            }
+            append("]}")
+        }
+
+        assertNull(BackupCodec.decode(text))
+    }
+
+    @Test
+    fun `excessive nesting is refused before recursive json parsing`() {
+        val depth = 65
+        val nested = "[".repeat(depth) + "0" + "]".repeat(depth)
+
+        assertNull(BackupCodec.decode("""{"version":1,"favorites":$nested}"""))
+    }
+
+    @Test
+    fun `json punctuation inside string values does not count as structure`() {
+        val json = """
+            {"version":1,"favorites":[{"key":"k","displayName":"},:,[{",
+            "streamUrl":"https://example.test/live"}]}
+        """.trimIndent()
+        val decoded = BackupCodec.decode(json)
+
+        assertEquals("},:,[{", decoded?.favorites?.singleOrNull()?.displayName)
+    }
 }

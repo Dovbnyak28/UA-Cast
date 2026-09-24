@@ -26,6 +26,7 @@ internal class ProxyManifestResources {
     }
 
     @Synchronized fun get(id: String): ResourceEntry? = active[id] ?: draining[id]
+    @Synchronized fun isActive(id: String): Boolean = accepting && id in active
     @Synchronized fun snapshot(): Map<String, ResourceEntry> = draining + active
 
     @Synchronized fun clear() {

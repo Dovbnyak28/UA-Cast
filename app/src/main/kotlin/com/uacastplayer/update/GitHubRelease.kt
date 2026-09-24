@@ -7,10 +7,7 @@ import org.json.JSONObject
 
 /**
  * The parts of a GitHub release this app cares about: which version it is, where a human can go to
- * read about it, and the APK to install.
- *
- * The release notes are still not kept. They live on the page [releaseUrl] points at, so carrying a
- * copy through the app would be a field nothing reads.
+ * read about it, a short plain-text version of its release notes, and the APK to install.
  *
  * [apk] is null far more often than it is a fault: a release with no APK attached, one whose upload
  * never finished, or one carrying several that [ReleaseApkPolicy] cannot choose between. Every one
@@ -22,6 +19,7 @@ data class GitHubRelease(
     val tagName: String,
     val releaseUrl: String,
     val apk: ReleaseApk? = null,
+    val releaseNotes: String? = null,
 )
 
 /**
@@ -51,6 +49,7 @@ object GitHubReleaseParser {
                 releaseUrl = releaseUrl,
                 // Mechanical: which attached file to install is [ReleaseApkPolicy]'s decision.
                 apk = ReleaseApkPolicy.pick(readAssets(obj), supportedAbis),
+                releaseNotes = ReleaseNotesFormatter.fromMarkdown(obj.opt("body") as? String),
             )
         } else {
             null

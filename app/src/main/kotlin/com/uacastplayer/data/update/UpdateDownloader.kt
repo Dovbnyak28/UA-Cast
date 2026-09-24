@@ -17,6 +17,8 @@ import java.io.InputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -74,6 +76,7 @@ class UpdateDownloader(
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
     private val appContext = context.applicationContext
+    private val downloadMutex = Mutex()
 
     private val directory: File get() = File(appContext.cacheDir, DIRECTORY_NAME)
 
@@ -83,27 +86,29 @@ class UpdateDownloader(
     private val hasher: MessageDigest = MessageDigest.getInstance("SHA-256")
 
     /**
-     * @param onProgress bytes so far and the total the release declared, on the caller's thread.
+     * @param onProgress bytes so far and the total the release declared, on [ioDispatcher].
      *   The total is 0 when the release did not declare one, which the UI shows as indeterminate
      *   rather than as a percentage of nothing.
      */
     suspend fun download(apk: ReleaseApk, onProgress: (Long, Long) -> Unit = { _, _ -> }): UpdateDownload =
         withContext(ioDispatcher) {
-            deleteStaleDownloads()
-            if (!directory.isDirectory && !directory.mkdirs()) {
-                AppLog.w(TAG) { "Cannot create the update cache directory" }
-                return@withContext UpdateDownload.Failed
+            downloadMutex.withLock {
+                deleteStaleDownloads()
+                if (!directory.isDirectory && !directory.mkdirs()) {
+                    AppLog.w(TAG) { "Cannot create the update cache directory" }
+                    return@withLock UpdateDownload.Failed
+                }
+                val destination = File(directory, "${Fingerprint.of(apk.downloadUrl)}$APK_SUFFIX")
+                // An APK already here with the right hash is the one that was asked for. Skipping the
+                // fetch matters most in the case it is most likely to happen: a download that finished
+                // and whose install the user dismissed, on a connection slow enough that they would
+                // rather not pay for it twice.
+                if (apk.sha256 != null && destination.isFile && FileDigest.sha256(destination) == apk.sha256) {
+                    AppLog.d(TAG) { "Update APK already downloaded and verified; reusing it" }
+                    return@withLock UpdateDownload.Ready(destination)
+                }
+                fetch(apk, destination, onProgress)
             }
-            val destination = File(directory, "${Fingerprint.of(apk.downloadUrl)}$APK_SUFFIX")
-            // An APK already here with the right hash is the one that was asked for. Skipping the
-            // fetch matters most in the case it is most likely to happen: a download that finished
-            // and whose install the user dismissed, on a connection slow enough that they would
-            // rather not pay for it twice.
-            if (apk.sha256 != null && destination.isFile && FileDigest.sha256(destination) == apk.sha256) {
-                AppLog.d(TAG) { "Update APK already downloaded and verified; reusing it" }
-                return@withContext UpdateDownload.Ready(destination)
-            }
-            fetch(apk, destination, onProgress)
         }
 
     @Suppress("ReturnCount")

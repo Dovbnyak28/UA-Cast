@@ -3,6 +3,7 @@ package com.uacastplayer.data.icons
 import android.content.Context
 import androidx.collection.LruCache
 import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.net.HttpDefaults
 import com.uacastplayer.core.net.executeCancellable
@@ -20,6 +21,8 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
@@ -42,6 +45,8 @@ private data class CachedIcon(val file: File?)
 class IconRepository(
     context: Context,
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    private val trimAfterWrites: Int = TRIM_AFTER_WRITES,
+    private val trimAfterBytes: Long = TRIM_AFTER_BYTES,
 ) {
 
     private val appContext = context.applicationContext
@@ -51,6 +56,9 @@ class IconRepository(
     private val memoryCache = LruCache<String, CachedIcon>(MEMORY_CACHE_SIZE)
     private val cacheLock = Any()
     private var cacheGeneration = 0L
+    private var writesSinceTrim = 0
+    private var bytesSinceTrim = 0L
+    private val trimMutex = Mutex()
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
 
     /** Keeps [castArtworkUrl]'s verdict from being written down once a second - see the call site. */
@@ -190,12 +198,28 @@ class IconRepository(
         return url
     }
 
-    suspend fun trimCache() {
+    suspend fun trimCache() = trimMutex.withLock {
+        synchronized(cacheLock) {
+            writesSinceTrim = 0
+            bytesSinceTrim = 0L
+        }
         diskCache.trim()
         // Trimming can evict a file that a positive memory entry still points at. Returning that
-        // stale File would make Coil fail from a path that no longer exists; force the next lookup
-        // through the disk/network chain instead.
+        // stale File would make Coil fail from a path that no longer exists.
         invalidateMemoryCache()
+    }
+
+    /** Lazy row loads also write icons, even on low-end devices where prefetch never runs. */
+    private fun shouldTrimAfterWrite(bytes: Int): Boolean = synchronized(cacheLock) {
+        writesSinceTrim++
+        bytesSinceTrim += bytes
+        if (writesSinceTrim >= trimAfterWrites || bytesSinceTrim >= trimAfterBytes) {
+            writesSinceTrim = 0
+            bytesSinceTrim = 0L
+            true
+        } else {
+            false
+        }
     }
 
     /** See [IconFailureStore.pruneExpiredFailures] - call once per playlist load/refresh. */
@@ -261,7 +285,17 @@ class IconRepository(
                     failureStore.recordFailure(url, isPermanent = false)
                     null
                 }
-                is IconFetchResult.Ready -> diskCache.put(url, fetched.bytes)
+                is IconFetchResult.Ready -> {
+                    val file = diskCache.put(url, fetched.bytes)
+                    if (file != null && shouldTrimAfterWrite(fetched.bytes.size)) {
+                        // Maintenance must never turn a successfully downloaded icon into a miss.
+                        // runCatchingNonFatal keeps cancellation and fatal VM errors intact.
+                        runCatchingNonFatal { trimCache() }.onFailure { error ->
+                            AppLog.w(TAG) { "Icon cache trim failed: ${error.javaClass.simpleName}" }
+                        }
+                    }
+                    file
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -280,6 +314,8 @@ class IconRepository(
 
     private companion object {
         const val MEMORY_CACHE_SIZE = 256
+        const val TRIM_AFTER_WRITES = 256
+        const val TRIM_AFTER_BYTES = 32L * 1024 * 1024
     }
 }
 

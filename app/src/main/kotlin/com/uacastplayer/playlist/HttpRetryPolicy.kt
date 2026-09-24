@@ -21,6 +21,11 @@ object HttpRetryPolicy {
         return attemptNumber < MAX_ATTEMPTS && (isNetworkError || isTransientHttpFailure)
     }
 
+    /** Malformed imported URLs are serialized as ReadError too, but repeating them cannot help. */
+    fun shouldRetryReadError(attemptNumber: Int, causeClassName: String?): Boolean =
+        causeClassName != IllegalArgumentException::class.java.simpleName &&
+            shouldRetry(attemptNumber, isNetworkError = true)
+
     /**
      * How long to wait before making attempt [attemptNumber] (1-based) - the first attempt is
      * never delayed, and each retry after that backs off exponentially from [BASE_DELAY_MILLIS],

@@ -444,6 +444,7 @@ internal fun RootTopBar(
             release = updateSection.state.availableRelease,
             installState = updateSection.installState,
             onInstall = updateSection.onDownloadAndInstall,
+            onGrantInstallPermission = updateSection.onGrantInstallPermission,
             onOpen = updateSection.onOpenRelease,
             onDismiss = updateSection.onDismissBanner,
         )
@@ -470,11 +471,6 @@ private fun BottomDestination.labelRes(): Int = when (this) {
     BottomDestination.CHANNELS -> R.string.nav_channels
     BottomDestination.FAVORITES -> R.string.nav_favorites
     BottomDestination.SETTINGS -> R.string.nav_settings
-}
-
-private fun BottomDestination.tabLabelRes(): Int = when (this) {
-    BottomDestination.SETTINGS -> R.string.nav_settings_compact
-    else -> labelRes()
 }
 
 /** Two tabs are tour targets; the other steps point at things inside a screen rather than at the

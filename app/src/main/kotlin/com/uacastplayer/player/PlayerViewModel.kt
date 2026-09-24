@@ -400,7 +400,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             channels = channels,
             startIndex = startIndex.coerceIn(channels.indices),
             wrapAround = wrapAroundEnabled,
-        )?.let(::applyChannelSwitch)
+        )?.let { transition ->
+            applyChannelSwitch(transition)
+            // Only a new request gets autoplay; the retained-request guard above preserves pause
+            // on rotation/reattach. Never play the previous item before installing the new one.
+            if (!isRemoteCasting) {
+                if (isInBackground) resumeLocalWhenForeground = true else exoPlayer.play()
+            }
+        }
     }
 
     private fun switchToIndexImmediate(index: Int) {
@@ -441,7 +448,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
         exoPlayer.setMediaItem(MediaItemFactory.forChannel(channel.streamUrl))
-        if (LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting)) {
+        if (LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting) && !isInBackground) {
             exoPlayer.prepare()
         } else {
             // The media item is still set so ResumeLocalPlayer (on cast disconnect) can prepare

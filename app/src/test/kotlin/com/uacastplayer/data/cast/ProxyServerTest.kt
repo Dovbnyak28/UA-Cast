@@ -51,6 +51,7 @@ class ProxyServerTest {
         """.trimIndent()
         val output = ByteArrayOutputStream()
 
+        server.registerPlaylist(parent.originalUrl, parent.userAgent, parent.referrer)
         server.servePlaylist(fakeResponse("https://origin.example/playlist.m3u8", playlist), "GET", output, parent)
 
         val mediaEntry = server.resourcesForTesting().values.single { it.type == RESOURCE_TYPE_MEDIA }
@@ -71,6 +72,7 @@ class ProxyServerTest {
         val playlist = "#EXTM3U\n#EXTINF:-1,Channel\nsegment1.ts"
         val output = ByteArrayOutputStream()
 
+        server.registerPlaylist(parent.originalUrl, parent.userAgent, parent.referrer)
         server.servePlaylist(fakeResponse("https://origin.example/playlist.m3u8", playlist), "GET", output, parent)
 
         val mediaEntry = server.resourcesForTesting().values.single { it.type == RESOURCE_TYPE_MEDIA }
@@ -90,6 +92,7 @@ class ProxyServerTest {
         val output = ByteArrayOutputStream()
 
         val upstream = fakeResponse("https://origin.example/playlist.m3u8", "#EXTM3U\nseg.ts")
+        server.registerPlaylist(parent.originalUrl, parent.userAgent, parent.referrer)
         server.servePlaylist(upstream, "GET", output, parent)
 
         // The Default Media Receiver fetches everything via cross-origin XHR - a response without
@@ -209,6 +212,7 @@ class ProxyServerTest {
             referrer = null,
         )
         val playlist = "#EXTM3U\n#EXTINF:-1,Channel\nsegment1.ts"
+        server.registerPlaylist(parent.originalUrl, parent.userAgent, parent.referrer)
         server.servePlaylist(fakeResponse("https://origin.example/playlist.m3u8", playlist), method, output, parent)
     }
 

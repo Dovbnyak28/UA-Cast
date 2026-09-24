@@ -82,7 +82,8 @@ default in `build.gradle.kts` matters only for locally built APKs.
 
 ### Publishing the release, and why the tag is now load-bearing
 
-The app checks for updates itself: once a week when it is opened, and on demand from Settings ->
+The app checks for updates itself: once a day when it enters the foreground (one-hour retry after
+a failed check), and on demand from Settings ->
 Updates. It asks
 `https://api.github.com/repos/Dovbnyak28/UA-Cast/releases/latest` and compares that release's
 `tag_name` against its own `versionName` (see `com.uacastplayer.update`). Two consequences for
@@ -98,7 +99,11 @@ this runbook:
    newer than `v0.9.0` - and a CI build reporting `0.9.0.147` is newer than the `v0.9.0` release it
    came from, so it is not offered an "update" back to itself.
 
-3. **Attach the APKs to the release, or the install path never engages.** The app can now download
+3. **Attach the APKs to the release, or the install path never engages.** A newly found release
+   with an installable APK raises an install invitation showing a bounded plain-text preview
+   of the GitHub Release body; write useful, user-facing release notes. The user must choose to download.
+   Choosing "Remind me later" retains the banner and offers the dialog again after at least three days.
+   The app can now download
    and install an update itself - it did not always, and this paragraph used to say so. It picks an
    attached asset via `ReleaseApkPolicy` (universal wins when present), verifies size and any
    published `sha256`, and refuses anything not signed by whoever signed the running copy
@@ -135,8 +140,10 @@ environment needs these protected secrets:
 
 The workflow materializes the key only under the runner's temporary directory, passes
 `-Puacast.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
-the AAB signature, then uploads only the signed Play bundle. It does not publish to Play Console;
-that remains an explicit human release step. Never commit the keystore, passwords, generated
+the AAB and universal APK signatures, then uploads separate signed Play AAB and GitHub APK
+artifacts. Attach the **universal APK** artifact to a published GitHub Release with the matching
+version tag; an Actions artifact alone is not visible to the app's updater. The workflow does not
+publish to Play Console or GitHub Releases; those remain explicit human release steps. Never commit the keystore, passwords, generated
 `gradle.properties`, or a base64 copy of the key.
 
 ### Which digit moves

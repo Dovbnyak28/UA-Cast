@@ -106,6 +106,9 @@ class DlnaSessionRepository internal constructor(
     private val discoveryHttpClient = OkHttpClient.Builder()
         .connectTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     /**
@@ -274,7 +277,7 @@ class DlnaSessionRepository internal constructor(
         }
         // This session ends by publishing the volume it read from the renderer itself, so an answer
         // still in flight for the previous one describes a state that is about to be replaced.
-        val sessionVolumeGeneration = volumeGeneration.incrementAndGet()
+        volumeGeneration.incrementAndGet()
         connectJob?.cancel()
         connectJob = scope.launch {
             val request = DlnaConnectRequest(
@@ -302,14 +305,6 @@ class DlnaSessionRepository internal constructor(
             } else {
                 null
             }
-            // A slider action can happen while a channel re-point is still reading the volume.
-            // Its optimistic value is newer than this read and must not be overwritten when the
-            // read returns; its serialized SetVolume will correct the renderer in the same order.
-            val volume = if (sessionVolumeGeneration == volumeGeneration.get()) {
-                reportedVolume
-            } else {
-                _state.value.volume
-            }
             // The renderer call may have completed just before a newer connect was requested;
             // cancellation cannot interrupt a blocking SOAP read. Never let that old answer publish
             // a device over the newer attempt's state.
@@ -317,7 +312,7 @@ class DlnaSessionRepository internal constructor(
                 return@launch
             }
             pendingConnectDevice = null
-            _state.value = if (connected) DlnaConnectionState(connectedDevice = device, volume = volume)
+            _state.value = if (connected) DlnaConnectionState(connectedDevice = device, volume = reportedVolume)
                 else DlnaConnectionState(failedDevice = device)
             // Started once there is something to watch over, and only then: a callback registered
             // for a connect that failed would outlive it with no session to end.
@@ -365,33 +360,32 @@ class DlnaSessionRepository internal constructor(
      *
      * The read-back is what makes the optimism safe. A renderer whose real scale is smaller than
      * [VolumeRange.MAX] clamps or refuses a value above it, and the correction lands within the
-     * round trip - visibly, on a control the user is still looking at. A refused action reverts to
-     * the value that was in force before, because nothing changed on the TV. A set the renderer
-     * accepted but whose read-back failed keeps the requested value: it is the best evidence there
-     * is, and reverting would show a volume the TV demonstrably is not at.
+     * round trip. Always read back, including after a refusal/timeout: an older optimistic value
+     * was not necessarily accepted, and a timed-out command may still have reached the TV. If the
+     * read also fails, null honestly represents unknown volume instead of inventing a rollback.
      */
     fun setVolume(volume: Int) {
-        val url = _state.value.connectedDevice?.renderingControlUrl ?: return
-        val previous = _state.value.volume
+        val device = _state.value.takeUnless { it.isConnecting }?.connectedDevice ?: return
+        val url = device.renderingControlUrl ?: return
         val requested = VolumeRange.clamp(volume)
         val generation = volumeGeneration.incrementAndGet()
         _state.update { it.copy(volume = requested) }
         scope.launch {
-            val (accepted, reported) = withContext(ioDispatcher) {
+            val reported = withContext(ioDispatcher) {
                 volumeAttempts.run(generation, volumeGeneration::get) { checkpoint ->
-                    val wasAccepted = renderingControlClient.setVolume(url, requested)
+                    renderingControlClient.setVolume(url, requested)
                     checkpoint()
-                    val readBack = if (wasAccepted) renderingControlClient.getVolume(url) else null
+                    val readBack = renderingControlClient.getVolume(url)
                     checkpoint()
-                    wasAccepted to readBack
+                    readBack
                 }
             }
             // Two guards on one write. Still connected: a stop() that landed while this was in
             // flight must not resurrect a volume for a session that is over. Still current: dragging
             // the slider twice in quick succession leaves two round trips racing, and the older
             // one's answer describes a volume the user has already moved past.
-            if (_state.value.connectedDevice != null && generation == volumeGeneration.get()) {
-                _state.update { it.copy(volume = reported ?: if (accepted) requested else previous) }
+            if (_state.value.connectedDevice == device && generation == volumeGeneration.get()) {
+                _state.update { it.copy(volume = reported) }
             }
         }
     }

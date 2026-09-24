@@ -40,6 +40,10 @@ object PlaylistOutcomeReducer {
             sourceSaveState = current.sourceSaveState,
         )
         PlaylistOutcome.SizeLimitExceeded -> current.copy(isLoading = false, error = PlaylistError.SizeLimitExceeded)
+        PlaylistOutcome.ChannelLimitExceeded -> current.copy(
+            isLoading = false,
+            error = PlaylistError.ChannelLimitExceeded,
+        )
         PlaylistOutcome.StorageError -> current.copy(isLoading = false, error = PlaylistError.Storage)
         is PlaylistOutcome.HttpError -> current.copy(isLoading = false, error = PlaylistError.Http(outcome.code))
         is PlaylistOutcome.ReadError -> current.copy(isLoading = false, error = PlaylistError.Network)

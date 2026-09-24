@@ -3,7 +3,6 @@ package com.uacastplayer.data.cast
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.log.AppLog
 import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -21,6 +20,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
+import okio.buffer
+import okio.sink
 
 private const val TAG = "ProxyHttpServer"
 private const val MAX_HEADER_BYTES = 16 * 1024
@@ -43,6 +44,7 @@ private const val MAX_QUEUED_ADMISSIONS = 16
 private const val MAX_QUEUED_RESPONSES = 32
 private const val MAX_CONNECTIONS_PER_IP = 8
 private const val SOCKET_READ_TIMEOUT_MILLIS = 15_000
+private const val SOCKET_WRITE_TIMEOUT_MILLIS = 15_000
 private const val HTTP_NO_CONTENT = 204
 private const val CORS_MAX_AGE_SECONDS = "86400"
 private const val HTTP_BAD_REQUEST = 400
@@ -58,7 +60,13 @@ private const val ASCII_VISIBLE_LAST = 126
 private const val ASCII_DELETE = 127
 private val HTTP_HEADER_NAME_SEPARATORS = "()<>@,;:\\\"/[]?={}".toSet()
 
-internal data class ParsedRequest(val method: String, val path: String, val headers: Map<String, String>)
+internal data class ParsedRequest(
+    val method: String,
+    val path: String,
+    val headers: Map<String, String>,
+    /** Local socket lifetime, not a claim about peer reachability. Bound by the response worker. */
+    val isConnectionOpen: () -> Boolean = { true },
+)
 
 /**
  * One admission against the exact per-IP counter generation it incremented.
@@ -120,8 +128,13 @@ internal class ProxyHttpServer(
     /** Runs after bounded parsing but before a request can occupy the response-serving pool. */
     private val isRequestAuthorized: (ParsedRequest) -> Boolean = { true },
     private val admissionTimeoutMillis: Int = SOCKET_READ_TIMEOUT_MILLIS,
+    private val writeTimeoutMillis: Int = SOCKET_WRITE_TIMEOUT_MILLIS,
     private val onRequest: (ParsedRequest, OutputStream) -> Unit,
 ) {
+
+    init {
+        require(writeTimeoutMillis > 0) { "Socket write timeout must be positive" }
+    }
 
     private var serverSocket: ServerSocket? = null
     private var admissionExecutor: ExecutorService? = null
@@ -264,7 +277,7 @@ internal class ProxyHttpServer(
         var request: ParsedRequest? = null
         try {
             val input = BufferedInputStream(AdmissionDeadlineInput(socket, deadlineNanos))
-            val output = BufferedOutputStream(socket.getOutputStream())
+            val output = clientOutput(socket)
             request = readRequest(input)
             if (System.nanoTime() - deadlineNanos >= 0) throw SocketTimeoutException("HTTP admission deadline exceeded")
             socket.soTimeout = SOCKET_READ_TIMEOUT_MILLIS
@@ -330,8 +343,8 @@ internal class ProxyHttpServer(
     @Suppress("TooGenericExceptionCaught")
     private fun serveAuthorizedRequest(socket: Socket, ipLease: IpConnectionLease, request: ParsedRequest) {
         try {
-            val output = BufferedOutputStream(socket.getOutputStream())
-            onRequest(request, output)
+            val output = clientOutput(socket)
+            onRequest(request.copy(isConnectionOpen = { !socket.isClosed }), output)
         } catch (e: SocketTimeoutException) {
             logConnectionFailure(e, request, routineDisconnect = true)
         } catch (e: SocketException) {
@@ -366,12 +379,18 @@ internal class ProxyHttpServer(
     internal fun metricsSnapshot(): ProxyHttpMetricsSnapshot = activeMetrics.snapshot()
 
     private fun acquireIpSlot(clientIp: String): IpConnectionLease? {
-        val count = connectionsPerIp.computeIfAbsent(clientIp) { AtomicInteger() }
-        while (true) {
-            val current = count.get()
-            if (current >= MAX_CONNECTIONS_PER_IP) return null
-            if (count.compareAndSet(current, current + 1)) return IpConnectionLease(clientIp, count)
+        var lease: IpConnectionLease? = null
+        // Lookup and increment must be atomic with release/remove for this key. A CAS on a
+        // counter obtained separately could succeed after the last release detached it from the map.
+        connectionsPerIp.compute(clientIp) { _, existing ->
+            val count = existing ?: AtomicInteger()
+            if (count.get() < MAX_CONNECTIONS_PER_IP) {
+                count.incrementAndGet()
+                lease = IpConnectionLease(clientIp, count)
+            }
+            count
         }
+        return lease
     }
 
     private fun releaseIpSlot(lease: IpConnectionLease) {
@@ -388,6 +407,14 @@ internal class ProxyHttpServer(
         clientSockets -= socket
         runCatchingNonFatal { socket.close() }
     }
+
+    /** SO_TIMEOUT only bounds reads. A receiver can keep its connection open without consuming
+     * video and pin a writer/IP slot indefinitely. Okio's socket sink closes that exact socket
+     * from its shared watchdog when a write stalls; each bounded chunk gets its own budget, not
+     * the whole live response. Use Socket.sink(), not OutputStream.sink(), for async cancellation. */
+    private fun clientOutput(socket: Socket): OutputStream = socket.sink().apply {
+        timeout().timeout(writeTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
+    }.buffer().outputStream()
 
     private fun boundedExecutor(threads: Int, queueCapacity: Int): ExecutorService =
         ThreadPoolExecutor(

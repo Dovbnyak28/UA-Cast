@@ -51,8 +51,8 @@ import com.uacastplayer.home.HomeContent
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
-import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.playlist.asUserMessage
 import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.IconHeader
@@ -121,8 +121,8 @@ fun HomeScreen(
     val onOpenAddPlaylist = source.onOpenAddPlaylist
     val onRefreshPlaylist = source.onRefreshPlaylist
     // Same idea as ChannelsScreen's iconRefreshKey - forces the icons below to re-resolve once EPG
-    // data arrives or a prefetch run finishes writing new files.
-    val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
+    // data arrives, is replaced, or a prefetch run finishes writing new files.
+    val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
     var showSourceSheet by remember { mutableStateOf(false) }
     val flatChannels = playlistState.channels
     val totalChannels = flatChannels.size
@@ -299,14 +299,7 @@ private fun HomeNoChannelsState(
     onOpenAddPlaylist: () -> Unit,
 ) {
     val error = playlistState.error
-    val errorMessage = when (error) {
-        PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
-        is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
-        PlaylistError.Network -> stringResource(R.string.playlist_error_network)
-        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
-        PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
-        null -> null
-    }
+    val errorMessage = error?.asUserMessage()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().padding(vertical = GapL),

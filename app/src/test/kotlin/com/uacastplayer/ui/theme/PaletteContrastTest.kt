@@ -49,6 +49,16 @@ class PaletteContrastTest {
     }
 
     @Test
+    fun `tertiary supporting text remains readable on raised surfaces`() {
+        palettes().forEach { (name, palette) ->
+            assertTrue(
+                "$name tertiary text",
+                contrastRatio(palette.labelTertiary, palette.surface2) >= MIN_TEXT_CONTRAST,
+            )
+        }
+    }
+
+    @Test
     fun `accent icon color contrasts with every gradient endpoint`() {
         palettes().forEach { (name, palette) ->
             assertTrue(

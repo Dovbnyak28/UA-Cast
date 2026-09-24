@@ -93,7 +93,22 @@ internal class HlsFlattenedStream(
      * What it rules out is the deterministic half: encrypted or byte-range segments, an fMP4 init,
      * an empty/unreadable playlist, or a master with no supported variant inside the probe budget.
      */
-    fun canFlatten(): Boolean = resolveMediaPlaylist() != null
+    fun canFlatten(): Boolean {
+        val media = resolveMediaPlaylist() ?: return false
+        // A structurally valid playlist can still point at expired segments, an error page served
+        // as HTTP 200, or a non-TS payload. GET does not commit the DLNA response until it has
+        // sniffed real segment bytes; HEAD must make the same decision or VIDAA can accept the
+        // MPEG-TS profile from HEAD and then receive an HLS manifest from the subsequent GET.
+        // Probe only a small prefix of the earliest segments, in playback order: live playlists
+        // can contain a large window, and HEAD must not turn into an unbounded media download.
+        return media.playlist.segmentUris.asSequence()
+            .mapNotNull { M3u8Rewriter.resolveUrl(media.base, it) }
+            // Match GET: discard malformed and non-HTTP references before applying the shared
+            // request-attempt budget. Otherwise HEAD can miss a playable TS that GET reaches and
+            // advertise the manifest MIME for a TS response.
+            .take(MAX_HEAD_SEGMENTS_TO_PROBE)
+            .any(::isMpegTsSegment)
+    }
 
     /**
      * Runs until the client disconnects, the origin stops publishing, or the playlist turns out to
@@ -125,19 +140,14 @@ internal class HlsFlattenedStream(
                     "HLS media sequence stayed behind the replay cursor; resuming from the restarted live window"
                 }
             }
-            val absolute = selection.segmentUris
-                .asSequence()
-                .mapNotNull { M3u8Rewriter.resolveUrl(base, it) }
-            // all(), not a loop with a break: it stops on the first false, which is exactly the
-            // "client hung up, stop fetching" behaviour wanted, and says so in one line.
-            val clientGone = !absolute.all { segmentUrl ->
-                streamSegment(segmentUrl, output) {
-                    if (!headersSent) {
-                        onHeadersNeeded()
-                        headersSent = true
-                    }
-                }
-            }
+            val segmentPass = streamPlaylistSegments(
+                segmentUris = selection.segmentUris,
+                base = base,
+                output = output,
+                headersSent = headersSent,
+                onHeadersNeeded = onHeadersNeeded,
+            )
+            headersSent = segmentPass.headersSent
             cursor = cursor.afterServing(current)
             // Nothing written on a whole pass over the playlist means this route cannot serve this
             // channel, and the caller is still free to fall back to the manifest - but only for as
@@ -149,7 +159,7 @@ internal class HlsFlattenedStream(
             // this function returns, and it is false.
             if (!hasViableResponse(headersSent)) break
             playlist = when {
-                clientGone -> null
+                segmentPass.clientGone -> null
                 // A finished playlist will never grow, so there is nothing left to wait for. Rare
                 // for a live channel and ordinary for a catch-up one.
                 current.hasEndList -> {
@@ -170,6 +180,41 @@ internal class HlsFlattenedStream(
         }
         return headersSent
     }
+
+    /** Serves one selected playlist window, keeping HEAD and GET format decisions aligned. */
+    private fun streamPlaylistSegments(
+        segmentUris: List<String>,
+        base: String,
+        output: OutputStream,
+        headersSent: Boolean,
+        onHeadersNeeded: () -> Unit,
+    ): SegmentPassResult {
+        val iterator = segmentUris.asSequence()
+            .mapNotNull { M3u8Rewriter.resolveUrl(base, it) }
+            .iterator()
+        var responseStarted = headersSent
+        var segmentsBeforeCommit = 0
+        var clientGone = false
+
+        // The same bounded prefix is probed by HEAD. Before the first valid TS bytes exist, that
+        // is the complete format decision; after commitment, the live playlist may be streamed
+        // without limiting its window.
+        while (iterator.hasNext() && !clientGone && isWithinProbeWindow(responseStarted, segmentsBeforeCommit)) {
+            val segmentUrl = iterator.next()
+            if (!responseStarted) segmentsBeforeCommit++
+            val stillConnected = streamSegment(segmentUrl, output) {
+                if (!responseStarted) {
+                    onHeadersNeeded()
+                    responseStarted = true
+                }
+            }
+            clientGone = !stillConnected
+        }
+        return SegmentPassResult(clientGone, responseStarted)
+    }
+
+    private fun isWithinProbeWindow(responseStarted: Boolean, segmentsBeforeCommit: Int): Boolean =
+        responseStarted || segmentsBeforeCommit < MAX_HEAD_SEGMENTS_TO_PROBE
 
     private fun hasViableResponse(headersSent: Boolean): Boolean = when {
         !headersSent -> {
@@ -195,6 +240,8 @@ internal class HlsFlattenedStream(
      * not an error at all - it is a stream that connects, stays connected, and plays nothing.
      */
     private data class Fetched(val requestUrl: String, val base: String, val playlist: HlsMediaPlaylist)
+
+    private data class SegmentPassResult(val clientGone: Boolean, val headersSent: Boolean)
 
     /**
      * The media playlist to replay, following at most one level of master playlist.
@@ -257,6 +304,25 @@ internal class HlsFlattenedStream(
     } catch (e: IOException) {
         AppLog.w(TAG) { "Flattened stream playlist refresh failed: ${e.javaClass.simpleName}" }
         null
+    }
+
+    /** HEAD eligibility follows GET's first-byte rule without downloading a whole live segment. */
+    private fun isMpegTsSegment(url: String): Boolean = try {
+        // Do not send an HTTP Range header: some origins reject range requests even though their
+        // ordinary HLS segment GET works. peekBody bounds what we read locally without changing
+        // the request semantics GET will use.
+        executeCall(url) { response ->
+            response.isSuccessful && MpegTsSniffer.looksLikeMpegTs(
+                response.peekBody(TS_PROBE_BYTES).bytes(),
+            )
+        }
+    } catch (_: IOException) {
+        // Probe failure is an expected reason to keep the safe manifest fallback available.
+        AppLog.d(TAG) { "Flattened stream HEAD segment probe failed; keeping the manifest fallback" }
+        false
+    } catch (_: IllegalArgumentException) {
+        AppLog.d(TAG) { "Flattened stream HEAD segment URL rejected" }
+        false
     }
 
     /**
@@ -417,7 +483,10 @@ internal class HlsFlattenedStream(
     /** Publishes the Call before checking ownership, closing the race where stop() landed after a
      * refresh was chosen but before the call existed. Only the replay worker writes [activeCall];
      * stop() may read and cancel it from the session thread. */
-    private fun <T> executeCall(url: String, readResponse: (okhttp3.Response) -> T): T {
+    private fun <T> executeCall(
+        url: String,
+        readResponse: (okhttp3.Response) -> T,
+    ): T {
         val call = newCall(url)
         activeCall = call
         return try {
@@ -441,6 +510,8 @@ internal class HlsFlattenedStream(
     private companion object {
         const val TS_PACKET_SIZE_BYTES = 188
         const val CHUNK_BYTES = 64 * 1024
+        const val TS_PROBE_BYTES = TS_PACKET_SIZE_BYTES * 2L
+        const val MAX_HEAD_SEGMENTS_TO_PROBE = 3
         const val MAX_MASTER_VARIANTS_TO_PROBE = 8
     }
 }

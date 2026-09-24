@@ -21,12 +21,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.job
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -172,6 +175,36 @@ class BackupControllerImportTest {
         }
 
         assertSame(expected, actual)
+    }
+
+    @Test
+    fun `cancelling a blocking provider pipe closes its stream`() = runTest {
+        val readStarted = CountDownLatch(1)
+        val closed = CountDownLatch(1)
+        answerWith {
+            object : InputStream() {
+                override fun read(): Int {
+                    readStarted.countDown()
+                    closed.await(5, TimeUnit.SECONDS)
+                    return -1
+                }
+
+                override fun close() {
+                    closed.countDown()
+                }
+            }
+        }
+        val loading = async(Dispatchers.IO) {
+            controller().readBoundedText(uri, currentCoroutineContext().job)
+        }
+
+        assertTrue("provider read never started", readStarted.await(1, TimeUnit.SECONDS))
+        loading.cancel()
+        assertTrue(
+            "cancelling backup import must close a blocking provider stream",
+            closed.await(1, TimeUnit.SECONDS),
+        )
+        loading.join()
     }
 
     @Test

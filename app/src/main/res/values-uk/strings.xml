@@ -17,6 +17,8 @@
     <!-- Bottom navigation -->
     <string name="nav_home">Головна</string>
     <string name="nav_channels">Канали</string>
+    <string name="nav_home_tab">Огляд</string>
+    <string name="nav_channels_tab">Дивитися</string>
     <string name="nav_favorites">Улюблені</string>
     <string name="nav_settings">Налаштування</string>
     <string name="nav_settings_compact">Налашт.</string>
@@ -24,7 +26,7 @@
     <!-- Home screen -->
     <string name="home_subtitle">Ваше телебачення</string>
     <string name="home_empty_message">Плейлист ще не додано</string>
-    <string name="home_empty_subtitle">Додайте посилання на M3U або M3U8 плейлист, щоб переглядати канали.</string>
+    <string name="home_empty_subtitle">Каналів у застосунку немає. Додайте посилання M3U/M3U8, файл плейлиста або дані Xtream від ТВ-провайдера.</string>
     <string name="home_active_playlist_label">Активний плейлист</string>
     <string name="playlist_unnamed">Плейліст із файлу</string>
     <string name="home_restored_from_cache">Відновлено з кешу</string>
@@ -68,10 +70,14 @@
     <string name="add_playlist_status_no_channels">Завантажено, але каналів не знайдено — перевірте посилання</string>
     <string name="add_playlist_save_button">Завантажити та зберегти</string>
     <string name="add_playlist_file_button">Завантажити з файлу</string>
-    <string name="add_playlist_tip">Використовуйте плейлист або обліковий запис від вашого ТВ-провайдера. Застосунок не надає власних каналів.</string>
+    <string name="add_playlist_source_title">Каналів у застосунку немає</string>
+    <string name="add_playlist_tip">Візьміть посилання M3U/M3U8, файл плейлиста або дані Xtream у свого ТВ-провайдера. UA Cast — плеєр, а не ТВ-сервіс.</string>
     <string name="add_playlist_type_url">URL M3U</string>
     <string name="add_playlist_type_file">Файл</string>
     <string name="add_playlist_type_xtream">Xtream</string>
+    <string name="add_playlist_method_url_help">Вставте посилання на плейлист, яке надав ТВ-провайдер.</string>
+    <string name="add_playlist_method_file_help">Оберіть файл плейлиста, збережений на цьому пристрої.</string>
+    <string name="add_playlist_method_xtream_help">Введіть адресу сервера та дані входу від ТВ-провайдера.</string>
     <string name="add_playlist_xtream_server_hint">Адреса сервера (з портом)</string>
     <string name="add_playlist_server_error">Введіть URL сервера або host:port</string>
     <string name="add_playlist_xtream_username_hint">Логін</string>
@@ -83,7 +89,7 @@
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Поки що немає каналів</string>
-    <string name="channels_empty_subtitle">Додайте плейлист, щоб побачити тут канали</string>
+    <string name="channels_empty_subtitle">Додайте плейлист від свого ТВ-провайдера. UA Cast не містить каналів.</string>
     <string name="channels_error_subtitle">Перевірте джерело та з’єднання, а потім повторіть</string>
     <string name="common_retry">Спробувати ще раз</string>
     <string name="channels_search_hint">Пошук каналів</string>
@@ -118,6 +124,7 @@
     </plurals>
     <string name="playlist_loading">Завантаження плейлиста…</string>
     <string name="playlist_error_size_limit">Плейлист перевищує ліміт 8 МБ — це приблизно 45 000 каналів. Попросіть у провайдера менший список або розділений за категоріями.</string>
+    <string name="playlist_error_channel_limit">У плейлисті понад 50 000 каналів. Попросіть провайдера надати менший список або розділити його за категоріями.</string>
     <string name="playlist_error_http">Помилка сервера (код %1$d)</string>
     <string name="playlist_error_network">Помилка мережі, спробуйте ще раз</string>
     <string name="playlist_error_empty">У цьому файлі немає каналів. Перевірте, чи це справді плейліст M3U, а не інший файл.</string>
@@ -410,8 +417,10 @@
     <string name="dlna_stop_casting">Зупинити</string>
     <!-- Guided tour -->
     <string name="guided_tour_welcome_title">Ласкаво просимо до UA Cast IPTV</string>
-    <string name="guided_tour_welcome_body">Швидко покажемо основні можливості додатка.</string>
-    <string name="guided_tour_start">Почати</string>
+    <string name="guided_tour_welcome_body">Каналів у застосунку немає. Додайте плейлист або обліковий запис ТВ-провайдера.</string>
+    <string name="guided_tour_add_playlist">Додати плейлист</string>
+    <string name="guided_tour_start">Показати огляд</string>
+    <string name="guided_tour_not_now">Не зараз</string>
     <string name="guided_tour_skip">Пропустити</string>
     <string name="guided_tour_back">Назад</string>
     <string name="guided_tour_next">Далі</string>
@@ -457,8 +466,15 @@
     <string name="update_banner_message">Версію %1$s можна завантажити.</string>
     <string name="update_banner_message_page_only">Версію %1$s опубліковано без APK — відкриється сторінка релізу.</string>
     <string name="update_banner_action">Відкрити реліз</string>
+    <string name="update_offer_title">Доступна нова версія</string>
+    <string name="update_offer_message">Версія %1$s готова до оновлення. Ваші плейлисти та налаштування залишаться на пристрої.</string>
+    <string name="update_offer_whats_new">Що нового</string>
+    <string name="update_offer_no_notes">Опис змін до цього релізу не додано.</string>
+    <string name="update_offer_full_notes">Переглянути реліз на GitHub</string>
+    <string name="update_offer_install">Оновити</string>
+    <string name="update_offer_later">Нагадати пізніше</string>
     <string name="settings_section_updates">Оновлення</string>
-    <string name="settings_update_hint">Застосунок перевіряє нову версію раз на тиждень, коли ви його відкриваєте. Якщо до релізу прикріплено APK, він може завантажити й встановити його — файл звіряється з релізом і має бути підписаний тим самим розробником, що й ваша копія, інакше буде відхилений. Ви завжди можете натомість відкрити сторінку релізу у браузері.</string>
+    <string name="settings_update_hint">Застосунок перевіряє нову версію раз на добу, коли ви його відкриваєте. Якщо до релізу прикріплено APK, він може завантажити й встановити його — файл звіряється з релізом і має бути підписаний тим самим розробником, що й ваша копія, інакше буде відхилений. Ви завжди можете натомість відкрити сторінку релізу у браузері.</string>
     <string name="settings_update_check_button">Перевірити оновлення</string>
     <string name="settings_update_checking">Перевіряємо…</string>
     <string name="settings_update_up_to_date">У вас найновіша версія.</string>

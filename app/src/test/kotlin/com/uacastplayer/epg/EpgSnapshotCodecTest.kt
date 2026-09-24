@@ -88,6 +88,91 @@ class EpgSnapshotCodecTest {
     }
 
     @Test
+    fun `restoring a guide retains only the requested programme budget and flags truncation`() {
+        val source = dataOf(
+            channels = listOf(EpgChannel("one", listOf("One"), null), EpgChannel("two", listOf("Two"), null)),
+            programmes = mapOf(
+                "one" to listOf(
+                    EpgProgramme("one", 1L, 2L, "A"),
+                    EpgProgramme("one", 3L, 4L, "B"),
+                ),
+                "two" to listOf(
+                    EpgProgramme("two", 5L, 6L, "C"),
+                    EpgProgramme("two", 7L, 8L, "D"),
+                ),
+            ),
+        )
+        val bytes = ByteArrayOutputStream().also { EpgSnapshotCodec.encode(header, source, it) }.toByteArray()
+
+        val decoded = EpgSnapshotCodec.decode(ByteArrayInputStream(bytes), maxProgrammes = 3)
+            as DecodedEpgSnapshot.Parsed
+
+        assertEquals(3, decoded.data.programmesByChannelId.values.sumOf(List<EpgProgramme>::size))
+        assertEquals(listOf("A", "B"), decoded.data.programmesByChannelId.getValue("one").map(EpgProgramme::title))
+        assertEquals(listOf("C"), decoded.data.programmesByChannelId.getValue("two").map(EpgProgramme::title))
+        assertTrue(decoded.data.truncation.programmesDropped)
+    }
+
+    @Test
+    fun `restoring an old oversized title retains only parser-sized text`() {
+        val longTitle = "x".repeat(XmlTvParser.MAX_TEXT_LENGTH + 200)
+        val decoded = roundTrip(
+            dataOf(
+                channels = listOf(EpgChannel("one", listOf("One"), null)),
+                programmes = mapOf("one" to listOf(EpgProgramme("one", 1L, 2L, longTitle))),
+            ),
+        )
+
+        val restoredTitle = decoded.data.programmesByChannelId.getValue("one").single().title
+        assertEquals(XmlTvParser.MAX_TEXT_LENGTH, restoredTitle.length)
+    }
+
+    @Test
+    fun `restoring an icon beyond parser attribute budget drops only the icon and reports truncation`() {
+        val decoded = roundTrip(
+            dataOf(
+                channels = listOf(
+                    EpgChannel(
+                        "one",
+                        listOf("One"),
+                        "https://example.test/${"x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH)}",
+                    ),
+                ),
+                programmes = emptyMap(),
+            ),
+        )
+
+        assertEquals(null, decoded.data.index.channels.single().iconUrl)
+        assertTrue(decoded.data.truncation.channelsDropped)
+    }
+
+    @Test
+    fun `programme-only groups use the parser channel-id pool ceiling`() {
+        val groups = (0..XmlTvParser.MAX_CHANNELS).associate { index ->
+            "orphan-$index" to emptyList<EpgProgramme>()
+        }
+
+        val decoded = roundTrip(dataOf(emptyList(), groups))
+
+        assertEquals(groups.size, decoded.data.programmesByChannelId.size)
+    }
+
+    @Test
+    fun `snapshot encoding rejects programme groups beyond parser id pool`() {
+        val groups = (0..XmlTvParser.MAX_CHANNEL_ID_POOL).associate { index ->
+            "orphan-$index" to emptyList<EpgProgramme>()
+        }
+        val snapshot = dataOf(emptyList(), groups)
+
+        try {
+            EpgSnapshotCodec.encode(header, snapshot, ByteArrayOutputStream())
+            throw AssertionError("encoder must reject a group count it cannot restore")
+        } catch (_: java.io.IOException) {
+            // Reject before persisting a snapshot that this build cannot read back.
+        }
+    }
+
+    @Test
     fun `an empty guide round trips without special-casing`() {
         val decoded = roundTrip(dataOf(emptyList(), emptyMap()))
 

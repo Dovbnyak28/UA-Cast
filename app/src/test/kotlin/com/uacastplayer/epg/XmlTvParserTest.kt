@@ -59,6 +59,35 @@ class XmlTvParserTest {
     }
 
     @Test
+    fun `an oversized later icon does not erase a valid earlier one`() {
+        val oversized = "x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH + 1)
+        val result = parse(
+            "<tv><channel id=\"one\"><icon src=\"https://example.test/valid.png\"/>" +
+                "<icon src=\"$oversized\"/></channel></tv>",
+        )
+
+        assertEquals("https://example.test/valid.png", result.channels.single().iconUrl)
+    }
+
+    @Test
+    fun `repeated icons count only the retained URL against the metadata budget`() {
+        val prefix = "https://example.test/"
+        val repeatedIcon = prefix + "x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH - prefix.length)
+        val xml = buildString {
+            append("<tv><channel id=\"one\">")
+            repeat(XmlTvParser.MAX_CHANNEL_METADATA_CHARS / XmlTvParser.MAX_ATTRIBUTE_LENGTH + 2) {
+                append("<icon src=\"$repeatedIcon\"/>")
+            }
+            append("</channel><channel id=\"two\"><icon src=\"https://example.test/two.png\"/>")
+            append("</channel></tv>")
+        }
+
+        val channels = parse(xml).channels
+        assertEquals(repeatedIcon, channels[0].iconUrl)
+        assertEquals("https://example.test/two.png", channels[1].iconUrl)
+    }
+
+    @Test
     fun `parses a programme with a title, discarding the description alongside it`() {
         val result = parse(
             """
@@ -172,6 +201,26 @@ class XmlTvParserTest {
         """.trimIndent()
         val result = parse(xml)
         assertTrue(result.programmes[0].title.length <= XmlTvParser.MAX_TEXT_LENGTH)
+    }
+
+    @Test
+    fun `oversized channel metadata is ignored instead of retained`() {
+        val oversizedId = "x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH + 1)
+        val oversizedIcon = "https://example.test/" + "i".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH + 1)
+        val result = parse(
+            """
+            <tv>
+              <channel id="$oversizedId">
+                <display-name>Too large</display-name>
+                <icon src="$oversizedIcon"/>
+              </channel>
+              <programme channel="$oversizedId" start="20240115120000 +0000"><title>Ignored</title></programme>
+            </tv>
+            """.trimIndent(),
+        )
+
+        assertTrue(result.channels.isEmpty())
+        assertTrue(result.programmes.isEmpty())
     }
 
     @Test

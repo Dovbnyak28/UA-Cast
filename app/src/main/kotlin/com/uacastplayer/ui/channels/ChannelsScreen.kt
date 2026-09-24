@@ -36,6 +36,7 @@ import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.playlist.asUserMessage
 import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.components.IconTierBanner
 import com.uacastplayer.ui.theme.AppIcons
@@ -79,11 +80,12 @@ fun ChannelsScreen(
     var channelActionsFor by remember { mutableStateOf<M3uChannel?>(null) }
 
     // Forces every ChannelIcon in this screen to re-resolve when either signal
-    // fires: EPG data arriving unlocks its icon-URL source (see AppViewModel.resolveChannelIcon),
+    // fires: EPG data arriving or being replaced changes its icon-URL source (see
+    // AppViewModel.resolveChannelIcon),
     // and a completed prefetch run may have just written new files for channels that previously
     // resolved to nothing. Deliberately NOT nowMillis or anything else that changes often - a
     // re-resolve on every recomposition would defeat the point of ChannelIcon's own caching.
-    val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
+    val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
 
     // Landing on a groups overview (like the rest of the bottom-nav tabs, this is per-tab UI state,
     // not app state - it deliberately resets to the overview on process death, unlike the playlist
@@ -333,13 +335,7 @@ private fun ChannelsContent(
 
 @Composable
 private fun ErrorState(error: PlaylistError, retryExistingSource: Boolean, onRetry: () -> Unit) {
-    val message = when (error) {
-        PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
-        is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
-        PlaylistError.Network -> stringResource(R.string.playlist_error_network)
-        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
-        PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
-    }
+    val message = error.asUserMessage()
     EmptyState(
         icon = AppIcons.HelpCircle,
         title = message,

@@ -18,3 +18,13 @@ internal object CastProxyOwnershipPolicy {
     fun stopped(state: CastProxyOwnership, target: CastProxyTarget): CastProxyOwnership =
         state.copy(activeTargets = state.activeTargets.filterNot { it == target })
 }
+
+/**
+ * Orders commands sent to [CastProxyService]. Android delivers service intents and main-handler
+ * callbacks asynchronously, so a stop requested for generation N must not be allowed to retire a
+ * start requested later at generation N+1.
+ */
+internal object CastProxyCommandPolicy {
+    fun accepts(latestGeneration: Long, commandGeneration: Long): Boolean =
+        commandGeneration == 0L || commandGeneration >= latestGeneration
+}

@@ -218,8 +218,9 @@ class TsSegmenter(
      * `RawTsRemuxSession`'s reconnect logic). Flushes whatever was buffered before the gap as its
      * own final (non-discontinuous) segment, then resets the PCR clock - the reconnected stream's
      * PCR values are on a different clock than before the gap, so diffing against pre-gap ticks
-     * would produce a garbage (or negative) duration. PAT/PMT/videoPid/pcrPid are deliberately left
-     * alone: it's the same channel/program, just a new TCP connection to it. The *next* segment
+     * would produce a garbage (or negative) duration. The last PAT/PMT/PIDs remain usable until
+     * fresh tables arrive, but [discoverProgramInfo] follows any changed PIDs after reconnect.
+     * The *next* segment
      * produced by [feed] is marked [TsSegment.discontinuity] so [LiveHlsPlaylistBuilder] can signal
      * the gap to the receiver.
      */
@@ -274,20 +275,22 @@ class TsSegmenter(
     }
 
     private fun discoverProgramInfo(pid: Int, data: ByteArray, offset: Int) {
-        if (pmtPid == null && pid == PAT_PID) {
-            pmtPid = parsePatFirstProgramPid(data, offset)
+        if (pid == PAT_PID) {
+            val discovered = parsePatFirstProgramPid(data, offset)
+            if (discovered != null && discovered != pmtPid) {
+                pmtPid = discovered
+                videoPid = null
+                pcrPid = null
+                pcrPidResolved = false
+            }
             return
         }
         if (pmtPid == null || pid != pmtPid) return
-        if (videoPid == null) {
-            videoPid = parsePmtFirstVideoPid(data, offset)
-        }
-        if (!pcrPidResolved) {
-            val parsedPcrPid = parsePmtPcrPid(data, offset)
-            if (parsedPcrPid != null) {
-                pcrPidResolved = true
-                pcrPid = if (parsedPcrPid == PCR_PID_NONE) null else parsedPcrPid
-            }
+        parsePmtFirstVideoPid(data, offset)?.let { videoPid = it }
+        val parsedPcrPid = parsePmtPcrPid(data, offset)
+        if (parsedPcrPid != null) {
+            pcrPidResolved = true
+            pcrPid = if (parsedPcrPid == PCR_PID_NONE) null else parsedPcrPid
         }
     }
 

@@ -86,11 +86,11 @@ private fun pcrOnlyPacket(pid: Int, pcrBase: Long): ByteArray {
     return packet
 }
 
-private fun videoPacket(pusi: Boolean, keyframe: Boolean, pcrBase: Long? = null): ByteArray {
+private fun videoPacket(pusi: Boolean, keyframe: Boolean, pcrBase: Long? = null, pid: Int = VIDEO_PID): ByteArray {
     val packet = ByteArray(188) { 0xFF.toByte() }
     packet[0] = 0x47.toByte()
-    packet[1] = ((if (pusi) 0x40 else 0x00) or ((VIDEO_PID shr 8) and 0x1F)).toByte()
-    packet[2] = (VIDEO_PID and 0xFF).toByte()
+    packet[1] = ((if (pusi) 0x40 else 0x00) or ((pid shr 8) and 0x1F)).toByte()
+    packet[2] = (pid and 0xFF).toByte()
     val hasAdaptation = keyframe || pcrBase != null
     packet[3] = (if (hasAdaptation) 0x30 else 0x10).toByte()
     if (hasAdaptation) {
@@ -389,6 +389,46 @@ class TsSegmenterTest {
         segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(1.5)))
         val next = segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(3.0)))
         assertEquals(false, next?.discontinuity)
+    }
+
+    @Test
+    fun `reconnect follows new PAT and PMT PIDs before cutting on the new video keyframe`() {
+        val newPmtPid = 0x120
+        val newVideoPid = 0x121
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, startupSegments = 0)
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0)))
+        segmenter.onReconnect()
+
+        segmenter.feed(tsPacket(0, buildPatSection(PROGRAM_NUMBER, newPmtPid)))
+        segmenter.feed(tsPacket(newPmtPid, buildPmtSection(PROGRAM_NUMBER, newVideoPid, listOf(0x1B to newVideoPid))))
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0), pid = newVideoPid))
+        segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(3.0), pid = newVideoPid))
+        val completed = segmenter.feed(
+            videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(5.2), pid = newVideoPid),
+        )
+
+        assertTrue("new program's keyframe must cut a decodable segment", completed != null)
+        assertEquals(true, completed?.discontinuity)
+    }
+
+    @Test
+    fun `updated PMT changes the video PID without changing the PMT PID`() {
+        val newVideoPid = 0x121
+        val segmenter = TsSegmenter(targetDurationMillis = 5_000, startupSegments = 0)
+        segmenter.feed(patPacket())
+        segmenter.feed(pmtPacket())
+        segmenter.onReconnect()
+
+        segmenter.feed(tsPacket(PMT_PID, buildPmtSection(PROGRAM_NUMBER, newVideoPid, listOf(0x1B to newVideoPid))))
+        segmenter.feed(videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(0.0), pid = newVideoPid))
+        segmenter.feed(videoPacket(pusi = true, keyframe = false, pcrBase = secondsToTicks(3.0), pid = newVideoPid))
+        val completed = segmenter.feed(
+            videoPacket(pusi = true, keyframe = true, pcrBase = secondsToTicks(5.2), pid = newVideoPid),
+        )
+
+        assertTrue("a changed elementary PID must still align segments to keyframes", completed != null)
     }
 
     @Test

@@ -109,7 +109,7 @@ fun PlayerScreen(
     val content = PlayerScreenContent(
         uiState = uiState,
         dlnaState = dlnaState,
-        iconRefreshKey = (epgState.data != null) to iconPrefetchState.completedRuns,
+        iconRefreshKey = epgState.data?.index to iconPrefetchState.completedRuns,
         videoResizeMode = ResizeModeCycle.toMedia3ResizeMode(uiState.resizeMode),
     )
     val actions = PlayerScreenActions(

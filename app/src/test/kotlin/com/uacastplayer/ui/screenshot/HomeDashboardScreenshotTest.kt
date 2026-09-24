@@ -1,6 +1,5 @@
 package com.uacastplayer.ui.screenshot
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
@@ -21,7 +20,7 @@ import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
-import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.appBackground
 import org.junit.Rule
 import org.junit.Test
 import org.junit.experimental.categories.Category
@@ -100,7 +99,7 @@ class HomeDashboardScreenshotTest {
                 Box(
                     Modifier
                         .size(width = 411.dp, height = 891.dp)
-                        .background(UaTheme.palette.void),
+                        .appBackground(),
                 ) {
                     HomeScreen(
                         content = content,
@@ -139,7 +138,7 @@ class HomeDashboardScreenshotTest {
                 Box(
                     Modifier
                         .size(width = 411.dp, height = 891.dp)
-                        .background(UaTheme.palette.void),
+                        .appBackground(),
                 ) {
                     HomeScreen(
                         content = newUserContent,
@@ -152,5 +151,33 @@ class HomeDashboardScreenshotTest {
             }
         }
         composeRule.onRoot().captureRoboImage("src/test/screenshots/home_dashboard_personalization_uk.png")
+    }
+
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun homeFirstRun_explainsPlaylistRequirementAndNextStep() {
+        val emptyContent = content.copy(
+            playlistState = PlaylistUiState(),
+            favorites = emptyList(),
+            lastWatchedChannelKey = null,
+        )
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Box(
+                    Modifier
+                        .size(width = 411.dp, height = 891.dp)
+                        .appBackground(),
+                ) {
+                    HomeScreen(
+                        content = emptyContent,
+                        source = source,
+                        resolveIcon = { null },
+                        onChannelSelected = { _, _ -> },
+                        onOpenChannels = {},
+                    )
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/home_first_run_uk.png")
     }
 }

@@ -117,13 +117,17 @@ jobs:
         run: ./gradlew :core:detekt :app:detekt --stacktrace
 
       - name: Detekt baseline stays empty
-        run: bash scripts/check-detekt-baseline.sh
+        run: |
+          bash scripts/tests/check-detekt-baseline-test.sh
+          bash scripts/check-detekt-baseline.sh
 
       - name: Architecture dependency boundaries
         run: bash scripts/check-architecture-boundaries.sh
 
       - name: Documentation package references
-        run: bash scripts/check-doc-references.sh
+        run: |
+          bash scripts/tests/check-doc-references-test.sh
+          bash scripts/check-doc-references.sh
 
       - name: Locale-independent formatting
         run: bash scripts/check-locale-format.sh

@@ -48,12 +48,17 @@ class ParentalControlStore(
         }
     }
 
-    /** A lost write here fails safe in the direction that matters: a lock that did not persist is
-     * re-applied by the user, while an unlock that did not persist leaves the channel locked. */
+    /** A lost write is kept visible to the persistence actor instead of being reported as durable.
+     * The in-memory lock remains active for this process; an unlock that fails to persist will be
+     * restored as locked on the next launch. */
     override suspend fun save(keys: Set<String>) = withContext(ioDispatcher) {
-        atomicFile.writeSafely(TAG, "Locked channels") { stream ->
+        val saved = atomicFile.writeSafely(TAG, "Locked channels") { stream ->
             stream.write(LockedChannelsCodec.encode(keys).toByteArray(Charsets.UTF_8))
         }
+        // LatestValueWriter treats a completed suspend function as a successful commit. Surface a
+        // false AtomicFile result so it can retain the failed state and report it instead of
+        // claiming the lock is durable when the disk is full or the rename was rejected.
+        if (!saved) throw IOException("Locked channels persistence failed")
         Unit
     }
 }

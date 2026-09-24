@@ -4,6 +4,7 @@ import com.uacastplayer.data.update.InstallLaunch
 import com.uacastplayer.data.update.InstallOutcomeBus
 import com.uacastplayer.data.update.UpdateDownload
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.update.InstallSessionOutcome
 import com.uacastplayer.update.InstallSessionResult
@@ -11,20 +12,23 @@ import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateInstallState
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "UpdateInstallController"
+private const val MAX_EARLY_INSTALL_FAILURES = 16
 
 /**
  * Downloads a release's APK and hands it to the installer, as one action with one state.
  *
  * Separate from [UpdateController] rather than bolted onto it, because the two have different
- * lifetimes and different failure vocabularies: a check is silent, weekly and disposable, while
+ * lifetimes and different failure vocabularies: a check is silent and disposable, while
  * this is something the user pressed a button for and waits on for minutes. Keeping them apart also
  * keeps [UpdateController] free of a downloader and an installer it would never use.
  *
@@ -37,16 +41,20 @@ private const val TAG = "UpdateInstallController"
 class UpdateInstallController(
     private val scope: CoroutineScope,
     private val download: suspend (ReleaseApk, (Long, Long) -> Unit) -> UpdateDownload,
-    private val install: (File) -> InstallLaunch,
+    private val install: suspend (File) -> InstallLaunch,
     /** How the system's verdict on a committed session gets back here - see [InstallOutcomeBus].
      * Injected so this can be driven without a `BroadcastReceiver` or a device. */
     outcomes: Flow<InstallSessionResult> = InstallOutcomeBus.outcomes,
+    private val installDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
     private val _state = MutableStateFlow<UpdateInstallState>(UpdateInstallState.Idle)
     val state: StateFlow<UpdateInstallState> = _state.asStateFlow()
 
     private var job: Job? = null
     private var activeSessionId: Int? = null
+    private var staging = false
+    // Main-confined: commit can deliver a broadcast before the IO result resumes on Main.
+    private val earlyFailures = linkedSetOf<Int>()
 
     init {
         scope.launch { outcomes.collect(::onSessionOutcome) }
@@ -55,17 +63,21 @@ class UpdateInstallController(
     /**
      * A committed session finally answered, so stop telling the user to confirm something.
      *
-     * Only while [UpdateInstallState.Launching], and that guard is the whole of the correctness
-     * here: a stale verdict from a previous session must not overwrite a download the user has
-     * since started, and a success needs nothing done because this process is about to be replaced
-     * by the version it just installed.
+     * Once the install result supplies its session ID, only that session can change Launching.
+     * While staging on IO, retain bounded early failures and match the returned ID before applying
+     * one. Verdicts arriving during download, or belonging to another session, cannot change it.
+     * A success needs nothing done because this process is about to be replaced by the new app.
      *
      * [InstallSessionOutcome.AwaitingUser] deliberately changes nothing. The session is alive and
      * the system is showing its dialog, which is exactly what `Launching` already says.
      */
     private fun onSessionOutcome(result: InstallSessionResult) {
-        if (_state.value != UpdateInstallState.Launching) return
-        if (result.sessionId != activeSessionId) return
+        if (staging && result.outcome == InstallSessionOutcome.Failed) {
+            earlyFailures += result.sessionId
+            if (earlyFailures.size > MAX_EARLY_INSTALL_FAILURES) earlyFailures.remove(earlyFailures.first())
+            return
+        }
+        if (_state.value != UpdateInstallState.Launching || result.sessionId != activeSessionId) return
         when (result.outcome) {
             InstallSessionOutcome.Failed -> {
                 activeSessionId = null
@@ -88,6 +100,7 @@ class UpdateInstallController(
         // first is waiting for its broadcast outcome.
         if (job?.isActive == true || _state.value == UpdateInstallState.Launching) return
         activeSessionId = null
+        earlyFailures.clear()
         _state.value = UpdateInstallState.Downloading(bytesSoFar = 0, totalBytes = apk.sizeBytes)
         job = scope.launch {
             val downloaded = runCatchingNonFatal {
@@ -115,21 +128,35 @@ class UpdateInstallController(
         }
     }
 
-    private fun launchInstall(file: File): UpdateInstallState {
-        val launched = runCatchingNonFatal { install(file) }.getOrElse { error ->
-            AppLog.w(TAG) { "Update installer boundary failed: ${error.javaClass.simpleName}" }
-            InstallLaunch.Failed
+    private suspend fun launchInstall(file: File): UpdateInstallState {
+        staging = true
+        return try {
+            val launched = runCatchingNonFatal {
+                withContext(installDispatcher) { install(file) }
+            }.getOrElse { error ->
+                AppLog.w(TAG) { "Update installer boundary failed: ${error.javaClass.simpleName}" }
+                InstallLaunch.Failed
+            }
+            AppLog.d(TAG) { "Update install launch: $launched" }
+            installState(launched)
+        } finally {
+            staging = false
+            earlyFailures.clear()
         }
-        AppLog.d(TAG) { "Update install launch: $launched" }
-        return when (launched) {
-            is InstallLaunch.Started -> {
+    }
+
+    private fun installState(launched: InstallLaunch): UpdateInstallState = when (launched) {
+        is InstallLaunch.Started -> {
+            if (launched.sessionId in earlyFailures) {
+                UpdateInstallState.Failed
+            } else {
                 activeSessionId = launched.sessionId
                 UpdateInstallState.Launching
             }
-            InstallLaunch.NeedsPermission -> UpdateInstallState.NeedsPermission
-            InstallLaunch.Untrusted -> UpdateInstallState.Untrusted
-            InstallLaunch.Failed -> UpdateInstallState.Failed
         }
+        InstallLaunch.NeedsPermission -> UpdateInstallState.NeedsPermission
+        InstallLaunch.Untrusted -> UpdateInstallState.Untrusted
+        InstallLaunch.Failed -> UpdateInstallState.Failed
     }
 
     /**

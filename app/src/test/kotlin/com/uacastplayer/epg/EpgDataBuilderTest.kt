@@ -32,6 +32,16 @@ class EpgDataBuilderTest {
     }
 
     @Test
+    fun `keeps programmes even when their channels are missing from metadata`() {
+        val programmes = List(40) { index -> programme("undeclared-$index", index.toLong()) }
+
+        val data = EpgDataBuilder.build(parsed(channels = emptyList(), programmes = programmes))
+
+        assertEquals(40, data.programmesByChannelId.size)
+        assertEquals(programmes, data.programmesByChannelId.values.map { it.single() })
+    }
+
+    @Test
     fun `large build checks cancellation throughout the work`() {
         var checks = 0
         EpgDataBuilder.build(

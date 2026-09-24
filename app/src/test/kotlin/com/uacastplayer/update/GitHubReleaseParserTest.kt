@@ -32,6 +32,13 @@ class GitHubReleaseParserTest {
         assertEquals("v1.2.0", parsed!!.tagName)
         assertEquals("https://github.com/Dovbnyak28/UA-Cast/releases/tag/v1.2.0", parsed.releaseUrl)
         assertEquals(AppVersion.parse("1.2.0"), parsed.version)
+        assertEquals("Fixed the thing", parsed.releaseNotes)
+    }
+
+    @Test
+    fun malformedReleaseNotesDoNotBecomeJsonTextInTheOffer() {
+        val json = release().replace("\"body\": \"Fixed the thing\"", "\"body\": [1,2,3]")
+        assertNull(GitHubReleaseParser.parse(json)?.releaseNotes)
     }
 
     /** `/releases/latest` already filters these out, but this parser is the last thing between a

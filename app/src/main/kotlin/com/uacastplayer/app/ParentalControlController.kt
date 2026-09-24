@@ -124,8 +124,7 @@ class ParentalControlController(
         // Written together, after the hash succeeds: a salt persisted without its hash would leave
         // isPinSet false with a stale salt on disk for the next setPin to overwrite anyway, but
         // pairing the writes keeps the two fields' invariant obvious.
-        preferences.parentalControlPinSalt = salt
-        preferences.parentalControlPinHash = hash
+        preferences.setParentalControlPin(hash = hash, salt = salt)
         _isPinSet.value = true
         return true
     }
@@ -134,8 +133,7 @@ class ParentalControlController(
      * gated behind [unlockedThisSession]; the only guard this gets is Settings' own confirmation
      * dialog before calling it. */
     fun resetParentalControl() {
-        preferences.parentalControlPinHash = null
-        preferences.parentalControlPinSalt = null
+        preferences.clearParentalControlPin()
         _isPinSet.value = false
         _unlockedThisSession.value = false
         _lockedKeys.value = emptySet()

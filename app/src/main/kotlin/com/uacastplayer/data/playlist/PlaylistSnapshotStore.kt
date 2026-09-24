@@ -7,6 +7,7 @@ import com.uacastplayer.data.writeSafely
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSnapshotCodec
+import com.uacastplayer.playlist.PlaylistChannelLimitExceededException
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -54,6 +55,8 @@ class PlaylistSnapshotStore(
             atomicFile.openRead().use { PlaylistSnapshotCodec.decode(it) }
         } catch (_: FileNotFoundException) {
             null
+        } catch (limitExceeded: PlaylistChannelLimitExceededException) {
+            throw limitExceeded
         } catch (e: IOException) {
             // Purely a cache - an unreadable snapshot just means re-fetching from the network,
             // which is what a null return already asks the caller to do.

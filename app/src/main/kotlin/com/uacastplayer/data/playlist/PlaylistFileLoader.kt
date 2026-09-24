@@ -16,6 +16,9 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -91,16 +94,30 @@ class PlaylistFileLoader(
      */
     @Suppress("TooGenericExceptionCaught")
 
+    @OptIn(InternalCoroutinesApi::class)
     suspend fun load(uri: Uri): PlaylistLoadResult = withContext(ioDispatcher) {
         try {
             val stream = context.contentResolver.openInputStream(uri)
                 ?: return@withContext PlaylistLoadResult.ReadError("Unable to open file")
+            // Content providers are allowed to return a blocking pipe. Coroutine cancellation
+            // does not interrupt an arbitrary InputStream.read(), so close the provider stream
+            // from the Job's cancellation callback; ParcelFileDescriptor-backed streams then
+            // unblock and the IO worker is released when the user leaves the import screen.
+            val closeOnCancellation = currentCoroutineContext().job.invokeOnCompletion(onCancelling = true) { cause ->
+                if (cause != null) runCatchingNonFatal { stream.close() }
+            }
             stream.use {
-                // A local file (picked via the Storage Access Framework) has no Content-Type to
-                // consult - always sniff the bytes.
-                when (val bounded = BoundedByteReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
-                    is BoundedBytesResult.Success -> PlaylistLoadResult.Success(CharsetDetector.decode(bounded.bytes))
-                    BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
+                try {
+                    // A local file (picked via the Storage Access Framework) has no Content-Type to
+                    // consult - always sniff the bytes.
+                    when (val bounded = BoundedByteReader.readBytes(it, PlaylistUrlLoader.MAX_PLAYLIST_BYTES)) {
+                        is BoundedBytesResult.Success -> PlaylistLoadResult.Success(
+                            CharsetDetector.decode(bounded.bytes),
+                        )
+                        BoundedBytesResult.SizeLimitExceeded -> PlaylistLoadResult.SizeLimitExceeded
+                    }
+                } finally {
+                    closeOnCancellation.dispose()
                 }
             }
         } catch (e: CancellationException) {

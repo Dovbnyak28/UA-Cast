@@ -81,4 +81,21 @@ class ChannelGrouperTest {
     fun `empty input yields no groups`() {
         assertEquals(emptyList<GroupedChannels>(), ChannelGrouper.group(emptyList()))
     }
+
+    @Test
+    fun `grouping stays correct after the bounded normalization cache fills`() {
+        val channels = buildList {
+            repeat(300) { index -> add(channel("custom-$index", "Provider Group $index")) }
+            add(channel("news-first", "News"))
+            repeat(20) { index -> add(channel("news-$index", "News")) }
+        }
+
+        val result = ChannelGrouper.group(channels)
+
+        assertEquals(300, result.count { it.group is ChannelGroup.Custom })
+        assertEquals(
+            21,
+            result.single { it.group == ChannelGroup.Known(ChannelGroup.KEY_NEWS) }.channels.size,
+        )
+    }
 }

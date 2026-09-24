@@ -238,7 +238,7 @@ class ProxyRendererProfileTest {
 
         val (body, contentType) = fetch(origin.urlFor("/live.m3u8"), unwrap = true, remux = false, flatten = true)
 
-        assertEquals("video/vnd.dlna.mpeg-tts", contentType)
+        assertEquals("video/mpeg", contentType)
         assertFalse("the renderer must not see a manifest", body.contains("#EXTM3U"))
         assertEquals("both segments must be fetched", 1, origin.hitsFor("/a.ts"))
         assertEquals(1, origin.hitsFor("/b.ts"))
@@ -246,6 +246,12 @@ class ProxyRendererProfileTest {
             "and both must arrive, concatenated",
             tsBytes(SEGMENT_PACKETS).size * 2,
             body.toByteArray(Charsets.ISO_8859_1).size,
+        )
+        val packets = body.toByteArray(Charsets.ISO_8859_1)
+        assertEquals(
+            "the response contains ordinary 188-byte TS, not 192-byte timestamped TS",
+            0x47,
+            packets[188].toInt(),
         )
         assertEquals(
             "flattened media must advance the watchdog's delivered-byte signal",
@@ -369,14 +375,83 @@ class ProxyRendererProfileTest {
         )
     }
 
-    /** The control, and what stops the assertion above from being satisfied by a HEAD that simply
-     * never announces a stream: a channel that can be flattened still says so. */
+    /** A channel that can be flattened still advertises its MPEG-TS profile, after a bounded
+     * sniff of the first segment. */
     @Test
     fun `a head on a channel that can be flattened names the stream`() {
         val origin = hlsOrigin()
 
-        assertEquals("video/vnd.dlna.mpeg-tts", headContentType(origin.urlFor("/live.m3u8")))
-        assertEquals("a HEAD must not pull any media", 0, origin.hitsFor("/a.ts"))
+        assertEquals("video/mpeg", headContentType(origin.urlFor("/live.m3u8")))
+        assertEquals(
+            "HEAD probes only the first segment needed to verify the advertised format",
+            1,
+            origin.hitsFor("/a.ts"),
+        )
+    }
+
+    @Test
+    fun `a head on a playlist with a missing first segment names the manifest`() {
+        val origin = Origin(mutableMapOf()).also { this.origin = it }
+        val playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\n/gone.ts\n#EXT-X-ENDLIST\n"
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", playlist.toByteArray())
+
+        assertEquals("application/vnd.apple.mpegurl", headContentType(origin.urlFor("/live.m3u8")))
+        assertEquals(1, origin.hitsFor("/gone.ts"))
+    }
+
+    @Test
+    fun `a head on an HTTP 200 non-TS segment names the manifest`() {
+        val origin = Origin(mutableMapOf()).also { this.origin = it }
+        val playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\n/a.ts\n#EXT-X-ENDLIST\n"
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", playlist.toByteArray())
+        origin.addRoute("/a.ts", "video/mp2t", "<html>expired token</html>".toByteArray())
+
+        assertEquals("application/vnd.apple.mpegurl", headContentType(origin.urlFor("/live.m3u8")))
+        assertEquals(1, origin.hitsFor("/a.ts"))
+    }
+
+    @Test
+    fun `HEAD and GET agree when the first playable TS is outside the probe window`() {
+        val origin = Origin(mutableMapOf()).also { this.origin = it }
+        val playlist = """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:1
+            #EXTINF:1,
+            /gone-1.ts
+            #EXTINF:1,
+            /gone-2.ts
+            #EXTINF:1,
+            /gone-3.ts
+            #EXTINF:1,
+            /a.ts
+        """.trimIndent()
+        origin.addRoute("/live.m3u8", "application/vnd.apple.mpegurl", playlist.toByteArray())
+        origin.addRoute("/a.ts", "video/mp2t", tsBytes())
+        val server = ProxyServer(OkHttpClient()).also { proxy = it }
+        server.start(
+            sessionToken = "session",
+            host = "127.0.0.1",
+            remuxEnabled = false,
+            unwrapWrapperPlaylists = true,
+            flattenHlsToStream = true,
+        )
+        val resourceId = server.registerPlaylist(origin.urlFor("/live.m3u8"))
+        val localUrl = server.buildLocalUrl(resourceId)
+        val headType = client.newCall(Request.Builder().url(localUrl).head().build()).execute().use {
+            it.header("Content-Type")
+        }
+        val getResponse = client.newCall(Request.Builder().url(localUrl).build()).execute().use {
+            it.body.string() to it.header("Content-Type")
+        }
+
+        assertEquals("application/vnd.apple.mpegurl", headType)
+        assertEquals("HEAD must not advertise a format GET will not serve", headType, getResponse.second)
+        assertTrue("GET should retain the safe manifest fallback", getResponse.first.contains("#EXTM3U"))
+        assertEquals(
+            "the segment outside the shared probe window must not be fetched",
+            0,
+            origin.hitsFor("/a.ts"),
+        )
     }
 
     @Test
@@ -394,7 +469,7 @@ class ProxyRendererProfileTest {
         val resourceId = server.registerPlaylist(origin.urlFor("/live.m3u8"))
         val request = Request.Builder().url(server.buildLocalUrl(resourceId)).build()
         client.newCall(request).execute().use { response ->
-            assertEquals("video/vnd.dlna.mpeg-tts", response.header("Content-Type"))
+            assertEquals("video/mpeg", response.header("Content-Type"))
             assertEquals("Streaming", response.header("transferMode.dlna.org"))
             assertTrue(response.header("contentFeatures.dlna.org").orEmpty().contains("DLNA.ORG_OP=00"))
             assertEquals("chunked", response.header("Transfer-Encoding"))
@@ -410,11 +485,11 @@ class ProxyRendererProfileTest {
 
         val headers = headResponseHeaders(origin.urlFor("/live.m3u8"))
 
-        assertEquals("video/vnd.dlna.mpeg-tts", headers["Content-Type"])
+        assertEquals("video/mpeg", headers["Content-Type"])
         assertEquals("Streaming", headers["transferMode.dlna.org"])
         assertTrue(headers["contentFeatures.dlna.org"].orEmpty().contains("DLNA.ORG_OP=00"))
         assertTrue(headers["Content-Length"] == null)
-        assertEquals(0, origin.hitsFor("/a.ts"))
+        assertEquals(1, origin.hitsFor("/a.ts"))
     }
 
     /**
@@ -433,7 +508,7 @@ class ProxyRendererProfileTest {
 
         val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
 
-        assertEquals("video/vnd.dlna.mpeg-tts", contentType)
+        assertEquals("video/mpeg", contentType)
         assertEquals(1, origin.hitsFor("/a.ts"))
     }
 
@@ -464,7 +539,7 @@ class ProxyRendererProfileTest {
 
         val (_, contentType) = fetch(origin.urlFor("/master.m3u8"), unwrap = true, remux = false, flatten = true)
 
-        assertEquals("video/vnd.dlna.mpeg-tts", contentType)
+        assertEquals("video/mpeg", contentType)
         assertEquals(1, origin.hitsFor("/modern.m3u8"))
         assertEquals(1, origin.hitsFor("/live.m3u8"))
         assertEquals(1, origin.hitsFor("/a.ts"))

@@ -2,6 +2,7 @@ package com.uacastplayer
 
 import android.content.Context
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -20,6 +21,7 @@ import com.uacastplayer.player.PlayerRequest
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.legal.TermsScreen
 import com.uacastplayer.ui.theme.UaCastTheme
+import com.uacastplayer.update.UpdateInstallState
 
 /** Key for the one entry in `ScaffoldZone`'s [rememberSaveableStateHolder] - see its `else`
  * branch. There is deliberately only ever one: the Help/Terms/AddPlaylist screens are transient and
@@ -63,6 +65,19 @@ class MainActivity : FragmentActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase.withAppLocale())
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Returning from the system's "install unknown apps" screen is not an installer result.
+        // Once permission was granted, return the action to its retryable state; otherwise the
+        // banner would keep opening Settings even though the user has already allowed installs.
+        if (viewModel.updateInstallState.value == UpdateInstallState.NeedsPermission &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())
+        ) {
+            viewModel.clearUpdateInstallOutcome()
+        }
+        if (BuildConfig.SELF_UPDATER_ENABLED) viewModel.checkForUpdatesOnForeground()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

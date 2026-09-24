@@ -9,6 +9,11 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
+/** A persisted playlist came from a version that accepted more entries than this build supports. */
+internal class PlaylistChannelLimitExceededException : IOException(
+    "Playlist snapshot exceeds the supported channel limit",
+)
+
 /**
  * Hand-rolled versioned binary (de)serializer for [PlaylistSnapshot]. Bumping [FORMAT_VERSION]
  * and adding a new `when` branch in [decode] is the expected way to evolve the format; unknown
@@ -22,6 +27,9 @@ object PlaylistSnapshotCodec {
     private const val FORMAT_VERSION_1 = 1
 
     fun encode(snapshot: PlaylistSnapshot, output: OutputStream) {
+        if (snapshot.channels.size > M3uParser.MAX_CHANNELS) {
+            throw PlaylistChannelLimitExceededException()
+        }
         val out = DataOutputStream(output)
         out.writeInt(FORMAT_VERSION)
         out.writeUTF(snapshot.sourceFingerprint)
@@ -52,6 +60,8 @@ object PlaylistSnapshotCodec {
             }
         } catch (_: EOFException) {
             null
+        } catch (limitExceeded: PlaylistChannelLimitExceededException) {
+            throw limitExceeded
         } catch (_: IOException) {
             null
         }
@@ -62,11 +72,8 @@ object PlaylistSnapshotCodec {
         val sourceUrl = input.readNullableUTF()
         val savedAtEpochMillis = input.readLong()
         val skippedLineCount = input.readCountField()
-        // No ceiling to check against - a playlist is as long as the provider makes it, and the
-        // only bound is PlaylistUrlLoader's 8MB on the document. So the count is checked for sense
-        // and the list is grown rather than sized from the file; see readCountField for why a
-        // count invented here would be worse than none.
         val channelCount = input.readCountField()
+        if (channelCount > M3uParser.MAX_CHANNELS) throw PlaylistChannelLimitExceededException()
         val channels = ArrayList<M3uChannel>(presizeFor(channelCount))
         repeat(channelCount) {
             val displayName = input.readUTF()
@@ -87,11 +94,8 @@ object PlaylistSnapshotCodec {
         val sourceFingerprint = input.readUTF()
         val savedAtEpochMillis = input.readLong()
         val skippedLineCount = input.readCountField()
-        // No ceiling to check against - a playlist is as long as the provider makes it, and the
-        // only bound is PlaylistUrlLoader's 8MB on the document. So the count is checked for sense
-        // and the list is grown rather than sized from the file; see readCountField for why a
-        // count invented here would be worse than none.
         val channelCount = input.readCountField()
+        if (channelCount > M3uParser.MAX_CHANNELS) throw PlaylistChannelLimitExceededException()
         val channels = ArrayList<M3uChannel>(presizeFor(channelCount))
         repeat(channelCount) {
             val displayName = input.readUTF()

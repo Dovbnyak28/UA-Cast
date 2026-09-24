@@ -16,6 +16,7 @@ import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.components.GlassTabBar
 import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.nav.largeTextLabelRes
+import com.uacastplayer.ui.nav.tabLabelRes
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -68,6 +69,36 @@ class LargeTextNavigationTest(private val locale: String) {
             val lineWidth = layout.getLineRight(0) - layout.getLineLeft(0)
             assertTrue("$diagnostic width", lineWidth <= layout.size.width + 1f)
             assertTrue("$diagnostic height", layout.getLineBottom(0) <= layout.size.height + 1f)
+        }
+    }
+
+    @Test fun actionLabelsRemainReadableOnCompactPhones() {
+        RuntimeEnvironment.setQualifiers("$locale-w320dp-h480dp-xhdpi")
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1f)) {
+                UaCastTheme(AppTheme.CINEMA) {
+                    GlassTabBar(BottomDestination.entries.map { destination ->
+                        TabBarItem(
+                            label = stringResource(destination.tabLabelRes()),
+                            largeTextLabel = stringResource(destination.largeTextLabelRes()),
+                            icon = AppIcons.Channels,
+                            selected = destination == BottomDestination.CHANNELS,
+                            onClick = {},
+                        )
+                    })
+                }
+            }
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        BottomDestination.entries.forEach { destination ->
+            val results = mutableListOf<TextLayoutResult>()
+            rule.onNodeWithText(context.getString(destination.tabLabelRes()))
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            val layout = results.single()
+            val diagnostic = "$locale $destination size=${layout.size} " +
+                "constraints=${layout.layoutInput.constraints}"
+            assertTrue("$diagnostic lines", layout.lineCount in 1..2)
+            assertFalse("$diagnostic ellipsis", (0 until layout.lineCount).any(layout::isLineEllipsized))
         }
     }
 

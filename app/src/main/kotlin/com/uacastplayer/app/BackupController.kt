@@ -19,10 +19,13 @@ import com.uacastplayer.playlist.PlaylistSource
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -63,7 +66,7 @@ class BackupController(
         val generation = exportGeneration.incrementAndGet()
         _backupExportResult.value = null
         scope.launch(ioDispatcher) {
-            val result = if (writeBackup(uri, data)) {
+            val result = if (writeBackup(uri, data, currentCoroutineContext().job)) {
                 BackupExportResult.SUCCESS
             } else {
                 BackupExportResult.FAILURE
@@ -81,16 +84,28 @@ class BackupController(
      * and expired-grant failures become a visible failure result, while coroutine cancellation and
      * fatal VM errors are deliberately not caught.
      */
-    internal fun writeBackup(uri: Uri, data: BackupData): Boolean {
-        val json = BackupCodec.encode(data)
+    @OptIn(InternalCoroutinesApi::class)
+    internal fun writeBackup(uri: Uri, data: BackupData, cancellationJob: Job? = null): Boolean {
+        val json = BackupCodec.encode(data).toByteArray(Charsets.UTF_8)
+        if (json.size > MAX_BACKUP_BYTES) {
+            AppLog.w(TAG) { "Backup export refused: larger than $MAX_BACKUP_BYTES bytes" }
+            return false
+        }
         return runCatchingNonFatal {
             val output = application.contentResolver.openOutputStream(uri)
             if (output == null) {
                 AppLog.w(TAG) { "Backup export failed: provider returned no output stream" }
                 false
             } else {
-                output.use { stream -> stream.write(json.toByteArray(Charsets.UTF_8)) }
-                true
+                val closeOnCancellation = cancellationJob?.invokeOnCompletion(onCancelling = true) { cause ->
+                    if (cause != null) runCatchingNonFatal { output.close() }
+                }
+                try {
+                    output.use { stream -> stream.write(json) }
+                    true
+                } finally {
+                    closeOnCancellation?.dispose()
+                }
             }
         }.onFailure { e ->
             AppLog.w(TAG) { "Backup export failed: ${e.javaClass.simpleName}" }
@@ -115,7 +130,7 @@ class BackupController(
             // Read and parse off the main thread. Parsing used to run where scope.launch left it,
             // and viewModelScope is Dispatchers.Main.immediate, so a large backup blocked frames.
             val data = withContext(ioDispatcher) {
-                val text = readBoundedText(uri) ?: return@withContext null
+                val text = readBoundedText(uri, currentCoroutineContext().job) ?: return@withContext null
                 BackupCodec.decode(text)
             } ?: return@launch
             // Waiting only at the persistence stage is too late: reorder() treats a merge as
@@ -185,19 +200,28 @@ class BackupController(
      * failed import. Coroutine cancellation and fatal VM errors are different: neither is input
      * damage, and both must escape instead of being disguised as an unreadable file.
      */
-    internal fun readBoundedText(uri: Uri): String? = runCatchingNonFatal {
-        application.contentResolver.openInputStream(uri)?.use { stream ->
-            when (val bounded = BoundedTextReader.readText(stream, MAX_BACKUP_BYTES)) {
-                is BoundedReadResult.Success -> bounded.text
-                BoundedReadResult.SizeLimitExceeded -> {
-                    AppLog.w(TAG) { "Backup import refused: larger than $MAX_BACKUP_BYTES bytes" }
-                    null
+    @OptIn(InternalCoroutinesApi::class)
+    internal fun readBoundedText(uri: Uri, cancellationJob: Job? = null): String? =
+        runCatchingNonFatal {
+            application.contentResolver.openInputStream(uri)?.use { stream ->
+                val closeOnCancellation = cancellationJob?.invokeOnCompletion(onCancelling = true) { cause ->
+                    if (cause != null) runCatchingNonFatal { stream.close() }
+                }
+                try {
+                    when (val bounded = BoundedTextReader.readText(stream, MAX_BACKUP_BYTES)) {
+                        is BoundedReadResult.Success -> bounded.text
+                        BoundedReadResult.SizeLimitExceeded -> {
+                            AppLog.w(TAG) { "Backup import refused: larger than $MAX_BACKUP_BYTES bytes" }
+                            null
+                        }
+                    }
+                } finally {
+                    closeOnCancellation?.dispose()
                 }
             }
         }
-    }
-        .onFailure { e -> AppLog.w(TAG) { "Backup import read failed: ${e.javaClass.simpleName}" } }
-        .getOrNull()
+            .onFailure { e -> AppLog.w(TAG) { "Backup import read failed: ${e.javaClass.simpleName}" } }
+            .getOrNull()
 
     fun dismissImportSummary() {
         _backupImportSummary.value = null
@@ -215,6 +239,6 @@ class BackupController(
          * for something like forty thousand of them: far past any real list, and far short of a file
          * that could not be held in memory.
          */
-        const val MAX_BACKUP_BYTES = 8 * 1024 * 1024
+        const val MAX_BACKUP_BYTES = BackupCodec.MAX_BACKUP_BYTES
     }
 }

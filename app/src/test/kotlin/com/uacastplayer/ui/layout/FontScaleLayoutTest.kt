@@ -140,7 +140,7 @@ class FontScaleLayoutTest(private val fontScale: Float) {
                 onComplete = {},
             )
         }
-        assertFullyOnScreen("Почати")
+        assertFullyOnScreen("Додати плейлист")
     }
 
     @Test

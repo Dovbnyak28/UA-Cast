@@ -65,12 +65,14 @@ class UpdateBannerTest {
         release: GitHubRelease?,
         installState: UpdateInstallState = UpdateInstallState.Idle,
         onInstall: (ReleaseApk) -> Unit = {},
+        onGrantInstallPermission: () -> Unit = {},
         onOpen: (String) -> Unit = {},
         onDismiss: () -> Unit = {},
     ) = UpdateBanner(
         release = release,
         installState = installState,
         onInstall = onInstall,
+        onGrantInstallPermission = onGrantInstallPermission,
         onOpen = onOpen,
         onDismiss = onDismiss,
     )
@@ -97,6 +99,26 @@ class UpdateBannerTest {
         composeRule.onNodeWithTag(UiTestTags.UPDATE_BANNER).assertIsDisplayed()
         composeRule.onNodeWithText("Доступна нова версія").assertIsDisplayed()
         composeRule.onNodeWithText("Версію v1.4.0 можна завантажити.").assertIsDisplayed()
+    }
+
+    @Test
+    fun missingInstallPermissionOffersSettingsInsteadOfDownloadingAgain() {
+        var installs = 0
+        var permissionOpens = 0
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Banner(
+                    release = release.copy(apk = apk),
+                    installState = UpdateInstallState.NeedsPermission,
+                    onInstall = { installs++ },
+                    onGrantInstallPermission = { permissionOpens++ },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Відкрити налаштування").performClick()
+        assertEquals(1, permissionOpens)
+        assertEquals(0, installs)
     }
 
     /**

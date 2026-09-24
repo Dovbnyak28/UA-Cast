@@ -48,9 +48,17 @@ fun rememberArtworkTone(
     resolveIcon: suspend (M3uChannel) -> File?,
     ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
     enabled: Boolean = true,
+    refreshKey: Any = Unit,
 ): Color? {
     if (!enabled) return null
-    val tone by produceState<Color?>(initialValue = null, key1 = channel.streamUrl) {
+    // EPG matching can fall back to the channel name, so stream URL/logo/id alone do not capture
+    // every change that can select a different icon. The cache key also retires a "no artwork"
+    // result after prefetch or a fresh EPG has supplied an icon.
+    val tone by produceState<Color?>(
+        initialValue = null,
+        key1 = channel,
+        key2 = refreshKey,
+    ) {
         value = withContext(ioDispatcher) {
             val file = resolveArtworkToneFile(channel, resolveIcon) ?: return@withContext null
             sampleTone(file)
@@ -80,7 +88,6 @@ internal suspend fun resolveArtworkToneFile(
 
 private fun sampleTone(file: File): Color? {
     val tone = samplePixels(file)?.let(ArtworkTonePolicy::of) ?: return null
-    AppLog.d(TAG) { "artwork tone: hue=${tone.hue.toInt()} sat=${tone.saturation}" }
     return Color.hsv(
         hue = tone.hue,
         saturation = tone.saturation.coerceAtMost(TONE_MAX_SATURATION),

@@ -25,7 +25,7 @@ private const val MAX_BODY_BYTES = 1L * 1024 * 1024
  * Asks GitHub what the newest published release is.
  *
  * Read-only, unauthenticated, one request. GitHub's unauthenticated limit is 60 requests per hour
- * per IP, which a check that runs at most weekly per device cannot approach - and no token is
+ * per IP; automatic checks are limited per device, and no token is
  * embedded, because a token shipped inside an APK is a published token.
  */
 class UpdateRepository(

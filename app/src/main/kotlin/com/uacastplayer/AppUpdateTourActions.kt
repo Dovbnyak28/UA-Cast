@@ -2,7 +2,9 @@ package com.uacastplayer
 
 import com.uacastplayer.update.ReleaseApk
 
-/** Manual update actions; launch-time throttling remains owned by AppViewModel initialization. */
+/** Manual update actions and the foreground-triggered automatic check. */
+internal fun AppViewModel.checkForUpdatesOnForeground() = updateController.checkOnLaunch()
+
 internal fun AppViewModel.checkForUpdatesNow() = updateController.checkNow()
 
 internal fun AppViewModel.downloadAndInstallUpdate(apk: ReleaseApk) =
@@ -11,5 +13,7 @@ internal fun AppViewModel.downloadAndInstallUpdate(apk: ReleaseApk) =
 internal fun AppViewModel.clearUpdateInstallOutcome() = updateInstallController.clearOutcome()
 
 internal fun AppViewModel.dismissUpdateBanner() = updateController.dismissAvailableUpdate()
+
+internal fun AppViewModel.acknowledgeUpdatePrompt() = updateController.acknowledgeUpdatePrompt()
 
 internal fun AppViewModel.clearUpdateCheckOutcome() = updateController.clearLastOutcome()

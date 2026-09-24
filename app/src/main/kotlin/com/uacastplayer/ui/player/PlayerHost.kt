@@ -129,7 +129,7 @@ fun PlayerHost(
 
     Box(modifier = modifier) {
         if (collapsed) {
-            val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
+            val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
             MiniPlayerBar(
                 viewModel = viewModel,
                 resolveIcon = resolveIcon,

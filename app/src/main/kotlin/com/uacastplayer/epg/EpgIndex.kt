@@ -23,16 +23,9 @@ class EpgIndex(val channels: List<EpgChannel>, checkCancellation: () -> Unit = {
     }
 
     fun match(channel: M3uChannel): EpgChannel? {
-        val exactIdMatch = channel.tvgId?.let(byExactId::get)
-        val normalizedIdMatch = channel.tvgId
-            ?.let(EpgChannelNameNormalizer::normalize)
-            ?.let(byNormalizedId::get)
-        val normalizedNameMatch = channel.tvgName
-            ?.let(EpgChannelNameNormalizer::normalize)
-            ?.let(byNormalizedName::get)
-        return exactIdMatch
-            ?: normalizedIdMatch
-            ?: normalizedNameMatch
+        return channel.tvgId?.let(byExactId::get)
+            ?: channel.tvgId?.let(EpgChannelNameNormalizer::normalize)?.let(byNormalizedId::get)
+            ?: channel.tvgName?.let(EpgChannelNameNormalizer::normalize)?.let(byNormalizedName::get)
             ?: byNormalizedName[EpgChannelNameNormalizer.normalize(channel.displayName)]
     }
 }

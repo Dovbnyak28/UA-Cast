@@ -5,6 +5,9 @@ import com.uacastplayer.ui.theme.appBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,13 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.playlist.CleartextCredentialPolicy
-import com.uacastplayer.playlist.PlaylistError
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.playlist.XtreamUrlBuilder
@@ -51,6 +53,7 @@ import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
+import com.uacastplayer.ui.theme.GapS
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.SectionLabel
@@ -86,7 +89,10 @@ fun AddPlaylistScreen(
     val gate = LocalFeatureGate.current
     var xtreamServer by rememberSaveable { mutableStateOf("") }
     var xtreamUsername by rememberSaveable { mutableStateOf("") }
-    var xtreamPassword by rememberSaveable { mutableStateOf("") }
+    // Credentials must not be written to the Activity saved-state Bundle. `rememberSaveable`
+    // persists through process recreation and can therefore leave the password in system-managed
+    // state; the field is intentionally cleared on recreation instead.
+    var xtreamPassword by remember { mutableStateOf("") }
     var xtreamPasswordVisible by rememberSaveable { mutableStateOf(false) }
     var pendingCleartextLoad by remember { mutableStateOf<PendingCleartextLoad?>(null) }
     PlaylistAddCompletion(
@@ -124,6 +130,7 @@ fun AddPlaylistScreen(
             )
         }
 
+        ProviderSourceHint()
 
         SegmentedControl(
             options = listOf(
@@ -144,6 +151,19 @@ fun AddPlaylistScreen(
                 }
             },
             modifier = Modifier.padding(top = GapM),
+        )
+
+        Text(
+            text = stringResource(
+                when (sourceType) {
+                    PlaylistSourceType.URL -> R.string.add_playlist_method_url_help
+                    PlaylistSourceType.FILE -> R.string.add_playlist_method_file_help
+                    PlaylistSourceType.XTREAM -> R.string.add_playlist_method_xtream_help
+                },
+            ),
+            style = Caption,
+            color = UaTheme.palette.labelSecondary,
+            modifier = Modifier.padding(top = GapS),
         )
 
         when (sourceType) {
@@ -227,12 +247,7 @@ fun AddPlaylistScreen(
             onPickFile = onPickFile,
         )
 
-        Text(
-            text = stringResource(R.string.add_playlist_tip),
-            style = Caption,
-            color = UaTheme.palette.labelSecondary,
-            modifier = Modifier.padding(top = GapL, bottom = GapL),
-        )
+        Spacer(modifier = Modifier.height(GapL))
     }
 
     pendingCleartextLoad?.let { pending ->
@@ -244,6 +259,42 @@ fun AddPlaylistScreen(
                 dispatchCleartextLoad(it, onLoadUrl, onLoadXtream)
             },
         )
+    }
+}
+
+@Composable
+private fun ProviderSourceHint() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = GapM)
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = false,
+            )
+            .padding(CardPadding),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            imageVector = AppIcons.HelpCircle,
+            contentDescription = null,
+            tint = UaTheme.palette.accentText,
+        )
+        Column(modifier = Modifier.padding(start = GapM)) {
+            Text(
+                text = stringResource(R.string.add_playlist_source_title),
+                style = SectionLabel,
+                color = UaTheme.palette.labelPrimary,
+            )
+            Text(
+                text = stringResource(R.string.add_playlist_tip),
+                style = BodyText,
+                color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(top = GapS),
+            )
+        }
     }
 }
 
@@ -477,13 +528,7 @@ private fun hasLoadFeedback(playlistState: PlaylistUiState): Boolean =
 @Composable
 private fun loadFeedbackMessage(playlistState: PlaylistUiState): String = when {
     playlistState.isLoading -> stringResource(R.string.add_playlist_status_loading)
-    playlistState.error != null -> when (val error = playlistState.error) {
-        PlaylistError.SizeLimitExceeded -> stringResource(R.string.playlist_error_size_limit)
-        is PlaylistError.Http -> stringResource(R.string.playlist_error_http, error.code)
-        PlaylistError.Network -> stringResource(R.string.playlist_error_network)
-        PlaylistError.Storage -> stringResource(R.string.playlist_error_storage)
-        PlaylistError.Empty -> stringResource(R.string.playlist_error_empty)
-    }
+    playlistState.error != null -> playlistState.error.asUserMessage()
     // A load that finished, reported no error, and produced nothing. Without this branch the
     // status fell through to "ready to load" - the exact words shown *before* the button was pressed,
     // so a user whose provider returned 200 with an empty body, an HTML error page, or bytes that

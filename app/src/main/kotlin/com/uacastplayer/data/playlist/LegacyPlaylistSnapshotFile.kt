@@ -5,6 +5,7 @@ import androidx.core.util.AtomicFile
 import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSnapshotCodec
+import com.uacastplayer.playlist.PlaylistChannelLimitExceededException
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -28,6 +29,8 @@ internal object LegacyPlaylistSnapshotFile {
         if (!file.isFile) return@withContext null
         try {
             FileInputStream(file).use { PlaylistSnapshotCodec.decode(it) }
+        } catch (limitExceeded: PlaylistChannelLimitExceededException) {
+            throw limitExceeded
         } catch (_: IOException) {
             null
         }

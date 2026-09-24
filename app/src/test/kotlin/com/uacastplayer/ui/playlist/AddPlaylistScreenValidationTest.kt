@@ -2,8 +2,10 @@ package com.uacastplayer.ui.playlist
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.testing.RequiresComposeTestManifest
@@ -23,6 +25,53 @@ class AddPlaylistScreenValidationTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun providerRequirementIsExplainedBeforeTheUserChoosesAPlaylistMethod() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                AddPlaylistScreen(
+                    playlistState = PlaylistUiState(),
+                    onSetDisplayName = {},
+                    onLoadUrl = {},
+                    onPickFile = {},
+                    onLoadXtream = { _, _, _ -> },
+                    onBackClick = {},
+                    onPlaylistLoaded = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Каналів у застосунку немає").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Візьміть посилання M3U/M3U8, файл плейлиста або дані Xtream у свого ТВ-провайдера. " +
+                "UA Cast — плеєр, а не ТВ-сервіс.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Вставте посилання на плейлист, яке надав ТВ-провайдер.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun selectingFileExplainsWhatTheUserShouldChoose() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                AddPlaylistScreen(
+                    playlistState = PlaylistUiState(),
+                    onSetDisplayName = {},
+                    onLoadUrl = {},
+                    onPickFile = {},
+                    onLoadXtream = { _, _, _ -> },
+                    onBackClick = {},
+                    onPlaylistLoaded = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Файл").performClick()
+
+        composeRule.onNodeWithText("Оберіть файл плейлиста, збережений на цьому пристрої.")
+            .assertIsDisplayed()
+    }
 
     @Test
     fun saveAction_requiresACompleteHttpUrl() {

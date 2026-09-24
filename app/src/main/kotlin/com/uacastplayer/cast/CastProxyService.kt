@@ -19,6 +19,7 @@ import com.uacastplayer.data.prefs.withAppLocale
 import com.uacastplayer.data.cast.CastWakeLocks
 import com.uacastplayer.dlna.DlnaSessionRepository
 import com.uacastplayer.log.AppLog
+import java.util.concurrent.atomic.AtomicLongArray
 
 private const val TAG = "CastProxyService"
 private const val NOTIFICATION_CHANNEL_ID = "cast_session"
@@ -38,6 +39,7 @@ private const val ACTION_END_SESSION = "com.uacastplayer.cast.action.END_SESSION
 private const val EXTRA_CHANNEL_TITLE = "channel_title"
 private const val EXTRA_RECEIVER_NAME = "receiver_name"
 private const val EXTRA_TARGET = "target"
+private const val EXTRA_COMMAND_GENERATION = "command_generation"
 
 /**
  * Which cast target the proxy session being protected belongs to - the only thing this service
@@ -82,6 +84,22 @@ class CastProxyService : Service() {
             buildNotification(channelTitle, receiverName, commandTarget),
         )
 
+        val commandGeneration = intent?.getLongExtra(EXTRA_COMMAND_GENERATION, 0L) ?: 0L
+        // A stop can be posted to this service's main handler while a newer start is still being
+        // delivered by ActivityManager. Ignore the older service command after satisfying the FGS
+        // start requirement; otherwise the service would be left foreground-less while the proxy
+        // socket is still serving the new session.
+        if (!CastProxyCommandPolicy.accepts(latestRequestedGeneration(commandTarget), commandGeneration)) {
+            if (ownership.activeTargets.isEmpty()) {
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
+            } else {
+                // A stale command for one target must not tear down protection for another target
+                // that is still active in this shared service instance.
+                refreshNotification()
+            }
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_END_SESSION -> {
                 AppLog.d(TAG) { "Stop action tapped - ending the $commandTarget session" }
@@ -193,11 +211,13 @@ class CastProxyService : Service() {
             channelTitle: String,
             receiverName: String,
             target: CastProxyTarget,
+            commandGeneration: Long,
         ): Intent = Intent(context, CastProxyService::class.java).apply {
             action = ACTION_START
             putExtra(EXTRA_CHANNEL_TITLE, channelTitle)
             putExtra(EXTRA_RECEIVER_NAME, receiverName)
             putExtra(EXTRA_TARGET, target.name)
+            putExtra(EXTRA_COMMAND_GENERATION, commandGeneration)
         }
 
         private fun stopForegroundIntent(context: Context, target: CastProxyTarget): Intent =
@@ -218,7 +238,11 @@ class CastProxyService : Service() {
             receiverName: String,
             target: CastProxyTarget = CastProxyTarget.CHROMECAST,
         ) {
-            startForegroundServiceSafely(context, startIntent(context, channelTitle, receiverName, target))
+            val commandGeneration = nextCommandGeneration(target)
+            startForegroundServiceSafely(
+                context,
+                startIntent(context, channelTitle, receiverName, target, commandGeneration),
+            )
         }
 
         /** Called 1:1 with [com.uacastplayer.data.cast.ProxyServer.stop] - tears down only this
@@ -230,10 +254,18 @@ class CastProxyService : Service() {
             context: Context,
             target: CastProxyTarget = CastProxyTarget.CHROMECAST,
         ) {
+            val commandGeneration = nextCommandGeneration(target)
             val service = runningInstance
             if (service != null) {
                 service.mainHandler.post {
-                    if (runningInstance === service) service.removeOwner(target)
+                    if (runningInstance === service &&
+                        CastProxyCommandPolicy.accepts(
+                            latestRequestedGeneration(target),
+                            commandGeneration,
+                        )
+                    ) {
+                        service.removeOwner(target)
+                    }
                 }
             } else {
                 // There is no owner to remove if the service has not been created (or was already
@@ -262,6 +294,13 @@ class CastProxyService : Service() {
 
         @Volatile
         private var runningInstance: CastProxyService? = null
+        private val latestRequestedGenerations = AtomicLongArray(CastProxyTarget.entries.size)
+
+        private fun nextCommandGeneration(target: CastProxyTarget): Long =
+            latestRequestedGenerations.incrementAndGet(target.ordinal)
+
+        private fun latestRequestedGeneration(target: CastProxyTarget): Long =
+            latestRequestedGenerations.get(target.ordinal)
     }
 
     private data class NotificationDetails(

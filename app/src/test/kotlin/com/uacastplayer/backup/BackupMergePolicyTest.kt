@@ -6,6 +6,7 @@ import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourcePolicy
 import com.uacastplayer.playlist.PlaylistSourceType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +37,24 @@ class BackupMergePolicyTest {
         )
         assertEquals(setOf("a", "b"), result.favorites.map { it.key }.toSet())
         assertEquals(1, result.importedFavoriteCount)
+    }
+
+    @Test
+    fun `imported favorite request headers are sanitized`() {
+        val result = BackupMergePolicy.merge(
+            existingSources = emptyList(),
+            existingFavorites = emptyList(),
+            importedSources = emptyList(),
+            importedFavorites = listOf(
+                backupFavorite("unsafe").copy(
+                    userAgent = "UA\r\nX-Injected: yes",
+                    referrer = "https://site.example/\u0000path",
+                ),
+            ),
+        )
+
+        assertNull(result.favorites.single().userAgent)
+        assertNull(result.favorites.single().referrer)
     }
 
     @Test

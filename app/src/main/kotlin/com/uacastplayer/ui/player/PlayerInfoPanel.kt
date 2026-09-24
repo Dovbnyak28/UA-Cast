@@ -144,6 +144,7 @@ internal fun ChannelInfoCard(
         channel = channel,
         resolveIcon = resolveIcon,
         enabled = UaTheme.palette.wallpaperTexture,
+        refreshKey = iconRefreshKey,
     )
     val cardShape = RoundedCornerShape(RadiusCard)
 

@@ -48,4 +48,15 @@ class CastProxyOwnershipPolicyTest {
         assertEquals(CastProxyTarget.CHROMECAST, restarted.displayedTarget)
         assertTrue(restarted.activeTargets.distinct().size == restarted.activeTargets.size)
     }
+
+    @Test
+    fun `older stop command is rejected after a newer start`() {
+        assertTrue(CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 8L))
+        assertTrue(!CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 7L))
+    }
+
+    @Test
+    fun `legacy command without generation remains accepted`() {
+        assertTrue(CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 0L))
+    }
 }

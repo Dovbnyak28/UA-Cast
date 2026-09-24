@@ -3,6 +3,7 @@ package com.uacastplayer.dlna
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.net.InetAddress
 
 class SsdpResponseParserTest {
 
@@ -63,5 +64,24 @@ class SsdpResponseParserTest {
         )
 
         assertEquals("https://tv.local:8443/device.xml", response.location)
+    }
+
+    @Test
+    fun `port zero and out of range ports are rejected`() {
+        for (location in listOf("http://10.0.0.5:0/device.xml", "http://10.0.0.5:65536/device.xml")) {
+            val response = SsdpResponseParser.parse("HTTP/1.1 200 OK\r\nLOCATION: $location\r\n\r\n")
+            assertNull(location, response.location)
+        }
+    }
+
+    @Test
+    fun `discovery location must resolve to the SSDP sender`() {
+        val sender = InetAddress.getByName("192.168.1.50")
+        assertEquals(
+            "http://192.168.1.50:9197/device.xml",
+            UpnpHttpEndpoint.discoveryLocation("http://192.168.1.50:9197/device.xml", sender),
+        )
+        assertNull(UpnpHttpEndpoint.discoveryLocation("http://127.0.0.1:8080/private", sender))
+        assertNull(UpnpHttpEndpoint.discoveryLocation("http://192.168.1.51:9197/device.xml", sender))
     }
 }

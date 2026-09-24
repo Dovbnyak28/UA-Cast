@@ -4,9 +4,11 @@ import com.uacastplayer.update.AppVersion
 import com.uacastplayer.update.GitHubRelease
 import com.uacastplayer.update.ReleaseLookup
 import com.uacastplayer.update.ReleaseSource
+import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateCheckOutcome
 import com.uacastplayer.update.UpdateCheckSchedule
 import com.uacastplayer.update.UpdateCheckStorage
+import com.uacastplayer.update.UpdatePromptSchedule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -22,6 +24,9 @@ class UpdateControllerTest {
     private class FakeStorage(
         override var lastUpdateCheckAtMillis: Long? = null,
         override var dismissedUpdateTag: String? = null,
+        override var promptedUpdateTag: String? = null,
+        override var lastUpdatePromptAtMillis: Long? = null,
+        override var lastUpdateCheckFailed: Boolean = false,
     ) : UpdateCheckStorage
 
     private class FakeReleaseSource(var lookup: ReleaseLookup) : ReleaseSource {
@@ -32,10 +37,11 @@ class UpdateControllerTest {
         }
     }
 
-    private fun releaseOf(tag: String) = GitHubRelease(
+    private fun releaseOf(tag: String, apk: ReleaseApk? = null) = GitHubRelease(
         version = AppVersion.parse(tag)!!,
         tagName = tag,
         releaseUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/tag/$tag",
+        apk = apk,
     )
 
     private fun found(tag: String) = ReleaseLookup.Found(releaseOf(tag))
@@ -47,12 +53,13 @@ class UpdateControllerTest {
         source: FakeReleaseSource,
         storage: FakeStorage,
         installed: String = "0.9.0",
+        currentTime: () -> Long = { now },
     ) = UpdateController(
         releaseSource = source,
         storage = storage,
         scope = scope,
         installedVersionName = installed,
-        now = { now },
+        now = currentTime,
     )
 
     @Test
@@ -93,7 +100,7 @@ class UpdateControllerTest {
     }
 
     @Test
-    fun theAutomaticCheckStaysQuietWithinTheWeek() = runTest {
+    fun theAutomaticCheckStaysQuietWithinTheDay() = runTest {
         val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(lastUpdateCheckAtMillis = now - 1000)
         val controller = controller(this, source, storage)
@@ -106,7 +113,7 @@ class UpdateControllerTest {
     }
 
     @Test
-    fun theAutomaticCheckRunsOnceTheWeekHasPassed() = runTest {
+    fun theAutomaticCheckRunsOnceTheDayHasPassed() = runTest {
         val source = FakeReleaseSource(found("v1.0.0"))
         val storage = FakeStorage(lastUpdateCheckAtMillis = now - UpdateCheckSchedule.INTERVAL_MILLIS)
         val controller = controller(this, source, storage)
@@ -227,7 +234,7 @@ class UpdateControllerTest {
     /** Even a failure records the timestamp: a device that is offline on every launch must not
      * re-request on every launch. */
     @Test
-    fun aFailedCheckStillCountsAgainstTheWeeklyThrottle() = runTest {
+    fun aFailedCheckStillCountsAgainstTheShortRetryThrottle() = runTest {
         val source = FakeReleaseSource(ReleaseLookup.Failed)
         val storage = FakeStorage()
         val controller = controller(this, source, storage)
@@ -236,6 +243,103 @@ class UpdateControllerTest {
         testScheduler.advanceUntilIdle()
 
         assertEquals(now, storage.lastUpdateCheckAtMillis)
+        assertEquals(true, storage.lastUpdateCheckFailed)
+    }
+
+    @Test
+    fun anApkReleaseOffersInstallationAndLeavesBannerAfterLater() = runTest {
+        val apk = ReleaseApk(
+            downloadUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.0.0/app.apk",
+            sizeBytes = 123L,
+            sha256 = null,
+        )
+        val release = releaseOf("v1.0.0", apk)
+        val storage = FakeStorage()
+        val source = FakeReleaseSource(ReleaseLookup.Found(release))
+        val controller = controller(this, source, storage)
+
+        controller.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+        assertEquals(release, controller.state.value.promptRelease)
+        controller.acknowledgeUpdatePrompt()
+        assertNull(controller.state.value.promptRelease)
+        assertEquals(release, controller.state.value.availableRelease)
+        assertEquals("v1.0.0", storage.promptedUpdateTag)
+        assertEquals(now, storage.lastUpdatePromptAtMillis)
+
+        storage.lastUpdateCheckAtMillis = now - UpdateCheckSchedule.INTERVAL_MILLIS
+        val reopened = controller(this, source, storage)
+        reopened.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+        assertNull(reopened.state.value.promptRelease)
+        assertEquals(release, reopened.state.value.availableRelease)
+    }
+
+    @Test
+    fun deferredReleaseIsOfferedAgainAfterThreeDays() = runTest {
+        var clock = now
+        val apk = ReleaseApk(
+            downloadUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.0.0/app.apk",
+            sizeBytes = 123L,
+            sha256 = null,
+        )
+        val release = releaseOf("v1.0.0", apk)
+        val storage = FakeStorage()
+        val source = FakeReleaseSource(ReleaseLookup.Found(release))
+        val first = controller(this, source, storage, currentTime = { clock })
+        first.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+        first.acknowledgeUpdatePrompt()
+
+        clock += UpdatePromptSchedule.REMINDER_INTERVAL_MILLIS
+        val reopened = controller(this, source, storage, currentTime = { clock })
+        reopened.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(release, reopened.state.value.promptRelease)
+    }
+
+    @Test
+    fun manuallyCheckingForAnApkShowsSettingsResultWithoutInterruptingWithDialog() = runTest {
+        val apk = ReleaseApk(
+            downloadUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.0.0/app.apk",
+            sizeBytes = 123L,
+            sha256 = null,
+        )
+        val controller = controller(
+            this,
+            FakeReleaseSource(ReleaseLookup.Found(releaseOf("v1.0.0", apk))),
+            FakeStorage(),
+        )
+
+        controller.checkNow()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, controller.state.value.lastOutcome)
+        assertNull(controller.state.value.promptRelease)
+        assertEquals("v1.0.0", controller.state.value.availableRelease?.tagName)
+    }
+
+    @Test
+    fun pageOnlyReleaseAndDismissedReleaseDoNotRaiseInstallDialog() = runTest {
+        val pageOnly = controller(this, FakeReleaseSource(found("v1.0.0")), FakeStorage())
+        pageOnly.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+        assertNull(pageOnly.state.value.promptRelease)
+
+        val apk = ReleaseApk(
+            downloadUrl = "https://github.com/Dovbnyak28/UA-Cast/releases/download/v1.0.0/app.apk",
+            sizeBytes = 123L,
+            sha256 = null,
+        )
+        val dismissed = controller(
+            this,
+            FakeReleaseSource(ReleaseLookup.Found(releaseOf("v1.0.0", apk))),
+            FakeStorage(dismissedUpdateTag = "v1.0.0"),
+        )
+        dismissed.checkOnLaunch()
+        testScheduler.advanceUntilIdle()
+        assertNull(dismissed.state.value.promptRelease)
     }
 
     @Test

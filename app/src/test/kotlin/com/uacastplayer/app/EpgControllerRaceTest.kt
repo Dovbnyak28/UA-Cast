@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -54,7 +55,11 @@ class EpgControllerRaceTest {
 
     /** Serves one XMLTV document naming a single channel [channelId]; when [hold] is set it does
      * not answer until [release] is called, which is what makes a load "still in flight". */
-    private class XmlTvServer(channelId: String, private val hold: Boolean = false) : AutoCloseable {
+    private class XmlTvServer(
+        channelId: String,
+        private val hold: Boolean = false,
+        private val statusCode: Int = 200,
+    ) : AutoCloseable {
         private val socket = ServerSocket(0)
         private val worker = Executors.newSingleThreadExecutor()
         private val released = CountDownLatch(1)
@@ -86,7 +91,8 @@ class EpgControllerRaceTest {
                         requestReceived.countDown()
                         if (hold) released.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                         val payload = document.toByteArray()
-                        val head = "HTTP/1.1 200 OK\r\n" +
+                        val status = if (statusCode == 200) "200 OK" else "404 Not Found"
+                        val head = "HTTP/1.1 $status\r\n" +
                             "Content-Type: application/xml\r\n" +
                             "Content-Length: ${payload.size}\r\n" +
                             "Connection: close\r\n\r\n"
@@ -132,6 +138,14 @@ class EpgControllerRaceTest {
             Thread.sleep(POLL_INTERVAL_MILLIS)
         }
         return channelIds() == expected
+    }
+
+    private fun EpgController.awaitError(timeoutMillis: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline && !epgState.value.hasError) {
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        return epgState.value.hasError
     }
 
     /**
@@ -197,6 +211,27 @@ class EpgControllerRaceTest {
                 "an uncontested load must reach the screen",
                 controller.awaitChannels(listOf("only"), ABSENCE_WAIT_MILLIS),
             )
+        }
+    }
+
+    @Test
+    fun `switching to a failing guide does not keep the previous source's programmes`() {
+        XmlTvServer("previous").use { previous ->
+            XmlTvServer("rejected", hold = true, statusCode = 404).use { rejected ->
+                val controller = controller()
+                controller.applyCustomEpgUrl(previous.url, markChosen = true)
+                assertTrue(controller.awaitChannels(listOf("previous"), LOAD_WAIT_MILLIS))
+
+                controller.applyCustomEpgUrl(rejected.url, markChosen = true)
+                assertTrue(rejected.requestReceived.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                assertTrue(controller.epgState.value.isLoading)
+                assertNull(controller.epgState.value.data)
+
+                rejected.release()
+                assertTrue(controller.awaitError(LOAD_WAIT_MILLIS))
+                assertNull(controller.epgState.value.data)
+                assertEquals(rejected.url, controller.epgState.value.customUrl)
+            }
         }
     }
 

@@ -89,7 +89,7 @@ class EpgDownloader(
     }
 
     private fun isRetryable(result: EpgDownloadResult, attempt: Int): Boolean = when (result) {
-        is EpgDownloadResult.ReadError -> HttpRetryPolicy.shouldRetry(attempt, isNetworkError = true)
+        is EpgDownloadResult.ReadError -> HttpRetryPolicy.shouldRetryReadError(attempt, result.cause)
         is EpgDownloadResult.HttpError ->
             HttpRetryPolicy.shouldRetry(attempt, isNetworkError = false, httpStatusCode = result.code)
         else -> false

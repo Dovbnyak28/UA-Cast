@@ -2,6 +2,7 @@ package com.uacastplayer.playlist
 
 sealed interface PlaylistError {
     data object SizeLimitExceeded : PlaylistError
+    data object ChannelLimitExceeded : PlaylistError
     data class Http(val code: Int) : PlaylistError
     data object Network : PlaylistError
     data object Storage : PlaylistError

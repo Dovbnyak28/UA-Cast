@@ -11,6 +11,7 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.log.AppLog
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -60,11 +61,13 @@ class EpgController(
      * [startTicking] is deliberately not routed through here - it is a permanent loop, not a load.
      */
     private var loadJob: Job? = null
+    private val loadGeneration = AtomicLong()
     private val initialLoadStarted = AtomicBoolean(false)
 
-    private fun launchLoad(block: suspend () -> Unit) {
+    private fun launchLoad(block: suspend (generation: Long) -> Unit) {
+        val generation = loadGeneration.incrementAndGet()
         loadJob?.cancel()
-        loadJob = scope.launch { block() }
+        loadJob = scope.launch { block(generation) }
     }
 
     /**
@@ -75,7 +78,7 @@ class EpgController(
      */
     fun loadInitial() {
         if (!initialLoadStarted.compareAndSet(false, true)) return
-        launchLoad {
+        launchLoad { generation ->
             // Before anything else, and regardless of whether this run downloads at all: a process
             // killed mid-download or mid-parse leaves a full feed behind in filesDir, where nothing
             // reclaims it. See EpgRepository.deleteStaleDownloads.
@@ -86,8 +89,8 @@ class EpgController(
             val configuredUrl = preferences.customEpgUrl ?: preferences.epgSource.url
             val restored = epgRepository.restoreSnapshot(configuredUrl)
             if (restored != null) {
-                applyEpgOutcome(restored.outcome)
-                refreshIfFromAnEarlierDay(restored.savedAtMillis)
+                applyEpgOutcome(restored.outcome, loadGeneration = generation)
+                refreshIfFromAnEarlierDay(restored.savedAtMillis, generation)
             } else {
                 // No cached snapshot (fresh install, or cache was cleared) - without this, the
                 // configured source is never fetched until the user manually reopens Settings and
@@ -99,7 +102,7 @@ class EpgController(
                 } else {
                     epgRepository.loadFromSource(preferences.epgSource)
                 }
-                applyEpgOutcome(outcome)
+                applyEpgOutcome(outcome, loadGeneration = generation)
             }
         }
     }
@@ -112,7 +115,7 @@ class EpgController(
      * A failed refresh is logged and otherwise ignored - it must not set `hasError`, because the
      * guide on screen is real and telling somebody it is broken would be false.
      */
-    private suspend fun refreshIfFromAnEarlierDay(savedAtMillis: Long) {
+    private suspend fun refreshIfFromAnEarlierDay(savedAtMillis: Long, generation: Long) {
         val shouldRefresh = EpgRefreshPolicy.shouldRefresh(
             savedAtMillis = savedAtMillis,
             nowMillis = System.currentTimeMillis(),
@@ -127,7 +130,7 @@ class EpgController(
             epgRepository.loadFromSource(preferences.epgSource)
         }
         if (outcome is EpgOutcome.Loaded) {
-            applyEpgOutcome(outcome)
+            applyEpgOutcome(outcome, loadGeneration = generation)
         } else {
             AppLog.w(TAG) { "Keeping the cached guide: ${EpgFailureReason.of(outcome)}" }
         }
@@ -150,10 +153,19 @@ class EpgController(
         preferences.customEpgUrl = null
         preferences.hasChosenEpgSource = true
         _epgState.update {
-            it.copy(selectedSource = source, customUrl = null, suggestedUrl = null, isLoading = true, hasError = false)
+            val sourceChanged = it.customUrl != null || it.selectedSource != source
+            it.copy(
+                data = if (sourceChanged) null else it.data,
+                selectedSource = source,
+                customUrl = null,
+                suggestedUrl = null,
+                isLoading = true,
+                hasError = false,
+                lastFailure = null,
+            )
         }
-        launchLoad {
-            applyEpgOutcome(epgRepository.loadFromSource(source))
+        launchLoad { generation ->
+            applyEpgOutcome(epgRepository.loadFromSource(source), loadGeneration = generation)
         }
     }
 
@@ -162,11 +174,11 @@ class EpgController(
         if (_epgState.value.isLoading) return
         initialLoadStarted.set(true)
         val current = _epgState.value
-        _epgState.update { it.copy(isLoading = true, hasError = false) }
-        launchLoad {
+        _epgState.update { it.copy(isLoading = true, hasError = false, lastFailure = null) }
+        launchLoad { generation ->
             val outcome = current.customUrl?.let { epgRepository.loadFromUrl(it) }
                 ?: epgRepository.loadFromSource(current.selectedSource)
-            applyEpgOutcome(outcome)
+            applyEpgOutcome(outcome, loadGeneration = generation)
         }
     }
 
@@ -181,9 +193,18 @@ class EpgController(
         initialLoadStarted.set(true)
         preferences.customEpgUrl = url
         if (markChosen) preferences.hasChosenEpgSource = true
-        _epgState.update { it.copy(customUrl = url, suggestedUrl = null, isLoading = true, hasError = false) }
-        launchLoad {
-            applyEpgOutcome(epgRepository.loadFromUrl(url))
+        _epgState.update {
+            it.copy(
+                data = if (it.customUrl == url) it.data else null,
+                customUrl = url,
+                suggestedUrl = null,
+                isLoading = true,
+                hasError = false,
+                lastFailure = null,
+            )
+        }
+        launchLoad { generation ->
+            applyEpgOutcome(epgRepository.loadFromUrl(url), loadGeneration = generation)
         }
     }
 
@@ -199,7 +220,8 @@ class EpgController(
         }
     }
 
-    private fun applyEpgOutcome(outcome: EpgOutcome) {
+    private fun applyEpgOutcome(outcome: EpgOutcome, loadGeneration: Long? = null) {
+        if (loadGeneration != null && this.loadGeneration.get() != loadGeneration) return
         // The outcome names the problem - an HTTP code, an exception class, a size refusal - and
         // until now every one of them was flattened into `hasError = true` and never written down.
         // See EpgFailureReason for the field report where that silence was met.

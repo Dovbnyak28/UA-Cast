@@ -175,6 +175,21 @@ class PlaylistOutcomeReducerTest {
     }
 
     @Test
+    fun `a channel-count limit failure preserves the previously loaded channels`() {
+        val result = PlaylistOutcomeReducer.reduce(
+            loadedState,
+            PlaylistOutcome.ChannelLimitExceeded,
+            fromCache = false,
+            displayName = null,
+        )
+
+        assertEquals(loadedState.groups, result.groups)
+        assertSame(loadedState.channels, result.channels)
+        assertEquals(PlaylistError.ChannelLimitExceeded, result.error)
+        assertFalse(result.isLoading)
+    }
+
+    @Test
     fun `a network read error also preserves the previously loaded channels`() {
         val result = PlaylistOutcomeReducer.reduce(
             loadedState,

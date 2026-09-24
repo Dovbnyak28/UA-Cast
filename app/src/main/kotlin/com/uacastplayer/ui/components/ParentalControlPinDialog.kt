@@ -12,7 +12,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -55,7 +55,9 @@ fun ParentalControlPinDialog(
     onSubmit: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var pin by rememberSaveable { mutableStateOf("") }
+    // A PIN is a secret, not restorable UI state. Keeping it in rememberSaveable would copy it
+    // into the Activity saved-state Bundle on rotation/process recreation.
+    var pin by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,

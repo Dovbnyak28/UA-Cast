@@ -15,6 +15,7 @@ import org.json.JSONObject
  */
 object BackupCodec {
     const val CURRENT_VERSION = 1
+    const val MAX_BACKUP_BYTES = 8 * 1024 * 1024
 
     fun encode(data: BackupData): String {
         val root = JSONObject()
@@ -32,7 +33,7 @@ object BackupCodec {
      * yields null" has to hold for the entire parse, not for its first line.
      */
     fun decode(text: String): BackupData? {
-        if (text.isBlank()) return null
+        if (text.isBlank() || !BackupJsonInputGuard.accepts(text)) return null
         return runCatchingNonFatal {
             JSONObject(text)
                 .takeIf { it.optInt("version", -1) == CURRENT_VERSION }

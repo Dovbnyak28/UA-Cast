@@ -47,9 +47,12 @@ class GroupVisibilityStore(
     }
 
     override suspend fun save(entries: List<GroupVisibilityEntry>) = withContext(ioDispatcher) {
-        atomicFile.writeSafely(TAG, "Group visibility") { stream ->
+        val saved = atomicFile.writeSafely(TAG, "Group visibility") { stream ->
             stream.write(GroupVisibilityCodec.encode(entries).toByteArray(Charsets.UTF_8))
         }
+        // Do not let a failed AtomicFile commit look like a durable settings change to the
+        // coalescing writer. The in-memory UI remains usable, while the failure is logged.
+        if (!saved) throw IOException("Group visibility persistence failed")
         Unit
     }
 }

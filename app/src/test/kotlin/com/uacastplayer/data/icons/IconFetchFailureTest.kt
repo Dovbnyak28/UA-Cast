@@ -2,6 +2,7 @@ package com.uacastplayer.data.icons
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
@@ -10,8 +11,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -221,5 +224,24 @@ class IconFetchFailureTest {
 
         assertNotNull("trim must not leave a stale in-memory file reference", resolvedAgain)
         assertEquals("the missing file must be fetched again", 2, origin.requests.get())
+    }
+
+    @Test
+    fun `lazy icon downloads eventually trim stale cache files without prefetch`() {
+        val origin = Origin("image/png", pngBytes()).also { this.origin = it }
+        val repository = IconRepository(application, trimAfterWrites = 2, trimAfterBytes = Long.MAX_VALUE)
+        val stale = File(application.filesDir, "icon_cache/abandoned.tmp").apply {
+            writeBytes(byteArrayOf(1))
+            setLastModified(System.currentTimeMillis() - IconDiskCache.STALE_TEMP_AGE_MILLIS - 60_000)
+        }
+
+        val first = runBlocking { repository.resolveIconFile(origin.urlFor("/first.png"), null, null) }
+        assertNotNull(first)
+        assertTrue("maintenance is deferred until the write budget is reached", stale.exists())
+
+        val second = runBlocking { repository.resolveIconFile(origin.urlFor("/second.png"), null, null) }
+        assertNotNull(second)
+        assertFalse("lazy resolution must enforce cache maintenance too", stale.exists())
+        assertTrue(checkNotNull(second).isFile)
     }
 }

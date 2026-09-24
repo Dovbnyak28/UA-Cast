@@ -62,6 +62,12 @@ object XmlTvParser {
      */
     const val MAX_TEXT_LENGTH = 512
 
+    /** XML attributes are untrusted and SAX materializes their values before the callback. */
+    const val MAX_ATTRIBUTE_LENGTH = 2_048
+
+    /** Bounds retained channel IDs and icon URLs independently of the programme budget. */
+    const val MAX_CHANNEL_METADATA_CHARS = 1_024 * 1_024
+
     /**
      * @param keepFromMillis drops programmes that had already finished by this instant - see
      *   [EpgRetentionPolicy], which is what a caller with a clock should use to compute it. The
@@ -97,6 +103,14 @@ object XmlTvParser {
         // and unsupported parser implementations still get bounded text/programme retention.
         trySetProperty(reader, "http://www.oracle.com/xml/jaxp/properties/entityExpansionLimit", "1024")
         trySetProperty(reader, "http://www.oracle.com/xml/jaxp/properties/totalEntitySizeLimit", "1048576")
+        // Xerces/JDK parsers enforce this before handing the attribute to the SAX callback. On
+        // Android's Expat implementation the property may be unsupported, so the handler-level
+        // length and aggregate budgets below remain mandatory defense in depth.
+        trySetProperty(
+            reader,
+            "http://www.oracle.com/xml/jaxp/properties/maxAttributeSize",
+            MAX_ATTRIBUTE_LENGTH.toString(),
+        )
         reader.entityResolver = EntityResolver { _, _ -> InputSource(StringReader("")) }
 
         val handler = XmlTvHandler(
@@ -177,10 +191,16 @@ private class XmlTvHandler(
     // unbounded retention point. The cap still leaves room for programme-first feeds where channel
     // declarations appear later in the document.
     private val channelIdPool = HashMap<String, String>()
+    private var channelMetadataChars = 0
 
     private fun internChannelId(id: String): String? {
-        return channelIdPool[id] ?: if (channelIdPool.size < XmlTvParser.MAX_CHANNEL_ID_POOL) {
+        if (id.isEmpty() || id.length > XmlTvParser.MAX_ATTRIBUTE_LENGTH) return null
+        return channelIdPool[id] ?: if (
+            channelIdPool.size < XmlTvParser.MAX_CHANNEL_ID_POOL &&
+            channelMetadataChars <= XmlTvParser.MAX_CHANNEL_METADATA_CHARS - id.length
+        ) {
             channelIdPool[id] = id
+            channelMetadataChars += id.length
             id
         } else {
             null
@@ -196,11 +216,15 @@ private class XmlTvHandler(
                 currentIconUrl = null
             }
             "display-name" -> textTarget = StringBuilder()
-            "icon" -> if (currentChannelId != null) currentIconUrl = attributes.getValue("src")
+            "icon" -> if (currentChannelId != null) acceptIcon(attributes.getValue("src"))
             "programme" -> {
                 currentProgrammeChannelId = attributes.getValue("channel")?.let(::internChannelId)
-                currentProgrammeStart = attributes.getValue("start")?.let(XmlTvTimeParser::parse)
-                currentProgrammeStop = attributes.getValue("stop")?.let(XmlTvTimeParser::parse)
+                currentProgrammeStart = attributes.getValue("start")
+                    ?.takeIf { it.length <= TIMESTAMP_ATTRIBUTE_MAX_LENGTH }
+                    ?.let(XmlTvTimeParser::parse)
+                currentProgrammeStop = attributes.getValue("stop")
+                    ?.takeIf { it.length <= TIMESTAMP_ATTRIBUTE_MAX_LENGTH }
+                    ?.let(XmlTvTimeParser::parse)
                 currentProgrammeTitle = null
                 // A feed with no stop time gets judged on its start: EpgProgramme falls back to the
                 // start for its stop too, so the two agree about when this programme ended.
@@ -221,6 +245,18 @@ private class XmlTvHandler(
             // <desc> is deliberately not accumulated - see EpgProgramme for the measurement. Its
             // text still streams through characters(), but with no target it is dropped there
             // rather than built into a String that nothing reads.
+        }
+    }
+
+    private fun acceptIcon(icon: String?) {
+        val previousLength = currentIconUrl?.length ?: 0
+        if (icon != null && icon.length <= XmlTvParser.MAX_ATTRIBUTE_LENGTH &&
+            channelMetadataChars - previousLength <= XmlTvParser.MAX_CHANNEL_METADATA_CHARS - icon.length
+        ) {
+            // Only one icon survives per channel. Replace its budget contribution instead of
+            // charging every repeated tag; refuse a bad replacement without erasing the valid one.
+            channelMetadataChars += icon.length - previousLength
+            currentIconUrl = icon
         }
     }
 
@@ -289,6 +325,10 @@ private class XmlTvHandler(
                 skippingProgramme = false
             }
         }
+    }
+
+    private companion object {
+        const val TIMESTAMP_ATTRIBUTE_MAX_LENGTH = 64
     }
 
     fun result() = XmlTvParseResult(

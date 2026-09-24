@@ -59,6 +59,9 @@ internal object ProxyRouteSelector {
     }
 
     fun shouldRemuxRaw(response: Response, remuxEnabled: Boolean): Boolean {
+        // A disabled codec probe must not wait for 128 KiB from a live/slow origin. This also
+        // applies to wrapper URLs, where unsuccessful inner responses must retain their status.
+        if (!remuxEnabled || !response.isSuccessful) return false
         val tsProbe = response.peekBody(TS_PROBE_BYTES).bytes()
         val looksLikeTs = MpegTsSniffer.looksLikeMpegTs(tsProbe)
         val verdict = if (looksLikeTs) classifyTsProbe(tsProbe) else CastCompatibilityVerdict.Unknown

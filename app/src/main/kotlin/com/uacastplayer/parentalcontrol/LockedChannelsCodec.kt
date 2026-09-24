@@ -14,7 +14,7 @@ private const val FIELD_CHANNEL_KEY = "channelKey"
 object LockedChannelsCodec {
 
     fun encode(keys: Set<String>): String =
-        MiniJson.writeArrayOfObjects(keys.map { key -> linkedMapOf(FIELD_CHANNEL_KEY to key) })
+        MiniJson.writeArrayOfObjects(keys) { key -> linkedMapOf(FIELD_CHANNEL_KEY to key) }
 
     fun decode(json: String): Set<String> = when (val result = decodeResult(json)) {
         is JsonDecodeResult.Success -> result.value
@@ -22,6 +22,6 @@ object LockedChannelsCodec {
     }
 
     internal fun decodeResult(json: String): JsonDecodeResult<Set<String>> = jsonDecodeResult {
-        MiniJson.parseArrayOfObjects(json).mapNotNull { it[FIELD_CHANNEL_KEY] }.toSet()
+        MiniJson.parseArrayOfObjects(json) { it[FIELD_CHANNEL_KEY] }.toSet()
     }
 }

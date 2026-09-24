@@ -6,7 +6,7 @@ import org.junit.Test
 
 class UpdateCheckScheduleTest {
 
-    private val week = UpdateCheckSchedule.INTERVAL_MILLIS
+    private val day = UpdateCheckSchedule.INTERVAL_MILLIS
     private val now = 1_800_000_000_000L
 
     @Test
@@ -15,11 +15,11 @@ class UpdateCheckScheduleTest {
     }
 
     @Test
-    fun notDueUntilTheFullWeekHasPassed() {
-        assertFalse(UpdateCheckSchedule.isDue(now - week + 1, now))
+    fun notDueUntilTheFullDayHasPassed() {
+        assertFalse(UpdateCheckSchedule.isDue(now - day + 1, now))
         assertFalse(UpdateCheckSchedule.isDue(now, now))
-        assertTrue(UpdateCheckSchedule.isDue(now - week, now))
-        assertTrue(UpdateCheckSchedule.isDue(now - week - 1, now))
+        assertTrue(UpdateCheckSchedule.isDue(now - day, now))
+        assertTrue(UpdateCheckSchedule.isDue(now - day - 1, now))
     }
 
     /**
@@ -34,7 +34,13 @@ class UpdateCheckScheduleTest {
     }
 
     @Test
-    fun theIntervalIsSevenDays() {
-        assertTrue(week == 7L * 24 * 60 * 60 * 1000)
+    fun aFailureRetriesAfterOneHour() {
+        assertFalse(UpdateCheckSchedule.isDue(now - 59 * 60 * 1000L, now, lastCheckFailed = true))
+        assertTrue(UpdateCheckSchedule.isDue(now - 60 * 60 * 1000L, now, lastCheckFailed = true))
+    }
+
+    @Test
+    fun theNormalIntervalIsOneDay() {
+        assertTrue(day == 24L * 60 * 60 * 1000)
     }
 }

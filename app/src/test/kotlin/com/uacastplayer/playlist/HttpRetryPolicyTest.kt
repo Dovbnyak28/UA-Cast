@@ -13,6 +13,16 @@ class HttpRetryPolicyTest {
     }
 
     @Test
+    fun `does not retry malformed imported URLs`() {
+        assertFalse(HttpRetryPolicy.shouldRetryReadError(1, IllegalArgumentException::class.java.simpleName))
+    }
+
+    @Test
+    fun `retries transient read errors`() {
+        assertTrue(HttpRetryPolicy.shouldRetryReadError(1, "ConnectException"))
+    }
+
+    @Test
     fun `retries on 5xx server errors`() {
         assertTrue(HttpRetryPolicy.shouldRetry(attemptNumber = 1, isNetworkError = false, httpStatusCode = 503))
     }

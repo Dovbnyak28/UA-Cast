@@ -9,6 +9,7 @@ import com.uacastplayer.proxy.TsPacketSegmenter
 import com.uacastplayer.proxy.TsSegment
 import com.uacastplayer.proxy.TsSegmenter
 import java.io.InputStream
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -117,8 +118,9 @@ internal class RawTsRemuxSession(
      * returns whatever is ready, even if that's still nothing (a slow origin shouldn't hang the
      * connection forever). */
     fun awaitInitialPlaylist(): String {
-        val deadline = System.currentTimeMillis() + REMUX_INITIAL_PLAYLIST_WAIT_MILLIS
-        while (shouldAwaitMoreSegments(deadline)) {
+        val deadlineNanos = System.nanoTime() +
+            TimeUnit.MILLISECONDS.toNanos(REMUX_INITIAL_PLAYLIST_WAIT_MILLIS)
+        while (shouldAwaitMoreSegments(deadlineNanos)) {
             Thread.sleep(REMUX_POLL_INTERVAL_MILLIS)
         }
         return currentPlaylist()
@@ -127,9 +129,9 @@ internal class RawTsRemuxSession(
     /** [hasEnded] means no further segment can ever arrive (the final flush happens before the
      * flag flips), so once it's set whatever the buffer holds now is all there will ever be -
      * waiting out the rest of the deadline would just stall the request thread for nothing. */
-    private fun shouldAwaitMoreSegments(deadline: Long): Boolean {
+    private fun shouldAwaitMoreSegments(deadlineNanos: Long): Boolean {
         if (!running || hasEnded) return false
-        return isBufferEmpty() && System.currentTimeMillis() < deadline
+        return isBufferEmpty() && System.nanoTime() < deadlineNanos
     }
 
     fun currentPlaylist(): String {

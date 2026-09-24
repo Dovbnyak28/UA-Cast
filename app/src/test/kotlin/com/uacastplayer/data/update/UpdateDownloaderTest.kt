@@ -9,6 +9,10 @@ import java.io.IOException
 import java.net.ServerSocket
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -41,7 +45,11 @@ class UpdateDownloaderTest {
     private val application: Application get() = ApplicationProvider.getApplicationContext()
 
     /** Serves [body] to every caller, or [status] when that is not 200. */
-    private class Origin(private val body: ByteArray, private val status: Int = 200) : AutoCloseable {
+    private class Origin(
+        private val body: ByteArray,
+        private val status: Int = 200,
+        private val responseDelayMillis: Long = 0L,
+    ) : AutoCloseable {
         private val socket = ServerSocket(0)
         private val worker = Executors.newCachedThreadPool()
         val requests = AtomicInteger(0)
@@ -60,6 +68,7 @@ class UpdateDownloaderTest {
                                 val input = it.getInputStream()
                                 val buffer = ByteArray(2048)
                                 input.read(buffer)
+                                if (responseDelayMillis > 0) Thread.sleep(responseDelayMillis)
                                 val out = it.getOutputStream()
                                 val head = if (status == 200) {
                                     "HTTP/1.1 200 OK\r\nContent-Length: ${body.size}\r\n" +
@@ -222,6 +231,27 @@ class UpdateDownloaderTest {
 
             assertTrue(second is UpdateDownload.Ready)
             assertEquals("the origin must not be asked twice", afterFirst, origin.requests.get())
+        }
+    }
+
+    @Test
+    fun `concurrent requests on one downloader share one verified download`() = runBlocking {
+        Origin(payload, responseDelayMillis = 200).use { origin ->
+            val downloader = UpdateDownloader(application)
+            val release = apk(origin)
+
+            val results = coroutineScope {
+                listOf(
+                    async(Dispatchers.IO) { downloader.download(release) },
+                    async(Dispatchers.IO) { downloader.download(release) },
+                ).awaitAll()
+            }
+
+            assertTrue(results.all { it is UpdateDownload.Ready })
+            results.filterIsInstance<UpdateDownload.Ready>().forEach { result ->
+                assertArrayEquals(payload, result.file.readBytes())
+            }
+            assertEquals("the second caller should reuse the verified APK", 1, origin.requests.get())
         }
     }
 

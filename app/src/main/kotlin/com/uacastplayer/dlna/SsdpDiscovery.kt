@@ -11,6 +11,7 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -46,7 +47,6 @@ private const val SEND_SPACING_MILLIS = 100L
  * exists so a noisy network cannot turn one tap into dozens of requests. */
 private const val MAX_LOCATIONS = 32
 
-private const val MILLIS_PER_SECOND = 1000L
 private const val RECEIVE_POLL_TIMEOUT_MILLIS = 500
 private const val MAX_DEVICE_DESCRIPTION_BYTES = 256 * 1024
 private const val RECEIVE_BUFFER_BYTES = 4096
@@ -109,9 +109,10 @@ class SsdpDiscovery(
         try {
             DatagramSocket().use { socket ->
                 socket.soTimeout = RECEIVE_POLL_TIMEOUT_MILLIS
-                val deadline = System.currentTimeMillis() + DISCOVERY_WINDOW_SECONDS * MILLIS_PER_SECOND
+                val deadlineNanos = System.nanoTime() +
+                    TimeUnit.SECONDS.toNanos(DISCOVERY_WINDOW_SECONDS.toLong())
                 sendSearchRequests(socket)
-                receiveResponsesUntilDeadline(socket, deadline, locations)
+                receiveResponsesUntilDeadline(socket, deadlineNanos, locations)
             }
         } catch (e: CancellationException) {
             throw e
@@ -168,11 +169,11 @@ class SsdpDiscovery(
      */
     private suspend fun receiveResponsesUntilDeadline(
         socket: DatagramSocket,
-        deadline: Long,
+        deadlineNanos: Long,
         locations: MutableSet<String>,
     ) {
         val buffer = ByteArray(RECEIVE_BUFFER_BYTES)
-        while (currentCoroutineContext().isActive && System.currentTimeMillis() < deadline) {
+        while (currentCoroutineContext().isActive && System.nanoTime() < deadlineNanos) {
             try {
                 val packet = DatagramPacket(buffer, buffer.size)
                 socket.receive(packet)
@@ -199,7 +200,9 @@ class SsdpDiscovery(
     private fun collectLocationFrom(packet: DatagramPacket, locations: MutableSet<String>) {
         if (locations.size >= MAX_LOCATIONS) return
         val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
-        SsdpResponseParser.parse(text).location?.let { locations += it }
+        SsdpResponseParser.parse(text).location
+            ?.let { UpnpHttpEndpoint.discoveryLocation(it, packet.address) }
+            ?.let { locations += it }
     }
 
     /** One unreachable or misbehaving renderer must not lose the whole discovery result - a device
@@ -207,8 +210,8 @@ class SsdpDiscovery(
      * [discover]), which is why anything thrown here degrades to null rather than propagating. */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun fetchDevice(location: String): DlnaDevice? {
-        val request = Request.Builder().url(location).build()
         return try {
+            val request = Request.Builder().url(location).build()
             httpClient.newCall(request).executeCancellable { response ->
                 parseDeviceDescription(response, location)
             }

@@ -70,6 +70,21 @@ class MiniJsonTest {
         assertEquals(objects, MiniJson.parseArrayOfObjects(json))
     }
 
+    @Test
+    fun `transforms records while encoding and decoding`() {
+        val values = listOf("first", "second")
+        var encodedRecordCount = 0
+        val json = MiniJson.writeArrayOfObjects(values) { value ->
+            encodedRecordCount++
+            mapOf("value" to value)
+        }
+
+        val decoded = MiniJson.parseArrayOfObjects(json) { fields -> fields["value"] }
+
+        assertEquals(2, encodedRecordCount)
+        assertEquals(values, decoded)
+    }
+
     /** The input is a regular escaped string, not a raw one: the doubled backslash is what makes
      * the parser receive the two characters `\` and `u`. This test previously used a raw string
      * whose escape had been flattened away, so its input was the literal `AB` and it exercised no

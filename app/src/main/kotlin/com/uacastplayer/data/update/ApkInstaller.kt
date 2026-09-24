@@ -5,10 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
+import androidx.annotation.VisibleForTesting
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.log.AppLog
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 
 private const val TAG = "ApkInstaller"
 
@@ -57,12 +63,15 @@ sealed interface InstallLaunch {
 object ApkInstaller {
 
     private const val SESSION_ENTRY = "uacast-update.apk"
-    fun install(context: Context, file: File): InstallLaunch = when {
-        // Signature first, before the permission: an APK this app will refuse anyway is refused
-        // without sending the user off to a Settings screen for nothing.
-        !ApkSignatureGate.isTrustedUpdate(context, file) -> InstallLaunch.Untrusted
-        !canInstallPackages(context) -> InstallLaunch.NeedsPermission
-        else -> commitSession(context, file)
+    suspend fun install(context: Context, file: File): InstallLaunch = withContext(AppDispatchers.io) {
+        currentCoroutineContext().ensureActive()
+        when {
+            // Signature first, before the permission: an APK this app will refuse anyway is refused
+            // without sending the user off to a Settings screen for nothing.
+            !ApkSignatureGate.isTrustedUpdate(context, file) -> InstallLaunch.Untrusted
+            !canInstallPackages(context) -> InstallLaunch.NeedsPermission
+            else -> commitSession(context, file)
+        }
     }
 
     /** Whether the user has allowed this app to install packages. Below API 26 there is no such
@@ -71,10 +80,13 @@ object ApkInstaller {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
 
     @Suppress("TooGenericExceptionCaught")
-    private fun commitSession(context: Context, file: File): InstallLaunch {
+    @VisibleForTesting // Production callers must use install(), including its trust and dispatcher boundary.
+    internal suspend fun commitSession(context: Context, file: File): InstallLaunch {
         val installer = context.packageManager.packageInstaller
+        val owner = currentCoroutineContext()
         var sessionId = -1
         return try {
+            owner.ensureActive()
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                 setAppPackageName(context.packageName)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -83,11 +95,16 @@ object ApkInstaller {
             }
             sessionId = installer.createSession(params)
             installer.openSession(sessionId).use { session ->
-                session.stage(file)
+                session.stage(file, owner::ensureActive)
+                owner.ensureActive()
+                // After commit the system owns this session, even if our process/UI disappears.
                 session.commit(statusIntent(context, sessionId).intentSender)
             }
             AppLog.d(TAG) { "Update session $sessionId committed" }
             InstallLaunch.Started(sessionId)
+        } catch (cancelled: CancellationException) {
+            abandon(installer, sessionId)
+            throw cancelled
         } catch (e: IOException) {
             AppLog.w(TAG) { "Could not stage the update: ${e.javaClass.simpleName}" }
             abandon(installer, sessionId)
@@ -105,9 +122,10 @@ object ApkInstaller {
     /** Copies the APK into the session. `fsync` before the stream closes is what the package
      * installer documents as required: without it the staged copy can be short of the bytes the
      * session was told to expect, and commit fails on a file that is perfectly good on disk. */
-    private fun PackageInstaller.Session.stage(file: File) {
+    private fun PackageInstaller.Session.stage(file: File, checkActive: () -> Unit) {
         openWrite(SESSION_ENTRY, 0, file.length()).use { out ->
-            file.inputStream().use { it.copyTo(out) }
+            file.inputStream().use { copyStagedApk(it, out, checkActive) }
+            checkActive()
             fsync(out)
         }
     }

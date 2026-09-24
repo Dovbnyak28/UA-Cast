@@ -9,6 +9,7 @@ import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uParser
+import com.uacastplayer.playlist.PlaylistChannelLimitExceededException
 import com.uacastplayer.playlist.PlaylistLoadResult
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSource
@@ -37,6 +38,7 @@ sealed interface PlaylistOutcome {
         val epgUrls: List<String> = emptyList(),
     ) : PlaylistOutcome
     data object SizeLimitExceeded : PlaylistOutcome
+    data object ChannelLimitExceeded : PlaylistOutcome
     data object StorageError : PlaylistOutcome
     data class HttpError(val code: Int) : PlaylistOutcome
     data class ReadError(val message: String?) : PlaylistOutcome
@@ -114,9 +116,9 @@ class PlaylistRepository(
      * instead of always re-fetching over the network. Grouping thousands of channels is CPU work,
      * not disk I/O, so it gets its own playlist CPU hop rather than riding along on the dispatcher
      * used for the snapshot file read. */
-    suspend fun restoreSnapshot(sourceId: String): PlaylistOutcome? {
+    suspend fun restoreSnapshot(sourceId: String): PlaylistOutcome? = try {
         val snapshot = PlaylistSnapshotStore(appContext, sourceId, ioDispatcher).load() ?: return null
-        return withPlaylistCpuCancellable { checkCancellation ->
+        withPlaylistCpuCancellable { checkCancellation ->
             PlaylistOutcome.Loaded(
                 groups = ChannelGrouper.group(snapshot.channels, groupingLocale(), checkCancellation),
                 skippedLineCount = snapshot.skippedLineCount,
@@ -124,6 +126,8 @@ class PlaylistRepository(
                 sourceUrl = snapshot.sourceUrl,
             )
         }
+    } catch (_: PlaylistChannelLimitExceededException) {
+        PlaylistOutcome.ChannelLimitExceeded
     }
 
     suspend fun loadSources(): List<PlaylistSource> = sourceStore.load()
@@ -234,15 +238,19 @@ class PlaylistRepository(
                 AppLog.d(TAG) { "Playlist $traceId parse worker started" }
                 val parsed = M3uParser.parse(result.text, checkCancellation)
                 AppLog.d(TAG) { "Playlist $traceId M3U parsed" }
-                val groups = ChannelGrouper.group(parsed.channels, groupingLocale(), checkCancellation)
-                AppLog.d(TAG) { "Playlist $traceId channels grouped" }
-                PlaylistOutcome.Loaded(
-                    groups = groups,
-                    skippedLineCount = parsed.skippedLineCount,
-                    sourceFingerprint = sourceFingerprint,
-                    sourceUrl = sourceUrl,
-                    epgUrls = parsed.epgUrls + extraEpgUrls,
-                )
+                if (parsed.channelLimitExceeded) {
+                    PlaylistOutcome.ChannelLimitExceeded
+                } else {
+                    val groups = ChannelGrouper.group(parsed.channels, groupingLocale(), checkCancellation)
+                    AppLog.d(TAG) { "Playlist $traceId channels grouped" }
+                    PlaylistOutcome.Loaded(
+                        groups = groups,
+                        skippedLineCount = parsed.skippedLineCount,
+                        sourceFingerprint = sourceFingerprint,
+                        sourceUrl = sourceUrl,
+                        epgUrls = parsed.epgUrls + extraEpgUrls,
+                    )
+                }
             }
         }
         PlaylistLoadResult.SizeLimitExceeded -> PlaylistOutcome.SizeLimitExceeded

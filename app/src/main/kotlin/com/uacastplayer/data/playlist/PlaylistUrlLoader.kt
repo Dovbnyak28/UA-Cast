@@ -34,7 +34,7 @@ class PlaylistUrlLoader(
     }
 
     private fun isRetryable(result: PlaylistLoadResult, attempt: Int): Boolean = when (result) {
-        is PlaylistLoadResult.ReadError -> HttpRetryPolicy.shouldRetry(attempt, isNetworkError = true)
+        is PlaylistLoadResult.ReadError -> HttpRetryPolicy.shouldRetryReadError(attempt, result.message)
         is PlaylistLoadResult.HttpError ->
             HttpRetryPolicy.shouldRetry(attempt, isNetworkError = false, httpStatusCode = result.code)
         else -> false

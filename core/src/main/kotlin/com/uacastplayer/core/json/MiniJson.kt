@@ -15,50 +15,76 @@ object MiniJson {
     private const val HEX_RADIX = 16
 
     fun writeArrayOfObjects(objects: List<Map<String, String?>>): String =
-        objects.joinToString(prefix = "[", postfix = "]", separator = ",") { writeObject(it) }
+        writeArrayOfObjects(objects) { it }
 
-    private fun writeObject(fields: Map<String, String?>): String =
-        fields.entries.joinToString(prefix = "{", postfix = "}", separator = ",") { (key, value) ->
-            "${writeString(key)}:${if (value == null) "null" else writeString(value)}"
+    /** Builds each record directly into the result rather than materializing a second mapped list. */
+    fun <T> writeArrayOfObjects(objects: Iterable<T>, fieldsFor: (T) -> Map<String, String?>): String =
+        buildString {
+            append('[')
+            var first = true
+            for (item in objects) {
+                if (!first) append(',')
+                first = false
+                appendObject(fieldsFor(item))
+            }
+            append(']')
         }
 
-    private fun writeString(value: String): String {
-        val sb = StringBuilder("\"")
+    private fun StringBuilder.appendObject(fields: Map<String, String?>) {
+        append('{')
+        var first = true
+        for ((key, value) in fields) {
+            if (!first) append(',')
+            first = false
+            appendJsonString(key)
+            append(':')
+            if (value == null) append("null") else appendJsonString(value)
+        }
+        append('}')
+    }
+
+    private fun StringBuilder.appendJsonString(value: String) {
+        append('"')
         for (c in value) {
             when (c) {
-                '"' -> sb.append("\\\"")
-                '\\' -> sb.append("\\\\")
-                '\n' -> sb.append("\\n")
-                '\r' -> sb.append("\\r")
-                '\t' -> sb.append("\\t")
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
                 // Locale.ROOT: this output is machine-read back by parseArrayOfObjects, so it must
                 // always use ASCII digits regardless of the device's default locale (Arabic-indic,
                 // Bengali, etc. digit systems would otherwise silently corrupt the escape).
                 else -> if (c.code < FIRST_PRINTABLE_CODE_POINT) {
-                    sb.append("\\u%04x".format(Locale.ROOT, c.code))
+                    append("\\u%04x".format(Locale.ROOT, c.code))
                 } else {
-                    sb.append(c)
+                    append(c)
                 }
             }
         }
-        return sb.append('"').toString()
+        append('"')
     }
 
-    fun parseArrayOfObjects(json: String): List<Map<String, String?>> = Parser(json).parseArray()
+    fun parseArrayOfObjects(json: String): List<Map<String, String?>> =
+        parseArrayOfObjects(json) { it }
+
+    /** Transforms each parsed object immediately so callers need not retain a second list of maps. */
+    fun <T : Any> parseArrayOfObjects(json: String, transform: (Map<String, String?>) -> T?): List<T> =
+        Parser(json).parseArray(transform)
 
     private class Parser(private val text: String) {
         private var pos = 0
 
-        fun parseArray(): List<Map<String, String?>> {
+        fun <T : Any> parseArray(transform: (Map<String, String?>) -> T?): List<T> {
             skipWhitespace()
             expect('[')
-            val result = mutableListOf<Map<String, String?>>()
+            val result = mutableListOf<T>()
             skipWhitespace()
             if (peek() == ']') {
                 pos++
             } else {
                 while (true) {
-                    result += parseObject()
+                    transform(parseObject())?.let(result::add)
                     skipWhitespace()
                     when (peek()) {
                         ',' -> { pos++; skipWhitespace() }

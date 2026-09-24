@@ -8,15 +8,13 @@ import com.uacastplayer.core.json.jsonDecodeResult
 object GroupVisibilityCodec {
 
     fun encode(entries: List<GroupVisibilityEntry>): String =
-        MiniJson.writeArrayOfObjects(
-            entries.map { entry ->
-                linkedMapOf(
-                    "sourceId" to entry.sourceId,
-                    "groupKey" to entry.groupKey,
-                    "state" to entry.state.name,
-                )
-            }
-        )
+        MiniJson.writeArrayOfObjects(entries) { entry ->
+            linkedMapOf(
+                "sourceId" to entry.sourceId,
+                "groupKey" to entry.groupKey,
+                "state" to entry.state.name,
+            )
+        }
 
     /** A record with no `sourceId` field at all (format version 1 - see [LEGACY_SOURCE_ID]) is
      * tagged [LEGACY_SOURCE_ID] rather than dropped, so a pre-source-scoping pin/hide list isn't
@@ -28,12 +26,12 @@ object GroupVisibilityCodec {
     }
 
     internal fun decodeResult(json: String): JsonDecodeResult<List<GroupVisibilityEntry>> = jsonDecodeResult {
-        MiniJson.parseArrayOfObjects(json).mapNotNull { fields ->
+        MiniJson.parseArrayOfObjects(json) { fields ->
             val sourceId = fields["sourceId"] ?: LEGACY_SOURCE_ID
-            val groupKey = fields["groupKey"] ?: return@mapNotNull null
+            val groupKey = fields["groupKey"] ?: return@parseArrayOfObjects null
             val state = fields["state"]
                 ?.let { name -> runCatchingNonFatal { GroupVisibilityState.valueOf(name) }.getOrNull() }
-                ?: return@mapNotNull null
+                ?: return@parseArrayOfObjects null
             GroupVisibilityEntry(sourceId, groupKey, state)
         }
     }

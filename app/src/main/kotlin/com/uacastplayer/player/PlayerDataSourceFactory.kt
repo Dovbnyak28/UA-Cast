@@ -7,6 +7,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.net.HttpDefaults
+import com.uacastplayer.core.net.HttpHeaderValuePolicy
 
 private const val CONNECT_TIMEOUT_SECONDS = 15L
 private const val READ_TIMEOUT_SECONDS = 30L
@@ -32,9 +33,9 @@ class PlayerDataSourceFactory private constructor(
 ) : DataSource.Factory by wrapped {
 
     fun setChannelHeaders(userAgent: String?, referrer: String?) {
-        httpDataSourceFactory.setUserAgent(userAgent?.ifBlank { null } ?: HttpDefaults.BROWSER_USER_AGENT)
+        httpDataSourceFactory.setUserAgent(HttpHeaderValuePolicy.userAgentOrDefault(userAgent))
         val properties = mutableMapOf<String, String>()
-        referrer?.ifBlank { null }?.let { properties["Referer"] = it }
+        HttpHeaderValuePolicy.sanitize(referrer)?.let { properties["Referer"] = it }
         httpDataSourceFactory.setDefaultRequestProperties(properties)
     }
 

@@ -26,4 +26,16 @@ interface ParentalControlPinStorage {
     var parentalControlPinHash: String?
 
     var parentalControlPinSalt: String?
+
+    /** Persists the two halves of a PIN record in one storage transaction when supported. */
+    fun setParentalControlPin(hash: String, salt: String) {
+        parentalControlPinSalt = salt
+        parentalControlPinHash = hash
+    }
+
+    /** Removes the two halves of a PIN record in one storage transaction when supported. */
+    fun clearParentalControlPin() {
+        parentalControlPinHash = null
+        parentalControlPinSalt = null
+    }
 }

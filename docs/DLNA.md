@@ -29,18 +29,26 @@ Two consequences of "same proxy" that are easy to get wrong, and were:
 
 The renderer profile is deliberately different from Chromecast's: raw MPEG-TS stays a continuous
 stream (`remuxEnabled=false`), single-URL wrapper playlists are unwrapped, and a real HLS channel is
-replayed as one continuous DLNA MPEG-TS response (`flattenHlsToStream=true`). The response uses the
-standard `video/vnd.dlna.mpeg-tts` MIME, `transferMode.dlna.org: Streaming`, matching
-`contentFeatures.dlna.org` attributes, and HTTP/1.1 chunked framing for the unknown-length live
-body. This is the direct fix
-for a Hisense VIDAA field capture where the set fetched one manifest, no segments, refused
-`SetAVTransportURI`, and displayed "Archivo no compatible". A master playlist is probed in order,
+replayed as one continuous 188-byte MPEG-TS response (`flattenHlsToStream=true`). The response uses
+`video/mpeg` (the un-timestamped TS MIME used by DLNA servers), `transferMode.dlna.org: Streaming`,
+matching `contentFeatures.dlna.org` attributes, and HTTP/1.1 chunked framing for the unknown-length
+live body. The route was introduced after a Hisense VIDAA field capture where the set fetched one
+manifest but no segments, refused `SetAVTransportURI`, and displayed "Archivo no compatible".
+A master playlist is probed in order,
 with a bounded eight-variant budget, so an unsupported fMP4/encrypted first variant does not hide a
 later MPEG-TS fallback. A generic origin MIME such as `application/octet-stream` is normalized to
 `video/mp2t` only after MPEG-TS sync bytes prove what the body is. Encrypted, fragmented-MP4 and
 byte-range media playlists still fall back to the manifest rather than being concatenated into
 corrupt output. A live encoder whose media sequence persistently resets is resumed after three
 consecutive rollback windows; one stale CDN response is ignored rather than replaying old video.
+
+The MIME choice is deliberate: `video/vnd.dlna.mpeg-tts` is registered for **192-byte** timestamped
+transport packets, while this route forwards ordinary **188-byte** HLS TS packets unchanged. Do not
+restore that MIME without adding a real 188-to-192-byte conversion. A successful SOAP `Play` is not
+proof that the TV could fetch the phone's stream. In a field log, `DLNA proxy listening on` gives the
+phone's address and port; `DLNA proxy root request` confirms the TV reached the proxy; and the
+flattened-stream delivered-byte/error lines distinguish a receiver rejection from an upstream
+failure. If no root request appears, check LAN isolation/IP reachability before changing codecs.
 
 ## Discovery
 

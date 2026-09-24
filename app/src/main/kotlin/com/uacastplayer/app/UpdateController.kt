@@ -9,6 +9,7 @@ import com.uacastplayer.update.UpdateCheckOutcome
 import com.uacastplayer.update.UpdateCheckSchedule
 import com.uacastplayer.update.UpdateCheckStorage
 import com.uacastplayer.update.UpdateUiState
+import com.uacastplayer.update.UpdatePromptSchedule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,16 +21,15 @@ private const val TAG = "UpdateController"
 /**
  * Finds out whether a newer release exists, on two schedules that behave differently on purpose.
  *
- * The **automatic** check runs when the app is opened and at most once every seven days
- * ([UpdateCheckSchedule]). It is silent: it can only ever add a banner, never an error message. A
+ * The **automatic** check runs when the app enters the foreground, normally once a day
+ * ([UpdateCheckSchedule]). It can offer an APK and add a banner, but never an error message. A
  * user who did not ask a question should not be shown the answer's failure.
  *
- * The **manual** check runs when the user taps the button in Settings. It ignores the weekly
+ * The **manual** check runs when the user taps the button in Settings. It ignores the automatic
  * throttle - a user who taps "check now" means now - and it does report failure, because there is
  * someone waiting for a reply.
  *
- * Neither downloads anything. [UpdateUiState.availableRelease] carries the release page URL, and
- * the UI opens it in a browser.
+ * Neither downloads anything. Download and installation only start after a user action.
  */
 class UpdateController(
     private val releaseSource: ReleaseSource,
@@ -42,13 +42,18 @@ class UpdateController(
     val state: StateFlow<UpdateUiState> = _state.asStateFlow()
 
     /**
-     * The weekly check. Does nothing at all when it is not due yet, when a check is already running,
+     * The foreground check. Does nothing when it is not due yet, when a check is already running,
      * or when this build's own version cannot be parsed - there is nothing to compare against then,
      * and offering an "update" on that basis would be guesswork.
      */
     fun checkOnLaunch() {
         if (_state.value.isChecking) return
-        if (!UpdateCheckSchedule.isDue(storage.lastUpdateCheckAtMillis, now())) return
+        if (!UpdateCheckSchedule.isDue(
+                storage.lastUpdateCheckAtMillis,
+                now(),
+                storage.lastUpdateCheckFailed,
+            )
+        ) return
         runCheck(manual = false)
     }
 
@@ -65,7 +70,15 @@ class UpdateController(
     fun dismissAvailableUpdate() {
         val tag = _state.value.availableRelease?.tagName ?: return
         storage.dismissedUpdateTag = tag
-        _state.value = _state.value.copy(availableRelease = null)
+        _state.value = _state.value.copy(availableRelease = null, promptRelease = null)
+    }
+
+    /** "Later" schedules a reminder for this release; the banner remains in the meantime. */
+    fun acknowledgeUpdatePrompt() {
+        val tag = _state.value.promptRelease?.tagName ?: return
+        storage.lastUpdatePromptAtMillis = now()
+        storage.promptedUpdateTag = tag
+        _state.value = _state.value.copy(promptRelease = null)
     }
 
     /** Clears the one-shot result shown next to the Settings button, so it does not sit there
@@ -91,10 +104,10 @@ class UpdateController(
                 AppLog.w(TAG) { "Update source boundary failed: ${error.javaClass.simpleName}" }
                 ReleaseLookup.Failed
             }
-            // Recorded even when the request failed. Otherwise a device that is offline every time
-            // the app opens would retry on every single launch, which is the one case where an
-            // update check could become a battery and data cost worth noticing.
+            // Failures are recorded too, but retry after an hour rather than every foreground
+            // transition or after a full day without another opportunity to discover an update.
             storage.lastUpdateCheckAtMillis = now()
+            storage.lastUpdateCheckFailed = lookup is ReleaseLookup.Failed
 
             val release = (lookup as? ReleaseLookup.Found)?.release?.takeIf { it.version > installed }
             _state.value = when {
@@ -112,6 +125,15 @@ class UpdateController(
                     } else {
                         null
                     },
+                    promptRelease = release.takeIf {
+                        !manual && it.apk != null && it.tagName != storage.dismissedUpdateTag &&
+                            UpdatePromptSchedule.isDue(
+                                it.tagName,
+                                storage.promptedUpdateTag,
+                                storage.lastUpdatePromptAtMillis,
+                                now(),
+                            )
+                    },
                     lastOutcome = if (manual) UpdateCheckOutcome.UPDATE_AVAILABLE else null,
                 )
 
@@ -122,6 +144,7 @@ class UpdateController(
                 else -> _state.value.copy(
                     isChecking = false,
                     availableRelease = null,
+                    promptRelease = null,
                     lastOutcome = if (manual) UpdateCheckOutcome.UP_TO_DATE else null,
                 )
             }

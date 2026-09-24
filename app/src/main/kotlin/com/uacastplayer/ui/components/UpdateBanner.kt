@@ -44,7 +44,7 @@ import com.uacastplayer.update.UpdateInstallState
  * part of the layout rather than an overlay, so it pushes the screen down instead of covering the
  * title.
  *
- * It is the whole of the "notify" half of the update feature. There is no system notification and
+ * It is the persistent reminder after the one-time install offer. There is no system notification and
  * no background job: the check runs when the app is opened (see
  * [com.uacastplayer.app.UpdateController]), so the moment there is something to say the user is
  * already looking at the screen.
@@ -67,6 +67,7 @@ fun UpdateBanner(
     release: GitHubRelease?,
     installState: UpdateInstallState,
     onInstall: (ReleaseApk) -> Unit,
+    onGrantInstallPermission: () -> Unit,
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -152,6 +153,7 @@ fun UpdateBanner(
                 release = shown,
                 installState = installState,
                 onInstall = onInstall,
+                onGrantInstallPermission = onGrantInstallPermission,
                 onOpen = onOpen,
             )
         }
@@ -170,6 +172,7 @@ private fun UpdateBannerAction(
     release: GitHubRelease?,
     installState: UpdateInstallState,
     onInstall: (ReleaseApk) -> Unit,
+    onGrantInstallPermission: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
     val apk = release?.apk
@@ -184,6 +187,18 @@ private fun UpdateBannerAction(
 
         installState is UpdateInstallState.Launching -> Text(
             text = stringResource(R.string.settings_update_launching),
+            color = UaTheme.palette.labelSecondary,
+            style = BodyRegular,
+        )
+
+        installState is UpdateInstallState.NeedsPermission -> SecondaryButton(
+            text = stringResource(R.string.settings_update_grant_permission_button),
+            onClick = onGrantInstallPermission,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        installState is UpdateInstallState.Untrusted -> Text(
+            text = stringResource(R.string.settings_update_untrusted),
             color = UaTheme.palette.labelSecondary,
             style = BodyRegular,
         )
