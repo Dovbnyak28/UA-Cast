@@ -13,6 +13,9 @@ import com.uacastplayer.player.PlaybackActivity
 import com.uacastplayer.playlist.M3uChannel
 import java.io.IOException
 import java.net.ServerSocket
+import java.net.Socket
+import java.net.SocketTimeoutException
+import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -29,6 +32,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -57,6 +61,32 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
  */
 @RunWith(RobolectricTestRunner::class)
 class IconPrefetchInterruptionTest {
+    @Test fun `closing the held icon server closes its accepted clients`() {
+        HeldIconServer().use { server ->
+            Socket("127.0.0.1", URI(server.url).port).use { client ->
+                client.soTimeout = 1_000
+                client.getOutputStream().write(1)
+                client.getOutputStream().flush()
+                assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                server.close()
+                assertEquals("Closing the fixture must unblock its held connection", -1, client.getInputStream().read())
+            }
+        }
+    }
+
+    @Test fun `held icon connections remain open during garbage collection`() {
+        HeldIconServer().use { server ->
+            Socket("127.0.0.1", URI(server.url).port).use { client ->
+                client.soTimeout = 1_000
+                client.getOutputStream().write(1)
+                client.getOutputStream().flush()
+                assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                repeat(3) { System.gc(); System.runFinalization() }
+                assertThrows(SocketTimeoutException::class.java) { client.getInputStream().read() }
+            }
+        }
+    }
+
     @Test fun `production selection leaves the caller thread before visiting channels`() {
         val observed = java.util.concurrent.atomic.AtomicReference<Thread>()
         val visited = CountDownLatch(1)
@@ -96,6 +126,9 @@ class IconPrefetchInterruptionTest {
     private class HeldIconServer : AutoCloseable {
         private val socket = ServerSocket(0)
         private val worker = Executors.newSingleThreadExecutor()
+        private val clientLock = Any()
+        private val heldClients = mutableListOf<Socket>()
+        private var closed = false
 
         /** Counts down once some icon request has actually arrived. */
         val requestReceived = CountDownLatch(1)
@@ -108,11 +141,21 @@ class IconPrefetchInterruptionTest {
                 try {
                     while (true) {
                         val client = socket.accept()
+                        val retained = synchronized(clientLock) {
+                            if (closed) false else {
+                                heldClients += client
+                                true
+                            }
+                        }
+                        if (!retained) {
+                            client.close()
+                            break
+                        }
                         client.getInputStream().read()
                         requestCount.incrementAndGet()
                         requestReceived.countDown()
-                        // Deliberately never answered and never closed: the client stays parked in
-                        // its read until this server is closed, which is the whole point.
+                        // Retain the socket so GC cannot end the client's held read. close() owns
+                        // all accepted connections, not only the listening ServerSocket.
                     }
                 } catch (_: IOException) {
                     // The socket being closed by close() below is how this thread ends.
@@ -121,8 +164,16 @@ class IconPrefetchInterruptionTest {
         }
 
         override fun close() {
-            worker.shutdownNow()
+            val clients = synchronized(clientLock) {
+                closed = true
+                heldClients.toList().also { heldClients.clear() }
+            }
             socket.close()
+            clients.forEach(Socket::close)
+            worker.shutdownNow()
+            check(worker.awaitTermination(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                "Held icon server worker did not stop"
+            }
         }
 
         fun awaitRequestCount(expected: Int): Boolean {
