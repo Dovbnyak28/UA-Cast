@@ -111,6 +111,73 @@ timeout повідомляє screen/foreground та тільки синтети�
 `benchmark-fixture-ready`. Це звужує пошук, але не доводить виправлення двох CI-збоїв
 і не видається за перевірку на API 24/35 або фізичному TV.
 
+Для опублікованого follow-up `4e272e2` усі шість Android CI jobs пройшли. Native:
+API 24 — 148 тестів / 173.331s, API 30 — 151 / 174.663s, API 36 — 151 / 191.143s.
+Raw звіти перевірені; попереднє API-24 зависання цього разу не повторилось. Це
+успішний повтор, не доказ знайденої причини чи виправлення давнього зависання.
+
+Локальний повний API-36.1 benchmark завершив native 8/8 за 589.047s; JSON містить
+усі вісім journeys і повні iteration counts. Gradle task при цьому червоний через
+`Failed to receive the UTP test results` / gRPC transport error, тому весь прогін
+не названий зеленим gate. Незмінний validator також повернув failure:
+
+| Локальний API 36.1 / software GPU | Значення | Поріг API-35 CI для порівняння |
+| --- | ---: | ---: |
+| Cold / warm display median | 2453.212 / 1811.446ms | 5000 / 2500ms |
+| Restore 40k channels display median | 2108.806ms | 10000ms |
+| Open channels / first player frame CPU P95 | 461.190 / 366.447ms | 100 / 100ms |
+| Fullscreen / EPG guide frame CPU P95 | 128.506 / 142.463ms | 100 / 100ms |
+| 350k EPG parse/index median | 3830.566ms | 60000ms |
+| Worst EPG MemoryUsageMetric managed heap | 45689 KiB | 262144 KiB |
+
+API/host/rendering різні, тому ці числа не видаються за контрольований before/after,
+за результат нового API-35 CI або за показники фізичного телевізора. Наявність усіх
+JSON measurements не скасовує UTP failure та чотири перевищення frame-порогів.
+
+## Завершений API-35 вимір та стабілізація підготовки — 5 жовтня
+
+На `4e272e2` віддалений API-35 run завершив 8/8 за 267.225s, нуль
+failures/errors/skips; завантажені XML/JSON перевірені незалежно. Підготовка цього
+разу не зависла. Сам performance gate **червоний** через три фактичні перевищення:
+
+| Поточний API-35 CI | Значення | Поріг |
+| --- | ---: | ---: |
+| Open channels frame CPU P95 | 165.651ms | 100ms |
+| First player frame CPU P95 | 241.873ms | 100ms |
+| Fullscreen frame CPU P95 | 306.657ms | 100ms |
+| EPG guide frame CPU P95 | 39.632ms | 100ms |
+| Cold / warm display median | 1104.510 / 580.765ms | 5000 / 2500ms |
+| Restore 40k channels display median | 1102.636ms | 10000ms |
+| 350k EPG parse/index median | 1273.679ms | 60000ms |
+| Worst EPG MemoryUsageMetric managed heap | 124524 KiB | 262144 KiB |
+
+Числа нижчі за попередній повний CI run, але hosted runners і навантаження можуть
+відрізнятися. Це не контрольований A/B і не доказ відсотка прискорення від конкретної
+зміни. Startup/restore/EPG/memory правила пройшли, три frame правила залишаються відкриті.
+
+В одній fullscreen trace поточного CI найдовший main-thread `postAndWait` — 214.629ms:
+210.872ms sleep, 3.745ms scheduler-ready, 0.012ms running. RenderThread drawing до
+230.620ms, buffer dequeue 157.434ms, GPU-completion wait 151.975ms. Layout до 5.070ms,
+inflate 0.382ms, recomposition до 63.993ms. Це evidence конкретної trace про значну
+частку renderer/synchronization wait; воно не виправдовує зміну state machine або
+підняття бюджету й не визначає швидкість hardware GPU фізичного TV.
+
+Окремий негативний тест підтвердив ще один дефект **тестової підготовки**, не програми:
+зі сплячим дисплеєм `prepareFixture` викликається до `measureRepeated`, а wake-up
+усередині AndroidX Macrobenchmark відбувається запізно. До виправлення тест впав
+за 190.509s: `screenOn=false`, `foreground=null`, `visibleStatus=[]`.
+
+Тепер driver будить дисплей і закриває тільки незахищений keyguard перед fixture.
+PIN/налаштування блокування не змінюються. Новий regression відмовляється виконувати
+sleep/fixture на фізичному пристрої. Після зміни readiness + cold/warm startup
+пройшли 3/3 за 168.608s, з незмінними 10 ітераціями кожного startup. Обидва варіанти
+harness компілюються; сам production APK після URL/UI gate не змінений.
+
+До performance workflow додано цей regression поряд із тими самими вісьмома
+обов'язковими measurement journeys. Жоден бюджет/timeout/minIterations не піднятий.
+Стан дисплея старого червоного `33e8dfe` не збережений, тому цей підтверджений шлях
+зависання не видається за доведену єдину причину того CI run.
+
 ## Що не підтверджено
 
 Mi TV під час цього проходу недоступний; старі успішні TV-тести не видаються за тести
@@ -119,7 +186,7 @@ fixtures не доводять тривале декодування реаль�
 
 Попередній повний API-35 performance run на `352e386` завершив 8/8 journeys, але три
 frame CPU P95 перевищували 100ms: канали 291.538ms, перший плеєр 355.126ms,
-fullscreen 469.306ms. Поточне скорочення layout/шарів треба повторно виміряти;
+fullscreen 469.306ms. Повторний вимір поточного APK наведений вище;
 старі числа не є показниками нового APK. Budgets не підняті й software-GPU затримки
 не приховані. Попередній неповторений API-24 process crash також не має доведеної причини.
 

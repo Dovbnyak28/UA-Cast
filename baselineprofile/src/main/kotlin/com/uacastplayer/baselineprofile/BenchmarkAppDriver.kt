@@ -21,6 +21,10 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
      * destructive choice visible at every call site.
      */
     fun prepareFixture(mode: String, clearPackage: Boolean = false) {
+        // Fixture preparation precedes measureRepeated, so Macrobenchmark's own wake-up is too late.
+        // Dismiss only a non-secure keyguard; this does not unlock a device protected by a PIN.
+        device.wakeUp()
+        device.executeShellCommand("wm dismiss-keyguard")
         if (clearPackage) {
             val clearResult = device.executeShellCommand("pm clear $PACKAGE_NAME")
             check(clearResult.contains("Success")) { "Could not clear benchmark package" }
