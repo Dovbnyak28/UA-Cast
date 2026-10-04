@@ -5,7 +5,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -54,24 +57,38 @@ class EntryStagger internal constructor() {
  * it is lagging rather than arriving. Past the cap items appear immediately, without a fade.
  *
  * [key] must be the same key the lazy list itself uses, so "already played" survives recycling.
+ * Lazy containers can pass their already-observed [animationsEnabled] policy rather than
+ * registering a settings observer separately for every visible row.
  */
 @Composable
-fun Modifier.staggeredEntry(stagger: EntryStagger, key: Any, index: Int): Modifier {
-    val animate = animationsAllowed() && index in 0 until MAX_STAGGERED_ITEMS
+fun Modifier.staggeredEntry(
+    stagger: EntryStagger,
+    key: Any,
+    index: Int,
+    animationsEnabled: Boolean? = null,
+): Modifier {
+    // Static/recycled rows need neither an animation clock nor a persistent graphics layer.
+    if (index !in 0 until MAX_STAGGERED_ITEMS) return this
+    val enabled = animationsEnabled ?: animationsAllowed()
     // Read once per composition of this item: if it has played before (a scroll-back), the item
     // starts fully visible and no animation is scheduled at all.
     val alreadyPlayed = remember(stagger, key) { stagger.hasPlayed(key) }
-    val progress = remember(stagger, key, animate) {
-        Animatable(if (alreadyPlayed || !animate) 1f else 0f)
-    }
+    return if (alreadyPlayed || !enabled) this else animatedEntry(stagger, key, index)
+}
+
+@Composable
+private fun Modifier.animatedEntry(stagger: EntryStagger, key: Any, index: Int): Modifier {
+    val progress = remember(stagger, key) { Animatable(0f) }
+    var complete by remember(stagger, key) { mutableStateOf(false) }
     val lift = with(LocalDensity.current) { EntryLift.toPx() }
 
-    LaunchedEffect(stagger, key, animate) {
-        if (alreadyPlayed || !animate) return@LaunchedEffect
+    LaunchedEffect(stagger, key) {
         stagger.markPlayed(key)
         delay(index.toLong() * STAGGER_MS)
         progress.animateTo(1f, tween(DUR_ENTER, easing = EaseSpring))
+        complete = true
     }
+    if (complete) return this
 
     // graphicsLayer's lambda form: the animated value is read at draw time, so each frame of this
     // costs a redraw of one item and no recomposition.

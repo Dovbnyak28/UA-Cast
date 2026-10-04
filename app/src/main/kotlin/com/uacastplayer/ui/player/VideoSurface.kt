@@ -17,8 +17,8 @@ import com.uacastplayer.player.PlayerViewModel
 internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
-            // Inflated from res/layout/player_view.xml instead of PlayerView(ctx) purely to get
-            // surface_type=texture_view applied - see that file's doc for why: a SurfaceView (the
+            // XML sets the video-only content layout (no duplicate native controls) and
+            // surface_type=texture_view - see that file's doc for why: a SurfaceView (the
             // constructor default) under Compose overlay buttons in the same Box was swallowing
             // their taps. useController is still set here since app:use_controller in that layout
             // only seeds PlayerView's initial value, not a persistent binding.

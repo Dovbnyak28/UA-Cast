@@ -1,6 +1,14 @@
 package com.uacastplayer.ui.channels
 
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -8,7 +16,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.core.settings.ListDensity
@@ -79,9 +86,50 @@ class PhoneChannelSearchUiTest {
         rule.onAllNodesWithText("Target One").assertCountEquals(2)
         rule.onAllNodesWithText("Target One")[0].performClick()
         rule.runOnIdle { assertSame(match, selected) }
-        rule.onNode(hasSetTextAction()).performTextClearance()
+        rule.onNodeWithContentDescription("Clear channel search").performClick()
         awaitText("Alpha")
         rule.onAllNodesWithText("Target One").assertCountEquals(2)
+    }
+
+    @Test fun groupNoResultsHasAnExplicitRecoveryAction() {
+        rule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                SingleGroupChannelList(
+                    GroupedChannels(ChannelGroup.Custom("Group"),
+                        listOf(M3uChannel("Alpha", "https://unused.example.test"))),
+                    EpgUiState(), 0, { null }, ListDensity.MINIMAL, ChannelLayout.LIST, {}, { false }, {},
+                    { false }, {}, {}, {},
+                )
+            }
+        }
+        rule.onNode(hasSetTextAction()).performTextInput("No match")
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Alpha").fetchSemanticsNodes().isEmpty() }
+        rule.onNodeWithText("Clear channel search").performClick()
+        awaitText("Alpha")
+        rule.onNodeWithContentDescription("Clear channel search").assertDoesNotExist()
+    }
+
+    @Test fun narrowLargeTextHeaderKeepsTheLayoutActionReachable() {
+        var chosen = ChannelLayout.LIST
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f),
+            ) {
+                UaCastTheme(AppTheme.CINEMA) {
+                    Box(Modifier.size(320.dp, 600.dp)) {
+                        GroupsOverviewGrid(
+                            listOf(GroupedChannels(ChannelGroup.Custom("Group"), emptyList())),
+                            rememberLazyGridState(), ChannelLayout.LIST, { chosen = it }, {},
+                            0, { null }, { false }, {},
+                            {}, emptySet(), emptySet(), {}, {}, {},
+                        )
+                    }
+                }
+            }
+        }
+        rule.onNodeWithContentDescription("Layout").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Grid").performClick()
+        rule.runOnIdle { org.junit.Assert.assertEquals(ChannelLayout.GRID, chosen) }
     }
 
     private fun awaitText(text: String) {

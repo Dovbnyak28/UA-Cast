@@ -83,9 +83,10 @@ fun Modifier.appBackground(plain: Boolean = false): Modifier {
                 radius = size.maxDimension * 0.64f,
             )
             onDrawWithContent {
-                drawContent()
+                // Atmosphere belongs behind text, controls and video, not as a tint over them.
                 drawRect(firstGlow)
                 drawRect(secondGlow)
+                drawContent()
             }
         }
 }

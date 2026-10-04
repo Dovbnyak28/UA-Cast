@@ -40,6 +40,7 @@ import com.uacastplayer.favorites.FavoritesSorter
 import com.uacastplayer.favorites.ReorderPolicy
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.ChannelIcon
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.BodyText
@@ -109,6 +110,7 @@ fun FavoritesScreen(
     }
     val channels = remember(visibleFavorites) { visibleFavorites.map { it.toChannel() } }
     val canReorder = editing && query.isBlank() && sortOrder == FavoritesSortOrder.MANUAL
+    val animateItems = animationsAllowed()
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding, vertical = GapM)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -146,7 +148,11 @@ fun FavoritesScreen(
                         // produce a stutter. This is what makes rows smoothly slide out of the way
                         // as you drag one past them, and makes removing a favorite collapse the
                         // list instead of the rows below it just jumping up.
-                        .then(if (isDragging) Modifier else Modifier.animateItem())
+                        .then(
+                            if (favoritePlacementAllowed(animateItems, isDragging)) {
+                                Modifier.animateItem()
+                            } else Modifier,
+                        )
                         .favoriteDrag(reorderState, favorite.key, index, canReorder, onReorder)
                         .clickable(enabled = !editing) { onChannelSelected(channels, index) }
                         .padding(ItemPadding),
@@ -180,6 +186,9 @@ fun FavoritesScreen(
 }
 
 /** Toolbar control that switches the Favorites screen's [FavoritesSortOrder]. */
+private fun favoritePlacementAllowed(animationsEnabled: Boolean, dragging: Boolean): Boolean =
+    animationsEnabled && !dragging
+
 @Composable
 private fun FavoritesSortMenu(selected: FavoritesSortOrder, onSelect: (FavoritesSortOrder) -> Unit) {
     var expanded by remember { mutableStateOf(false) }

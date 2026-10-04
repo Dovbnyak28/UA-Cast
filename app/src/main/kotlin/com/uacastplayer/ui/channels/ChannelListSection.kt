@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.data.playlist.filterPlaylistChannels
@@ -66,6 +67,7 @@ import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.rememberEntryStagger
 import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
@@ -117,6 +119,7 @@ internal fun SingleGroupChannelList(
     // Replays when the filter changes: a search that narrows 400 rows to 3 is new content arriving,
     // and the wave is what makes that legible. Also covers opening a different group.
     val entryStagger = rememberEntryStagger(filteredChannels)
+    val animateItems = animationsAllowed()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
@@ -133,6 +136,7 @@ internal fun SingleGroupChannelList(
                 color = UaTheme.palette.labelPrimary,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
             )
             Box(modifier = Modifier.align(Alignment.CenterEnd)) {
@@ -145,6 +149,14 @@ internal fun SingleGroupChannelList(
             onValueChange = { query = it },
             placeholder = { Text(stringResource(R.string.channels_search_hint)) },
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
+            trailingIcon = if (query.isNotEmpty()) {
+                {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(AppIcons.Close, contentDescription = stringResource(R.string.channels_clear_search),
+                            tint = UaTheme.palette.labelSecondary)
+                    }
+                }
+            } else null,
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
             colors = uaTextFieldColors(),
@@ -158,7 +170,7 @@ internal fun SingleGroupChannelList(
         )
 
         if (filteredChannels.isEmpty()) {
-            NoSearchResults(trimmedQuery)
+            NoSearchResults(trimmedQuery, onClearSearch = { query = "" })
         } else if (layout == ChannelLayout.LIST) {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
                 // One LazyColumn item per channel - NOT a single item wrapping a forEachIndexed
@@ -186,8 +198,8 @@ internal fun SingleGroupChannelList(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index)
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, entryKey, index, animationsEnabled = animateItems)
                             .clip(shape)
                             .background(UaTheme.palette.surface1),
                     ) {
@@ -248,8 +260,8 @@ internal fun SingleGroupChannelList(
                         onClick = { onChannelClick(channel) },
                         onLongClick = { onLongPressChannel(channel) },
                         modifier = Modifier
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index),
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, entryKey, index, animationsEnabled = animateItems),
                     )
                 }
             }

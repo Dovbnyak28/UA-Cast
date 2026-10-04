@@ -8,7 +8,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -76,9 +75,28 @@ class PhoneChannelSearchInstrumentedTest {
         rule.onAllNodesWithText("Target One").assertCountEquals(2)
         rule.onAllNodesWithText("Target One")[0].performClick()
         rule.runOnIdle { assertSame(match, selected) }
-        rule.onNode(hasSetTextAction()).performTextClearance()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        rule.onNodeWithContentDescription(context.getString(R.string.channels_clear_search)).performClick()
         awaitText("Alpha")
         rule.onAllNodesWithText("Target One").assertCountEquals(2)
+    }
+
+    @Test fun noResultsCanBeClearedWithoutEditingTheQuery() {
+        rule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                SingleGroupChannelList(
+                    GroupedChannels(ChannelGroup.Custom("Group"), listOf(M3uChannel("Alpha", "https://unused.example.test"))),
+                    EpgUiState(), 0, { null }, ListDensity.MINIMAL, ChannelLayout.LIST, {}, { false }, {},
+                    { false }, {}, {}, {},
+                )
+            }
+        }
+        rule.onNode(hasSetTextAction()).performTextInput("No match")
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Alpha").fetchSemanticsNodes().isEmpty() }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        rule.onNodeWithText(context.getString(R.string.channels_clear_search)).performClick()
+        awaitText("Alpha")
+        rule.onNodeWithContentDescription(context.getString(R.string.channels_clear_search)).assertDoesNotExist()
     }
 
     private fun awaitText(text: String) {

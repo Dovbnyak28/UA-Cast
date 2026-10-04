@@ -198,7 +198,7 @@ fun PlayerScreen(
 private fun PipPlayerSurface(viewModel: PlayerViewModel, modifier: Modifier) {
     AndroidView(
         factory = { context ->
-            PlayerView(context).apply {
+            (android.view.LayoutInflater.from(context).inflate(R.layout.pip_player_view, null) as PlayerView).apply {
                 player = viewModel.player
                 useController = false
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT

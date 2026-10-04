@@ -56,6 +56,7 @@ import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.groupDisplayKey
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.rememberEntryStagger
 import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
@@ -114,6 +115,7 @@ internal fun GroupsOverviewGrid(
     // Keyed on the ordered list, so pinning or hiding a group replays the wave over the new order
     // rather than leaving the moved cards as the only static things on screen.
     val entryStagger = rememberEntryStagger(orderedGroups)
+    val animateItems = animationsAllowed()
     val totalChannels = remember(orderedGroups) { orderedGroups.sumOf { it.channels.size } }
     // LIST mode stays a literal single column (a list of group cards); GRID/LARGE_ICONS lets the
     // width fit as many ~GroupTileMinWidth tiles as the screen allows, unlike a fixed column count.
@@ -144,7 +146,7 @@ internal fun GroupsOverviewGrid(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = stringResource(R.string.channels_groups_title),
                     style = Title,
@@ -171,7 +173,7 @@ internal fun GroupsOverviewGrid(
             onValueChange = { query = it },
             placeholder = { Text(stringResource(R.string.channels_search_all_hint)) },
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
-            trailingIcon = if (query.isNotBlank()) {
+            trailingIcon = if (query.isNotEmpty()) {
                 {
                     IconButton(onClick = { query = "" }) {
                         Icon(
@@ -211,14 +213,14 @@ internal fun GroupsOverviewGrid(
                         onClick = { onGroupClick(grouped) },
                         onLongClick = { groupActionsFor = grouped },
                         modifier = Modifier
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = key, index = index),
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, key, index, animationsEnabled = animateItems),
                     )
                 }
             }
 
             is ChannelSearchOutcome.Matches -> if (outcome.results.isEmpty()) {
-                NoSearchResults(trimmedQuery)
+                NoSearchResults(trimmedQuery, onClearSearch = { query = "" })
             } else {
                 ChannelSearchResultsList(
                     results = outcome.results,
