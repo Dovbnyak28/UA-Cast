@@ -23,7 +23,8 @@ permissions:
 
 concurrency:
   group: performance-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded PR measurements cannot validate the new revision; keep weekly/manual runs intact.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   device-budgets:

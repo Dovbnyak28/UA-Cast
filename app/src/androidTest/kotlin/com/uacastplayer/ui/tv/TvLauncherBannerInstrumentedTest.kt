@@ -22,7 +22,10 @@ class TvLauncherBannerInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val manager = context.packageManager
         assertTrue("Only test the isolated debug package", context.packageName.endsWith(".debug"))
-        assertEquals(R.mipmap.ic_launcher, context.applicationInfo.icon)
+        // Some system images choose the manifest's roundIcon as ApplicationInfo.icon.
+        // Both are phone launcher assets; neither may be replaced by the TV banner.
+        assertTrue("Phone icon must remain one of the two manifest-declared launcher resources",
+            context.applicationInfo.icon in setOf(R.mipmap.ic_launcher, R.mipmap.ic_launcher_round))
         val activity = manager.getActivityInfo(ComponentName(context, MainActivity::class.java), 0)
         val drawable = requireNotNull(activity.loadBanner(manager))
         assertTrue("Legacy launchers should not have to rasterize the vector", drawable is BitmapDrawable)

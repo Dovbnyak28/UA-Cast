@@ -2,6 +2,7 @@ package com.uacastplayer.ui.tv
 
 import android.view.KeyEvent
 import android.view.View
+import androidx.activity.findViewTreeOnBackPressedDispatcherOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -28,8 +29,20 @@ class TvInputRegistry {
     }
 
     /** null means there is no dialog; false must NOT fall through to the obscured Activity. */
-    fun dispatchToDialog(event: KeyEvent): Boolean? =
-        dialogs.keys.lastOrNull { it.isAttachedToWindow }?.dispatchKeyEvent(event)
+    fun dispatchToDialog(event: KeyEvent): Boolean? {
+        val root = dialogs.keys.lastOrNull { it.isAttachedToWindow } ?: return null
+        val backOwner = root.findViewTreeOnBackPressedDispatcherOwner()
+        // Modern Android routes Back through the dialog's dispatcher, not decor-view KeyEvents.
+        // Use the dialog owner (never the obscured Activity), preserving dismissOnBackPress.
+        return if (event.keyCode == KeyEvent.KEYCODE_BACK && backOwner != null) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+                backOwner.onBackPressedDispatcher.onBackPressed()
+            }
+            true
+        } else {
+            root.dispatchKeyEvent(event)
+        }
+    }
 }
 
 @Composable

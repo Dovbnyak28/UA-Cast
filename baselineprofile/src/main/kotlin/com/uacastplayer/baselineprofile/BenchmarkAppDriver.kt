@@ -89,6 +89,14 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         check(status == EPG_PARSE_READY) { status }
     }
 
+    fun waitForGuideProgramme() {
+        // The guide selects today and scrolls to the current programme. Slot 000 belongs to
+        // midnight, so requiring it to be visible makes this journey fail later in the day.
+        requireNotNull(device.wait(
+            Until.findObject(By.pkg(PACKAGE_NAME).text(GUIDE_PROGRAMME_PATTERN)), UI_TIMEOUT_MILLIS,
+        )) { "Timed out waiting for a visible benchmark guide programme" }
+    }
+
     private fun waitForStatus(pattern: Pattern, timeoutMillis: Long): String {
         val node = requireNotNull(device.wait(Until.findObject(By.text(pattern)), timeoutMillis)) {
             "Timed out waiting for benchmark status"
@@ -108,7 +116,6 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val CHANNELS_LABEL = "Channels"
         const val FIRST_GROUP = "Benchmark Group 01"
         const val FIRST_CHANNEL = "Benchmark Channel 00001"
-        const val FIRST_PROGRAMME = "Benchmark Programme 000"
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
@@ -122,5 +129,6 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         private const val FIXTURE_TIMEOUT_MILLIS = 180_000L
         private val FIXTURE_STATUS_PATTERN = Pattern.compile("benchmark-fixture-(ready|failed:.*)")
         private val EPG_PARSE_STATUS_PATTERN = Pattern.compile("benchmark-epg-parse-(ready|failed:.*)")
+        private val GUIDE_PROGRAMME_PATTERN = Pattern.compile("Benchmark Programme [0-9]{3}")
     }
 }

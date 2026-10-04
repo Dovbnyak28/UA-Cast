@@ -112,8 +112,55 @@ duration uses median. Eight validator tests include malformed evidence and all c
 names, but their synthetic data is explicitly **not** device measurement evidence. Traces/results
 are retained as artifacts for 30 days. See `PERFORMANCE.md` and the release runbook.
 
-Required follow-up: publish the workflow, run all eight cases on API 35, review traces and calibrate
-tighter budgets from measured evidence. The API-28 Mi TV functional run is not that benchmark run.
+Publication: [PR #4](https://github.com/Dovbnyak28/UA-Cast/pull/4) is a draft Android-only review
+snapshot, including earlier Android commits absent from master. It does not publish a release or
+activate the weekly schedule. Private keys/playlists/recovery archives, unrelated web files and
+local physical-device captures are absent from the PR diff.
+
+Required follow-up: complete all eight cases on API 35, review traces and calibrate tighter budgets
+from measured evidence. The API-28 Mi TV functional run is not that benchmark run.
+
+### Initial execution found real harness/platform gaps
+
+The first disposable API-36 run finished 4/8: the four UI journeys timed out looking for visible
+`Home` text. The current tab is labelled `Overview` and Home's heading is the application name;
+the navigation accessibility description remains `Home`. The driver now waits for that existing
+description, without changing production UI. The next run finished 7/8: EPG was correctly scrolled
+to the current programme, while the driver demanded the midnight `000` slot. Both Macrobenchmark
+and profile-generation paths now require a visible, exact-format synthetic programme row instead
+of an off-screen historical slot. The corrected EPG journey passed separately (five iterations,
+60.024s total). The complete corrected eight-case run then passed in 494.933s with all configured
+iterations (10 for each startup, five for each other journey). Its target app predates the
+following TV-only Back fix; that pass verifies the harness, not a new signed release. Budgets,
+timeouts and assertions about loaded programme data were not removed. Local frame CPU P95 values
+were 165.9–477.9ms under Windows software rendering, so this run is explicitly **not** an API-35
+budget pass. The first remote API-35 run independently reproduced the midnight-slot selector bug.
+
+Initial remote Android CI passed unit/screenshots, lint/detekt/architecture, unsigned packaging
+and API 24. API 36 exposed nine failures in phone-remote Back routing to modal windows: sending
+KeyEvents to the decor view did not reach modern Dialog back handling. Installed AndroidX sources
+confirm that Compose's ComponentDialog owns an OnBackPressedDispatcher callback respecting
+`dismissOnBackPress`. The registry now obtains that owner from the dialog view tree and invokes
+it once on an uncancelled key-up, never the obscured Activity. Existing window reference counts,
+top-dialog selection and non-Back key routing are unchanged. New host/native tests require that
+key-down and cancelled key-up do not dismiss or navigate underneath. The current targeted host
+gate passed 213 tests plus screenshot verification, Debug lint, detekt and debug/test APK builds
+in five minutes. Current native window/banner/secure-backup-dialog regressions then passed
+**16/16 on API 36 (67.123s)** and **16/16 on the actual API-28 Mi TV (55.379s)**. The TV runner
+restored and hash-verified all four original debug files/preferences. The local owned-emulator
+wrapper initially expected 15 cases instead of the actual 16; its assertion was corrected to
+the exact suite count, without changing any test result or allowing a partial pass.
+
+Rebuilt debug APK SHA-256: `6D7A7FEC7EECBF94B2CB313F54A1CA41BC7F7131406AF9657C41F771648450BB`.
+Native test APK SHA-256: `BA5503F0BD70C5B356636A9A0F2CC8E98AF9CD6442E46C129A3A7409C5B96852`.
+
+The separate API-30 failure was a banner-test assumption: the system selected the manifest's
+declared round phone icon. The native assertion now permits only those two declared phone-icon
+resources, while retaining all banner bitmap/dimension/filtering/opacity/memory checks. No
+production icon, manifest binding, pixel tolerance or screenshot golden was changed for it.
+
+Superseded PR performance jobs are cancelled; weekly/manual measurement runs keep their normal
+ownership. Local API-36 software-rendered frame timings are not used to certify API-35 budgets.
 
 ## Verification
 

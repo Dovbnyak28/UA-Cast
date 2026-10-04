@@ -78,7 +78,7 @@ class CriticalJourneysBenchmark {
         },
         journey = { driver ->
             driver.clickText(BenchmarkAppDriver.GUIDE_LABEL)
-            driver.waitForText(BenchmarkAppDriver.FIRST_PROGRAMME)
+            driver.waitForGuideProgramme()
         },
     )
 

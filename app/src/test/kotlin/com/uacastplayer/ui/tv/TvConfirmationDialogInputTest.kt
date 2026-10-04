@@ -65,6 +65,25 @@ class TvConfirmationDialogInputTest {
         checkDismissal(R.string.common_cancel)
     }
 
+    @Test fun `dialog back waits for an uncancelled key up and dismisses only once`() {
+        showDialog { dismiss, action -> BackupExportWarningDialog(action, dismiss) }
+        assertRegistered()
+        rule.runOnIdle {
+            assertEquals(true, registry.dispatchToDialog(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
+            assertEquals(0, dismissed)
+            val up = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)
+            registry.dispatchToDialog(KeyEvent.changeFlags(up, KeyEvent.FLAG_CANCELED))
+        }
+        rule.waitForIdle()
+        assertEquals(0, dismissed)
+        assertEquals(0, underlyingBack)
+        send(RemoteCommand.BACK)
+        assertEquals(1, dismissed)
+        assertEquals(0, underlyingBack)
+        assertEquals(0, underlyingSelect)
+        assertReleased()
+    }
+
     @Test fun `diagnostics consent routes phone back and select to its own window`() {
         showDialog { dismiss, action -> DiagnosticsPreviewDialog("Public test report", dismiss, action) }
         checkDismissal(R.string.diagnostics_preview_cancel)
