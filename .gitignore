@@ -36,3 +36,6 @@ diary-data.json.*
 
 # Generated Python bytecode from the performance evidence validator.
 __pycache__/
+
+# Local physical-phone captures are diagnostic evidence, not distributable source assets.
+/mi-a2-*.png
