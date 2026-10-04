@@ -4,6 +4,7 @@ import com.uacastplayer.core.cast.CastCompatibilityPolicy
 import com.uacastplayer.core.cast.CastCompatibilityVerdict
 import com.uacastplayer.core.cast.TsProgramInfoParser
 import com.uacastplayer.core.cast.CastRouteKind
+import com.uacastplayer.core.cast.TsSourceKind
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.PlaylistDetector
@@ -20,6 +21,7 @@ internal data class ProxyRouteDecision(
     val route: UpstreamRoute,
     /** Null for a nested media segment: only top-level channel resources are route attempts. */
     val attemptedRoute: CastRouteKind?,
+    val diagnostic: ProxySourceDiagnostic? = null,
 )
 
 /**
@@ -44,7 +46,12 @@ internal object ProxyRouteSelector {
             response.header("Content-Type"),
             response.peekBody(PLAYLIST_SNIFF_BYTES).bytes(),
         )
-        val shouldRemux = !isPlaylist && remuxEligible && shouldRemuxRaw(response, remuxEnabled)
+        val diagnostic = when {
+            !remuxEligible -> null
+            isPlaylist -> ProxySourceDiagnostic(CastCompatibilityVerdict.Unknown, TsSourceKind.Hls)
+            else -> diagnoseRaw(response, remuxEnabled)
+        }
+        val shouldRemux = !isPlaylist && diagnostic?.let(::shouldRemux) == true
         val route = when {
             isPlaylist -> UpstreamRoute.PLAYLIST
             shouldRemux -> UpstreamRoute.REMUX
@@ -55,23 +62,25 @@ internal object ProxyRouteSelector {
         } else {
             null
         }
-        return ProxyRouteDecision(route, attemptedRoute)
+        return ProxyRouteDecision(route, attemptedRoute, diagnostic)
     }
 
-    fun shouldRemuxRaw(response: Response, remuxEnabled: Boolean): Boolean {
+    fun diagnoseRaw(response: Response, remuxEnabled: Boolean): ProxySourceDiagnostic? {
         // A disabled codec probe must not wait for 128 KiB from a live/slow origin. This also
         // applies to wrapper URLs, where unsuccessful inner responses must retain their status.
-        if (!remuxEnabled || !response.isSuccessful) return false
+        if (!remuxEnabled || !response.isSuccessful) return null
         val tsProbe = response.peekBody(TS_PROBE_BYTES).bytes()
         val looksLikeTs = MpegTsSniffer.looksLikeMpegTs(tsProbe)
         val verdict = if (looksLikeTs) classifyTsProbe(tsProbe) else CastCompatibilityVerdict.Unknown
-        return RawTsRemuxActivation.shouldActivate(
-            isHlsPlaylist = false,
-            looksLikeMpegTs = looksLikeTs,
-            verdict = verdict,
-            featureEnabled = remuxEnabled,
-        )
+        return ProxySourceDiagnostic(verdict, if (looksLikeTs) TsSourceKind.RawTs else TsSourceKind.Unknown)
     }
+
+    fun shouldRemux(diagnostic: ProxySourceDiagnostic): Boolean = RawTsRemuxActivation.shouldActivate(
+        isHlsPlaylist = false,
+        looksLikeMpegTs = diagnostic.sourceKind == TsSourceKind.RawTs,
+        verdict = diagnostic.verdict,
+        featureEnabled = true,
+    )
 
     /** An arbitrary third-party byte stream must degrade to Unknown, never break HTTP serving. */
     @Suppress("TooGenericExceptionCaught")

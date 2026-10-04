@@ -166,6 +166,24 @@ dialog, so long localized choices do not require sideways scrolling. Short prese
 - Source deletion requires confirmation. Favorites exposes removal and reordering in edit mode,
   not in the ordinary play-focused rows. Cancelling a drag restores the pre-drag order.
 
+### Phone remote and TV browsing
+
+- Phone remote modes use selected radio semantics and an accent-filled active choice, not a disabled
+  button. Selecting the current mode is a no-op; changing presentation does not reconnect the client.
+  `RemoteModeSelector` stacks the choices on narrow screens or with large fonts. Check EN/UK/RU/ES
+  at 320dp / 200% before restoring an equal-width-only layout.
+- Direction controls use the shared vector glyph and retain 72dp targets. The center OK action is
+  visually primary and has a localized spoken Select label. The touchpad also exposes Select and
+  four directional accessibility actions; these must not duplicate ordinary tap/swipe commands.
+- Connected status has both a checkmark and text. The touchpad boundary remains visible without
+  adding a glow, background timer or a new palette outside `ui/theme`.
+- An empty TV favorites view explains the star action. No search matches, no saved favorites and
+  no playlist are different states; do not recommend another import when saved favorites are usable.
+  Empty search results provide a clear action below the field, reachable with Down. Clearing brings
+  focus back to search; a trailing icon alone is not proof of D-pad reachability.
+- The language form and Continue action share the same 640dp width cap, including short landscape
+  screens. Apply `widthIn(max = ContentMaxWidth)` before `fillMaxWidth()` so the cap takes effect.
+
 ## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `MidnightPalette.kt`, `Theme.kt`, `Background.kt`)
 
 The app has three selectable visual styles. Users pick one in Settings; it applies instantly,
@@ -338,3 +356,16 @@ cannot create a place to wrap. So when adding an item to a row like this, check 
 longest **word**, not the longest string - and where a term is unavoidably long, translate it as two
 short words instead of one long one (`"Формат кадру"`, not `"Співвідношення"`). Roughly: keep the
 longest word under about 9 characters for a six-item row at 411dp.
+
+## Future Lite banner placements (2026-10-03)
+
+Advertising is disabled until a provider and permission flow are deliberately installed.
+The only allowed phone slots are the bottom of populated Home content and a non-overlay
+footer below Channels. No player, mini-player, remote-control, TV or first-run placements.
+Premium prevents renderer mounting, rather than hiding a view that already requested ads.
+
+`BannerAdSlot` has zero layout footprint for disabled, blocked, Premium, paused or no-fill
+states. Only a ready renderer uses `BannerAdFrame`: localized advertising label, existing
+semantic typography/colors, centered content capped at 640dp. Do not substitute shimmer,
+placeholder cards or a permanent blank footer for an unavailable ad. Follow the adapter
+lifecycle/privacy contract in `docs/LITE_ADVERTISING_FOUNDATION_2026-10-03.md`.

@@ -372,8 +372,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** [castArtworkUrlFor] resolves the logo a Cast receiver is shown for a channel; see
      * [com.uacastplayer.AppViewModel.castArtworkUrlFor] for why it is a function and not a value.
-     * The default is the channel's own `tvg-logo`, i.e. what this class did before anything richer
-     * was passed in. */
+     * Without an explicit resolver, playback has no artwork; playlist logos are not a fallback. */
     private var attachedRequest: PlayerRequest? = null
 
     fun start(
@@ -448,7 +447,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
         exoPlayer.setMediaItem(MediaItemFactory.forChannel(channel.streamUrl))
-        if (LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting) && !isInBackground) {
+        val preparesLocally = LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting) && !isInBackground
+        if (preparesLocally) {
             exoPlayer.prepare()
         } else {
             // The media item is still set so ResumeLocalPlayer (on cast disconnect) can prepare
@@ -473,7 +473,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update {
             it.copy(
                 currentChannel = channel,
-                isBuffering = true,
+                isBuffering = preparesLocally,
                 badges = PlaybackBadgesState(),
                 nextChannelsPreview = transition.preview,
                 fatalError = false,
@@ -562,7 +562,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         "(attempt ${effect.attemptInWindow} in the last 60s)"
                 }
                 exoPlayer.seekToDefaultPosition()
-                exoPlayer.prepare()
+                // A live-window error can arrive after pause, backgrounding or cast handoff.
+                // Use the same ownership/foreground gate as every other local error retry.
+                performScheduledPlaybackRetry()
             }
             is PlayerSessionStateMachine.PlaybackFailureEffect.Retry -> {
                 retryJob?.cancel()
@@ -861,9 +863,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val TAG = "PlayerViewModel"
 
-        /** What [start] falls back to when no resolver is supplied: the channel's own `tvg-logo`,
-         * the only artwork source this class had before [start] took one. */
-        private val DEFAULT_CAST_ARTWORK: (M3uChannel) -> String? = { it.tvgLogo }
+        /** Logo resolution requires a user-selected pack; never infer a provider URL here. */
+        private val DEFAULT_CAST_ARTWORK: (M3uChannel) -> String? = { null }
 
         // Process-wide guard: at most one PlayerViewModel (hence one ExoPlayer) may be alive at a
         // time. Incremented as the first thing each instance does, decremented in onCleared; a value

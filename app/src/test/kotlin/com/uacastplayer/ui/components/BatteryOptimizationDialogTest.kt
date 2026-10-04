@@ -1,10 +1,14 @@
 package com.uacastplayer.ui.components
 
 import android.app.Application
+import android.content.ContextWrapper
+import android.content.Intent
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import androidx.compose.ui.platform.LocalContext
 import com.uacastplayer.R
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.theme.AppTheme
@@ -67,6 +71,28 @@ class BatteryOptimizationDialogTest {
         // Not just "did not crash": the hint is a one-shot, and the flag that retires it is set by
         // onAllow. Losing it would bring this dialog back on every single cast session.
         assertTrue("the one-time hint must still be retired when the screen cannot be opened", allowed)
+    }
+
+    @Test
+    fun `a denied battery settings screen still retires the one-time hint`() {
+        val context = object : ContextWrapper(application) {
+            override fun startActivity(intent: Intent) {
+                throw SecurityException("battery settings activity is not exported")
+            }
+        }
+        var allowed = false
+        composeRule.setContent {
+            CompositionLocalProvider(LocalContext provides context) {
+                UaCastTheme(AppTheme.MIDNIGHT) {
+                    BatteryOptimizationDialog(onAllow = { allowed = true }, onDismiss = {})
+                }
+            }
+        }
+
+        composeRule.onNodeWithText(allowLabel()).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(allowed)
     }
 
     /** The ordinary device, so the guard is not mistaken for the behaviour. */

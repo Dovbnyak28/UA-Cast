@@ -2,9 +2,11 @@ package com.uacastplayer.dlna
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import com.uacastplayer.cast.CastProxyService
 import com.uacastplayer.cast.CastProxyTarget
 import com.uacastplayer.core.concurrent.AppDispatchers
@@ -53,6 +55,22 @@ private const val DEVICE_DESCRIPTION_TIMEOUT_SECONDS = 4L
 // Same budget cast/CastSessionRepository gives its own ProxyServer, because it is the same job.
 private const val PROXY_CONNECT_TIMEOUT_SECONDS = 10L
 private const val PROXY_READ_TIMEOUT_SECONDS = 15L
+
+/** The callback must observe the same Wi-Fi network that supplies the proxy address, even when
+ * it is local-only and has no INTERNET capability. No cellular/VPN event can change that address. */
+internal fun dlnaSessionNetworkRequest(): NetworkRequest = NetworkRequest.Builder().apply {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        clearCapabilities()
+    } else {
+        // clearCapabilities was added in API 30. Remove the builder's default filters on older
+        // devices so a local-only/restricted Wi-Fi does not disappear from this callback.
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+    }
+    addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+}.build()
 
 private data class PreparedDlnaProxy(val token: String, val localUrl: String)
 private data class DlnaConnectRequest(
@@ -196,9 +214,10 @@ class DlnaSessionRepository internal constructor(
      * available: re-pointing the renderer at the new address needs it to still be reachable, which
      * on mobile data it is not, and on a new Wi-Fi it may not be either.
      *
-     * Registered against ANY network rather than Wi-Fi alone, because the event worth catching is
-     * often the *loss* of Wi-Fi to a mobile connection that is perfectly healthy - a Wi-Fi-only
-     * request would simply stop reporting and never fire.
+     * Observe the Wi-Fi carrying the proxy address, including local-only networks with no
+     * Internet capability. Its onLost fires when the phone falls back to mobile data; watching
+     * only Internet-capable networks missed that event for a local-only Wi-Fi and left a stale
+     * "connected" session on screen.
      */
     private fun watchForNetworkChange(generation: Long) {
         networkWatch?.close()
@@ -209,10 +228,10 @@ class DlnaSessionRepository internal constructor(
             override fun onLost(network: Network) = checkSessionStillServable(generation)
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
                 checkSessionStillServable(generation)
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) =
+                checkSessionStillServable(generation)
         }
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
+        val request = dlnaSessionNetworkRequest()
         runCatchingNonFatal { connectivityManager.registerNetworkCallback(request, callback) }
             .onSuccess {
                 networkWatch = AutoCloseable {
@@ -226,13 +245,16 @@ class DlnaSessionRepository internal constructor(
     }
 
     private fun checkSessionStillServable(generation: Long) {
-        if (_state.value.connectedDevice == null) return
-        val current = localAddress(appContext)
-        if (DlnaNetworkChangePolicy.sessionSurvives(sessionHost, current)) return
-        AppLog.d(TAG) { "The address this session was served from is gone; ending it" }
-        // On the main thread deliberately: stop() touches _state and connectJob, and a
-        // NetworkCallback arrives on a binder thread.
-        scope.launch { if (generation == connectGeneration.get()) stop() }
+        // NetworkCallback runs on the connectivity thread. Query on our owning thread, outside
+        // the callback, and decide there: a queued loss can already have recovered by then, and
+        // an old callback must not inspect or stop a replacement session.
+        scope.launch {
+            if (generation != connectGeneration.get() || _state.value.connectedDevice == null) return@launch
+            val current = localAddress(appContext)
+            if (DlnaNetworkChangePolicy.sessionSurvives(sessionHost, current)) return@launch
+            AppLog.d(TAG) { "The address this session was served from is gone; ending it" }
+            stop()
+        }
     }
 
     /** A last-resort net under [SsdpDiscovery]'s own per-stage catches - discovery failing must
@@ -325,7 +347,12 @@ class DlnaSessionRepository internal constructor(
     /** Monitoring belongs to the committed session, not a pending SOAP transaction. */
     private fun watchConnectedSession(device: DlnaDevice, generation: Long) {
         watchForNetworkChange(generation)
-        rendererWatchdog.start(device.controlUrl) {
+        rendererWatchdog.start(device.controlUrl, onUnverified = {
+            if (generation == connectGeneration.get() && _state.value.connectedDevice == device) {
+                _state.update { it.copy(playbackStatusUnverified = true) }
+                AppLog.w(TAG) { "DLNA playback status is unavailable for this renderer" }
+            }
+        }) {
             if (generation == connectGeneration.get()) {
                 AppLog.w(TAG) { "DLNA renderer is no longer playing or reachable; ending session" }
                 stop()
@@ -510,7 +537,7 @@ class DlnaSessionRepository internal constructor(
         sessionToken = null
         sessionHost = null
         proxyServer.stop()
-        CastProxyService.stop(appContext, CastProxyTarget.DLNA)
+        CastProxyService.stop(CastProxyTarget.DLNA)
         return token
     }
 

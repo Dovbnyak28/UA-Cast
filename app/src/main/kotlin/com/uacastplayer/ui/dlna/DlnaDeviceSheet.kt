@@ -137,7 +137,11 @@ internal fun DlnaDeviceSheetContent(
 
         val connected = connectionState.connectedDevice
         connected?.takeUnless { connectionState.isConnecting }?.let { device ->
-            DlnaConnectedRow(deviceName = device.friendlyName, onStop = onStopCasting)
+            DlnaConnectedRow(
+                deviceName = device.friendlyName,
+                playbackStatusUnverified = connectionState.playbackStatusUnverified,
+                onStop = onStopCasting,
+            )
             // Absent, not disabled, when the renderer has no RenderingControl service or the
             // first read failed: a greyed-out slider sitting at zero would say the TV is muted.
             connectionState.volume?.let { volume ->
@@ -222,7 +226,7 @@ private fun DlnaSearchingRow() {
 }
 
 @Composable
-private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
+private fun DlnaConnectedRow(deviceName: String, playbackStatusUnverified: Boolean, onStop: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -239,8 +243,8 @@ private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
         // laid itself out one character per line and the card grew to half the sheet. Weighted, the
         // button is measured first at the width it actually needs and the name takes the remainder.
         Column(modifier = Modifier.weight(1f)) {
-            // The name alone, not "Connected to <name>": the green line right below already says
-            // this is a live cast, and the name was appearing a third time in the device list under
+            // The name alone, not "Connected to <name>": the status line right below describes
+            // what the app can actually verify, and the name was appearing a third time under
             // the card. Ellipsized because a friendlyName is whatever the TV's owner typed into it.
             Text(
                 text = deviceName,
@@ -250,9 +254,12 @@ private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = stringResource(R.string.cast_status_connected),
+                text = stringResource(
+                    if (playbackStatusUnverified) R.string.dlna_status_unverified
+                    else R.string.cast_status_connected,
+                ),
                 style = Caption,
-                color = UaTheme.palette.routeGreen,
+                color = if (playbackStatusUnverified) UaTheme.palette.routeAmber else UaTheme.palette.routeGreen,
             )
         }
         TextButton(onClick = onStop) {
@@ -374,7 +381,7 @@ private fun DlnaDeviceSheetRowsPreview(@PreviewParameter(AppThemePreviewParamete
         Column(verticalArrangement = Arrangement.spacedBy(GapS), modifier = Modifier.padding(ScreenHPadding)) {
             // The real friendlyName of the TV this layout was fixed against - a short placeholder
             // is exactly what hid the wrapping bug from this preview in the first place.
-            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", onStop = {})
+            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", playbackStatusUnverified = false, onStop = {})
             DlnaVolumeRow(volume = 23, onVolumeChange = {})
             DlnaDeviceRow(
                 device = DlnaDevice(friendlyName = "LG webOS TV", controlUrl = "http://192.168.1.5/upnp/control"),

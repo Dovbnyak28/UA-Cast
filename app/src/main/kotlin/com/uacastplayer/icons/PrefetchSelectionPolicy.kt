@@ -43,7 +43,7 @@ object PrefetchSelectionPolicy {
             priority.lastWatchedKey?.let { key ->
                 channels.firstOrNull {
                     checkCancellation()
-                    FavoriteKey.of(it) == key
+                    FavoriteKey.matches(it, key)
                 }?.let { yield(it) }
             }
         }

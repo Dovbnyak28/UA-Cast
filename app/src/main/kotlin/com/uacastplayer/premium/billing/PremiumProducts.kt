@@ -28,18 +28,18 @@ object PremiumProducts {
     const val YEARLY = "premium_yearly"
     const val LIFETIME = "premium_lifetime"
 
-    /** Every id, with its Play product type - what [BillingProvider.products] has to ask for. */
+    /** Only this one-time purchase is sold. Legacy subscriptions remain recognised for restore. */
     val ALL: Map<String, String> = mapOf(
-        MONTHLY to TYPE_SUBSCRIPTION,
-        YEARLY to TYPE_SUBSCRIPTION,
         LIFETIME to TYPE_ONE_TIME,
     )
 
-    val SUBSCRIPTION_IDS: List<String> = ALL.filterValues { it == TYPE_SUBSCRIPTION }.keys.toList()
     val ONE_TIME_IDS: List<String> = ALL.filterValues { it == TYPE_ONE_TIME }.keys.toList()
 
+    fun isForSale(productId: String): Boolean = productId in ALL
+
     /**
-     * What owning [productId] entitles the user to, or null for an id this build does not sell.
+     * Current or legacy ownership tier, or null for an unrecognised id. Recognition is not an
+     * offer for sale: checkout must separately use [isForSale].
      *
      * Null rather than a default tier on purpose: a purchase of something unrecognised must not
      * quietly unlock the app. That happens for real - a product renamed in the console, an old id

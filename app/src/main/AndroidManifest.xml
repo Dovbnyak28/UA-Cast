@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Recognize the Android TV DocumentsStub that resolves SAF but immediately cancels. -->
+    <queries>
+        <package android:name="com.google.android.tv.frameworkpackagestubs" />
+    </queries>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- SSDP discovery (DLNA): the multicast lock SsdpDiscovery takes for the duration of an
@@ -71,10 +75,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- LEANBACK_LAUNCHER deliberately omitted - the UI has no D-pad/focus navigation
-                     yet, so the app is unusable on a real TV launcher. See docs/TV_SUPPORT.md for
-                     what's needed before re-adding it. The leanback uses-feature/banner below are
-                     left in place since they're harmless and save re-plumbing them later. -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
 

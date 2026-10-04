@@ -15,7 +15,6 @@ import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.playlist.ChannelGrouper
-import java.io.File
 import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.CancellationException

@@ -21,8 +21,8 @@ object CastMediaLoader {
             putString(MediaMetadata.KEY_TITLE, title)
             // Without an image the Default Media Receiver shows a bare title on a black screen, and
             // the sender's own cast controller dialog shows a large empty grey panel where the
-            // artwork belongs. The channel's tvg-logo is the only picture this app has for a live
-            // channel, so it fills both. Blank is dropped rather than passed on as an empty Uri:
+            // artwork belongs. Only a logo selected from a user-added pack is passed here.
+            // Blank is dropped rather than passed on as an empty Uri:
             // the receiver treats a broken image as an error to report, not as "no image".
             logoUrl?.takeIf { it.isNotBlank() }?.let { addImage(WebImage(it.toUri())) }
         }

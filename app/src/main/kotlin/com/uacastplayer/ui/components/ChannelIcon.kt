@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -45,13 +46,26 @@ fun ChannelIcon(
     modifier: Modifier = Modifier,
     size: Dp = ChannelLogoSize,
     // Included in produceState's key so a caller can force a re-resolve once new information that
-    // could change the result becomes available (EPG data arriving, an icon prefetch run
-    // finishing) - resolveIcon's own result is otherwise retained for this channel's metadata.
+    // could change the result becomes available (user pack edits or completed downloads).
     refreshKey: Any? = null,
 ) {
-    // EPG matching can fall back to tvg-name or display name, and playlists can change tvg-logo
-    // without changing the stream URL. The full channel value covers those changes.
-    val iconFile by produceState<File?>(initialValue = null, key1 = channel, key2 = refreshKey) {
+    // produceState restarts work for new keys but retains its previous value. Own the file,
+    // decode error and painter by the same generation so none can leak into a different channel
+    // or prevent a repaired file at the same path from being decoded after an explicit refresh.
+    key(channel, refreshKey) {
+        ChannelIconContent(channel, resolveIcon, modifier, size)
+    }
+}
+
+@Composable
+private fun ChannelIconContent(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    modifier: Modifier,
+    size: Dp,
+) {
+    // The outer key owns both the channel and selected-pack revision.
+    val iconFile by produceState<File?>(initialValue = null) {
         value = resolveIcon(channel)
     }
     var isDecodeError by remember(iconFile) { mutableStateOf(false) }

@@ -44,7 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.playlist.withPlaylistCpu
+import com.uacastplayer.data.playlist.searchPlaylistChannels
 import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
@@ -134,7 +134,7 @@ internal fun GroupsOverviewGrid(
             // Search belongs to the same bounded CPU lane as playlist parsing. Media3 recovery can
             // saturate Dispatchers.Default; making search wait behind it left the Channels screen
             // apparently empty even though the playlist itself had already loaded.
-            withPlaylistCpu { ChannelSearch.search(groups, trimmedQuery) }
+            searchPlaylistChannels(groups, trimmedQuery)
         }
     }
 

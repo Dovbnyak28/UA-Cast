@@ -38,6 +38,8 @@ import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +51,8 @@ internal fun HiddenGroupsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        // The window owns input even when its last actionable row disappears.
+        TvDialogInputRegistration()
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(
                 text = stringResource(R.string.settings_hidden_groups, groups.size),
@@ -161,6 +165,7 @@ private fun LockedChannelsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        TvDialogInputRegistration()
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(
                 text = stringResource(R.string.parental_control_manage_locked, channels.size),
@@ -203,14 +208,19 @@ private fun ResetParentalControlConfirmDialog(onConfirm: () -> Unit, onDismiss: 
         titleContentColor = UaTheme.palette.labelPrimary,
         textContentColor = UaTheme.palette.labelSecondary,
         title = { Text(stringResource(R.string.parental_control_reset_confirm_title)) },
-        text = { Text(stringResource(R.string.parental_control_reset_confirm_message)) },
+        text = {
+            TvDialogInputRegistration()
+            Text(stringResource(R.string.parental_control_reset_confirm_message))
+        },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = onConfirm, modifier = Modifier.tvFocus()) {
                 Text(stringResource(R.string.parental_control_reset), color = UaTheme.palette.routeRed)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.common_cancel))
+            }
         },
     )
 }

@@ -7,7 +7,6 @@ import com.uacastplayer.favorites.FavoritesSortOrder
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.performance.DeviceTier
-import com.uacastplayer.performance.HeapBudget
 import com.uacastplayer.performance.DeviceTierDefaults
 import com.uacastplayer.settings.CacheSizes
 import com.uacastplayer.settings.IconPlaceholdersBannerPolicy

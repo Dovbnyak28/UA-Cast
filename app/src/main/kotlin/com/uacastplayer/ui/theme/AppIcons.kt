@@ -12,6 +12,19 @@ import androidx.compose.ui.unit.dp
  * on any bundled Material icon set at all (see E4 in the optimization plan).
  */
 object AppIcons {
+    val Remote: ImageVector by lazy {
+        ImageVector.Builder("Remote", 24.dp, 24.dp, 24f, 24f).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(8f, 1f); lineTo(16f, 1f); lineTo(18f, 3f); lineTo(18f, 21f)
+                lineTo(16f, 23f); lineTo(8f, 23f); lineTo(6f, 21f); lineTo(6f, 3f); close()
+                moveTo(8f, 3f); lineTo(16f, 3f); lineTo(16f, 21f); lineTo(8f, 21f); close()
+                moveTo(11f, 6f); lineTo(13f, 6f); lineTo(13f, 9f); lineTo(16f, 9f)
+                lineTo(16f, 11f); lineTo(13f, 11f); lineTo(13f, 14f); lineTo(11f, 14f)
+                lineTo(11f, 11f); lineTo(8f, 11f); lineTo(8f, 9f); lineTo(11f, 9f); close()
+                moveTo(10f, 17f); lineTo(14f, 17f); lineTo(14f, 19f); lineTo(10f, 19f); close()
+            }
+        }.build()
+    }
     val Home: ImageVector get() = PrimaryAppIcons.Home
     val Channels: ImageVector get() = PrimaryAppIcons.Channels
     val Favorites: ImageVector get() = PrimaryAppIcons.Favorites

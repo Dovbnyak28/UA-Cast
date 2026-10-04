@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.player
+import com.uacastplayer.ui.tv.LocalTvMode
 
 import android.content.Context
 import android.media.AudioManager
@@ -63,10 +64,8 @@ import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.PrimaryButton
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.cast.CastButton
-import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.components.liveRing
 import com.uacastplayer.ui.dlna.DlnaDeviceSheet
-import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.DUR_PRESS
@@ -90,6 +89,10 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
     channels: List<M3uChannel> = emptyList(),
 ) {
+    if (LocalTvMode.current) {
+        TvPlayerScreen(viewModel, onExit, isFavorite, onToggleFavorite, epgState, modifier)
+        return
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dlnaState by viewModel.dlnaState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -109,7 +112,7 @@ fun PlayerScreen(
     val content = PlayerScreenContent(
         uiState = uiState,
         dlnaState = dlnaState,
-        iconRefreshKey = epgState.data?.index to iconPrefetchState.completedRuns,
+        iconRefreshKey = iconPrefetchState.refreshKey,
         videoResizeMode = ResizeModeCycle.toMedia3ResizeMode(uiState.resizeMode),
     )
     val actions = PlayerScreenActions(

@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.components
+import com.uacastplayer.ui.tv.tvFocus
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.darken
 import com.uacastplayer.ui.theme.pressedSurface
@@ -114,7 +115,7 @@ fun PrimaryButton(
                     base.raisedSurface(shape, UaTheme.palette.surface2, shadow = false)
                 }
             }
-            .clickable(
+            .tvFocus(shape, enabled).clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
@@ -188,6 +189,7 @@ fun GradientPlayButton(
             .clip(CircleShape)
             .background(UaTheme.palette.accentGradient)
             .border(1.dp, UaTheme.palette.edgeHighlightAccent, CircleShape)
+            .tvFocus(CircleShape, enabled)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
@@ -230,6 +232,7 @@ fun RoundIconButton(
             .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
             .scale(scale)
             .raisedSurface(CircleShape, pressedSurface(UaTheme.palette.surface1, pressed), shadow = false)
+            .tvFocus(CircleShape, enabled)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
@@ -277,6 +280,7 @@ fun SmallRoundIconButton(
             .size(IconButtonSize)
             .scale(scale)
             .raisedSurface(CircleShape, pressedSurface(background, pressed), shadow = false)
+            .tvFocus(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -413,6 +417,7 @@ fun SegmentedControl(
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .tvFocus()
                         .selectable(
                             selected = selected,
                             onClick = { onSelected(index) },
@@ -503,6 +508,7 @@ fun SecondaryButton(
                     m.raisedSurface(shape, pressedSurface(palette.surface1, pressed), shadow = false)
                 }
             }
+            .tvFocus(shape, enabled)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

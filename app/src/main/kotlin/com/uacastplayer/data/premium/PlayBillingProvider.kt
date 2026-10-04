@@ -25,6 +25,7 @@ import com.uacastplayer.premium.billing.PremiumProducts
 import com.uacastplayer.premium.billing.PurchaseRecord
 import com.uacastplayer.premium.billing.PurchaseResult
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,6 +72,7 @@ class PlayBillingProvider(
     // one thing worth reading here, namely which inputs are rejected and why, harder to see.
 
     private val appContext = context.applicationContext
+    private val closed = AtomicBoolean(false)
 
     private val _connection = MutableStateFlow(BillingConnectionState.DISCONNECTED)
     override val connection: StateFlow<BillingConnectionState> = _connection.asStateFlow()
@@ -94,16 +96,19 @@ class PlayBillingProvider(
     private val pendingPurchase = PendingPurchaseCoordinator()
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
-        val records = purchases.orEmpty().mapNotNull(::toRecord)
-        if (records.isNotEmpty()) {
-            purchaseSnapshots.notePurchases(records)
-            onReconnected()
+        if (!closed.get()) {
+            val records = purchases.orEmpty().mapNotNull(::toRecord)
+            if (records.isNotEmpty()) {
+                purchaseSnapshots.notePurchases(records)
+                onReconnected()
+            }
+            pendingPurchase.complete(records) { outcomeOf(result, it) }
         }
-        pendingPurchase.complete(records) { outcomeOf(result, it) }
     }
 
     private fun onReconnected() {
         scope.launch {
+            if (closed.get()) return@launch
             runCatchingNonFatal { refreshPurchases() }.onFailure { error ->
                 AppLog.w(TAG) { "Ownership refresh failed: ${error.javaClass.simpleName}" }
             }
@@ -121,13 +126,14 @@ class PlayBillingProvider(
         .build()
 
     override suspend fun connect() {
-        if (client.isReady) return
+        if (closed.get() || client.isReady) return
         _connection.value = BillingConnectionState.CONNECTING
         val result = suspendCancellableCoroutine { continuation ->
             client.startConnection(object : BillingClientStateListener {
                 @Volatile private var resumed = false
 
                 override fun onBillingSetupFinished(billingResult: BillingResult) {
+                    if (closed.get()) return
                     // Called again on every automatic reconnection, not only for the call that
                     // started this one - which is why the state is published here rather than only
                     // from the result below. Play restarts its service on its own schedule, and
@@ -146,6 +152,7 @@ class PlayBillingProvider(
                 }
 
                 override fun onBillingServiceDisconnected() {
+                    if (closed.get()) return
                     _connection.value = BillingConnectionState.DISCONNECTED
                     if (!resumed) {
                         resumed = true
@@ -170,9 +177,8 @@ class PlayBillingProvider(
     }
 
     override suspend fun products(): List<BillingProduct> {
-        if (!client.isReady) return emptyList()
-        return query(PremiumProducts.SUBSCRIPTION_IDS, PremiumProducts.TYPE_SUBSCRIPTION) +
-            query(PremiumProducts.ONE_TIME_IDS, PremiumProducts.TYPE_ONE_TIME)
+        if (closed.get() || !client.isReady) return emptyList()
+        return query(PremiumProducts.ONE_TIME_IDS, PremiumProducts.TYPE_ONE_TIME)
     }
 
     private suspend fun query(ids: List<String>, type: String): List<BillingProduct> {
@@ -203,37 +209,23 @@ class PlayBillingProvider(
     }
 
     private fun toProduct(details: ProductDetails): BillingProduct? {
+        if (!PremiumProducts.isForSale(details.productId)) return null
         val tier = PremiumProducts.tierFor(details.productId) ?: return null
-        val selectedOffer = details.subscriptionOfferDetails
-            ?.firstOrNull { offer ->
-                offer.pricingPhases.pricingPhaseList.lastOrNull()?.formattedPrice?.isNotBlank() == true
-            }
         val price = details.oneTimePurchaseOfferDetails?.formattedPrice
-            // The *last* pricing phase, not the first. A base plan with an introductory offer -
-            // a free first month, a discounted first year, both of which Play pushes hard - arrives
-            // as a list of phases ending in the one that repeats forever. Taking the first would
-            // print "0,00 ₴" as the price of a monthly subscription: technically what they pay
-            // today, and a lie about what they are agreeing to. Never formatted here - Play has
-            // already applied the user's currency and regional pricing.
-            ?: selectedOffer?.pricingPhases?.pricingPhaseList?.lastOrNull()?.formattedPrice
             ?: return null
         return BillingProduct(
             id = details.productId,
             tier = tier,
             title = details.title,
             formattedPrice = price,
-            offerToken = selectedOffer?.offerToken,
         )
     }
 
     override suspend fun purchase(product: BillingProduct, launchContext: Any?): PurchaseResult {
+        if (closed.get() || !PremiumProducts.isForSale(product.id)) return PurchaseResult.Unavailable
         val activity = launchContext as? Activity ?: return PurchaseResult.Failed("no activity")
         val details = productDetails[product.id] ?: return PurchaseResult.Unavailable
         val paramsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details)
-        // Subscriptions are bought as a specific offer; one-time products have none and setting a
-        // token on them is rejected.
-        (product.offerToken ?: details.subscriptionOfferDetails?.firstOrNull()?.offerToken)
-            ?.let(paramsBuilder::setOfferToken)
         val flow = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(paramsBuilder.build()))
             .build()
@@ -255,7 +247,7 @@ class PlayBillingProvider(
     }
 
     override suspend fun restore(): PurchaseResult {
-        if (!client.isReady) return PurchaseResult.Unavailable
+        if (closed.get() || !client.isReady) return PurchaseResult.Unavailable
         val records = refreshPurchases() ?: return PurchaseResult.Unavailable
         // Reached the store, and this account owns nothing. That is an answer, not a failure, and
         // the user needs to be told which of the two it was.
@@ -335,7 +327,7 @@ class PlayBillingProvider(
      * users who bought early enough to hit the window.
      */
     override suspend fun acknowledge(purchase: PurchaseRecord) {
-        if (!purchase.needsAcknowledgement) return
+        if (closed.get() || !purchase.needsAcknowledgement) return
         val token = purchaseTokens[purchase.productId] ?: return
         val result = client.acknowledgePurchase(
             AcknowledgePurchaseParams.newBuilder().setPurchaseToken(token).build(),
@@ -343,5 +335,12 @@ class PlayBillingProvider(
         if (result.responseCode != BillingClient.BillingResponseCode.OK) {
             AppLog.w(TAG) { "acknowledge failed for ${purchase.productId}: ${result.responseCode}" }
         }
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        pendingPurchase.complete(emptyList()) { PurchaseResult.Unavailable }
+        _connection.value = BillingConnectionState.DISCONNECTED
+        client.endConnection()
     }
 }

@@ -1,7 +1,6 @@
 package com.uacastplayer.ui.home
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -39,7 +37,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.playlist.withPlaylistCpu
+import com.uacastplayer.ads.AdPlacement
+import com.uacastplayer.ui.ads.BannerAdSlot
+import com.uacastplayer.data.playlist.resolveHomeContent
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.epg.EpgLookup
@@ -120,9 +120,8 @@ fun HomeScreen(
     val onRemovePlaylistSource = source.onRemovePlaylistSource
     val onOpenAddPlaylist = source.onOpenAddPlaylist
     val onRefreshPlaylist = source.onRefreshPlaylist
-    // Same idea as ChannelsScreen's iconRefreshKey - forces the icons below to re-resolve once EPG
-    // data arrives, is replaced, or a prefetch run finishes writing new files.
-    val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
+    // Refresh on user pack edits or completed downloads, not unrelated EPG updates.
+    val iconRefreshKey: Any = iconPrefetchState.refreshKey
     var showSourceSheet by remember { mutableStateOf(false) }
     val flatChannels = playlistState.channels
     val totalChannels = flatChannels.size
@@ -141,7 +140,7 @@ fun HomeScreen(
         value = if (lastWatchedChannelKey == null) {
             initialHomeContent
         } else {
-            withPlaylistCpu { HomeContentPolicy.resolve(lastWatchedChannelKey, flatChannels, favorites) }
+            resolveHomeContent(lastWatchedChannelKey, flatChannels, favorites)
         }
     }
     val favoriteChannels = remember(homeContent.favorites) {
@@ -161,7 +160,7 @@ fun HomeScreen(
             modifier = Modifier.padding(top = 8.dp),
         )
 
-        // Draws nothing at all unless a trial is in its last days or has just ended - see
+        // Draws nothing at all unless legacy paid access has expired - see
         // UpgradeBanner, which owns that rule. Placed above the dashboard because it is news about
         // the app the user is looking at, and below the title because it is not what Home is for.
         LocalPremiumNotice.current(Modifier.padding(top = 12.dp))
@@ -223,6 +222,8 @@ fun HomeScreen(
                 favoriteCount = favorites.size,
                 onRefreshPlaylist = onRefreshPlaylist,
             )
+            BannerAdSlot(AdPlacement.HOME_BANNER,
+                Modifier.fillMaxWidth().padding(top = GapL, bottom = GapL))
         } else if (playlistState.isLoading) {
             // hasChannels wins over isLoading, and isLoading over the empty state - the same order
             // ChannelsScreen uses, and for the same reason: a restore in progress is not the

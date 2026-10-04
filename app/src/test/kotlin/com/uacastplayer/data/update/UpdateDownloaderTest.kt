@@ -235,6 +235,31 @@ class UpdateDownloaderTest {
     }
 
     @Test
+    fun `a cached hash match still rejects release metadata with the wrong size`() {
+        Origin(payload).use { origin ->
+            assertTrue(download(apk(origin)) is UpdateDownload.Ready)
+            val afterFirst = origin.requests.get()
+
+            val result = download(apk(origin, size = payload.size.toLong() + 1))
+
+            assertEquals(UpdateDownload.Corrupt, result)
+            assertEquals("the known bad metadata must not trigger another download", afterFirst, origin.requests.get())
+        }
+    }
+
+    @Test
+    fun `declared apk above the cap is rejected before using mobile data`() {
+        Origin(payload).use { origin ->
+            val small = UpdateDownloader(application, maxBytes = 1024L)
+
+            val result = runBlocking { small.download(apk(origin, size = 1025L)) }
+
+            assertEquals(UpdateDownload.TooLarge, result)
+            assertEquals(0, origin.requests.get())
+        }
+    }
+
+    @Test
     fun `concurrent requests on one downloader share one verified download`() = runBlocking {
         Origin(payload, responseDelayMillis = 200).use { origin ->
             val downloader = UpdateDownloader(application)

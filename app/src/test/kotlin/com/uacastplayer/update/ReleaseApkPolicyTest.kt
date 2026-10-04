@@ -100,13 +100,63 @@ class ReleaseApkPolicyTest {
         assertNull(ReleaseApkPolicy.pick(release, supportedAbis = listOf("arm64-v8a", "armeabi-v7a")))
     }
 
-    /** One APK is still one APK - the ordinary hand-published release, with no ABI question to
-     * answer. */
+    /** A single ABI-labelled APK is not automatically compatible with every phone. */
     @Test
-    fun `a single apk is taken without consulting the architecture at all`() {
-        val picked = ReleaseApkPolicy.pick(listOf(asset(name = "app-x86_64-release.apk")), supportedAbis = emptyList())
+    fun `a single incompatible architecture apk is refused`() {
+        assertNull(ReleaseApkPolicy.pick(
+            listOf(asset(name = "app-arm64-v8a-release.apk")),
+            supportedAbis = listOf("armeabi-v7a"),
+        ))
+    }
 
-        assertEquals("https://example.test/app-x86_64-release.apk", picked?.downloadUrl)
+    @Test
+    fun `a single matching architecture apk is accepted`() {
+        val picked = ReleaseApkPolicy.pick(
+            listOf(asset(name = "app-armeabi-v7a-release.apk")),
+            supportedAbis = listOf("armeabi-v7a"),
+        )
+        assertEquals("https://example.test/app-armeabi-v7a-release.apk", picked?.downloadUrl)
+    }
+
+    @Test
+    fun `x86 must not match x86_64`() {
+        assertNull(ReleaseApkPolicy.pick(
+            listOf(asset(name = "app-x86_64-release.apk"), asset(name = "app-arm64-v8a-release.apk")),
+            supportedAbis = listOf("x86"),
+        ))
+    }
+
+    @Test
+    fun `underscore separated architecture label is still checked`() {
+        assertNull(ReleaseApkPolicy.pick(
+            listOf(asset(name = "app-arm64-v8a_release.apk")),
+            supportedAbis = listOf("armeabi-v7a"),
+        ))
+    }
+
+    @Test
+    fun `matching architecture with uppercase and underscore separators is accepted`() {
+        val picked = ReleaseApkPolicy.pick(
+            listOf(asset(name = "APP_ARM64-V8A_RELEASE.APK")),
+            supportedAbis = listOf("arm64-v8a"),
+        )
+        assertEquals("https://example.test/APP_ARM64-V8A_RELEASE.APK", picked?.downloadUrl)
+    }
+
+    @Test
+    fun `nonuniversal name cannot bypass incompatible architecture`() {
+        assertNull(ReleaseApkPolicy.pick(
+            listOf(asset(name = "app-nonuniversal-arm64-v8a-release.apk")),
+            supportedAbis = listOf("armeabi-v7a"),
+        ))
+    }
+
+    @Test
+    fun `universal name cannot override an explicit incompatible architecture`() {
+        assertNull(ReleaseApkPolicy.pick(
+            listOf(asset(name = "app-universal-arm64-v8a-release.apk")),
+            supportedAbis = listOf("armeabi-v7a"),
+        ))
     }
 
     /**

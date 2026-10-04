@@ -89,6 +89,7 @@ class IconPrefetchInterruptionTest {
         // Process-wide singleton - leaving it set would follow this test into every other one.
         PlaybackActivity.setActive(false)
         scope.cancel()
+        application.getSharedPreferences("custom_icon_sources", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     /** Accepts icon requests forever and answers none of them, so every fetch stays in flight. */
@@ -147,13 +148,15 @@ class IconPrefetchInterruptionTest {
         shadowOf(manager).setNetworkCapabilities(network, capabilities)
     }
 
-    private fun controller(): IconController {
+    private fun controller(logoUrl: String = "http://example.test/logo.png"): IconController {
         giveTheDeviceANetwork()
         val preferences = AppPreferences(application)
         // Metered is what the Robolectric default network is, so the prefetch has to be allowed to
         // run on one - the gate this test needs open is connectivity, not the wifi-only setting.
         preferences.iconWifiOnly = false
-        val iconRepository = IconRepository(application)
+        val iconRepository = IconRepository(application).apply {
+            addCustomIconSource(logoUrl.substringBeforeLast('/'))
+        }
         return IconController(
             preferences = preferences,
             iconRepository = iconRepository,
@@ -164,7 +167,7 @@ class IconPrefetchInterruptionTest {
     }
 
     private fun channelsPointingAt(logoUrl: String) = listOf(
-        M3uChannel(displayName = "One", streamUrl = "http://example.test/one.ts", tvgLogo = logoUrl),
+        M3uChannel(displayName = "One", streamUrl = "http://example.test/one.ts", tvgLogo = logoUrl, tvgId = "logo"),
     )
 
     private fun IconController.awaitRunning(running: Boolean): Boolean {
@@ -183,7 +186,7 @@ class IconPrefetchInterruptionTest {
             lastIconPrefetchAtMillis = null
         }
         var finishedCallbacks = 0
-        val repository = IconRepository(application)
+        val repository = IconRepository(application).apply { addCustomIconSource("http://example.test") }
         val controller = IconController(
             preferences = preferences,
             iconRepository = repository,
@@ -209,7 +212,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `a prefetch interrupted by playback stops claiming to be running`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             controller.triggerPrefetch(
                 channels = channels,
@@ -238,7 +241,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `cache limited mode prefetches a bounded priority batch`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             controller.triggerPrefetch(
                 channels = channels,
@@ -262,7 +265,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `the prefetch comes back once playback stops`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             controller.triggerPrefetch(
                 channels = channels,
@@ -290,7 +293,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `an ineligible replacement clears the previous prefetch progress`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             val context = IconController.PrefetchContext(firstGroupChannels = channels)
             controller.triggerPrefetch(
@@ -322,7 +325,9 @@ class IconPrefetchInterruptionTest {
         HeldIconServer().use { server ->
             giveTheDeviceANetwork()
             val preferences = AppPreferences(application).apply { iconWifiOnly = false }
-            val repository = IconRepository(application)
+            val repository = IconRepository(application).apply {
+                addCustomIconSource(server.url.substringBeforeLast('/'))
+            }
             val callbacks = mutableListOf<() -> Unit>()
             val controller = IconController(
                 preferences = preferences,
@@ -361,7 +366,9 @@ class IconPrefetchInterruptionTest {
         HeldIconServer().use { server ->
             giveTheDeviceANetwork()
             val preferences = AppPreferences(application).apply { iconWifiOnly = false }
-            val repository = IconRepository(application)
+            val repository = IconRepository(application).apply {
+                addCustomIconSource(server.url.substringBeforeLast('/'))
+            }
             val channels = channelsPointingAt(server.url)
             val context = IconController.PrefetchContext(firstGroupChannels = channels)
             var registrations = 0
@@ -395,39 +402,12 @@ class IconPrefetchInterruptionTest {
     }
 
     @Test
-    fun `an unexpected prefetch callback failure clears progress instead of escaping`() {
-        val controller = controller()
-        val channels = channelsPointingAt("http://example.test/logo.png")
-        val callbackInvoked = CountDownLatch(1)
-
-        controller.triggerPrefetch(
-            channels = channels,
-            iconDisplayMode = IconDisplayMode.CACHE,
-            epgIconUrlFor = {
-                callbackInvoked.countDown()
-                throw IllegalStateException("EPG index unavailable")
-            },
-            context = IconController.PrefetchContext(firstGroupChannels = channels),
-        )
-
-        assertTrue(
-            "prefetch never reached the failing callback",
-            callbackInvoked.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
-        )
-        assertTrue(
-            "failure must clear the progress state after the asynchronous prefetch settles",
-            controller.awaitRunning(false),
-        )
-        assertEquals(0, controller.iconPrefetchState.value.completedRuns)
-    }
-
-    @Test
     fun `cache clear waits for row icon resolution and blocks new row writers`() = runBlocking {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channel = channelsPointingAt(server.url).single()
             val firstResolution = scope.launch {
-                controller.resolveChannelIcon(channel, IconDisplayMode.CACHE, epgIconUrl = null)
+                controller.resolveChannelIcon(channel, IconDisplayMode.CACHE)
             }
             assertTrue(
                 "the row resolver must be inside a real icon write path before clear begins",
@@ -448,7 +428,7 @@ class IconPrefetchInterruptionTest {
                 val requestsAfterFirstResolution = server.requestCount.get()
 
                 val blockedResolution = scope.launch {
-                    controller.resolveChannelIcon(channel, IconDisplayMode.CACHE, epgIconUrl = null)
+                    controller.resolveChannelIcon(channel, IconDisplayMode.CACHE)
                 }
                 Thread.sleep(RESTART_GUARD_MILLIS)
                 assertEquals(
@@ -473,7 +453,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `overlapping cache clears block every prefetch restart until the last delete ends`() = runBlocking {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             val context = IconController.PrefetchContext(firstGroupChannels = channels)
             controller.triggerPrefetch(

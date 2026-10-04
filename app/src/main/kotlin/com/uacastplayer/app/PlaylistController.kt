@@ -68,11 +68,22 @@ class PlaylistController(
     private val _activePlaylistSourceId = MutableStateFlow(preferences.activePlaylistSourceId)
     val activePlaylistSourceId: StateFlow<String?> = _activePlaylistSourceId.asStateFlow()
 
+    val sourceInitialization = PlaylistSourceInitialization(preferences, playlistRepository, scope) { sources ->
+        _playlistSources.value = sources
+        val activeId = preferences.activePlaylistSourceId
+            ?.takeIf { id -> sources.any { it.id == id } }
+            ?: sources.firstOrNull()?.id
+        setActivePlaylistSourceId(activeId)
+    }
+
     /** Set by loadPlaylistFromUrl/loadPlaylistFromFile/loadXtreamPlaylist right before starting a
      * load that's meant to become a brand-new saved source; consumed by setPlaylistDisplayName
      * once that load succeeds and the user's typed name (if any) is known. Deliberately NOT set by
      * refreshPlaylist or switchPlaylistSource, which reload an *existing* source instead. */
     private var pendingNewSource: PlaylistSource? = null
+    private var pendingPreviousState: PlaylistUiState? = null
+    private var pendingPreviousChannelCount = 0
+    private var pendingLoadedNotification: (() -> Unit)? = null
 
     /**
      * The one load allowed to be in flight. Every entry point that loads a playlist goes through
@@ -99,12 +110,32 @@ class PlaylistController(
     var channelCount: Int = 0
         private set
 
-    private fun launchLoad(kind: String, block: suspend (generation: Long) -> Unit) {
+    private fun launchLoad(
+        kind: String,
+        requiresSourceList: Boolean = true,
+        block: suspend (generation: Long) -> Unit,
+    ) {
         val generation = loadGeneration.incrementAndGet()
         loadJob?.cancel()
         loadJob = scope.launch {
             AppLog.d(TAG) { "Playlist load $generation ($kind) started" }
             try {
+                if (requiresSourceList) {
+                    val initializationFailure = sourceInitialization.awaitLoaded()
+                    if (!isCurrentGeneration(generation)) return@launch
+                    if (initializationFailure != null) {
+                        applyPlaylistOutcome(initializationFailure, loadGeneration = generation)
+                        return@launch
+                    }
+                    // The synchronous check can see an empty list while startup is reading IO.
+                    // Re-check the durable list before any download or source replacement.
+                    val pending = pendingNewSource
+                    if (pending != null && !canAddSource(pending)) {
+                        cancelPendingSourceAdd()
+                        publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
+                        return@launch
+                    }
+                }
                 block(generation)
                 AppLog.d(TAG) { "Playlist load $generation ($kind) completed" }
             } catch (cancelled: CancellationException) {
@@ -122,49 +153,20 @@ class PlaylistController(
     /** Restores the active source's cached snapshot at startup, migrating a pre-multi-playlist
      * legacy snapshot into the sources list first if needed. Called once from AppViewModel.init. */
     fun loadInitialSource() {
-        launchLoad("initial", ::loadInitialSourceForGeneration)
+        launchLoad("initial", requiresSourceList = false, ::loadInitialSourceForGeneration)
     }
 
     private suspend fun loadInitialSourceForGeneration(generation: Long) {
-        val loadedSources = playlistRepository.loadSources()
+        val failure = sourceInitialization.awaitLoaded()
         if (!isCurrentGeneration(generation)) return
-        val sources = migrateInitialSourcesIfNeeded(loadedSources, generation)
-        if (!isCurrentGeneration(generation)) return
-        _playlistSources.value = sources
-        val activeId = preferences.activePlaylistSourceId
-            ?.takeIf { preferredId -> sources.any { source -> source.id == preferredId } }
-            ?: sources.firstOrNull()?.id
-        activeId?.let { id ->
-            val source = sources.first { it.id == id }
+        if (failure != null) {
+            applyPlaylistOutcome(failure, loadGeneration = generation)
+            return
+        }
+        _playlistSources.value.firstOrNull { it.id == _activePlaylistSourceId.value }?.let { source ->
             selectSource(source)
             loadSavedSource(source, generation)
         }
-    }
-
-    private suspend fun migrateInitialSourcesIfNeeded(
-        loadedSources: List<PlaylistSource>,
-        generation: Long,
-    ): List<PlaylistSource> {
-        if (loadedSources.isNotEmpty() || !isCurrentGeneration(generation)) return loadedSources
-        // Upgrading from before multi-playlist support (or a fresh install with nothing loaded
-        // yet) - see PlaylistRepository.migrateLegacySnapshotIfNeeded.
-        val migrated = playlistRepository.migrateLegacySnapshotIfNeeded()
-        return if (!isCurrentGeneration(generation)) {
-            loadedSources
-        } else migrated?.let { migratedSource ->
-            val sources = listOf(migratedSource.copy(displayName = preferences.playlistDisplayName))
-            val sourcesSaved = playlistRepository.saveSources(sources)
-            if (isCurrentGeneration(generation)) {
-                setActivePlaylistSourceId(migratedSource.id)
-                // Only now, and deliberately last: until the source list naming the migrated
-                // snapshot is on disk, the legacy file is the only record that the playlist exists.
-                // Dying between the two used to lose it (see
-                // PlaylistRepository.migrateLegacySnapshotIfNeeded); dying after this line loses
-                // nothing, because everything it pointed at has already been written.
-                if (sourcesSaved) playlistRepository.discardLegacySnapshot()
-            }
-            sources
-        } ?: loadedSources
     }
 
     private fun setActivePlaylistSourceId(id: String?) {
@@ -181,8 +183,6 @@ class PlaylistController(
     fun setPlaylistDisplayName(name: String) {
         val pending = pendingNewSource ?: run { sourcePersistence.retry(); return }
         if (!_playlistState.value.sourceReadyToSave) return
-        pendingNewSource = null
-        _playlistState.value = _playlistState.value.copy(sourceReadyToSave = false)
         // What the user typed, else what the source already knows about itself (a picked file
         // carries its own name - see loadPlaylistFromFile), else one derived from where it came
         // from. The last step used to be an Xtream-only special case; PlaylistSourceLabel answers
@@ -191,14 +191,27 @@ class PlaylistController(
             ?: pending.displayName
             ?: PlaylistSourceLabel.forLocation(pending.type, pending.location)
         val newSource = pending.copy(displayName = effectiveName)
+        val acceptedNotification = pendingLoadedNotification
         when (val result = PlaylistSourcePolicy.add(_playlistSources.value, newSource)) {
             is PlaylistSourceAddResult.Added -> {
+                pendingNewSource = null
+                pendingPreviousState = null
+                pendingLoadedNotification = null
                 _playlistSources.value = result.sources
                 setActivePlaylistSourceId(newSource.id)
-                _playlistState.value = _playlistState.value.copy(displayName = newSource.displayName)
+                _playlistState.value = _playlistState.value.copy(
+                    displayName = newSource.displayName,
+                    sourceReadyToSave = false,
+                )
+                // Cross-controller work belongs to a source the user has accepted. A completed
+                // load can still be abandoned before the add screen's save effect runs.
+                acceptedNotification?.invoke()
                 persistSources(result.sources)
             }
-            PlaylistSourceAddResult.LimitReached -> publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
+            PlaylistSourceAddResult.LimitReached -> {
+                cancelPendingSourceAdd()
+                publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
+            }
         }
     }
 
@@ -255,14 +268,31 @@ class PlaylistController(
     fun cancelPendingSourceAdd() {
         val pending = pendingNewSource ?: return
         pendingNewSource = null
+        pendingLoadedNotification = null
         // A repository write may be in a non-cancellable AtomicFile stage. Invalidate the
         // generation before cancelling so its eventual completion cannot publish stale channels.
         loadGeneration.incrementAndGet()
         loadJob?.cancel()
         loadJob = null
-        _playlistState.value = _playlistState.value.copy(isLoading = false, sourceReadyToSave = false)
+        val previous = pendingPreviousState ?: PlaylistUiState()
+        pendingPreviousState = null
+        channelCount = pendingPreviousChannelCount
+        _playlistState.value = previous.copy(isLoading = false, sourceReadyToSave = false)
+        onStateChanged()
         if (_playlistSources.value.none { it.id == pending.id }) {
             scope.launch { playlistRepository.deleteSnapshot(pending.id) }
+        }
+        restoreSavedSourceIfNeeded()
+    }
+
+    private fun restoreSavedSourceIfNeeded() {
+        if (_playlistState.value.hasChannels) return
+        val cancelledGeneration = loadGeneration.get()
+        scope.launch {
+            sourceInitialization.awaitLoaded()
+            if (!isCurrentGeneration(cancelledGeneration) || _playlistState.value.hasChannels) return@launch
+            _playlistSources.value.firstOrNull { it.id == _activePlaylistSourceId.value }
+                ?.let(::switchPlaylistSource)
         }
     }
 
@@ -279,12 +309,15 @@ class PlaylistController(
     /** Switches to an already-saved source (see Home's source-switcher bottom sheet) - shows its
      * cached snapshot instantly when one exists instead of always re-fetching over the network. */
     fun switchPlaylistSource(source: PlaylistSource) {
+        if (pendingNewSource != null) cancelPendingSourceAdd()
         selectSource(source)
         launchLoad("switch") { generation -> loadSavedSource(source, generation) }
     }
 
     private fun selectSource(source: PlaylistSource) {
         pendingNewSource = null
+        pendingPreviousState = null
+        pendingLoadedNotification = null
         setActivePlaylistSourceId(source.id)
         channelCount = 0
         // Keeping the previous source's channels here would label A as B if loading B fails.
@@ -353,7 +386,15 @@ class PlaylistController(
      * [com.uacastplayer.backup.BackupMergePolicy]) and persists it - the merged list is already
      * computed by the caller, this just applies and saves it. The returned job lets callers that
      * require a durable boundary (notably process-restarting instrumentation) wait for the write. */
-    fun applyImportedSources(sources: List<PlaylistSource>, activateIfNeeded: Boolean = false): Job {
+    fun applyImportedSources(sources: List<PlaylistSource>, activateIfNeeded: Boolean = false): Job = scope.launch {
+        if (sourceInitialization.awaitLoaded() != null) {
+            publishSourceSave(PlaylistSourceSaveState.FAILED)
+            return@launch
+        }
+        applySourceReplacement(sources, activateIfNeeded).join()
+    }
+
+    private fun applySourceReplacement(sources: List<PlaylistSource>, activateIfNeeded: Boolean): Job {
         _playlistSources.value = sources
         if (sources.isEmpty()) {
             loadGeneration.incrementAndGet()
@@ -372,7 +413,8 @@ class PlaylistController(
     private val persistSources: (List<PlaylistSource>) -> Job = sourcePersistence::write
 
     suspend fun awaitSourcesPersistence(): Boolean {
-        return sourcePersistence.awaitPersistence()
+        return _playlistState.value.sourceSaveState != PlaylistSourceSaveState.FAILED &&
+            sourcePersistence.awaitPersistence()
     }
 
     private fun publishSourceSave(state: PlaylistSourceSaveState) {
@@ -381,16 +423,24 @@ class PlaylistController(
 
     /** Check capacity before download, but allow updating an existing source at the limit. */
     private fun beginSourceAdd(source: PlaylistSource): Boolean {
-        if (PlaylistSourcePolicy.add(_playlistSources.value, source) == PlaylistSourceAddResult.LimitReached) {
-            publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
-            return false
-        }
+        if (pendingNewSource != null) cancelPendingSourceAdd()
+        if (!canAddSource(source)) return false
+        pendingPreviousState = _playlistState.value
+        pendingPreviousChannelCount = channelCount
+        pendingLoadedNotification = null
         pendingNewSource = source
         _playlistState.value = _playlistState.value.copy(sourceReadyToSave = false)
         if (_playlistState.value.sourceSaveState != PlaylistSourceSaveState.FAILED) {
             publishSourceSave(PlaylistSourceSaveState.IDLE)
         }
         return true
+    }
+
+    private fun canAddSource(source: PlaylistSource): Boolean {
+        val result = PlaylistSourcePolicy.add(_playlistSources.value, source)
+        if (result != PlaylistSourceAddResult.LimitReached) return true
+        publishSourceSave(PlaylistSourceSaveState.LIMIT_REACHED)
+        return false
     }
 
     private fun newPendingSource(type: PlaylistSourceType, location: String): PlaylistSource = PlaylistSource(
@@ -482,11 +532,19 @@ class PlaylistController(
         if (outcome is PlaylistOutcome.Loaded) {
             loadedChannels?.takeIf { it.isNotEmpty() }?.let { channels ->
                 channelCount = channels.size
-                onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
+                if (outcome.sourceFingerprint == pendingNewSource?.id) {
+                    pendingLoadedNotification = {
+                        onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
+                    }
+                } else {
+                    onLoaded(channels, outcome.groups, outcome.epgUrls, fromCache)
+                }
             }
         }
         _playlistState.value = nextState.copy(
-            sourceReadyToSave = pendingNewSource != null && nextState.error == null && nextState.hasChannels,
+            sourceReadyToSave = outcome is PlaylistOutcome.Loaded &&
+                outcome.sourceFingerprint == pendingNewSource?.id &&
+                nextState.error == null && nextState.hasChannels,
         )
         onStateChanged()
     }

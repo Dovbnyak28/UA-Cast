@@ -4,9 +4,11 @@ import com.uacastplayer.core.cast.TsProgramInfo
 import com.uacastplayer.core.cast.TsProgramInfoParser
 import com.uacastplayer.core.cast.TsSourceKind
 import com.uacastplayer.core.io.BoundedByteReader
+import com.uacastplayer.core.net.HttpHeaderValuePolicy
 import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.proxy.M3u8Rewriter
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -31,27 +33,30 @@ data class TsDiagnosticResult(val programInfo: TsProgramInfo?, val sourceKind: T
  * playlist needs its first segment fetched separately to reach actual TS packets, while raw TS
  * bytes already are the probe, sniffed directly with no second request.
  */
+// Standalone diagnostic utility only. Playback must use in-band proxy observations instead:
+// a second GET can displace a Media3/Cast/DLNA stream on single-connection provider accounts.
 object TsFirstSegmentDiagnostic {
 
-    private const val INITIAL_PROBE_RANGE_HEADER = "bytes=0-262143"
-    private const val MAX_INITIAL_PROBE_BYTES = 256 * 1024
-    private const val SEGMENT_PROBE_RANGE_HEADER = "bytes=0-262143"
-    private const val MAX_SEGMENT_PROBE_BYTES = 256 * 1024
+    private const val PROBE_RANGE_HEADER = "bytes=0-262143"
+    private const val MAX_PROBE_BYTES = 256 * 1024
 
     // This is the non-fatal boundary around three independent failure sources: URL validation,
     // network I/O and parsing arbitrary third-party transport-stream bytes. All must take the same
     // Unknown fallback, while CancellationException remains explicitly rethrown below.
     @Suppress("TooGenericExceptionCaught")
-    suspend fun diagnose(streamUrl: String, httpClient: OkHttpClient): TsDiagnosticResult = try {
-        val request = Request.Builder().url(streamUrl).header("Range", INITIAL_PROBE_RANGE_HEADER).build()
-        val probe = httpClient.newCall(request).executeCancellable { response ->
-            InitialProbe(
-                contentType = response.header("Content-Type"),
-                prefix = BoundedByteReader.readAtMostBytes(response.body.byteStream(), MAX_INITIAL_PROBE_BYTES),
-                finalUrl = response.request.url.toString(),
-            )
-        }
-        diagnoseResponse(probe, httpClient)
+    suspend fun diagnose(
+        streamUrl: String,
+        httpClient: OkHttpClient,
+        userAgent: String? = null,
+        referrer: String? = null,
+    ): TsDiagnosticResult = try {
+        val headers = ProbeHeaders(
+            HttpHeaderValuePolicy.userAgentOrDefault(userAgent),
+            HttpHeaderValuePolicy.sanitize(referrer),
+        )
+        val probe = readProbe(streamUrl, httpClient, headers)
+        if (probe == null) TsDiagnosticResult(null, TsSourceKind.Unknown)
+        else diagnoseResponse(probe, httpClient, headers)
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (error: Exception) {
@@ -61,11 +66,15 @@ object TsFirstSegmentDiagnostic {
         TsDiagnosticResult(null, TsSourceKind.Unknown)
     }
 
-    private suspend fun diagnoseResponse(probe: InitialProbe, httpClient: OkHttpClient): TsDiagnosticResult {
+    private suspend fun diagnoseResponse(
+        probe: InitialProbe,
+        httpClient: OkHttpClient,
+        headers: ProbeHeaders,
+    ): TsDiagnosticResult {
         return when (TsSourceClassifier.classify(probe.contentType, probe.prefix)) {
             TsSourceKind.RawTs -> TsDiagnosticResult(TsProgramInfoParser.parse(probe.prefix), TsSourceKind.RawTs)
             TsSourceKind.Hls -> {
-                val info = diagnoseHlsSegment(probe.prefix, probe.finalUrl, httpClient)
+                val info = diagnoseHlsSegment(probe.prefix, probe.finalUrl, httpClient, headers)
                 TsDiagnosticResult(info, TsSourceKind.Hls)
             }
             TsSourceKind.Unknown -> TsDiagnosticResult(null, TsSourceKind.Unknown)
@@ -76,17 +85,42 @@ object TsFirstSegmentDiagnostic {
         playlistPrefix: ByteArray,
         finalUrl: String,
         httpClient: OkHttpClient,
-    ): TsProgramInfo? {
+        headers: ProbeHeaders,
+    ): TsProgramInfo? = try {
         val playlistText = String(playlistPrefix, Charsets.UTF_8)
         val segmentUrl = firstMediaSegmentLine(playlistText)?.let { M3u8Rewriter.resolveUrl(finalUrl, it) }
-            ?: return null
-        val segmentRequest = Request.Builder().url(segmentUrl).header("Range", SEGMENT_PROBE_RANGE_HEADER).build()
-        return httpClient.newCall(segmentRequest).executeCancellable { segmentResponse ->
-            TsProgramInfoParser.parse(
-                BoundedByteReader.readAtMostBytes(segmentResponse.body.byteStream(), MAX_SEGMENT_PROBE_BYTES),
-            )
+        segmentUrl?.let { readProbe(it, httpClient, headers) }?.let { TsProgramInfoParser.parse(it.prefix) }
+    } catch (error: IOException) {
+        // The initial response already proved HLS. A segment timeout/rejection invalidates only
+        // the codec verdict, not that source kind (important for extensionless provider URLs).
+        AppLog.d(TAG) { "Cast segment probe failed: ${error.javaClass.simpleName}" }
+        null
+    } catch (error: IllegalArgumentException) {
+        AppLog.d(TAG) { "Cast segment probe rejected: ${error.javaClass.simpleName}" }
+        null
+    }
+
+    private suspend fun readProbe(url: String, httpClient: OkHttpClient, headers: ProbeHeaders): InitialProbe? {
+        val request = Request.Builder().url(url).apply {
+            header("Range", PROBE_RANGE_HEADER)
+            header("User-Agent", headers.userAgent)
+            headers.referrer?.let { header("Referer", it) }
+        }.build()
+        return httpClient.newCall(request).executeCancellable { response ->
+            if (!response.isSuccessful) {
+                AppLog.d(TAG) { "Cast probe rejected: HTTP ${response.code}" }
+                null
+            } else {
+                InitialProbe(
+                    contentType = response.header("Content-Type"),
+                    prefix = BoundedByteReader.readAtMostBytes(response.body.byteStream(), MAX_PROBE_BYTES),
+                    finalUrl = response.request.url.toString(),
+                )
+            }
         }
     }
+
+    private data class ProbeHeaders(val userAgent: String, val referrer: String?)
 
     /** Capped independently of the Range request: a live origin can ignore Range and keep writing
      * forever, but codec sniffing only needs the leading playlist/PAT/PMT bytes. Keeping this value
@@ -100,6 +134,13 @@ object TsFirstSegmentDiagnostic {
     /** The first non-blank, non-tag line in an HLS playlist - its first actual media segment
      * reference, per the M3U8 spec (`#`-prefixed lines are tags/comments). Returns null for a
      * playlist with no segments (a master playlist, or one that's empty/malformed). */
-    internal fun firstMediaSegmentLine(playlistText: String): String? =
-        playlistText.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
+    internal fun firstMediaSegmentLine(playlistText: String): String? {
+        val lines = playlistText.lineSequence().map { it.trim() }
+        // A master URI names another playlist, not TS bytes. Choosing an arbitrary variant for a
+        // hard codec verdict could also block a different, playable variant selected by the TV.
+        if (lines.any { it.startsWith("#EXT-X-STREAM-INF:") || it.startsWith("#EXT-X-I-FRAME-STREAM-INF:") }) {
+            return null
+        }
+        return lines.firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
+    }
 }

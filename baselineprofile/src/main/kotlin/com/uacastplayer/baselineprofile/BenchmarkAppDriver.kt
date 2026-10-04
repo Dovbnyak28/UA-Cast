@@ -37,7 +37,9 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     fun startMain(scope: MacrobenchmarkScope) {
         scope.startActivityAndWait()
-        waitForText(HOME_LABEL)
+        // Home now displays "Overview" and the app-name heading. Its accessibility description
+        // remains "Home", matching the Channels selector; visible wording is not a ready signal.
+        waitForDescription(HOME_LABEL)
     }
 
     fun openChannels() {

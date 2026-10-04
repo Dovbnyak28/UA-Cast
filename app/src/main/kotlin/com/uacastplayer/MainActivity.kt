@@ -14,6 +14,17 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import com.uacastplayer.remote.PhoneRemoteViewModel
+import com.uacastplayer.remote.TvRemoteReceiverViewModel
+import com.uacastplayer.remote.dispatchTvRemote
+import com.uacastplayer.ui.remote.RemoteControlHost
+import com.uacastplayer.ui.tv.TvPresentation
+import com.uacastplayer.ui.tv.TvInputRegistry
+import com.uacastplayer.ui.tv.isTelevision
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.prefs.withAppLocale
 import com.uacastplayer.favorites.FavoriteKey
@@ -61,6 +72,9 @@ internal val SavedPlayerRequestSaver: Saver<SavedPlayerRequest?, List<Any>> = Sa
 class MainActivity : FragmentActivity() {
 
     private val viewModel: AppViewModel by viewModels()
+    private val phoneRemote: PhoneRemoteViewModel by viewModels()
+    private val tvRemote: TvRemoteReceiverViewModel by viewModels()
+    private val tvInputRegistry = TvInputRegistry()
     private var activeLanguage: AppLanguage? = null
 
     override fun attachBaseContext(newBase: Context) {
@@ -69,6 +83,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        viewModel.refreshPremiumAccess()
         // Returning from the system's "install unknown apps" screen is not an installer result.
         // Once permission was granted, return the action to its retryable state; otherwise the
         // banner would keep opening Settings even though the user has already allowed installs.
@@ -97,6 +112,15 @@ class MainActivity : FragmentActivity() {
         )
         super.onCreate(savedInstanceState)
 
+        val television = isTelevision()
+        if (television) lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                tvRemote.commands.collect { event ->
+                    tvRemote.consume(event) { command -> dispatchTvRemote(command, tvInputRegistry::dispatchToDialog) }
+                }
+            }
+        }
+
         activeLanguage = viewModel.uiState.value.language
 
         setContent {
@@ -117,6 +141,8 @@ class MainActivity : FragmentActivity() {
             }
 
             UaCastTheme(theme = uiState.appTheme) {
+                TvPresentation(television, tvInputRegistry) {
+                    RemoteControlHost(television, phoneRemote, tvRemote) {
                 when {
                     uiState.needsLanguagePicker ->
                         LanguagePickerScreen(onLanguageConfirmed = viewModel::selectLanguage)
@@ -137,7 +163,16 @@ class MainActivity : FragmentActivity() {
                         onFinish = { finish() },
                     )
                 }
+                    }
+                }
             }
         }
+    }
+
+    override fun onStop() {
+        // Also covers language/Activity recreation; no listener or socket survives an invisible owner.
+        phoneRemote.disconnect()
+        tvRemote.stop()
+        super.onStop()
     }
 }

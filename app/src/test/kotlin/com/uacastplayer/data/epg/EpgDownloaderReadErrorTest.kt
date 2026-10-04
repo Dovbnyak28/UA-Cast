@@ -1,6 +1,5 @@
 package com.uacastplayer.data.epg
 
-import java.io.File
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals

@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -28,6 +29,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.job
 import org.junit.Assert.assertEquals
@@ -89,6 +91,38 @@ class BackupControllerImportTest {
     }
 
     @Test
+    fun `superseded import cannot apply settings after its source callback resumes`() = runTest {
+        val newerUri = Uri.parse("content://com.example.documents/newer-backup.json")
+        answerWith { ByteArrayInputStream(aBackupWith(1, bufferSize = "LARGE").toByteArray()) }
+        answerWith(newerUri) { ByteArrayInputStream(aBackupWith(1, bufferSize = "SMALL").toByteArray()) }
+        val applyingOlder = CompletableDeferred<Unit>()
+        val releaseOlder = CompletableDeferred<Unit>()
+        val appliedSettings = mutableListOf<String?>()
+        val controller = controller()
+
+        val older = controller.importFrom(
+            uri, { emptyList() }, { emptyList() },
+            {
+                applyingOlder.complete(Unit)
+                releaseOlder.await()
+            },
+            { appliedSettings += it.bufferSize },
+        )
+        runCurrent()
+        applyingOlder.await()
+        val newer = controller.importFrom(
+            newerUri, { emptyList() }, { emptyList() }, {},
+            { appliedSettings += it.bufferSize },
+        )
+        newer.join()
+        releaseOlder.complete(Unit)
+        older.join()
+
+        assertEquals(listOf("SMALL"), appliedSettings)
+        assertEquals(1, controller.backupImportSummary.value?.importedFavoriteCount)
+    }
+
+    @Test
     fun `an ordinary backup is imported`() = runTest {
         answerWith { ByteArrayInputStream(aBackupWith(3).toByteArray()) }
         val seen = Import()
@@ -102,6 +136,29 @@ class BackupControllerImportTest {
         assertNotNull("the import should have reached the callbacks", seen.sources)
         assertEquals("LARGE", seen.settings?.bufferSize)
         assertEquals(3, controller.backupImportSummary.value?.importedFavoriteCount)
+    }
+
+    @Test
+    fun `failed source initialization prevents a partial backup import`() = runTest {
+        answerWith { ByteArrayInputStream(aBackupWith(1).toByteArray()) }
+        val seen = Import()
+        val controller = BackupController(
+            application,
+            FavoritesRepository(application, backgroundScope),
+            this,
+            UnconfinedTestDispatcher(testScheduler),
+            awaitSourcesLoaded = { false },
+        )
+
+        controller.importFrom(
+            uri, { emptyList() }, { emptyList() },
+            { seen.sources = it }, { seen.settings = it },
+        ).join()
+
+        assertNull(seen.sources)
+        assertNull(seen.settings)
+        assertEquals(0, controller.backupImportSummary.value?.importedSourceCount)
+        assertTrue(controller.backupImportSummary.value!!.persistenceFailed)
     }
 
     /**
@@ -119,7 +176,7 @@ class BackupControllerImportTest {
 
         assertNull("nothing may be merged from a file this big", seen.sources)
         assertNull(seen.settings)
-        assertNull(controller.backupImportSummary.value)
+        assertTrue(controller.backupImportSummary.value!!.fileRejected)
     }
 
     /** A file exactly at the cap is still a backup - the bound must refuse what is over it, not
@@ -158,7 +215,7 @@ class BackupControllerImportTest {
         testScheduler.advanceUntilIdle()
 
         assertNull(seen.sources)
-        assertNull(controller.backupImportSummary.value)
+        assertTrue(controller.backupImportSummary.value!!.fileRejected)
     }
 
     @Test

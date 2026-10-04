@@ -10,11 +10,14 @@ import com.uacastplayer.premium.billing.BillingProvider
 import com.uacastplayer.premium.billing.PurchaseRecord
 import com.uacastplayer.premium.billing.PurchaseResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -45,7 +48,6 @@ class PremiumRepositoryTest {
 
     private class FakeStorage(
         override var storedLicense: License? = null,
-        override var storeHasEverOfferedProducts: Boolean = false,
         override var clockHighWaterMark: Long = 0L,
     ) : LicenseStorage
 
@@ -56,16 +58,26 @@ class PremiumRepositoryTest {
         var acknowledgementAttempts = mutableListOf<PurchaseRecord>()
         var acknowledgementFailures = emptySet<String>()
         var catalogueQueries = 0
+        var catalogueGate: CompletableDeferred<Unit>? = null
+        val launchedPurchases = mutableListOf<String>()
+        var purchaseResult: PurchaseResult = PurchaseResult.Unavailable
+        var purchaseGate: CompletableDeferred<PurchaseResult>? = null
+        var closeCalls = 0
 
         override val connection: StateFlow<BillingConnectionState> = connectionFlow.asStateFlow()
         override val purchases: StateFlow<Set<PurchaseRecord>?> = purchasesFlow.asStateFlow()
         override suspend fun connect() = Unit
         override suspend fun products(): List<BillingProduct> {
             catalogueQueries++
+            catalogueGate?.await()
             return catalogue
         }
-        override suspend fun purchase(product: BillingProduct, launchContext: Any?) = PurchaseResult.Unavailable
+        override suspend fun purchase(product: BillingProduct, launchContext: Any?): PurchaseResult {
+            launchedPurchases += product.id
+            return purchaseGate?.await() ?: purchaseResult
+        }
         override suspend fun restore() = PurchaseResult.Unavailable
+        override fun close() { closeCalls++ }
         override suspend fun acknowledge(purchase: PurchaseRecord) {
             acknowledgementAttempts += purchase
             if (purchase.productId in acknowledgementFailures) {
@@ -109,29 +121,153 @@ class PremiumRepositoryTest {
         assertEquals(LicenseTier.FREE, storage.storedLicense?.tier)
     }
 
+    @Test fun ownershipGrantDoesNotWaitForOrQueryTheSaleCatalogue() = runTest {
+        val storage = FakeStorage(License.FREE)
+        val provider = StubProvider().apply {
+            catalogueGate = CompletableDeferred()
+            purchasesFlow.value = setOf(purchase(LicenseTier.LIFETIME))
+            connectionFlow.value = BillingConnectionState.CONNECTED
+        }
+        val repository = PremiumRepository(provider, storage, scope) { now }
+
+        repository.loadInitial()
+
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
+        assertEquals(0, provider.catalogueQueries)
+    }
+
+    @Test fun authoritativeRefundDoesNotWaitForOrQueryTheSaleCatalogue() = runTest {
+        val storage = FakeStorage(License(LicenseTier.LIFETIME))
+        val provider = StubProvider().apply {
+            catalogueGate = CompletableDeferred()
+            connectionFlow.value = BillingConnectionState.CONNECTED
+        }
+        val repository = PremiumRepository(provider, storage, scope) { now }
+
+        repository.loadInitial()
+
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        assertEquals(0, provider.catalogueQueries)
+    }
+
+    @Test fun replacingAStoreReleasesItsSdkOwner() = runTest {
+        val first = StubProvider()
+        val second = StubProvider()
+        val repository = PremiumRepository(first, FakeStorage(License.FREE), scope) { now }
+        repository.loadInitial()
+
+        repository.useProvider(second)
+
+        assertEquals(1, first.closeCalls)
+        assertEquals(0, second.closeCalls)
+    }
+
+    @Test fun retiredProviderPurchaseCannotOverwriteReplacementOwnership() = runTest {
+        val first = StubProvider(catalogue()).apply { purchaseGate = CompletableDeferred() }
+        val storage = FakeStorage(License.FREE)
+        val repository = PremiumRepository(first, storage, scope) { now }
+        repository.loadInitial()
+        val checkout = async { repository.purchase(catalogue().single().id, null) }
+        runCurrent()
+        assertEquals(1, first.launchedPurchases.size)
+
+        repository.useProvider(StubProvider().apply { connectionFlow.value = BillingConnectionState.CONNECTED })
+        first.purchaseGate!!.complete(PurchaseResult.Success(purchase(LicenseTier.LIFETIME)))
+
+        assertEquals(PurchaseResult.Unavailable, checkout.await())
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        assertEquals(LicenseTier.FREE, storage.storedLicense?.tier)
+    }
+
+    @Test fun closeIsIdempotentAndCannotRevokeCachedPaidAccess() = runTest {
+        val paid = License(LicenseTier.LIFETIME, source = "premium_lifetime")
+        val provider = StubProvider()
+        val storage = FakeStorage(paid)
+        val repository = PremiumRepository(provider, storage, scope) { now }
+        repository.loadInitial()
+
+        repository.close()
+        repository.close()
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        repository.loadInitial()
+        repository.refresh()
+
+        assertEquals(1, provider.closeCalls)
+        assertEquals(paid, storage.storedLicense)
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.effectiveTier)
+        assertEquals(emptyList<BillingProduct>(), repository.products())
+        assertEquals(PurchaseResult.Unavailable, repository.purchase("premium_lifetime", null))
+        assertEquals(PurchaseResult.Unavailable, repository.restore())
+        assertEquals(0, provider.catalogueQueries)
+        assertTrue(provider.launchedPurchases.isEmpty())
+    }
+
+    @Test fun reusingTheSameProviderDoesNotCloseTheActiveStore() = runTest {
+        val provider = StubProvider()
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+        repository.loadInitial()
+
+        repository.useProvider(provider)
+        provider.connectionFlow.value = BillingConnectionState.CONNECTED
+        provider.purchasesFlow.value = setOf(purchase(LicenseTier.LIFETIME))
+
+        assertEquals(0, provider.closeCalls)
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.effectiveTier)
+    }
+
+    @Test fun providerPassedToADestroyedOwnerIsReleasedWithoutBeingObserved() = runTest {
+        val first = StubProvider()
+        val second = StubProvider()
+        val repository = PremiumRepository(first, FakeStorage(License.FREE), scope) { now }
+        repository.loadInitial()
+        repository.close()
+
+        repository.useProvider(second)
+        second.connectionFlow.value = BillingConnectionState.CONNECTED
+        second.purchasesFlow.value = setOf(purchase(LicenseTier.LIFETIME))
+
+        assertEquals(1, first.closeCalls)
+        assertEquals(1, second.closeCalls)
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.effectiveTier)
+    }
+
+    @Test fun aLateCatalogueResultFromARetiredStoreIsNotReturnedToTheUi() = runTest {
+        val provider = StubProvider(catalogue()).apply { catalogueGate = CompletableDeferred() }
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
+        repository.loadInitial()
+        val prices = async { repository.products() }
+        runCurrent()
+        assertEquals(1, provider.catalogueQueries)
+
+        repository.useProvider(StubProvider())
+        provider.catalogueGate!!.complete(Unit)
+
+        assertTrue(prices.await().isEmpty())
+    }
+
     @Test
-    fun aFreshInstallIsGrantedATrialAndItIsRemembered() = runTest {
+    fun aFreshInstallStartsInLiteAndItIsRemembered() = runTest {
         val storage = FakeStorage(storedLicense = null)
         val repository = PremiumRepository(StubProvider(), storage, scope) { now }
 
         repository.loadInitial()
 
-        assertEquals(LicenseTier.TRIAL, repository.entitlements.value.license.tier)
-        assertTrue(repository.entitlements.value.unlocked.contains(Feature.DLNA))
-        assertNotNull("the trial must be stored, or it is granted again next launch", storage.storedLicense)
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        assertFalse(repository.entitlements.value.unlocked.contains(Feature.DLNA))
+        assertEquals(License.FREE, storage.storedLicense)
     }
 
     /** Clearing an expired trial would hand the same device a fresh 14 days on every launch. */
     @Test
-    fun anExpiredTrialIsNotGrantedAgain() = runTest {
-        val expired = License.trialStartingAt(now - License.TRIAL_DURATION_MILLIS - 1)
+    fun aLegacyTrialIsRetiredToLite() = runTest {
+        val expired = License(LicenseTier.TRIAL, expiresAtMillis = now - 1, source = "trial")
         val storage = FakeStorage(storedLicense = expired)
         val repository = PremiumRepository(StubProvider(), storage, scope) { now }
 
         repository.loadInitial()
 
-        assertEquals(LicenseTier.TRIAL, repository.entitlements.value.license.tier)
-        assertTrue(repository.entitlements.value.hasLapsed)
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        assertFalse(repository.entitlements.value.hasLapsed)
         assertFalse(repository.entitlements.value.unlocked.contains(Feature.DLNA))
         assertTrue(repository.entitlements.value.unlocked.contains(Feature.CHROMECAST))
     }
@@ -177,8 +313,8 @@ class PremiumRepositoryTest {
     /** A running trial was never issued by a store, so a store reporting no purchases says nothing
      * about it. */
     @Test
-    fun aConnectedStoreReportingNothingLeavesARunningTrialAlone() = runTest {
-        val storage = FakeStorage(storedLicense = License.trialStartingAt(now))
+    fun aRunningLegacyTrialCannotGrantPremium() = runTest {
+        val storage = FakeStorage(storedLicense = License(LicenseTier.TRIAL, expiresAtMillis = now + 1000))
         val provider = StubProvider()
         val repository = PremiumRepository(provider, storage, scope) { now }
 
@@ -186,8 +322,8 @@ class PremiumRepositoryTest {
         provider.connectionFlow.value = BillingConnectionState.CONNECTED
         provider.purchasesFlow.value = emptySet()
 
-        assertEquals(LicenseTier.TRIAL, repository.entitlements.value.license.tier)
-        assertTrue(repository.entitlements.value.unlocked.contains(Feature.DLNA))
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        assertFalse(repository.entitlements.value.unlocked.contains(Feature.DLNA))
     }
 
     @Test
@@ -200,7 +336,8 @@ class PremiumRepositoryTest {
         provider.connectionFlow.value = BillingConnectionState.CONNECTED
         provider.purchasesFlow.value = setOf(purchase(LicenseTier.YEARLY, expires = now + 1_000_000, id = "yearly"))
 
-        assertEquals(LicenseTier.YEARLY, repository.entitlements.value.license.tier)
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
+        assertEquals(now + 1_000_000, repository.entitlements.value.license.expiresAtMillis)
         assertEquals("yearly", repository.entitlements.value.license.source)
         assertTrue(repository.entitlements.value.unlocked.contains(Feature.CLOUD_SYNC))
     }
@@ -233,7 +370,7 @@ class PremiumRepositoryTest {
             purchase(LicenseTier.MONTHLY, expires = now + 5000, id = "monthly"),
         )
 
-        assertEquals(LicenseTier.MONTHLY, repository.entitlements.value.license.tier)
+        assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
     }
 
     /** Google Play refunds anything unacknowledged within three days: skipping this silently
@@ -316,18 +453,17 @@ class PremiumRepositoryTest {
         assertEquals(listOf("yearly"), provider.acknowledged.map { it.productId })
     }
 
-    /** Nothing else notices that a trial has ended - a running app has to re-resolve it against
-     * the clock. */
+    /** A restored legacy subscription retains its original expiry while the app is open. */
     @Test
-    fun refreshEndsATrialThatRanOutWhileTheAppWasOpen() = runTest {
-        val storage = FakeStorage(License.trialStartingAt(now))
+    fun refreshEndsLegacyPaidAccessThatRanOutWhileTheAppWasOpen() = runTest {
+        val storage = FakeStorage(License(LicenseTier.MONTHLY, now + 1_000, "premium_monthly"))
         var clock = now
         val repository = PremiumRepository(StubProvider(), storage, scope) { clock }
 
         repository.loadInitial()
         assertTrue(repository.entitlements.value.unlocked.contains(Feature.DLNA))
 
-        clock = now + License.TRIAL_DURATION_MILLIS
+        clock = now + 1_000
         repository.refresh()
 
         assertFalse(repository.entitlements.value.unlocked.contains(Feature.DLNA))
@@ -335,84 +471,68 @@ class PremiumRepositoryTest {
     }
 
     private fun catalogue() = listOf(
-        BillingProduct("premium_monthly", LicenseTier.MONTHLY, "Monthly", "$1.99"),
+        BillingProduct("premium_lifetime", LicenseTier.LIFETIME, "Premium", "$1.99"),
     )
 
-    /**
-     * The release-day failure this latch exists for.
-     *
-     * A product id Play Console does not have is not an error: the query succeeds and comes back
-     * without it. So a build flipped live one day early, or with one id spelled differently, is a
-     * connected store that sells nothing - and every gate hanging off it would be a lock with no
-     * key. The repository has to notice, without anything opening the premium screen first.
-     */
-    @Test
-    fun aConnectedStoreWithAnEmptyCatalogueIsNotAllowedToSell() = runTest {
-        val storage = FakeStorage(License.FREE)
-        val provider = StubProvider(catalogue = emptyList())
-        val repository = PremiumRepository(provider, storage, scope) { now }
-
+    @Test fun oldPlansAreFilteredAndCannotLaunchCheckout() = runTest {
+        val legacy = listOf(
+            BillingProduct("premium_monthly", LicenseTier.MONTHLY, "Monthly", "$1.99"),
+            BillingProduct("premium_yearly", LicenseTier.YEARLY, "Yearly", "$19.99"),
+        )
+        val provider = StubProvider(legacy + catalogue() + catalogue())
+        val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
         repository.loadInitial()
-        provider.connectionFlow.value = BillingConnectionState.CONNECTED
-
-        assertFalse(repository.storeCanSell.value)
-        assertFalse(storage.storeHasEverOfferedProducts)
-        assertTrue("the catalogue must be asked for without a screen doing it", provider.catalogueQueries > 0)
+        assertEquals(listOf("premium_lifetime"), repository.products().map { it.id })
+        for (id in listOf("premium_monthly", "premium_yearly", "unknown")) {
+            assertEquals(PurchaseResult.Unavailable, repository.purchase(id, null))
+        }
+        assertTrue(provider.launchedPurchases.isEmpty())
     }
 
-    @Test
-    fun aStoreThatOffersAPriceMayThenSell() = runTest {
-        val storage = FakeStorage(License.FREE)
-        val provider = StubProvider(catalogue = catalogue())
+    @Test fun aSinglePurchaseUnlocksEverythingAndIsStoredWithoutExpiry() = runTest {
+        val provider = StubProvider(catalogue()).apply {
+            purchaseResult = PurchaseResult.Success(purchase(LicenseTier.LIFETIME, id = "premium_lifetime"))
+        }
+        val storage = FakeStorage()
         val repository = PremiumRepository(provider, storage, scope) { now }
-
         repository.loadInitial()
-        provider.connectionFlow.value = BillingConnectionState.CONNECTED
-
-        assertTrue(repository.storeCanSell.value)
-        assertTrue("it has to survive the next launch", storage.storeHasEverOfferedProducts)
+        assertFalse(Feature.DLNA in repository.entitlements.value.unlocked)
+        assertTrue(repository.purchase("premium_lifetime", null) is PurchaseResult.Success)
+        assertEquals(Feature.entries.toSet(), repository.entitlements.value.unlocked)
+        assertEquals(License(LicenseTier.LIFETIME, source = "premium_lifetime"), storage.storedLicense)
+        assertEquals(listOf("premium_lifetime"), provider.launchedPurchases)
     }
 
-    /** Offline is not a licence to give the app away. Once the till has been seen open, it stays
-     * open - which is the whole reason the flag is stored rather than re-asked. */
-    @Test
-    fun aDeviceThatHasSeenPricesBeforeStaysSellableWithNoStoreAtAll() = runTest {
-        val storage = FakeStorage(License.FREE, storeHasEverOfferedProducts = true)
-        val provider = StubProvider(catalogue = emptyList())
-        val repository = PremiumRepository(provider, storage, scope) { now }
-
+    @Test fun legacyPaidStorageMigratesWithoutExtendingOrLosingAccess() = runTest {
+        val legacy = License(LicenseTier.YEARLY, now + 1_000, "premium_yearly")
+        val storage = FakeStorage(legacy)
+        val repository = PremiumRepository(StubProvider(), storage, scope) { now }
         repository.loadInitial()
-
-        assertTrue(repository.storeCanSell.value)
-        provider.connectionFlow.value = BillingConnectionState.CONNECTED
-        assertTrue("an empty answer must not close a till that was already open", repository.storeCanSell.value)
-        assertEquals("nothing left to find out: do not ask again", 0, provider.catalogueQueries)
+        assertEquals(legacy.copy(tier = LicenseTier.LIFETIME), storage.storedLicense)
+        assertEquals(Feature.entries.toSet(), repository.entitlements.value.unlocked)
     }
 
-    /** The catalogue is queried to answer one question, and the answer does not change. Re-asking
-     * it on every purchase update would be a network call per store event, forever. */
-    @Test
-    fun theCatalogueIsAskedAboutOnlyUntilItAnswers() = runTest {
+    @Test fun repeatedOwnershipUpdatesDoNotQueryPrices() = runTest {
         val provider = StubProvider(catalogue = catalogue())
         val repository = PremiumRepository(provider, FakeStorage(License.FREE), scope) { now }
-
         repository.loadInitial()
         provider.connectionFlow.value = BillingConnectionState.CONNECTED
-        provider.purchasesFlow.value = setOf(purchase(LicenseTier.MONTHLY, expires = now + 1000, id = "monthly"))
-        provider.purchasesFlow.value = emptySet()
 
-        assertEquals(1, provider.catalogueQueries)
+        repeat(10) {
+            provider.purchasesFlow.value = setOf(purchase(LicenseTier.LIFETIME))
+            assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
+            provider.purchasesFlow.value = emptySet()
+            assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
+        }
+
+        assertEquals(0, provider.catalogueQueries)
     }
 
-    /**
-     * The repository half of the same rule: an install older than the trial, with its storage
-     * emptied, is not a first launch however empty the storage looks.
-     */
+    /** Clearing stored data still starts in Lite; no retired trial can be recreated. */
     @Test
     fun clearingDataOnAnOldInstallDoesNotHandOutAnotherTrial() = runTest {
         val storage = FakeStorage(storedLicense = null)
-        val installedLongAgo = now - License.TRIAL_DURATION_MILLIS - 1
-        val repository = PremiumRepository(StubProvider(), storage, scope, { installedLongAgo }) { now }
+        val repository = PremiumRepository(StubProvider(), storage, scope) { now }
 
         repository.loadInitial()
 
@@ -423,31 +543,31 @@ class PremiumRepositoryTest {
 
     /** And a genuine first launch is unaffected by the same check. */
     @Test
-    fun aTrulyNewInstallStillGetsItsTrial() = runTest {
+    fun repeatedLaunchesWithoutAPurchaseStayInLite() = runTest {
         val storage = FakeStorage(storedLicense = null)
-        val repository = PremiumRepository(StubProvider(), storage, scope, { now }) { now }
+        val repository = PremiumRepository(StubProvider(), storage, scope) { now }
 
         repository.loadInitial()
-
-        assertEquals(LicenseTier.TRIAL, repository.entitlements.value.license.tier)
+        repository.loadInitial()
+        assertEquals(LicenseTier.FREE, repository.entitlements.value.license.tier)
     }
 
     /**
-     * Winding the device clock back must not revive a trial that has ended. The repository records
+     * Winding the device clock back must not revive legacy paid access that has ended. The repository records
      * the newest time it has seen and judges expiry against that, so the second launch is resolved
      * at the time of the first rather than at whatever the settings screen now claims.
      */
     @Test
-    fun windingTheClockBackDoesNotReviveALapsedTrial() = runTest {
-        val storage = FakeStorage(storedLicense = License.trialStartingAt(now))
-        var clock = now + License.TRIAL_DURATION_MILLIS + 1
+    fun windingTheClockBackDoesNotReviveLapsedLegacyPaidAccess() = runTest {
+        val storage = FakeStorage(storedLicense = License(LicenseTier.MONTHLY, now + 1_000, "premium_monthly"))
+        var clock = now + 1_001
 
-        val afterItLapsed = PremiumRepository(StubProvider(), storage, scope, { now }) { clock }
+        val afterItLapsed = PremiumRepository(StubProvider(), storage, scope) { clock }
         afterItLapsed.loadInitial()
-        assertTrue("the trial has to have lapsed first", afterItLapsed.entitlements.value.hasLapsed)
+        assertTrue("legacy paid access has to have lapsed first", afterItLapsed.entitlements.value.hasLapsed)
 
         clock = now - 30 * 24 * 60 * 60 * 1000L
-        val afterWindingBack = PremiumRepository(StubProvider(), storage, scope, { now }) { clock }
+        val afterWindingBack = PremiumRepository(StubProvider(), storage, scope) { clock }
         afterWindingBack.loadInitial()
 
         assertTrue("a clock that went backwards is not evidence", afterWindingBack.entitlements.value.hasLapsed)
@@ -475,7 +595,7 @@ class PremiumRepositoryTest {
         assertEquals(BillingConnectionState.DISCONNECTED, repository.connection.value)
         assertEquals(LicenseTier.LIFETIME, repository.entitlements.value.license.tier)
         assertTrue(repository.products().isEmpty())
-        assertTrue(repository.purchase("premium_monthly", null) is PurchaseResult.Failed)
+        assertTrue(repository.purchase("premium_lifetime", null) is PurchaseResult.Failed)
         assertTrue(repository.restore() is PurchaseResult.Failed)
     }
 }

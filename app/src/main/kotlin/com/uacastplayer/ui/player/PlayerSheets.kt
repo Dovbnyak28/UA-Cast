@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -110,7 +112,10 @@ internal fun PlayerDialogs(
                     color = UaTheme.palette.labelPrimary,
                 )
             },
-            text = { QualityDetails(uiState.badges) },
+            text = {
+                TvDialogInputRegistration()
+                QualityDetails(uiState.badges)
+            },
             confirmButton = {
                 TextButton(onClick = onDismissQualityDialog) {
                     Text(
@@ -149,6 +154,7 @@ internal fun TrackPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, style = Title, color = UaTheme.palette.labelPrimary) },
         text = {
+            TvDialogInputRegistration()
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 if (tracks.isEmpty()) {
                     Text(
@@ -165,6 +171,7 @@ internal fun TrackPickerDialog(
                         color = UaTheme.palette.labelPrimary,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .tvFocus()
                             .selectable(selected = isOffSelected, onClick = onSelectOff, role = Role.RadioButton)
                             .heightIn(min = 48.dp)
                             .padding(vertical = 12.dp),
@@ -174,6 +181,7 @@ internal fun TrackPickerDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .tvFocus()
                             .selectable(
                                 selected = track.isSelected,
                                 onClick = { onSelect(track) },

@@ -37,11 +37,50 @@ class DlnaRendererWatchdogTest {
         assertEquals(0, ended)
     }
 
-    @Test fun `unsupported legacy status query disables polling rather than disconnecting`() = runTest {
+    @Test fun `unsupported legacy status query keeps a slow reachability watch`() = runTest {
         var checks = 0
+        var unverified = 0
         val watchdog = DlnaRendererWatchdog(backgroundScope) { checks++; DlnaTransportHealth.UNSUPPORTED }
-        watchdog.start("renderer") { error("legacy renderer disconnected") }
+        watchdog.start("renderer", onUnverified = { unverified++ }) { error("legacy renderer disconnected") }
         advanceTimeBy(120_000)
+        assertEquals(2, checks)
+        assertEquals(1, unverified)
+    }
+
+    @Test fun `legacy renderer that powers off eventually releases its session`() = runTest {
+        var checks = 0
+        var unverified = 0
+        var ended = 0
+        val watchdog = DlnaRendererWatchdog(backgroundScope) {
+            checks++
+            if (checks == 1) DlnaTransportHealth.UNSUPPORTED else DlnaTransportHealth.UNREACHABLE
+        }
+        watchdog.start("renderer", onUnverified = { unverified++ }) { ended++ }
+
+        advanceTimeBy(199_999)
+        assertEquals(0, ended)
+        advanceTimeBy(1)
+        runCurrent()
+
+        assertEquals(1, unverified)
+        assertEquals(4, checks)
+        assertEquals(1, ended)
+    }
+
+    @Test fun `stopping a legacy session cancels its slow reachability checks`() = runTest {
+        var checks = 0
+        val watchdog = DlnaRendererWatchdog(backgroundScope) {
+            checks++
+            DlnaTransportHealth.UNSUPPORTED
+        }
+        watchdog.start("renderer") { error("stopped session must not be lost twice") }
+        advanceTimeBy(20_000)
+        runCurrent()
+        assertEquals(1, checks)
+
+        watchdog.stop()
+        advanceTimeBy(240_000)
+
         assertEquals(1, checks)
     }
 

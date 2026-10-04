@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,15 +23,15 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.tvFocus
 
-/** User-managed icon CDN sources, isolated from the playback settings composition. */
+/** User-managed channel-logo packs, with no predefined source. */
 @Composable
 internal fun IconSourcesSection(
     customSources: List<String>,
@@ -55,13 +56,14 @@ internal fun IconSourcesSection(
             color = UaTheme.palette.labelSecondary,
             modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
         )
-        IconSourceRow(
-            urlText = stringResource(
-                R.string.settings_icon_sources_builtin,
-                IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL,
-            ),
-            onRemoveClick = null,
-        )
+        if (customSources.isEmpty()) {
+            Text(
+                text = stringResource(R.string.settings_icon_sources_empty),
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
         customSources.forEach { source ->
             IconSourceRow(urlText = source, onRemoveClick = { onRemoveSource(source) })
         }
@@ -115,7 +117,7 @@ private fun SourceInput(
             ),
             colors = uaTextFieldColors(),
         )
-        IconButton(onClick = onAdd) {
+        IconButton(onClick = onAdd, enabled = value.isNotBlank()) {
             Icon(
                 AppIcons.Plus,
                 contentDescription = stringResource(R.string.settings_icon_sources_add),
@@ -126,7 +128,8 @@ private fun SourceInput(
 }
 
 @Composable
-private fun IconSourceRow(urlText: String, onRemoveClick: (() -> Unit)?) {
+private fun IconSourceRow(urlText: String, onRemoveClick: () -> Unit) {
+    val check = LocalIconPackCheck.current
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -138,14 +141,15 @@ private fun IconSourceRow(urlText: String, onRemoveClick: (() -> Unit)?) {
             color = UaTheme.palette.labelSecondary,
             modifier = Modifier.weight(1f),
         )
-        if (onRemoveClick != null) {
-            IconButton(onClick = onRemoveClick) {
-                Icon(
-                    AppIcons.Delete,
-                    contentDescription = stringResource(R.string.settings_icon_sources_remove),
-                    tint = UaTheme.palette.labelSecondary,
-                )
-            }
+        IconButton(onClick = onRemoveClick) {
+            Icon(
+                AppIcons.Delete,
+                contentDescription = stringResource(R.string.settings_icon_sources_remove),
+                tint = UaTheme.palette.labelSecondary,
+            )
+        }
+        if (check != null) TextButton(onClick = { check(urlText) }, modifier = Modifier.tvFocus()) {
+            Text(stringResource(R.string.icon_pack_check_action))
         }
     }
 }

@@ -15,6 +15,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -160,7 +161,7 @@ class PlaylistControllerRemovalTest {
             val loads = Loads()
             val controller = controllerFor(loads)
             val source = sourceFor(server.url, addedAtEpochMillis = 1L)
-            controller.applyImportedSources(listOf(source))
+            runBlocking { controller.applyImportedSources(listOf(source)).join() }
             controller.switchPlaylistSource(source)
             assertTrue(
                 "the load should have reached the server",
@@ -193,7 +194,7 @@ class PlaylistControllerRemovalTest {
             val controller = controllerFor(loads)
             val active = sourceFor(server.url, addedAtEpochMillis = 2L)
             val other = sourceFor("http://127.0.0.1:1/other.m3u", addedAtEpochMillis = 1L)
-            controller.applyImportedSources(listOf(active, other))
+            runBlocking { controller.applyImportedSources(listOf(active, other)).join() }
             controller.switchPlaylistSource(active)
             assertTrue(
                 "the load should have reached the server",

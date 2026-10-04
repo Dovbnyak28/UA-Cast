@@ -16,6 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.tvReadingFocus
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -77,6 +80,7 @@ fun EpgGuideSheet(
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = UaTheme.palette.surface2) {
+        TvDialogInputRegistration()
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = GapM)) {
             Text(
                 text = channel.displayName,
@@ -149,7 +153,7 @@ private fun EpgDaySelector(
         modifier = Modifier.fillMaxWidth().padding(bottom = GapM),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onPrevious) {
+        IconButton(onClick = onPrevious, modifier = Modifier.tvFocus()) {
             Icon(
                 imageVector = AppIcons.ArrowBack,
                 contentDescription = stringResource(R.string.epg_previous_day),
@@ -169,7 +173,7 @@ private fun EpgDaySelector(
                 Text(text = stringResource(R.string.epg_jump_today), color = UaTheme.palette.accentText)
             }
         }
-        IconButton(onClick = onNext) {
+        IconButton(onClick = onNext, modifier = Modifier.tvFocus()) {
             Icon(
                 imageVector = AppIcons.ArrowBack,
                 contentDescription = stringResource(R.string.epg_next_day),
@@ -279,7 +283,7 @@ private fun ProgrammeRow(
     }
 
     val timeWidth = 52.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().tvReadingFocus().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Text(text = timeLabel, style = Caption, color = timeColor, modifier = Modifier.width(timeWidth))
             Text(text = programme.title, style = BodyText, color = textColor, modifier = Modifier.weight(1f))

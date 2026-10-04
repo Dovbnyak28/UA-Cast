@@ -2,7 +2,6 @@ package com.uacastplayer.ui.playlist
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.appBackground
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +21,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.tvTextFieldNavigation
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,7 +31,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
@@ -187,7 +188,7 @@ fun AddPlaylistScreen(
             label = { Text(stringResource(R.string.add_playlist_name_hint)) },
             singleLine = true,
             colors = uaTextFieldColors(),
-            modifier = Modifier.fillMaxWidth().padding(top = GapL),
+            modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapL),
         )
 
         if (hasLoadFeedback(playlistState)) {
@@ -311,9 +312,9 @@ private fun CleartextLoadDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.add_playlist_title)) },
-        text = { Text(stringResource(message)) },
+        text = { TvDialogInputRegistration(); Text(stringResource(message)) },
         confirmButton = {
-            TextButton(onClick = { onConfirm(pending) }) {
+            TextButton(onClick = { onConfirm(pending) }, modifier = Modifier.tvFocus()) {
                 Text(stringResource(R.string.common_confirm))
             }
         },
@@ -430,7 +431,7 @@ private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
     Text(
         text = stringResource(R.string.add_playlist_helper),
@@ -473,7 +474,7 @@ private fun XtreamSourceFields(
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
     if (CleartextCredentialPolicy.exposesCredentials(server)) {
         Text(
@@ -490,7 +491,7 @@ private fun XtreamSourceFields(
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
     OutlinedTextField(
         value = password,
@@ -516,7 +517,7 @@ private fun XtreamSourceFields(
             }
         },
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
 }
 

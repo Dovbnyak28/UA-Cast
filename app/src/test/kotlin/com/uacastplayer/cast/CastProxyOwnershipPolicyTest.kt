@@ -56,6 +56,14 @@ class CastProxyOwnershipPolicyTest {
     }
 
     @Test
+    fun `pending start is rejected after its owner stops before service creation`() {
+        val pendingStartGeneration = 4L
+        val latestGenerationAfterStop = 5L
+
+        assertTrue(!CastProxyCommandPolicy.accepts(latestGenerationAfterStop, pendingStartGeneration))
+    }
+
+    @Test
     fun `legacy command without generation remains accepted`() {
         assertTrue(CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 0L))
     }

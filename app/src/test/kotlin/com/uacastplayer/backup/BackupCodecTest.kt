@@ -10,7 +10,7 @@ class BackupCodecTest {
     private fun sampleData() = BackupData(
         sources = listOf(
             BackupPlaylistSource("id1", "URL", "http://a.com/p.m3u", "A", 100L),
-            BackupPlaylistSource("id2", "FILE", "content://x/y", null, 200L),
+            BackupPlaylistSource("id2", "FILE", "content://x/y", null, 200L, "YWJj", "checksum"),
         ),
         favorites = listOf(
             BackupFavorite(

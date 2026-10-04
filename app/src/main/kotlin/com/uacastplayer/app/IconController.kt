@@ -53,12 +53,12 @@ class IconController(
     private val maintenanceDispatcher: CoroutineDispatcher = AppDispatchers.io,
     private val awaitNetwork: ((() -> Unit) -> AutoCloseable) = iconPrefetcher::awaitNetwork,
 ) {
-    val sources = IconSourceController(iconRepository)
+    val sources = IconSourceController(iconRepository, ::onSourcesChanged)
 
     private val _iconPrefetchState = MutableStateFlow(
         IconPrefetchUiState(
             wifiOnly = preferences.iconWifiOnly,
-            updateReminderDue = LogoUpdateReminder.isDue(
+            updateReminderDue = iconRepository.customIconSources().isNotEmpty() && LogoUpdateReminder.isDue(
                 preferences.lastIconPrefetchAtMillis,
                 System.currentTimeMillis(),
             ),
@@ -77,7 +77,6 @@ class IconController(
     private var disposed = false
     private var networkWatcher: AutoCloseable? = null
     private var lastPrefetchChannels: List<M3uChannel> = emptyList()
-    private var lastEpgIconUrlFor: (M3uChannel) -> String? = { null }
     private var lastIconDisplayMode: IconDisplayMode = IconDisplayMode.DEFAULT
     private var lastPrefetchContext: PrefetchContext = PrefetchContext()
     private var iconPrefetchJob: Job? = null
@@ -106,11 +105,11 @@ class IconController(
         }
     }
 
-    suspend fun resolveChannelIcon(channel: M3uChannel, iconDisplayMode: IconDisplayMode, epgIconUrl: String?): File? {
+    suspend fun resolveChannelIcon(channel: M3uChannel, iconDisplayMode: IconDisplayMode): File? {
         if (iconDisplayMode == IconDisplayMode.PLACEHOLDERS) return null
         val cacheLease = acquireIconCacheLease()
         return try {
-            iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrl, channel.tvgId)
+            iconRepository.resolveIconFile(channel.tvgId)
         } finally {
             releaseIconCacheLease(cacheLease)
         }
@@ -125,8 +124,18 @@ class IconController(
      * a TV showing one channel at a time. Suppressing artwork there would leave the receiver on a
      * bare title for a setting the user picked to keep the channel list light.
      */
-    fun castArtworkUrl(channel: M3uChannel, epgIconUrl: String?): String? =
-        iconRepository.castArtworkUrl(channel.tvgLogo, epgIconUrl, channel.tvgId)
+    fun castArtworkUrl(channel: M3uChannel): String? = iconRepository.castArtworkUrl(channel.tvgId)
+
+    private fun onSourcesChanged() {
+        cancelPrefetch()
+        _iconPrefetchState.update {
+            it.copy(sourceRevision = it.sourceRevision + 1, updateReminderDue = false)
+        }
+        val request = synchronized(prefetchLifecycleLock) {
+            Triple(lastPrefetchChannels, lastIconDisplayMode, lastPrefetchContext)
+        }
+        triggerPrefetch(request.first, request.second, request.third)
+    }
 
     fun setIconWifiOnly(enabled: Boolean) {
         preferences.iconWifiOnly = enabled
@@ -138,7 +147,6 @@ class IconController(
     fun triggerPrefetch(
         channels: List<M3uChannel>,
         iconDisplayMode: IconDisplayMode,
-        epgIconUrlFor: (M3uChannel) -> String? = { null },
         context: PrefetchContext = PrefetchContext(),
     ) {
         // A previous playlist load may have happened while the network was down. Transient icon
@@ -159,7 +167,6 @@ class IconController(
         synchronized(prefetchLifecycleLock) {
             if (disposed) return
             lastPrefetchChannels = channels
-            lastEpgIconUrlFor = epgIconUrlFor
             lastIconDisplayMode = iconDisplayMode
             lastPrefetchContext = context
             watcherGeneration += 1
@@ -170,7 +177,7 @@ class IconController(
         // Register/unregister may synchronously call framework code. Keep it outside the lock:
         // callbacks are allowed to re-enter startPrefetchJob(), whose guard uses the same lock.
         previousWatcher?.close()
-        val newWatcher = awaitNetwork {
+        val newWatcher = if (iconRepository.customIconSources().isEmpty()) null else awaitNetwork {
             val isCurrent = synchronized(prefetchLifecycleLock) {
                 !disposed && watcherGeneration == registrationGeneration
             }
@@ -189,7 +196,7 @@ class IconController(
                 false
             }
         }
-        if (!watcherIsCurrent) newWatcher.close()
+        if (!watcherIsCurrent) newWatcher?.close()
         startPrefetchJob(expectedWatcherGeneration = registrationGeneration)
     }
 
@@ -208,11 +215,10 @@ class IconController(
             // inside the lazily-started coroutine would let a concurrent trigger mix generations.
             val channels = lastPrefetchChannels
             val iconDisplayMode = lastIconDisplayMode
-            val epgIconUrlFor = lastEpgIconUrlFor
             val context = lastPrefetchContext
             lateinit var newJob: Job
             newJob = scope.launch(start = CoroutineStart.LAZY) {
-                runPrefetch(generation, channels, iconDisplayMode, epgIconUrlFor, context)
+                runPrefetch(generation, channels, iconDisplayMode, context)
             }
             iconPrefetchJob = newJob
             activePrefetchJobs += newJob
@@ -343,7 +349,6 @@ class IconController(
         generation: Long,
         channels: List<M3uChannel>,
         iconDisplayMode: IconDisplayMode,
-        epgIconUrlFor: (M3uChannel) -> String?,
         context: PrefetchContext,
     ) {
         // LOW_END skips the bulk background pass entirely - only the lazy per-row fetch that
@@ -360,7 +365,7 @@ class IconController(
         }
         if (!started) return
         val executed = runCatchingNonFatal {
-            iconPrefetcher.prefetch(selected, preferences.iconWifiOnly, epgIconUrlFor) { progress ->
+            iconPrefetcher.prefetch(selected, preferences.iconWifiOnly) { progress ->
                 updatePrefetchState(generation) {
                     it.copy(completed = progress.completed, total = progress.total)
                 }
@@ -401,7 +406,7 @@ class IconController(
             IconDisplayMode.CACHE_LIMITED -> LIMITED_PREFETCH_LIMIT
             IconDisplayMode.PLACEHOLDERS -> null
         }
-        val shouldSkip = limit == null || channels.isEmpty() ||
+        val shouldSkip = limit == null || channels.isEmpty() || iconRepository.customIconSources().isEmpty() ||
             context.deviceTier == DeviceTier.LOW_END ||
             PlaybackActivity.isActive.value
         return if (shouldSkip) {

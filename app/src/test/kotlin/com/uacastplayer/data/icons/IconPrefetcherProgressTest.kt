@@ -110,7 +110,6 @@ class IconPrefetcherProgressTest {
 
         val work = iconPrefetchWork(
             channels = listOf(shared, shared.copy(displayName = "Alias"), channel(3)),
-            epgIconUrlFor = { null },
         )
 
         assertEquals(2, work.size)

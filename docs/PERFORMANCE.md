@@ -1,5 +1,57 @@
 # Performance: thread rules
 
+## Scheduled measured regression gate
+
+The repository now includes `.github/workflows/performance-gate.yml`: manual runs and a weekly
+Monday 04:00 UTC run on a fresh API-35 x86_64 emulator (2 GiB RAM, 256 MiB heap). It will become
+active only after publication to the default branch. See
+`SECURE_BACKUP_ICON_CHECK_PERFORMANCE_2026-10-04.md` for implementation and verification status.
+
+Eight existing production journeys must all produce complete AndroidX Benchmark 1.4.1 JSON:
+cold/warm start, restoring/opening 40,000 channels, first player, fullscreen, EPG opening and
+350,000-programme parsing/indexing. `config/performance/ci-api35.json` defines the initial
+conservative absolute limits. The validator uses median startup/parse time, worst per-run managed
+heap and frame CPU P95 (`sampledMetrics.P95`), requiring every configured iteration. Missing,
+duplicate, zero, non-finite or interrupted results fail closed; a passing host test is not a device
+measurement. Emulator suppression is restricted to `EMULATOR`, not other benchmark errors.
+
+```bash
+python3 -B -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
+python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
+```
+
+Measurements/traces/failure reports are retained for 30 days. Initial limits are not a calibrated
+physical-device baseline or a native/GPU memory guarantee; review the first successful CI traces
+and tighten budgets from evidence. Keep the existing host complexity/allocation budgets in the
+ordinary unit-test gate. Run the device gate before release; Mi TV API 28 does not replace the
+API-35 CI benchmark run.
+
+## Scheduled measured regression gate
+
+The repository now includes `.github/workflows/performance-gate.yml`: manual runs and a weekly
+Monday 04:00 UTC run on a fresh API-35 x86_64 emulator (2 GiB RAM, 256 MiB heap). It will become
+active only after publication to the default branch. See
+`SECURE_BACKUP_ICON_CHECK_PERFORMANCE_2026-10-04.md` for implementation and verification status.
+
+Eight existing production journeys must all produce complete AndroidX Benchmark 1.4.1 JSON:
+cold/warm start, restoring/opening 40,000 channels, first player, fullscreen, EPG opening and
+350,000-programme parsing/indexing. `config/performance/ci-api35.json` defines the initial
+conservative absolute limits. The validator uses median startup/parse time, worst per-run managed
+heap and frame CPU P95 (`sampledMetrics.P95`), requiring every configured iteration. Missing,
+duplicate, zero, non-finite or interrupted results fail closed; a passing host test is not a device
+measurement. Emulator suppression is restricted to `EMULATOR`, not other benchmark errors.
+
+```bash
+python3 -B -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
+python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
+```
+
+Measurements/traces/failure reports are retained for 30 days. Initial limits are not a calibrated
+physical-device baseline or a native/GPU memory guarantee; review the first successful CI traces
+and tighten budgets from evidence. Keep the existing host complexity/allocation budgets in the
+ordinary unit-test gate. Run the device gate before release; Mi TV API 28 does not replace the
+API-35 CI benchmark run.
+
 Motivated by a real complaint on a 2863-channel, 11-group playlist: the whole app froze for the
 duration of every playlist load. The root cause and the fixes below are collectively "Block 1-3" in
 the UI-jank fix pass; see the git log for the exact commits.
@@ -51,7 +103,13 @@ entirely while something is actually playing/casting (`PlaybackActivity`), and s
 `DeviceTier.LOW_END`. Anything outside that selection still gets its icon lazily, one row at a time,
 the first time it's actually scrolled into view - that path was already correct.
 
-The selected pass is drained by a fixed six-worker queue. Equal icon candidate chains are collapsed
+Channel logos use only explicitly added packs, matched by `tvg-id`. EPG completion no longer
+restarts logo prefetch or invalidates channel-logo composition; provider logo metadata is not a
+fetch source. With no pack selected, there is no bulk logo work or icon network watcher. Source
+edits retire prior work and advance a UI revision, including on low-end devices where no bulk
+prefetch runs. A removed pack's late request cannot return a stale displayed logo.
+
+The selected pass is drained by a fixed six-worker queue. Equal channel icon IDs are collapsed
 before any coroutine is launched, with each unique item carrying a progress weight, so a 40k-channel
 playlist cannot create 40k suspended `async` objects or fetch the same logo repeatedly. A pass that
 the connectivity/Wi-Fi-only gate refuses reports a distinct not-executed outcome: the controller
@@ -120,11 +178,17 @@ Guide initialization is also deferred until a playlist is actually available. An
 install therefore pays neither the initial XMLTV download nor the parse/restore cost; selecting or
 restoring a playlist starts the one idempotent initial guide load.
 
-`EpgSnapshotSizeTest` guards the decode-vs-parse margin. It deliberately asserts **nothing about file
-size**: synthetic titles are near-identical, so gzip crushes a generated XMLTV document about
-eighteenfold (41KB against 737KB for the binary) and such a test measures the fixture, not the
-format. What actually shrinks a real file is dropping `<desc>`, which no honest synthetic fixture
-here reproduces - hence the end-to-end device measurement above.
+`EpgSnapshotSizeTest` guards the decode-vs-parse margin. Its parity regression requires both inputs
+to preserve the same channels, programme timestamps and truncation state. Both timed paths return
+query-ready `EpgData`: binary decode versus `EpgDocumentPipeline` (gzip, XML guards, retention,
+parsing, grouping/sorting and index construction), not just the raw SAX parser. The host guard
+requires decode to take less than 75% of the XML pipeline's time, using the quickest of five warmed
+runs; it is not a device latency guarantee.
+
+It deliberately asserts **nothing about file size**: synthetic titles are near-identical, so gzip
+compresses the generated XML especially well and such a test measures the fixture, not the format.
+What actually shrinks a real file is dropping `<desc>`, which no honest synthetic fixture here
+reproduces - hence the end-to-end device measurement above.
 
 ### Note the caps while you are here
 

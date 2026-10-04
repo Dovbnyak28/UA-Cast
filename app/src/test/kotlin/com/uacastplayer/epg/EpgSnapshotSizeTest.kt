@@ -2,8 +2,13 @@ package com.uacastplayer.epg
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.zip.GZIPOutputStream
 import kotlin.system.measureNanoTime
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,6 +23,9 @@ import org.junit.Test
  * Not a precise benchmark - hardware varies, and this runs at a fraction of the real feed's size to
  * stay quick - but a coarse guard that restoring the snapshot stays far cheaper than parsing the
  * document.
+ * Both inputs contain the same schedule, and both measured paths produce query-ready [EpgData]:
+ * the XML path includes production guards, retention, grouping, sorting and index construction.
+ * Comparing binary restore to the raw SAX parser would omit work the app must do after parsing.
  *
  * It compares the **fastest** of several runs on each side, not the total of them. A loose ratio was
  * supposed to absorb CI noise on its own and did not: summing five timed windows means one window
@@ -29,11 +37,11 @@ import org.junit.Test
  *
  * There is deliberately **no assertion here about file size.** The obvious one - "the parsed
  * snapshot is smaller than the gzipped document" - measures the fixture rather than the format:
- * synthetic titles are near-identical, so gzip crushes the generated XML about eighteen-fold
- * (41KB against 737KB for the binary) and the test fails while telling you nothing true about a
- * real feed. What makes the real file shrink is that the parsed form drops `<desc>`, which
- * dominates a genuine XMLTV document and which no synthetic fixture here reproduces honestly. The
- * size win is therefore measured end to end on a device instead - see docs/PERFORMANCE.md.
+ * synthetic titles are near-identical, so gzip compresses the generated XML especially well,
+ * telling you little about a real feed. What makes the real file shrink is that the parsed form
+ * drops `<desc>`, which dominates a genuine XMLTV document and which no synthetic fixture here
+ * reproduces honestly. The size win is therefore measured end to end on a device instead - see
+ * docs/PERFORMANCE.md.
  */
 class EpgSnapshotSizeTest {
 
@@ -44,6 +52,10 @@ class EpgSnapshotSizeTest {
         // This still requires a meaningful speedup while tolerating noisy shared CI runners.
         const val PARSE_BUDGET_RATIO = 0.75
         const val TIMED_RUNS = 5
+        const val FIXTURE_HEAP_BYTES = 256L * 1024 * 1024
+        val XMLTV_TIMESTAMP: DateTimeFormatter = DateTimeFormatter
+            .ofPattern("yyyyMMddHHmmss Z", Locale.ROOT)
+            .withZone(ZoneOffset.UTC)
     }
 
     /** Wall-clock cost of the quickest of [TIMED_RUNS] runs - see the class doc for why the minimum
@@ -80,7 +92,9 @@ class EpgSnapshotSizeTest {
             }
             for ((channelId, programmes) in data.programmesByChannelId) {
                 for (programme in programmes) {
-                    append("<programme start=\"20240101000000 +0000\" stop=\"20240101003000 +0000\" ")
+                    val start = XMLTV_TIMESTAMP.format(Instant.ofEpochMilli(programme.startMillis))
+                    val stop = XMLTV_TIMESTAMP.format(Instant.ofEpochMilli(programme.stopMillis))
+                    append("<programme start=\"$start\" stop=\"$stop\" ")
                     append("channel=\"$channelId\"><title>${programme.title}</title></programme>")
                 }
             }
@@ -92,6 +106,29 @@ class EpgSnapshotSizeTest {
     }
 
     @Test
+    fun snapshotAndXmlFixturesContainTheSameGuide() {
+        val data = sampleData()
+        val parsedBytes = ByteArrayOutputStream().also { EpgSnapshotCodec.encode(header, data, it) }.toByteArray()
+        val decoded = EpgSnapshotCodec.decode(ByteArrayInputStream(parsedBytes)) as DecodedEpgSnapshot.Parsed
+        val xml = parseDocument(equivalentGzippedXmltv(data))
+        for (restored in listOf(decoded.data, xml)) {
+            assertEquals(data.index.channels, restored.index.channels)
+            assertEquals(data.truncation, restored.truncation)
+            assertTrue(
+                "Both fixtures must preserve every programme and its actual times",
+                data.programmesByChannelId == restored.programmesByChannelId,
+            )
+        }
+    }
+
+    private fun parseDocument(bytes: ByteArray): EpgData = EpgDocumentPipeline.parse(
+        rawInput = ByteArrayInputStream(bytes),
+        nowMillis = 0L,
+        zoneId = ZoneOffset.UTC,
+        maxHeapBytes = FIXTURE_HEAP_BYTES,
+    )
+
+    @Test
     fun `decoding the parsed snapshot is far cheaper than parsing the document`() {
         val data = sampleData()
         val parsedBytes = ByteArrayOutputStream().also { EpgSnapshotCodec.encode(header, data, it) }.toByteArray()
@@ -100,13 +137,11 @@ class EpgSnapshotSizeTest {
         // Warm the JIT on both paths first, or the one that runs second wins on that alone.
         repeat(3) {
             EpgSnapshotCodec.decode(ByteArrayInputStream(parsedBytes))
-            java.util.zip.GZIPInputStream(ByteArrayInputStream(documentBytes)).use(XmlTvParser::parse)
+            parseDocument(documentBytes)
         }
 
         val decodeNanos = fastestOf { EpgSnapshotCodec.decode(ByteArrayInputStream(parsedBytes)) }
-        val parseNanos = fastestOf {
-            java.util.zip.GZIPInputStream(ByteArrayInputStream(documentBytes)).use(XmlTvParser::parse)
-        }
+        val parseNanos = fastestOf { parseDocument(documentBytes) }
 
         assertTrue(
             "decoding took ${decodeNanos}ns vs ${parseNanos}ns to parse the document - " +

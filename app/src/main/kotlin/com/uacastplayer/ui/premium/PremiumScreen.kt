@@ -22,6 +22,9 @@ import com.uacastplayer.premium.PremiumAvailability
 import com.uacastplayer.premium.StoreAbsence
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
+import com.uacastplayer.premium.billing.PremiumProducts
+import com.uacastplayer.premium.LicenseTier
+import com.uacastplayer.ui.components.PrimaryButton
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyRegular
@@ -38,19 +41,17 @@ import com.uacastplayer.ui.theme.raisedSurface
  * by the Settings section and by [PremiumBottomSheet] without being written twice.
  *
  * The feature list shows every sold feature with its current lock state, including the ones already
- * unlocked. A list that only showed what is missing would read as a demand; showing both is what
- * makes "you have this until the trial ends" legible.
+ * unlocked. Lite and Premium share one feature list; one purchase unlocks the whole list.
  */
 @Composable
 fun PremiumContent(
     section: PremiumSectionState,
-    nowMillis: Long,
     modifier: Modifier = Modifier,
     showIntro: Boolean = true,
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = statusLine(section, nowMillis),
+            text = statusLine(section),
             style = BodyRegular,
             color = UaTheme.palette.labelPrimary,
         )
@@ -80,7 +81,10 @@ fun PremiumContent(
             }
         }
 
-        if (section.products.isEmpty()) {
+        val product = section.products.firstOrNull {
+            PremiumProducts.isForSale(it.id) && it.tier == LicenseTier.LIFETIME && it.formattedPrice.isNotBlank()
+        }
+        if (product == null && section.entitlements.effectiveTier == LicenseTier.FREE) {
             // The honest state until this app is published: there is no store to buy from. Saying
             // so beats an empty list under a heading that promises prices.
             Text(
@@ -89,29 +93,26 @@ fun PremiumContent(
                 color = UaTheme.palette.labelSecondary,
                 modifier = Modifier.padding(top = 4.dp),
             )
-        } else {
-            for (product in section.products) {
-                TierRow(
-                    product = product,
-                    onPurchase = { section.onPurchase(product) },
-                    enabled = !section.isPurchasing,
-                )
-            }
-
-            SecondaryButton(
-                text = stringResource(R.string.premium_restore),
-                onClick = section.onRestore,
+        } else if (product != null && section.entitlements.effectiveTier == LicenseTier.FREE) {
+            TierRow(
+                product = product,
+                onPurchase = { section.onPurchase(product) },
                 enabled = !section.isPurchasing,
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
+        }
 
-            outcomeLine(section.lastOutcome)?.let { message ->
-                Text(
-                    text = message,
-                    style = Caption,
-                    color = UaTheme.palette.labelSecondary,
-                )
-            }
+        SecondaryButton(
+            text = stringResource(R.string.premium_restore),
+            onClick = section.onRestore,
+            enabled = !section.isPurchasing,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+        outcomeLine(section.lastOutcome)?.let { message ->
+            Text(
+                text = message,
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+            )
         }
     }
 }
@@ -151,13 +152,10 @@ private fun noStoreMessage(section: PremiumSectionState): Int =
     }
 
 @Composable
-private fun statusLine(section: PremiumSectionState, nowMillis: Long): String {
-    val days = section.daysRemaining(nowMillis)
+private fun statusLine(section: PremiumSectionState): String {
     return when {
         section.entitlements.hasLapsed -> stringResource(R.string.premium_status_lapsed)
-        section.entitlements.license.tier == com.uacastplayer.premium.LicenseTier.TRIAL && days != null ->
-            stringResource(R.string.premium_status_trial, days)
-        section.entitlements.license.tier == com.uacastplayer.premium.LicenseTier.FREE ->
+        section.entitlements.effectiveTier == LicenseTier.FREE ->
             stringResource(R.string.premium_status_free)
         else -> stringResource(R.string.premium_status_active)
     }
@@ -198,7 +196,7 @@ private fun FeatureRow(feature: Feature, unlocked: Boolean) {
 
 @Composable
 private fun TierRow(product: BillingProduct, onPurchase: () -> Unit, enabled: Boolean = true) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .raisedSurface(
@@ -208,18 +206,21 @@ private fun TierRow(product: BillingProduct, onPurchase: () -> Unit, enabled: Bo
                 shadow = false,
             )
             .padding(horizontal = CardPadding, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
-            text = product.title,
+            text = stringResource(R.string.premium_purchase_once),
             style = BodyRegular,
             color = UaTheme.palette.labelPrimary,
-            maxLines = 2,
-            modifier = Modifier.weight(1f).padding(end = 10.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
         // The price comes from the store, never from a string resource: Play returns it in the
         // user's own currency with regional pricing and any running promotion already applied.
-        SecondaryButton(text = product.formattedPrice, onClick = onPurchase, enabled = enabled)
+        PrimaryButton(
+            text = stringResource(R.string.premium_buy, product.formattedPrice),
+            onClick = onPurchase,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }

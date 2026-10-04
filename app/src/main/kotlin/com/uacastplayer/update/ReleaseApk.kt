@@ -54,11 +54,10 @@ data class ReleaseApk(
  * wrong architecture fails at install with `INSTALL_FAILED_NO_MATCHING_ABIS`, so guessing here is
  * strictly worse than choosing.
  *
- * **What is still refused rather than guessed**: several APKs, none universal, none matching this
- * device. That is a release built for architectures this phone is not, or a debug build published
- * beside a release one - and an APK signed with the debug key cannot install over a release-signed
- * app under any circumstances. Refusing leaves the release page as the offer, where a human can
- * see what the files are.
+ * **What is still refused rather than guessed**: an ABI-labelled APK that does not match this
+ * device, even when it is the release's only attachment. A single generic APK can still be used
+ * because it does not claim an incompatible architecture. Refusing leaves the release page as the
+ * offer, where a human can see what was published.
  */
 object ReleaseApkPolicy {
 
@@ -67,6 +66,14 @@ object ReleaseApkPolicy {
 
     /** The name AGP gives the APK with no ABI filter - the one that runs everywhere. */
     private const val UNIVERSAL_MARKER = "universal"
+    private val universalMarker = Regex("(?:^|[-_.])$UNIVERSAL_MARKER(?=[-_.]|$)", RegexOption.IGNORE_CASE)
+    // Longest x86 variant first: x86 is not evidence that an x86_64-only APK is compatible.
+    private val abiMarker = Regex("(?:^|[-_.])(arm64-v8a|armeabi-v7a|x86_64|x86)(?=[-_.]|$)", RegexOption.IGNORE_CASE)
+
+    private fun labelledAbi(name: String): String? = abiMarker.find(name)?.groupValues?.get(1)
+
+    private fun supports(asset: ReleaseAsset, abi: String): Boolean =
+        labelledAbi(asset.name)?.equals(abi, ignoreCase = true) == true
 
     /**
      * @param supportedAbis this device's `Build.SUPPORTED_ABIS`, most-preferred first. Passed in
@@ -80,11 +87,13 @@ object ReleaseApkPolicy {
                 asset.sizeBytes > 0 &&
                 asset.downloadUrl.isNotBlank()
         }
-        val chosen = candidates.singleOrNull()
-            ?: candidates.firstOrNull { it.name.contains(UNIVERSAL_MARKER, ignoreCase = true) }
+        val chosen = candidates.firstOrNull {
+            labelledAbi(it.name) == null && universalMarker.containsMatchIn(it.name)
+        }
             ?: supportedAbis.firstNotNullOfOrNull { abi ->
-                candidates.firstOrNull { it.name.contains(abi, ignoreCase = true) }
+                candidates.firstOrNull { supports(it, abi) }
             }
+            ?: candidates.singleOrNull()?.takeIf { labelledAbi(it.name) == null }
             ?: return null
         return ReleaseApk(
             downloadUrl = chosen.downloadUrl,

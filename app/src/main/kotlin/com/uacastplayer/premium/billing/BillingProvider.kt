@@ -3,18 +3,17 @@ package com.uacastplayer.premium.billing
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * A store, whichever one it is. The only place in this project that is allowed to know about Google
- * Play - and it does not know either, it just declares the shape any store has to fit.
+ * A store contract without Android or SDK dependencies. Implementations own their connections
+ * and listeners; the repository releases them when replaced or when its ViewModel is cleared.
  *
  * The point of this interface is a specific, testable claim: on the day this app is published,
- * turning on real purchases means writing one implementation and changing one line where the
- * provider is constructed. `FeatureManager`, `PremiumRepository` and every screen stay closed.
+ * the existing Play implementation can be selected without changing `FeatureManager` or screens.
  *
  * Implementations planned or possible: the fake used until publication, a debug-only one driving
  * every license state by hand, Google Play, Amazon, Huawei, and a server-issued license for
  * distribution outside any store.
  */
-interface BillingProvider {
+interface BillingProvider : AutoCloseable {
 
     /** Whether the store can be reached. Drives nothing but copy - access itself falls back to the
      * cached license, so a disconnected store never removes a paid feature. */
@@ -24,9 +23,8 @@ interface BillingProvider {
      * What the user owns according to the store.
      *
      * Empty means "the store says nothing is owned", which is *not* the same as "unknown" - see
-     * [connection]. A provider that cannot reach its store reports [BillingConnectionState.DISCONNECTED]
-     * and leaves this at its last known value rather than clearing it, because clearing it would
-     * read as a refund.
+     * [connection]. A failed/incomplete query reports null, not an empty set. Disconnection must
+     * never publish an authoritative empty ownership answer: the repository retains paid access.
      */
     // null means ownership has not been authoritatively queried (or the latest query failed).
     // Connected transport plus null must never revoke a cached entitlement.
@@ -58,4 +56,7 @@ interface BillingProvider {
      * within three days, so this is not optional bookkeeping - skipping it silently reverses sales.
      */
     suspend fun acknowledge(purchase: PurchaseRecord)
+
+    /** Releases SDK connections/listeners when the owner is destroyed or the provider is replaced. */
+    override fun close() = Unit
 }

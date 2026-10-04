@@ -55,10 +55,10 @@ class FeaturePolicyTest {
         assertFalse(Feature.CUSTOM_ICON_SOURCES in free)
     }
 
-    /** A trial that hides what is being sold does not sell it. */
+    /** Trials from earlier installs no longer bypass the Lite/Premium boundary. */
     @Test
-    fun theTrialShowsEverything() {
-        assertEquals(Feature.entries.toSet(), FeaturePolicy.featuresFor(LicenseTier.TRIAL))
+    fun aLegacyTrialGetsOnlyLiteFeatures() {
+        assertEquals(FeaturePolicy.featuresFor(LicenseTier.FREE), FeaturePolicy.featuresFor(LicenseTier.TRIAL))
     }
 
     @Test
@@ -69,9 +69,9 @@ class FeaturePolicyTest {
     }
 
     @Test
-    fun testerAndDeveloperTiersUnlockEverything() {
-        assertEquals(Feature.entries.toSet(), FeaturePolicy.featuresFor(LicenseTier.BETA))
-        assertEquals(Feature.entries.toSet(), FeaturePolicy.featuresFor(LicenseTier.ADMIN))
+    fun retiredTesterTiersGetOnlyLiteFeatures() {
+        assertEquals(FeaturePolicy.featuresFor(LicenseTier.FREE), FeaturePolicy.featuresFor(LicenseTier.BETA))
+        assertEquals(FeaturePolicy.featuresFor(LicenseTier.FREE), FeaturePolicy.featuresFor(LicenseTier.ADMIN))
     }
 
     /** Every tier has to be answerable - a `when` that grew a gap would otherwise fail at runtime

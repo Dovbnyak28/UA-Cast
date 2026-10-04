@@ -29,17 +29,21 @@ import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.raisedSurface
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.LocalTvMode
 
 private val RailWidth = 96.dp
+private val TvRailWidth = 184.dp
 private val RailItemSpacing = 4.dp
 private val RailVerticalPadding = 4.dp
 
 /** Medium/expanded counterpart of [GlassTabBar], retaining the same selection semantics. */
 @Composable
 fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) {
+    val television = LocalTvMode.current
     Column(
         modifier = modifier
-            .width(RailWidth)
+            .width(if (television) TvRailWidth else RailWidth)
             .fillMaxHeight()
             .verticalScroll(rememberScrollState())
             .background(UaTheme.palette.glassTone)
@@ -65,6 +69,7 @@ fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) 
                             Modifier
                         },
                     )
+                    .tvFocus()
                     .selectable(
                         selected = item.selected,
                         role = Role.Tab,
@@ -87,13 +92,14 @@ fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) 
                 )
                 run {
                     Text(
-                        text = item.label,
+                        text = if (television) item.contentDescription else item.label,
                         style = CaptionSemibold,
                         color = contentColor,
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
+                        maxLines = if (television) 1 else 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.then(if (television) Modifier.fillMaxWidth() else Modifier)
+                            .padding(top = 4.dp),
                     )
                 }
             }

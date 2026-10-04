@@ -24,6 +24,9 @@ object IconFailurePolicy {
     }
 
     fun isExpired(record: FailureRecord, nowMillis: Long): Boolean {
+        // Wall-clock correction (or invalid persisted data) must not extend a URL's blacklist
+        // into the future. Validate before subtracting, which also avoids Long age overflow.
+        if (record.recordedAtMillis < 0L || record.recordedAtMillis > nowMillis) return true
         val ttl = if (record.isPermanent) PERMANENT_TTL_MILLIS else TRANSIENT_TTL_MILLIS
         return nowMillis - record.recordedAtMillis > ttl
     }

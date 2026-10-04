@@ -23,7 +23,6 @@ data class PrefetchProgress(val completed: Int, val total: Int)
 
 internal data class IconPrefetchWork(
     val channel: M3uChannel,
-    val epgIconUrl: String?,
     /** Number of input channels represented by this unique resolution key. */
     val progressWeight: Int,
 )
@@ -31,15 +30,13 @@ internal data class IconPrefetchWork(
 /** Builds the bounded worker queue up front and coalesces channels with the same candidate chain. */
 internal fun iconPrefetchWork(
     channels: List<M3uChannel>,
-    epgIconUrlFor: (M3uChannel) -> String?,
 ): List<IconPrefetchWork> {
     val unique = linkedMapOf<String, IconPrefetchWork>()
     for (channel in channels) {
-        val epgIconUrl = epgIconUrlFor(channel)
-        val key = IconMemoryCacheKey.of(channel.tvgLogo, epgIconUrl, channel.tvgId)
+        val key = IconMemoryCacheKey.of(channel.tvgId)
         val previous = unique[key]
         unique[key] = if (previous == null) {
-            IconPrefetchWork(channel, epgIconUrl, progressWeight = 1)
+            IconPrefetchWork(channel, progressWeight = 1)
         } else {
             previous.copy(progressWeight = previous.progressWeight + 1)
         }
@@ -55,12 +52,11 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
     suspend fun prefetch(
         channels: List<M3uChannel>,
         wifiOnly: Boolean,
-        epgIconUrlFor: (M3uChannel) -> String? = { null },
         onProgress: (PrefetchProgress) -> Unit,
     ): Boolean {
         if (channels.isEmpty() || !PrefetchGate.canPrefetchNow(wifiOnly, isConnected(), isMetered())) return false
 
-        val work = iconPrefetchWork(channels, epgIconUrlFor)
+        val work = iconPrefetchWork(channels)
         // The callback must be serialized with the increment, not merely fed an atomic number.
         // Otherwise coroutine A can increment to 1, pause, coroutine B report 2, then A report 1:
         // a StateFlow consumer visibly moves backwards and the final callback need not be `total`.
@@ -76,11 +72,7 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
             val workers = List(minOf(MAX_CONCURRENT_FETCHES, work.size)) {
                 launch {
                     for (item in queue) {
-                        iconRepository.resolveIconFile(
-                            item.channel.tvgLogo,
-                            item.epgIconUrl,
-                            tvgId = item.channel.tvgId,
-                        )
+                        iconRepository.resolveIconFile(item.channel.tvgId)
                         progressMutex.withLock {
                             completed += item.progressWeight
                             onProgress(PrefetchProgress(completed, channels.size))

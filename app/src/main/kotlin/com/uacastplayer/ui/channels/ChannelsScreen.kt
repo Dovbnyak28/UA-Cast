@@ -1,5 +1,4 @@
 package com.uacastplayer.ui.channels
-import com.uacastplayer.ui.theme.UaTheme
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -9,11 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,11 +17,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ads.AdPlacement
+import com.uacastplayer.ui.ads.BannerAdSlot
 import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.epg.EpgUiState
@@ -40,8 +37,8 @@ import com.uacastplayer.ui.playlist.asUserMessage
 import com.uacastplayer.ui.components.EmptyState
 import com.uacastplayer.ui.components.IconTierBanner
 import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.ScreenHPadding
+import com.uacastplayer.ui.theme.GapM
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,13 +76,8 @@ fun ChannelsScreen(
     // which only opens once the sheet's "Guide" row is tapped.
     var channelActionsFor by remember { mutableStateOf<M3uChannel?>(null) }
 
-    // Forces every ChannelIcon in this screen to re-resolve when either signal
-    // fires: EPG data arriving or being replaced changes its icon-URL source (see
-    // AppViewModel.resolveChannelIcon),
-    // and a completed prefetch run may have just written new files for channels that previously
-    // resolved to nothing. Deliberately NOT nowMillis or anything else that changes often - a
-    // re-resolve on every recomposition would defeat the point of ChannelIcon's own caching.
-    val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
+    // Pack removal retires displayed files; completed downloads retry previously empty rows.
+    val iconRefreshKey: Any = iconPrefetchState.refreshKey
 
     // Landing on a groups overview (like the rest of the bottom-nav tabs, this is per-tab UI state,
     // not app state - it deliberately resets to the overview on process death, unlike the playlist
@@ -163,6 +155,7 @@ fun ChannelsScreen(
             }
         } else {
             ChannelsContent(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 playlistState = playlistState,
                 openGroup = openGroup,
                 overviewGridState = overviewGridState,
@@ -188,6 +181,8 @@ fun ChannelsScreen(
                 onRefreshPlaylist = onRefreshPlaylist,
             )
         }
+        if (playlistState.hasChannels) BannerAdSlot(AdPlacement.CHANNELS_BANNER,
+            Modifier.fillMaxWidth().padding(vertical = GapM))
     }
 
     guideChannel?.let { channel ->
@@ -267,8 +262,9 @@ private fun ChannelsContent(
     onClearGroupOverride: (String) -> Unit,
     onOpenAddPlaylist: () -> Unit,
     onRefreshPlaylist: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         when {
             // hasChannels wins over both isLoading and error: a reload in progress or one that
             // just failed must not hide channels already on screen - see applyPlaylistOutcome/

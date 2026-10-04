@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -47,7 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.playlist.withPlaylistCpu
+import com.uacastplayer.data.playlist.filterPlaylistChannels
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.core.settings.ChannelLayout
@@ -112,9 +111,7 @@ internal fun SingleGroupChannelList(
         } else {
             // One provider can put every channel in a single group. Filtering that list belongs
             // beside whole-playlist search, not in the composition that draws the text field.
-            withPlaylistCpu {
-                grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
-            }
+            filterPlaylistChannels(grouped.channels, trimmedQuery)
         }
     }
     // Replays when the filter changes: a search that narrows 400 rows to 3 is new content arriving,

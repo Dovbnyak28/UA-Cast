@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.tvFocus
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
@@ -164,8 +165,8 @@ fun LanguagePickerScreen(
             onClick = { selected?.let(onLanguageConfirmed) },
             enabled = selected != null,
             modifier = Modifier
-                .fillMaxWidth()
                 .widthIn(max = ContentMaxWidth)
+                .fillMaxWidth()
                 .padding(top = GapM),
         )
     }
@@ -187,6 +188,7 @@ private fun LanguageRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = TouchTargetMin)
+            .tvFocus(RoundedCornerShape(RadiusItem))
             .selectable(selected = isSelected, onClick = onClick, role = Role.RadioButton)
             .background(containerColor, RoundedCornerShape(RadiusItem))
             .border(1.dp, borderColor, RoundedCornerShape(RadiusItem))

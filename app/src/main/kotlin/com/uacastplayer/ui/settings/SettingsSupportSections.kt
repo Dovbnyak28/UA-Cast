@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +15,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.LocalTvMode
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +42,6 @@ import com.uacastplayer.diagnostics.RemuxEffectivenessPolicy
 import com.uacastplayer.guidedtour.GuidedTourSectionState
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.premium.Feature
-import com.uacastplayer.premium.PremiumAvailability
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.UiTestTags
@@ -77,20 +76,22 @@ internal fun DataSettingsSection(
             style = Caption,
             color = UaTheme.palette.labelSecondary,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SecondaryButton(
                 text = stringResource(R.string.settings_data_export),
                 onClick = gate.guard(Feature.BACKUP, onShowExportWarning),
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                leadingIcon = AppIcons.Storage,
+                modifier = Modifier.fillMaxWidth()
                     .settingsSearchTarget(stringResource(R.string.settings_data_export)),
             )
             SecondaryButton(
                 text = stringResource(R.string.settings_data_import),
                 onClick = gate.guard(Feature.BACKUP, onImportBackup),
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                leadingIcon = AppIcons.Upload,
+                modifier = Modifier.fillMaxWidth()
                     .settingsSearchTarget(stringResource(R.string.settings_data_import)),
             )
         }
@@ -105,12 +106,19 @@ internal fun BackupExportWarningDialog(onConfirm: () -> Unit, onDismiss: () -> U
         titleContentColor = UaTheme.palette.labelPrimary,
         textContentColor = UaTheme.palette.labelSecondary,
         title = { Text(stringResource(R.string.settings_data_export_warning_title)) },
-        text = { Text(stringResource(R.string.settings_data_export_warning_message)) },
+        text = {
+            TvDialogInputRegistration()
+            Text(stringResource(R.string.settings_data_export_warning_message))
+        },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(R.string.settings_data_export_confirm)) }
+            TextButton(onClick = onConfirm, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.settings_data_export_confirm))
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.common_cancel))
+            }
         },
     )
 }
@@ -122,14 +130,16 @@ internal fun BackupImportSummaryBanner(
     modifier: Modifier = Modifier,
 ) {
     BackupNoticeBanner(
-        text = if (summary.persistenceFailed) {
-            stringResource(R.string.settings_data_import_persistence_failure)
-        } else {
-            stringResource(
-                R.string.settings_data_import_summary,
-                summary.importedSourceCount,
-                summary.importedFavoriteCount,
-            )
+        text = when {
+            summary.fileRejected -> stringResource(R.string.settings_data_import_failure)
+            summary.persistenceFailed -> stringResource(R.string.settings_data_import_persistence_failure)
+            else -> stringResource(
+                R.string.settings_data_import_summary, summary.importedSourceCount, summary.importedFavoriteCount,
+            ) + if (summary.sourceLimitExceededCount > 0) {
+                "\n" + stringResource(R.string.settings_data_import_limit, summary.sourceLimitExceededCount)
+            } else {
+                ""
+            }
         },
         onDismiss = onDismiss,
         modifier = modifier,
@@ -189,12 +199,9 @@ private fun BackupNoticeBanner(
 @Composable
 internal fun PremiumSettingsSection(premiumSection: PremiumSectionState) {
     val hasDeveloperMenu = premiumSection.developerStates.isNotEmpty()
-    if (!PremiumAvailability.STORE_IS_LIVE && !hasDeveloperMenu) return
 
     SettingsSection(title = stringResource(R.string.settings_section_premium), icon = AppIcons.Lock) {
-        if (PremiumAvailability.STORE_IS_LIVE) {
-            PremiumContent(section = premiumSection, nowMillis = System.currentTimeMillis())
-        }
+        PremiumContent(section = premiumSection)
         if (hasDeveloperMenu) {
             LabeledRow(stringResource(R.string.settings_developer_license), AppIcons.Lock) {
                 for (state in premiumSection.developerStates) {
@@ -211,6 +218,8 @@ internal fun PremiumSettingsSection(premiumSection: PremiumSectionState) {
 
 @Composable
 internal fun TutorialSettingsSection(guidedTourSection: GuidedTourSectionState) {
+    // The phone tour targets touch-only cards that do not exist in the TV grid.
+    if (LocalTvMode.current) return
     SettingsSection(title = stringResource(R.string.settings_section_tutorial), icon = AppIcons.HelpCircle) {
         Text(
             text = stringResource(

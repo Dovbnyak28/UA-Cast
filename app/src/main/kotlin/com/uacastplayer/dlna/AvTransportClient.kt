@@ -17,11 +17,13 @@ private const val TAG = "AvTransportClient"
  * [AvTransportSoapBuilder]; this class is just the HTTP POST.
  */
 class AvTransportClient(
-    private val httpClient: OkHttpClient,
+    httpClient: OkHttpClient,
     /** Longer-timeout client for the one action a renderer answers only after fetching the url -
      * see `DlnaSessionRepository.SET_URI_TIMEOUT_SECONDS`. */
-    private val setUriHttpClient: OkHttpClient = httpClient,
+    setUriHttpClient: OkHttpClient = httpClient,
 ) {
+    private val httpClient = httpClient.forUpnpControl()
+    private val setUriHttpClient = setUriHttpClient.forUpnpControl()
 
     suspend fun setAvTransportUri(controlUrl: String, mediaUrl: String, title: String): Boolean {
         val envelope = AvTransportSoapBuilder.setAvTransportUriEnvelope(mediaUrl, title)

@@ -14,7 +14,7 @@ import org.json.JSONObject
  * crashing on a hand-edited or future-version file.
  */
 object BackupCodec {
-    const val CURRENT_VERSION = 1
+    const val CURRENT_VERSION = 2
     const val MAX_BACKUP_BYTES = 8 * 1024 * 1024
 
     fun encode(data: BackupData): String {
@@ -36,12 +36,25 @@ object BackupCodec {
         if (text.isBlank() || !BackupJsonInputGuard.accepts(text)) return null
         return runCatchingNonFatal {
             JSONObject(text)
-                .takeIf { it.optInt("version", -1) == CURRENT_VERSION }
+                .takeIf { it.optInt("version", -1) in 1..CURRENT_VERSION }
                 ?.let { root ->
-                    val sources = root.optJSONArray("sources")?.toObjectList()?.mapNotNull(::sourceFromJson).orEmpty()
+                    val sourceRows = root.optJSONArray("sources")
+                    val favoriteRows = root.optJSONArray("favorites")
+                    val sources = sourceRows?.toObjectList()?.mapNotNull(::sourceFromJson).orEmpty()
                     val favorites =
-                        root.optJSONArray("favorites")?.toObjectList()?.mapNotNull(::favoriteFromJson).orEmpty()
+                        favoriteRows?.toObjectList()?.mapNotNull(::favoriteFromJson).orEmpty()
                     val settings = root.optJSONObject("settings")?.let(::settingsFromJson) ?: BackupSettings()
+                    // Version 1 only saved document addresses. Version 2 promises portable local
+                    // files, so missing payloads must not quietly become unusable saved sources.
+                    val missingPayload = sources.any {
+                        it.type == "FILE" && (it.playlistBase64 == null || it.playlistDigest == null)
+                    }
+                    if (root.optInt("version") >= CURRENT_VERSION) {
+                        if (missingPayload || sourceRows?.length() != sources.size) return@let null
+                        if (favoriteRows?.length() != favorites.size || root.optJSONObject("settings") == null) {
+                            return@let null
+                        }
+                    }
                     BackupData(sources, favorites, settings)
                 }
         }.getOrNull()
@@ -91,6 +104,8 @@ object BackupCodec {
         put("location", source.location)
         putOpt("displayName", source.displayName)
         put("addedAtEpochMillis", source.addedAtEpochMillis)
+        putOpt("playlistBase64", source.playlistBase64)
+        putOpt("playlistDigest", source.playlistDigest)
     }
 
     private fun sourceFromJson(json: JSONObject): BackupPlaylistSource? {
@@ -104,6 +119,8 @@ object BackupCodec {
             location = location,
             displayName = json.stringOrNull("displayName"),
             addedAtEpochMillis = json.optLong("addedAtEpochMillis", 0L),
+            playlistBase64 = json.stringOrNull("playlistBase64"),
+            playlistDigest = json.stringOrNull("playlistDigest"),
         )
     }
 

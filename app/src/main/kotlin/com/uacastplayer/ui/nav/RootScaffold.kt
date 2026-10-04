@@ -29,6 +29,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import com.uacastplayer.ui.remote.LocalOpenRemote
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.tv.tvFocus
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +89,8 @@ import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.settings.SettingsScreen
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.tv.LocalTvMode
+import com.uacastplayer.ui.tv.TvBrowseScreen
 import com.uacastplayer.ui.theme.DisplayTitle
 import com.uacastplayer.ui.theme.DUR_NAV
 import com.uacastplayer.ui.theme.EaseSpring
@@ -217,11 +224,12 @@ fun RootScaffold(
         modifier = modifier.fillMaxSize().appBackground(plain = navState.current == BottomDestination.SETTINGS),
     ) {
         val widthDp = maxWidth.value.toInt()
-        val navigationMode = AdaptiveRootLayout.navigationModeFor(widthDp)
+        val television = LocalTvMode.current
+        val navigationMode = rootNavigationMode(widthDp, television)
         val expanded = AdaptiveRootLayout.isExpanded(widthDp)
         val navAnimationsAllowed = animationsAllowed()
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().tvOverscanPadding(television),
             containerColor = Color.Transparent,
             topBar = {
                 RootTopBar(
@@ -262,15 +270,19 @@ fun RootScaffold(
                         label = "adaptiveNavContent",
                         modifier = Modifier.fillMaxSize(),
                     ) { destination ->
-                        val contentMaxWidth = if (expanded && destination == BottomDestination.CHANNELS) {
-                            1_200.dp
-                        } else {
-                            840.dp
-                        }
+                        val contentMaxWidth = rootContentWidth(expanded, destination)
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                             stateHolder.SaveableStateProvider(destination) {
                                 val content = Modifier.widthIn(max = contentMaxWidth).fillMaxSize()
-                                when (destination) {
+                                if (television && destination != BottomDestination.SETTINGS) {
+                                    TvBrowseScreen(destination, playlistState,
+                                        HomeSourceState(playlistSources, activePlaylistSourceId,
+                                            onSwitchPlaylistSource, onRemovePlaylistSource, onOpenAddPlaylist,
+                                            onRefreshPlaylist, onRetrySourceSave),
+                                        favorites, hiddenGroupKeys, resolveIcon, onChannelSelected, content,
+                                        iconPrefetchState.refreshKey,
+                                        settingsState.favoritesSortOrder)
+                                } else when (destination) {
                 BottomDestination.HOME -> HomeScreen(
                     content = HomeContentState(
                         playlistState = playlistState,
@@ -326,6 +338,7 @@ fun RootScaffold(
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(
                     favorites = favorites,
+                    iconRefreshKey = iconPrefetchState.refreshKey,
                     playlistChannels = playlistState.channels,
                     sortOrder = settingsState.favoritesSortOrder,
                     onSortOrderSelected = onFavoritesSortOrderSelected,
@@ -402,6 +415,15 @@ fun RootScaffold(
 internal fun shouldShowDownloadStatus(playlistState: PlaylistUiState): Boolean =
     playlistState.hasChannels || playlistState.isLoading
 
+private fun rootNavigationMode(widthDp: Int, television: Boolean): RootNavigationMode =
+    if (television) RootNavigationMode.NAVIGATION_RAIL else AdaptiveRootLayout.navigationModeFor(widthDp)
+
+private fun Modifier.tvOverscanPadding(television: Boolean): Modifier =
+    if (television) padding(24.dp) else this
+
+private fun rootContentWidth(expanded: Boolean, destination: BottomDestination) =
+    if (expanded && destination == BottomDestination.CHANNELS) 1_200.dp else 840.dp
+
 /**
  * The screen title and background-download/update banners.
  *
@@ -461,6 +483,10 @@ internal fun RootTopBar(
                     style = DisplayTitle,
                     color = UaTheme.palette.labelPrimary,
                 )
+            }
+            IconButton(onClick = LocalOpenRemote.current, modifier = Modifier.tvFocus()) {
+                Icon(AppIcons.Remote, stringResource(if (LocalTvMode.current) R.string.tv_pair_phone
+                    else R.string.remote_title), tint = UaTheme.palette.azure)
             }
         }
     }

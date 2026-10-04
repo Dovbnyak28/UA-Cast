@@ -6,14 +6,17 @@ import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseStorage
 import com.uacastplayer.premium.LicenseTier
-import com.uacastplayer.premium.TrialEligibilityPolicy
+import com.uacastplayer.premium.LicenseClockPolicy
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.BillingProvider
 import com.uacastplayer.premium.billing.PurchaseRecord
 import com.uacastplayer.premium.billing.PurchaseResult
+import com.uacastplayer.premium.billing.PremiumProducts
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,7 +30,7 @@ private const val TAG = "PremiumRepository"
  * license the device currently holds.
  *
  * Everything above it sees one [StateFlow] of [Entitlements] and cannot tell where the answer came
- * from - a real purchase, a stored license read while offline, the first-launch trial, or the debug
+ * from - a real purchase, a stored license read while offline, a legacy paid record, or the debug
  * menu. That indifference is the point: it is what lets the store be swapped without a single screen
  * changing.
  *
@@ -41,27 +44,19 @@ class PremiumRepository(
     private var provider: BillingProvider,
     private val storage: LicenseStorage,
     private val scope: CoroutineScope,
-    /**
-     * When this install was first put on the device - the one fact clearing app data does not
-     * erase - or null where it cannot be read. See [TrialEligibilityPolicy.deservesTrial].
-     *
-     * Declared before [systemClock] on purpose: every existing caller passes the clock as a
-     * trailing lambda, and a new last parameter would have silently taken that binding.
-     */
-    private val installTime: () -> Long? = { null },
     private val systemClock: () -> Long = System::currentTimeMillis,
-) {
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
 
     /**
      * The clock every entitlement decision in this class is judged against: the system clock,
      * except that it never goes backwards.
      *
      * Reading it records it, which is what makes the mark advance. See
-     * [TrialEligibilityPolicy.clampToHighWaterMark] for why an app that sells time has to do this,
-     * and for what it deliberately does not defend against.
+     * [LicenseClockPolicy.clampToHighWaterMark] protects expiry on legacy paid records.
      */
     private fun now(): Long {
-        val clamped = TrialEligibilityPolicy.clampToHighWaterMark(systemClock(), storage.clockHighWaterMark)
+        val clamped = LicenseClockPolicy.clampToHighWaterMark(systemClock(), storage.clockHighWaterMark)
         if (clamped > storage.clockHighWaterMark) storage.clockHighWaterMark = clamped
         return clamped
     }
@@ -71,55 +66,21 @@ class PremiumRepository(
     private val _connection = MutableStateFlow(BillingConnectionState.DISCONNECTED)
     val connection: StateFlow<BillingConnectionState> = _connection.asStateFlow()
 
-    /**
-     * Whether this device has ever been shown something it could actually buy.
-     *
-     * The gates hang off this, not off the connection state - see `FeatureManager.isUnlocked`. An
-     * app that withholds features it has never offered a price for is indistinguishable, from the
-     * user's side, from one that is simply broken, and the ways to arrive there do not announce
-     * themselves: a product still in draft, an id spelled differently in the console, a release
-     * flipped live before the track it is attached to went out. Each of those is answered by Play
-     * with a perfectly successful, perfectly empty response.
-     *
-     * Latched, and persisted, because it must not follow the network. Once the till has been seen
-     * open it stays open, or an offline launch would hand the app out for free.
-     */
-    private val _storeCanSell = MutableStateFlow(storage.storeHasEverOfferedProducts)
-    val storeCanSell: StateFlow<Boolean> = _storeCanSell.asStateFlow()
-
     /** Cancelled and replaced when the store is swapped, so the old provider stops being listened
      * to - otherwise two providers would race to set the license. */
     private var observeJob: Job? = null
+    private var expiryJob: Job? = null
+    private var scheduledExpiryLicense: License? = null
+    private var scheduledExpiryAt: Long = 0L
 
-    /**
-     * Reads the stored license, granting the first-launch trial if this install has never had one,
-     * and then starts listening to the store.
-     *
-     * "Never had one" used to mean "storage is empty", and Android hands the user a button that
-     * produces exactly that - Clear data - so the fortnight restarted for anyone willing to spend
-     * three taps on it. [TrialEligibilityPolicy.deservesTrial] adds the one fact clearing data does
-     * not touch: how old the install itself is. An expired trial still stays stored rather than
-     * being cleared, for the same reason as before.
-     */
+    /** A fresh install starts in Lite. Preserve paid records and retire old promotional licences. */
     fun loadInitial() {
+        if (closed.get()) return
         val stored = storage.storedLicense
-        val license = stored ?: grantTrialIfDeserved()
+        val license = (stored ?: License.FREE).currentModel()
+        if (stored != license) storage.storedLicense = license
         publish(license)
         observeProvider()
-    }
-
-    private fun grantTrialIfDeserved(): License {
-        if (!TrialEligibilityPolicy.deservesTrial(installTime(), now())) {
-            // Not a first launch - an install older than the trial, with its storage emptied. The
-            // free tier is what it gets, and it is recorded so this is decided once rather than on
-            // every launch from here on.
-            AppLog.d(TAG) { "storage was cleared on an install older than the trial: no new trial" }
-            return License.FREE.also { storage.storedLicense = it }
-        }
-        return License.trialStartingAt(now()).also {
-            storage.storedLicense = it
-            AppLog.d(TAG) { "first launch: granted a trial" }
-        }
     }
 
     /**
@@ -128,8 +89,8 @@ class PremiumRepository(
      * The two are combined rather than collected separately, and that is not tidiness. Collected
      * apart, the purchases handler has to read the *last seen* connection state, so a provider that
      * reports CONNECTED and a purchase in quick succession can have the purchase evaluated against
-     * a connection state that has not arrived yet - and a real purchase is then silently dropped
-     * because the store "was not connected". Combining makes the pair consistent by construction.
+     * a connection state that has not arrived yet. Combining observes both latest values without
+     * a second mutable copy; a connected transport still needs a non-null ownership answer.
      */
     private fun observeProvider() {
         observeJob?.cancel()
@@ -144,16 +105,18 @@ class PremiumRepository(
                     AppLog.w(TAG) { "Store connection boundary failed: ${error.javaClass.simpleName}" }
                 }
                 .isSuccess
-            if (!connected) return@launch
+            if (!connected || !isCurrentProvider(observedProvider)) return@launch
             combine(observedProvider.connection, observedProvider.purchases) { state, purchases -> state to purchases }
                 .collect { (state, purchases) ->
+                    if (!isCurrentProvider(observedProvider)) return@collect
                     runCatchingNonFatal {
                         _connection.value = state
                         // Only a *connected* store is allowed to speak about what is owned. An empty set
                         // from a store that is not connected is the absence of an answer, not the answer
                         // "you own nothing" - acting on it would revoke a paid feature offline.
                         if (state == BillingConnectionState.CONNECTED) {
-                            noteWhetherAnythingIsForSale(observedProvider)
+                            // Ownership is independent of the sale catalogue. A slow price query
+                            // must not delay an authoritative grant/refund or block this observer.
                             if (purchases != null) applyPurchases(purchases, observedProvider)
                         }
                     }.onFailure { error ->
@@ -161,29 +124,6 @@ class PremiumRepository(
                         AppLog.w(TAG) { "Store state boundary failed: ${error.javaClass.simpleName}" }
                     }
                 }
-        }
-    }
-
-    /**
-     * Asks the store, once, whether it has anything to sell - not on behalf of any screen, but so
-     * that the gates have an answer before a user meets one.
-     *
-     * Deliberately not left to the premium screen to discover. Someone who never opens that screen
-     * still runs into the locks, and a check that only happens when the paywall is opened would let
-     * a mis-configured catalogue take features away from everyone who never went looking for it.
-     */
-    private suspend fun noteWhetherAnythingIsForSale(observedProvider: BillingProvider) {
-        if (_storeCanSell.value) return
-        val products = runCatchingNonFatal { observedProvider.products() }.onFailure { error ->
-            AppLog.w(TAG) { "Store catalogue boundary failed: ${error.javaClass.simpleName}" }
-        }.getOrNull()
-        when {
-            products == null -> Unit
-            products.isEmpty() -> AppLog.d(TAG) { "store is connected but sells nothing: gates stay open" }
-            else -> {
-                storage.storeHasEverOfferedProducts = true
-                _storeCanSell.value = true
-            }
         }
     }
 
@@ -196,8 +136,7 @@ class PremiumRepository(
         val best = bestOf(purchases)
         if (best == null) {
             // The store is connected and says nothing is owned. If the device is holding a paid
-            // license, it was cancelled or refunded, and it goes; a running trial is untouched,
-            // since no store ever issued it.
+            // license, it was cancelled or refunded, and it goes. Lite needs no store ownership.
             val stored = storage.storedLicense
             if (stored != null && stored.tier.isPaid) {
                 AppLog.d(TAG) { "store reports no purchases: clearing a paid license" }
@@ -211,7 +150,7 @@ class PremiumRepository(
                 tier = best.tier,
                 expiresAtMillis = best.expiresAtMillis,
                 source = best.productId,
-            ),
+            ).currentModel(),
         )
     }
 
@@ -249,13 +188,16 @@ class PremiumRepository(
     /** Buys [productId]; the resulting entitlement is published through [entitlements] like any
      * other, so the caller does not have to do anything with the result but report it. */
     suspend fun purchase(productId: String, launchContext: Any?): PurchaseResult {
+        if (closed.get() || !PremiumProducts.isForSale(productId)) return PurchaseResult.Unavailable
         val activeProvider = provider
         return runCatchingNonFatal {
-            val product = activeProvider.products().firstOrNull { it.id == productId }
+            val product = offeredProducts(activeProvider).firstOrNull { it.id == productId }
                 ?: return@runCatchingNonFatal PurchaseResult.Unavailable
-            activeProvider.purchase(product, launchContext).also { result ->
-                if (result is PurchaseResult.Success) applyPurchases(setOf(result.purchase), activeProvider)
-            }
+            if (!isCurrentProvider(activeProvider)) return@runCatchingNonFatal PurchaseResult.Unavailable
+            val result = activeProvider.purchase(product, launchContext)
+            if (!isCurrentProvider(activeProvider)) return@runCatchingNonFatal PurchaseResult.Unavailable
+            if (result is PurchaseResult.Success) applyPurchases(setOf(result.purchase), activeProvider)
+            result
         }.getOrElse { error ->
             AppLog.w(TAG) { "Purchase boundary failed: ${error.javaClass.simpleName}" }
             PurchaseResult.Failed(reason = null)
@@ -264,31 +206,74 @@ class PremiumRepository(
 
     /** "I already paid, on my other phone." Google Play requires every app that sells anything to
      * offer this. */
-    suspend fun restore(): PurchaseResult = runCatchingNonFatal { provider.restore() }.getOrElse { error ->
-        AppLog.w(TAG) { "Restore boundary failed: ${error.javaClass.simpleName}" }
-        PurchaseResult.Failed(reason = null)
+    suspend fun restore(): PurchaseResult {
+        if (closed.get()) return PurchaseResult.Unavailable
+        val activeProvider = provider
+        return runCatchingNonFatal {
+            val result = activeProvider.restore()
+            if (isCurrentProvider(activeProvider)) result else PurchaseResult.Unavailable
+        }.getOrElse { error ->
+            AppLog.w(TAG) { "Restore boundary failed: ${error.javaClass.simpleName}" }
+            PurchaseResult.Failed(reason = null)
+        }
     }
 
     /** What can be bought, priced by the store in the user's own currency. */
-    suspend fun products(): List<BillingProduct> =
-        runCatchingNonFatal { provider.products() }.getOrElse { error ->
+    suspend fun products(): List<BillingProduct> {
+        if (closed.get()) return emptyList()
+        val activeProvider = provider
+        return runCatchingNonFatal {
+            offeredProducts(activeProvider).takeIf { isCurrentProvider(activeProvider) }.orEmpty()
+        }.getOrElse { error ->
             AppLog.w(TAG) { "Store catalogue boundary failed: ${error.javaClass.simpleName}" }
             emptyList()
         }
+    }
+
+    private suspend fun offeredProducts(activeProvider: BillingProvider): List<BillingProduct> =
+        activeProvider.products().filter {
+            PremiumProducts.isForSale(it.id) && it.tier == LicenseTier.LIFETIME && it.formattedPrice.isNotBlank()
+        }.distinctBy { it.id }
 
     /**
      * Swaps the store. Used on the day Google Play Billing arrives, and by the debug-only developer
      * menu, whose provider class is not compiled into a release build at all.
      */
     fun useProvider(replacement: BillingProvider) {
+        if (replacement === provider) return
+        if (closed.get()) {
+            closeProvider(replacement)
+            return
+        }
+        val previous = provider
         provider = replacement
+        observeJob?.cancel()
+        closeProvider(previous)
         _connection.value = BillingConnectionState.DISCONNECTED
         observeProvider()
     }
 
-    /** Re-resolves the stored license against the current clock - the trial has to actually end at
-     * some point, and nothing else would notice that it had. */
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        observeJob?.cancel()
+        observeJob = null
+        expiryJob?.cancel()
+        expiryJob = null
+        scheduledExpiryLicense = null
+        closeProvider(provider)
+    }
+
+    private fun isCurrentProvider(candidate: BillingProvider): Boolean = !closed.get() && provider === candidate
+
+    private fun closeProvider(candidate: BillingProvider) {
+        runCatchingNonFatal { candidate.close() }.onFailure { error ->
+            AppLog.w(TAG) { "Store release boundary failed: ${error.javaClass.simpleName}" }
+        }
+    }
+
+    /** Re-resolves stored access so a time-limited legacy paid record expires on schedule. */
     fun refresh() {
+        if (closed.get()) return
         publish(storage.storedLicense ?: License.FREE)
     }
 
@@ -298,7 +283,42 @@ class PremiumRepository(
     }
 
     private fun publish(license: License) {
-        _entitlements.value = Entitlements.of(license, now())
+        val observedAt = now()
+        val resolved = Entitlements.of(license, observedAt)
+        _entitlements.value = resolved
+        // Refreshing the same record after clock rollback must not restart its elapsed-time timer.
+        if (keepLegacyExpiryTimer(resolved, observedAt)) return
+        expiryJob?.cancel()
+        expiryJob = null
+        scheduledExpiryLicense = null
+        scheduleLegacyExpiry(resolved, observedAt)
+    }
+
+    private fun keepLegacyExpiryTimer(resolved: Entitlements, observedAt: Long): Boolean {
+        val unchanged = scheduledExpiryLicense == resolved.license && observedAt <= scheduledExpiryAt
+        return unchanged && expiryJob?.isActive == true && !resolved.hasLapsed
+    }
+
+    private fun scheduleLegacyExpiry(resolved: Entitlements, observedAt: Long) {
+        val deadline = resolved.license.expiresAtMillis ?: return
+        if (resolved.hasLapsed) return
+        scheduledExpiryLicense = resolved.license
+        scheduledExpiryAt = observedAt
+        // One timer only for a legacy timed record. It belongs to the ViewModel's scope and is
+        // replaced on every ownership change; a previous subscription cannot expire new Premium.
+        expiryJob = scope.launch {
+            delay(deadline - observedAt)
+            runCatchingNonFatal {
+                if (storage.storedLicense?.currentModel() == resolved.license) {
+                    // Elapsed time reached the original deadline even if the wall clock was wound
+                    // back meanwhile. Preserve the paid record, but publish lapsed access.
+                    storage.clockHighWaterMark = maxOf(storage.clockHighWaterMark, deadline)
+                    refresh()
+                }
+            }.onFailure { error ->
+                AppLog.w(TAG) { "Legacy access expiry boundary failed: ${error.javaClass.simpleName}" }
+            }
+        }
     }
 
     /**
@@ -307,7 +327,9 @@ class PremiumRepository(
      * [LicenseTier.LIFETIME] wins outright; between the rest, the one lasting longest wins.
      */
     private fun bestOf(purchases: Set<PurchaseRecord>): PurchaseRecord? {
-        val active = purchases.filter { it.expiresAtMillis == null || it.expiresAtMillis > now() }
+        val active = purchases.filter {
+            it.tier.isPaid && (it.expiresAtMillis == null || it.expiresAtMillis > now())
+        }
         return active.firstOrNull { it.tier == LicenseTier.LIFETIME }
             ?: active.maxByOrNull { it.expiresAtMillis ?: Long.MAX_VALUE }
     }

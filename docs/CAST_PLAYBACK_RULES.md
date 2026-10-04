@@ -3,19 +3,29 @@
 ## Direct-first
 
 Every cast attempt starts direct: the receiver is handed the origin stream URL, no relay involved
-- it's faster and puts no load on the phone. The only exception is a (stream, receiver) pair
-already known to fail (see "Incompatibility memory" below), which skips straight to the proxy.
+- it's faster and puts no load on the phone. A (stream, receiver) pair already proven to require
+the proxy skips direct. A cached compatible raw-TS observation also goes straight to proxy.
+A cached hard-incompatible codec is reported after replacing receiver media, preserving the
+existing handoff: skipping `load()` would leave the previous channel playing on the TV.
 
-## The two reducers
+Before a direct `load()`, any previous Chromecast proxy is stopped. A remux or flattened producer
+can otherwise keep its origin open even when the receiver no longer fetches the proxy, blocking
+the new direct stream on a one-slot provider. Cleanup removes only Chromecast service ownership,
+not the Cast SDK session or another active DLNA owner. Later fallback can restart the proxy.
+Proxy → proxy retains the existing port/resource handoff when host/token are unchanged.
 
-All Cast state transitions go through exactly two pure reducers (`cast/CastLoadResultReducer.kt`,
-`cast/CastReceiverStatusReducer.kt`) - `CastSessionRepository` is the only thing that calls real
-GMS Cast APIs or starts timers; it always ends up producing a `CastLoadResult` or `ReceiverStatus`
-and feeding it through one of these two.
+## State reduction and side effects
 
-- **Load result reducer** - success pauses the local player; failure records an incompatibility
-  signal and resumes local playback (the *caller* decides whether "resume local" actually means
-  "try the proxy instead" - see below).
+`CastLoadResultReducer` and `CastReceiverStatusReducer` handle SDK load outcomes and receiver
+status events. Separate reducers handle proxy preparation failure and codec verdicts.
+`CastSessionRepository` orchestrates loads/timers, initializes pending-media state, and applies
+their state/effects; the reducer classes themselves do not call the SDK or open network resources.
+
+- **Load result reducer** - success acknowledges the load (`loadPhase=LOADED`); it is not proof
+  of `PLAYING`. `loadOnReceiver()` pauses/stops local playback through a side effect *before*
+  issuing the SDK load, to free its upstream. A terminal load failure records incompatibility
+  and resumes local playback. The repository handles an eligible Direct failure by trying Proxy
+  before applying that terminal failure reducer.
 - **Receiver status reducer** - maps `BUFFERING`/`PLAYING`/`PAUSED`/`IDLE`+reason onto side
   effects. `PLAYING` pauses the local player. `IDLE` with `ERROR` records incompatibility, closes
   any proxy session, and resumes local playback. A synthetic `DISCONNECTED` status (session lost)
@@ -35,6 +45,11 @@ noise from being replaced, always ignored) apart from a `Rejected`/`Failed` stat
 failure of that specific request, which still goes through the normal direct-fails-to-proxy path).
 Every outcome logs one line: `cast load: gen=<g> status=<NAME(code)> action=<...>`.
 
+Each receiver load also resets media status to neutral `IDLE`/`NONE` while `loadPhase=LOADING`.
+This is pending media, not a terminal receiver event. The previous channel's stored `PLAYING`
+must not settle either watchdog or describe the replacement as playing; a matching accepted
+receiver callback supplies the new status. SDK load acknowledgement alone does not prove playback.
+
 The receiver's own status stream (`RemoteMediaClient.Callback.onStatusUpdated`) has the same
 problem from a different angle: issuing a new load naturally interrupts whatever the receiver was
 doing, and the SDK reports that as an ordinary `IDLE` (`CANCELLED`/`INTERRUPTED`/`NONE`), not an
@@ -45,15 +60,11 @@ even if self-initiated, since a real error is still an error.
 
 ## Stale channel guard
 
-A watchdog timeout and a diagnostic result are both deferred continuations holding a `streamUrl`
-captured in a closure - the diagnostic in particular runs on the IO dispatcher, genuinely
-concurrently with the user zapping to another channel on the Main dispatcher, not just racing
-coroutine cancellation timing. `cast/StaleChannelGuard.isCurrent(streamUrl, activeStreamUrl)` is
-checked before any of the three places such a continuation could act on a channel that's no longer
-current (`fallBackToProxyIfStillDirect`, `onRouteBlocked`, and the diagnostic-result handler
-itself) - without it, a late-arriving continuation for an abandoned channel could load the WRONG
-(already zapped-away-from) channel onto the receiver, or attribute a codec incompatibility banner to
-whatever channel happens to be on screen instead of the one it was actually diagnosed for.
+Deferred watchdog callbacks check the load generation and `StaleChannelGuard` before acting.
+Source/codec observations originate on proxy workers and are dispatched to the repository's Main
+scope. After dispatch, the repository rechecks the Cast attempt, active resource ID, and exact
+proxy producer lease, not just URL equality. Thus A → B → A, same-token stop/start, and changed
+access headers cannot make an obsolete observation update the current channel's UI or cache.
 
 ## Watchdog
 
@@ -63,10 +74,10 @@ were once the same 4-second constant, and that was a bug (below).
 **The direct-mode watchdog** (`CastSessionRepository.loadDirectWithWatchdog`) decides the
 direct→proxy *mode switch*. A stream that's geo-restricted or VPN-only often doesn't error out on
 the receiver - it just buffers forever. So after a direct load, if the receiver isn't `PLAYING`
-within **4 seconds**, the app falls back to the proxy. This is raced against
-`data/cast/TsFirstSegmentDiagnostic` probing the stream for its actual declared video/audio codecs
-(`core/cast/TsProgramInfoParser.kt`, reading PAT/PMT). Flat 4s is right here: nothing travels through
-the phone in direct mode, and firing costs only a mode switch.
+within **4 seconds**, the app falls back to the proxy. It does not launch a diagnostic GET alongside
+the receiver: that second connection can displace the stream on a single-slot provider account.
+Uncached raw TS therefore waits for the ordinary watchdog rather than receiving an early diagnostic
+fallback. A previously cached source/verdict can select proxy before loading the receiver.
 
 **The stall watchdog** (`CastSessionRepository.scheduleStallWatchdog`, policy in
 `cast/CastStallWatchdogPolicy.kt`) covers everything after that - proxy loads and recovery reloads -
@@ -113,43 +124,46 @@ built from `PlayerViewModel`. Closing that gap means plumbing an `epgIconUrlFor`
 to the cast layer. `cast load: artwork=<bool>` records which case a channel hit, without ever
 logging the url.
 
-### Diagnostic warm-up and cache
+### In-band diagnostics and cache
 
-Probing a stream is a real HTTP fetch, and casting or re-casting the same channel shouldn't pay for
-it every time. `data/cast/DiagnosticResultCache.kt` (an LRU cache of 32 entries keyed by stream URL,
-governed by `core/cast/DiagnosticCachePolicy.kt`) remembers the verdict; `loadDirectWithWatchdog` checks
-it first and, on a hit, skips the HTTP probe entirely. A `Compatible`/`LikelyCompatible`/
-`IncompatibleVideo` entry is trusted for the rest of the process's lifetime, but an `Unknown` one
-(PAT/PMT not found in the probe window) only for 10 minutes - it might just have caught the origin
-at a bad moment (mid-ad-break, a transient encoder hiccup). A later probe result for the same URL is
-merged in, never *replacing* a more decisive existing verdict with a less decisive one - a confirmed
-`IncompatibleVideo` can't be silently downgraded back to `Compatible` by a flaky re-probe.
+`CastDiagnosticCoordinator` performs no network I/O. It caches observations from the current proxy
+producer in `DiagnosticResultCache` (32-entry LRU, governed by `DiagnosticCachePolicy`). Keys contain
+the URL and sanitized access headers, matching proxy resource identity. Display title/index/artwork
+are not part of the key. `startPlayback` consults this cache before issuing a receiver load.
+Decisive verdicts retain their existing process-lifetime policy; Unknown expires after 10 minutes.
+Less decisive observations do not replace a stronger verdict for the same request identity.
 
-`CastSessionRepository.setActiveChannel` also warms the cache proactively while the player is just
-browsing locally, not casting: 1.5 seconds after landing on a channel (zapping past it before then
-cancels the warm-up outright), it's probed in the background, so a channel the user has actually
-settled on already has an answer cached by the time they tap Cast. This warm-up never touches
-casting UI state on its own - if it happens to still be in flight when casting actually starts,
-`startPlayback` cancels it immediately in favor of the watchdog's own immediate probe, which is
-never gated by the debounce.
+`CastSessionRepository.setActiveChannel` only remembers a channel when there is no Cast session.
+There is **no speculative warm-up while browsing/playing locally** and no separate diagnostic
+fetch during direct Cast playback. Both could displace the real consumer of a one-connection stream.
 
-The stream URL can point at either an HLS playlist or a raw MPEG-TS origin - IPTV origins routinely
-use tokenized/extensionless URLs that give no hint which, and feeding raw TS bytes into a text
-playlist parser just silently finds no segments. The diagnostic classifies the initial probe first
-(`data/cast/TsSourceClassifier.kt`, reusing `proxy/PlaylistDetector.kt` and `proxy/MpegTsSniffer.kt`
-so it agrees with the proxy's own routing) before deciding how to read codecs: HLS fetches its
-first segment separately; raw TS is sniffed directly, no second request.
+`ProxyRouteSelector` publishes the source/verdict it already computed while routing the response.
+There is no extra fetch, peek, or PAT/PMT parse. Successful root HLS yields Hls/Unknown; root raw TS
+uses the existing bounded 128-KiB remux probe. Wrapper playlists can update their root observation
+from the already-required inner response. Raw probing remains disabled when remux is disabled.
+Nested HLS segments/sub-playlists do not produce root codec verdicts or additional probe reads.
+
+Only successful responses yield observations; 403/404/500 bodies do not become codec metadata.
+An observer failure is logged without interrupting response serving. Observations retain a producer
+lease but no response, socket, Activity, or UI reference. HLS codecs are no longer fetched by a
+standalone probe: receiver errors remain the fallback signal, and no arbitrary variant can block
+the channel. `TsFirstSegmentDiagnostic` remains a standalone utility, not wired to playback.
+
+`CastDirectNetworkOwnershipTest` reproduces the previous receiver/probe conflict with real HTTP
+sockets and a shadowed Cast SDK. It now checks both one load and 30 rapid loads with late SDK results.
+Proxy lease and Cast attempt tests cover queued observations after switch, A → B → A, and stop/start.
+These host-side tests do not establish acceptance on a physical receiver or Hisense VIDAA.
 
 ### Routing table
 
 `core/cast/CastCompatibilityPolicy.kt` turns the probed codecs into a verdict, and
 `cast/CastDeliveryStrategy.onDiagnosticResult(verdict, sourceKind)` turns *that* into a routing
-decision the moment the diagnostic resolves - even mid-watchdog-window, not just at the 4s mark:
+decision from cached metadata before load, or from a current in-band observation after proxy routing:
 
 | Verdict | Source kind | Action |
 |---|---|---|
-| `IncompatibleVideo` (MPEG-2 only) | any | **Blocked** - never proxy (remuxing the container never fixes a codec problem); report the codec to the UI and record the (stream, receiver) pair as incompatible immediately, not on a later receiver-side failure. This is the *only* verdict that blocks an attempt. |
-| `Compatible` / `LikelyCompatible` | raw TS | **ProxyImmediately** - skip the direct attempt outright. A receiver never plays a bare MPEG-TS URL directly (it needs HLS/DASH wrapping), so trying direct first is a guaranteed 4s wait for nothing. |
+| `IncompatibleVideo` (MPEG-2 only) | any | **Blocked** - report the codec and suppress pointless recovery. A cached verdict does not skip receiver media replacement. First-time uncached detection happens only after proxy fetch. Remux does not fix codecs. |
+| `Compatible` / `LikelyCompatible` | raw TS | **ProxyImmediately** - cached compatible raw TS selects the application's proxy/HLS-wrapping route before direct load. |
 | `Compatible` / `LikelyCompatible` | HLS | **NoAction** - unchanged: direct, then watchdog, then proxy (rewrite, not remux - nothing to remux, it's already HLS). |
 | `Unknown` (PAT/PMT not found in the probe window) | any | **NoAction** - unchanged: direct, then watchdog, then proxy. If that proxy attempt turns out to be raw TS, `proxy/RawTsRemuxActivation.kt` still remuxes it (an Unknown verdict isn't a confirmed problem, and a raw-TS passthrough is never playable either way - only a confirmed `IncompatibleVideo` verdict skips remux there). |
 

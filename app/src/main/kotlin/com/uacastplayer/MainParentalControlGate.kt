@@ -3,6 +3,7 @@ package com.uacastplayer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -11,6 +12,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.ui.components.ParentalControlPinDialog
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 /**
  * Returns a function that runs its argument immediately if the parental-control PIN was already
@@ -22,13 +24,25 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) -> Unit {
+    val unlocked by viewModel.parentalControlUnlocked.collectAsStateWithLifecycle()
+    return rememberParentalControlGate(unlocked, viewModel::verifyParentalControlPin)
+}
+
+/** The request boundary is independently testable without starting app-wide network owners. */
+@Composable
+internal fun rememberParentalControlGate(
+    unlocked: Boolean,
+    verifyPin: suspend (String) -> Boolean,
+): (() -> Unit) -> Unit {
     var pendingUnlockAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showDialog by remember { mutableStateOf(false) }
     var pinError by remember { mutableStateOf(false) }
-    val unlocked by viewModel.parentalControlUnlocked.collectAsStateWithLifecycle()
+    var verificationJob by remember { mutableStateOf<Job?>(null) }
+    var requestRevision by remember { mutableLongStateOf(0L) }
     // Read through a holder rather than captured directly, so the returned gate below can be
     // remembered once instead of being reallocated whenever `unlocked` flips.
     val unlockedNow = rememberUpdatedState(unlocked)
+    val verifyPinNow = rememberUpdatedState(verifyPin)
     val pinScope = rememberCoroutineScope()
 
     if (showDialog) {
@@ -38,18 +52,26 @@ internal fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) 
             // Launched rather than called inline: verifying runs PBKDF2 off the main thread now
             // (see ParentalControlController.verifyPin), so the result arrives a frame or two later.
             onSubmit = { pin ->
-                pinScope.launch {
-                    if (viewModel.verifyParentalControlPin(pin)) {
+                verificationJob?.cancel()
+                val revision = ++requestRevision
+                val action = pendingUnlockAction
+                verificationJob = pinScope.launch {
+                    val accepted = verifyPinNow.value(pin)
+                    if (revision != requestRevision) return@launch
+                    if (accepted) {
                         showDialog = false
                         pinError = false
-                        pendingUnlockAction?.invoke()
                         pendingUnlockAction = null
+                        action?.invoke()
                     } else {
                         pinError = true
                     }
                 }
             },
             onDismiss = {
+                requestRevision++
+                verificationJob?.cancel()
+                verificationJob = null
                 showDialog = false
                 pendingUnlockAction = null
             },
@@ -61,6 +83,10 @@ internal fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) 
     // never be skipped - one EPG minute tick recomposed the entire tab scaffold.
     return remember {
         { action: () -> Unit ->
+            requestRevision++
+            verificationJob?.cancel()
+            pendingUnlockAction = null
+            showDialog = false
             if (unlockedNow.value) {
                 action()
             } else {
@@ -71,4 +97,3 @@ internal fun rememberParentalControlGate(viewModel: AppViewModel): (() -> Unit) 
         }
     }
 }
-

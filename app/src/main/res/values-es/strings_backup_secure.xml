@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_password_title">Copia de seguridad protegida</string>
+    <string name="backup_password_export_hint">Usa una frase única de 12–128 caracteres. Guárdala: sin ella no se puede restaurar el archivo. UA-Cast no guarda la contraseña.</string>
+    <string name="backup_password_import_hint">Introduce la contraseña de esta copia.</string>
+    <string name="backup_password_label">Contraseña</string>
+    <string name="backup_password_repeat">Repetir contraseña</string>
+    <string name="backup_password_continue">Desbloquear</string>
+    <string name="backup_password_failed">Contraseña incorrecta o copia dañada. No se ha cambiado nada.</string>
+    <string name="backup_preview_title">Revisar restauración</string>
+    <string name="backup_preview_counts">Fuentes: %1$d\nNuevos favoritos: %2$d\nListas locales incluidas: %3$d</string>
+    <string name="backup_preview_merge_hint">Se conservan los datos existentes. Las fuentes se combinan dentro del límite. Nada cambia hasta confirmar.</string>
+    <string name="backup_preview_settings">Ajustes que cambiarán: %1$d</string>
+    <string name="backup_preview_confirm">Restaurar</string>
+    <string name="backup_setting_icons">Logotipos de canales</string>
+    <string name="backup_setting_density">Densidad de la lista de canales</string>
+    <string name="backup_working">Procesando copia de seguridad…</string>
+</resources>

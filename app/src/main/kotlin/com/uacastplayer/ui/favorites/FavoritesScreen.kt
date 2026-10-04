@@ -63,6 +63,7 @@ fun FavoritesScreen(
     onOpenChannels: () -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
     modifier: Modifier = Modifier,
+    iconRefreshKey: Any? = null,
 ) {
     if (favorites.isEmpty()) {
         EmptyState(
@@ -151,7 +152,7 @@ fun FavoritesScreen(
                         .padding(ItemPadding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ChannelIcon(channels[index], resolveIcon)
+                    ChannelIcon(channels[index], resolveIcon, refreshKey = iconRefreshKey)
                     Text(
                         text = favorite.displayName,
                         style = BodyText,

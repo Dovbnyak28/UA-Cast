@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.settings
+import com.uacastplayer.ui.tv.tvFocus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -94,7 +95,7 @@ internal fun PlaylistActionRow(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .tvFocus().clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -132,7 +133,7 @@ internal fun SettingsNavigationRow(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = false,
             )
-            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
+            .tvFocus().clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -281,6 +282,7 @@ internal fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Uni
         modifier = Modifier
             .clip(RoundedCornerShape(RadiusItem))
             .background(if (isSelected) UaTheme.palette.azure else UaTheme.palette.surface2)
+            .tvFocus()
             .selectable(selected = isSelected, onClick = onClick, role = Role.RadioButton)
             .heightIn(min = 48.dp)
             .padding(horizontal = 14.dp, vertical = 8.dp),

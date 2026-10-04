@@ -1,5 +1,8 @@
 package com.uacastplayer
 
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
+
 import android.app.Application
 import android.content.Context
 import android.net.ConnectivityManager
@@ -29,11 +32,11 @@ import com.uacastplayer.premium.DeveloperMode
 import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.data.premium.PlayBillingProvider
 import com.uacastplayer.premium.PremiumAvailability
+import com.uacastplayer.premium.Feature
 import com.uacastplayer.premium.FeatureManager
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
-import com.uacastplayer.update.ReleaseApk
 import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
@@ -61,20 +64,16 @@ import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.core.settings.BufferSize
-import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.data.prefs.DeviceSpecsProvider
-import com.uacastplayer.favorites.FavoritesSortOrder
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.DiagnosticsReportBuilder
 import com.uacastplayer.diagnostics.DiagnosticsSnapshot
-import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgWorkloadPolicy
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
-import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.log.CrashLog
 import com.uacastplayer.log.LogBuffer
@@ -151,7 +150,6 @@ class AppViewModel @JvmOverloads constructor(
             iconController.triggerPrefetch(
                 channels,
                 settingsState.value.iconDisplayMode,
-                ::epgIconUrlFor,
                 prefetchContext(groups.firstOrNull()?.channels.orEmpty()),
             )
             // Only on an actual load, never a startup cache restore - see
@@ -196,12 +194,8 @@ class AppViewModel @JvmOverloads constructor(
      * [PremiumRepository] already is one - it owns the state, the scope and the side effects - and a
      * class that only forwarded to it would be ceremony rather than structure.
      *
-     * **Which provider is chosen is decided by one constant.** With [PremiumAvailability.STORE_IS_LIVE]
-     * false, [FakeBillingProvider] reports - truthfully - that this build has no store behind it:
-     * no prices, nothing owned, and (see [FeatureManager]) nothing withheld either. Flipping that
-     * constant to true is what turns real purchases on, and by then everything below it already
-     * exists: [PlayBillingProvider] is a full Google Play implementation, not a stub. It does not on
-     * its own turn the locks on, though - Play still has to answer with a catalogue first.
+     * [PremiumAvailability.STORE_IS_LIVE] selects real Google Play checkout or the unavailable
+     * provider. Lite/Premium feature access comes from the licence in both cases.
      *
      * It is a `const`, so R8 folds this branch: a release build with the store off does not carry
      * the billing client's code paths at all, and one with it on does not carry the fake.
@@ -214,7 +208,6 @@ class AppViewModel @JvmOverloads constructor(
         },
         storage = preferences,
         scope = viewModelScope,
-        installTime = ::firstInstallTimeMillis,
     )
     val entitlements: StateFlow<Entitlements> = premiumRepository.entitlements
 
@@ -222,29 +215,17 @@ class AppViewModel @JvmOverloads constructor(
      * yet" apart from "this device has no Google Play" - see [com.uacastplayer.premium.StoreAbsence]. */
     val premiumConnection: StateFlow<BillingConnectionState> = premiumRepository.connection
 
-    /**
-     * When this app was first installed, or null if the platform will not say.
-     *
-     * Read here rather than inside the premium layer because that layer imports nothing from
-     * Android - see `scripts/check-premium-purity.sh`, which fails the build over exactly this
-     * import. The value survives Clear data and is reset only by a real uninstall, which is what
-     * makes it worth asking for at all.
-     */
-    private fun firstInstallTimeMillis(): Long? = runCatchingNonFatal {
-        val application = getApplication<Application>()
-        application.packageManager.getPackageInfo(application.packageName, 0).firstInstallTime
-    }.getOrNull()
-
-    /** The only way anything in this app asks whether a feature is available. It is given the
-     * store's own answer to "is there anything to sell", so that a catalogue Play does not recognise
-     * cannot lock features nobody is able to buy - see [FeatureManager]. */
-    val featureManager = FeatureManager(entitlements) { premiumRepository.storeCanSell.value }
+    /** Screens ask this manager about the current Lite/Premium entitlement. */
+    val featureManager = FeatureManager(entitlements)
 
     private val _premiumProducts = MutableStateFlow<List<BillingProduct>>(emptyList())
 
     /** What the store offers. Empty until something asks - and empty forever while there is no
      * store, which the premium screen says out loud rather than showing an empty price list. */
     val premiumProducts: StateFlow<List<BillingProduct>> = _premiumProducts.asStateFlow()
+
+    /** Re-check legacy expiry when returning from the background or device clock settings. */
+    fun refreshPremiumAccess() = premiumRepository.refresh()
 
     internal val parentalControlController =
         ParentalControlController(
@@ -265,25 +246,6 @@ class AppViewModel @JvmOverloads constructor(
         onLoaded = {
             recomputeDeviceTierDefaults(loadedPlaylistChannels())
             refreshCacheSizes()
-            // The initial prefetch (triggered right after the playlist loads - see
-            // PlaylistController's onLoaded above) fires before EPG data exists for a fresh load,
-            // so channels whose only icon comes from the EPG match (the "built-in" cdn.epg.one
-            // source, resolved via epgIconUrlFor - see IconResolver) never got a chance at a bulk
-            // background fetch: they only picked up their icon later, one row at a time, whenever
-            // the user happened to scroll past that channel. Re-running prefetch here - now that
-            // an epgIconUrlFor lookup actually resolves to something - gives those icons the same
-            // bulk background download (with the same visible banner) instead.
-            val playlist = playlistController.playlistState.value
-            val groups = playlist.groups
-            val channels = playlist.channels
-            if (channels.isNotEmpty()) {
-                iconController.triggerPrefetch(
-                    channels,
-                    settingsState.value.iconDisplayMode,
-                    ::epgIconUrlFor,
-                    prefetchContext(groups.firstOrNull()?.channels.orEmpty()),
-                )
-            }
         },
     )
     val epgState: StateFlow<EpgUiState> = epgController.epgState
@@ -305,9 +267,33 @@ class AppViewModel @JvmOverloads constructor(
         favoritesRepository,
         viewModelScope,
         ioDispatcher,
+        awaitSourcesLoaded = { playlistController.sourceInitialization.awaitLoaded() == null },
     )
     val backupImportSummary: StateFlow<BackupImportSummary?> = backupController.backupImportSummary
     val backupExportResult: StateFlow<BackupExportResult?> = backupController.backupExportResult
+    internal val backupRestoreWorkflow = com.uacastplayer.app.BackupRestoreWorkflow(
+        scope = viewModelScope,
+        read = { uri -> withContext(ioDispatcher) {
+            com.uacastplayer.data.backup.BackupDocumentReader.read(application, uri, currentCoroutineContext().job)
+        } },
+        prepare = { data ->
+            if (playlistController.sourceInitialization.awaitLoaded() == null) {
+                favoritesRepository.awaitLoaded()
+                backupController.preparePortableData(data)
+            } else null
+        },
+        current = ::buildBackupData,
+        apply = { data -> if (Feature.BACKUP in entitlements.value.unlocked) backupController.importDecoded(
+            data,
+            com.uacastplayer.app.BackupRestoreTarget(
+                currentSources = { playlistSources.value },
+                currentFavorites = { favorites.value },
+                onSourcesMerged = { playlistController.applyImportedSources(it, activateIfNeeded = true).join() },
+                onSettingsImported = ::applyImportedSettings,
+                awaitSourcesPersisted = playlistController::awaitSourcesPersistence,
+            ),
+        ) else viewModelScope.launch {} },
+    )
 
     // AppPreferences is a plain synchronous wrapper, not itself observable, and the player that
     // writes lastWatchedChannelKey is a separate ViewModel instance - so this needs an explicit
@@ -343,8 +329,7 @@ class AppViewModel @JvmOverloads constructor(
         parentalControlController.loadInitial()
         // Sideload builds may check GitHub for updates; the Play variant deliberately has no
         // self-updater permission or UI (see build.gradle.kts and src/play/AndroidManifest.xml).
-        // Grants the first-launch trial if this device has never held a license, then starts
-        // listening to whatever store there is.
+        // Starts in Lite or restores the stored paid licence, then listens for ownership changes.
         premiumRepository.loadInitial()
         viewModelScope.launch {
             activePlaylistSourceId.collect { groupVisibilityController.setActiveSource(it) }
@@ -451,7 +436,7 @@ class AppViewModel @JvmOverloads constructor(
         val provider = DeveloperMode.apply?.invoke(state, preferences) ?: return
         premiumRepository.useProvider(provider)
         // The state may have been written straight to storage rather than reported as a purchase -
-        // a trial and an expired subscription are not things a store can express - so the stored
+        // an offline/expired legacy licence is not a current purchase - so the stored
         // license has to be re-read rather than waited for.
         premiumRepository.refresh()
     }
@@ -546,12 +531,6 @@ class AppViewModel @JvmOverloads constructor(
         )
     }
 
-    /** The channel's icon URL from the matching EPG entry, if any - the "built-in" cdn.epg.one
-     * source is only ever reachable this way (see [IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL]'s
-     * own candidate being cache-only), so this is also passed to icon prefetch - see
-     * [epgController]'s onLoaded above - not just to the interactive per-row resolve below. */
-    private fun epgIconUrlFor(channel: M3uChannel): String? = epgState.value.data?.index?.match(channel)?.iconUrl
-
     /** Builds the "what's worth prefetching" context (see [IconController.PrefetchContext]) from
      * whatever's already known synchronously - [firstGroupChannels] is passed in rather than read
      * from [playlistState] here because the playlist-just-loaded call site fires before that state
@@ -586,14 +565,15 @@ class AppViewModel @JvmOverloads constructor(
     private fun loadedPlaylistChannels(): List<M3uChannel> =
         playlistState.value.channels
 
-    fun exportBackupTo(uri: Uri) = backupController.exportTo(uri, buildBackupData())
+    fun exportBackupTo(uri: Uri, password: CharArray? = null) =
+        backupController.exportCurrentTo(uri, password, ::buildBackupData)
 
     fun importBackupFrom(uri: Uri) {
         backupController.importFrom(
             uri = uri,
             currentSources = { playlistSources.value },
             currentFavorites = { favorites.value },
-            onSourcesMerged = { playlistController.applyImportedSources(it, activateIfNeeded = true) },
+            onSourcesMerged = { playlistController.applyImportedSources(it, activateIfNeeded = true).join() },
             onSettingsImported = ::applyImportedSettings,
             awaitSourcesPersisted = playlistController::awaitSourcesPersistence,
         )
@@ -731,6 +711,7 @@ class AppViewModel @JvmOverloads constructor(
     }
 
     override fun onCleared() {
+        premiumRepository.close()
         iconController.dispose()
         super.onCleared()
     }

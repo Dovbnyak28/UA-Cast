@@ -16,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uacastplayer.ui.tv.LocalTvMode
 import androidx.media3.common.util.UnstableApi
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
@@ -128,8 +129,8 @@ fun PlayerHost(
     }
 
     Box(modifier = modifier) {
-        if (collapsed) {
-            val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
+        if (collapsed && !LocalTvMode.current) {
+            val iconRefreshKey: Any = iconPrefetchState.refreshKey
             MiniPlayerBar(
                 viewModel = viewModel,
                 resolveIcon = resolveIcon,
@@ -142,7 +143,7 @@ fun PlayerHost(
             PlayerScreen(
                 viewModel = viewModel,
                 channels = channels,
-                onExit = onCollapse,
+                onExit = if (LocalTvMode.current) onExit else onCollapse,
                 isFavorite = isFavorite,
                 onToggleFavorite = onToggleFavorite,
                 resolveIcon = resolveIcon,

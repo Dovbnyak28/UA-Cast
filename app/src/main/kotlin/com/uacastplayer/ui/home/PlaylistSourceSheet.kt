@@ -20,6 +20,8 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +85,7 @@ fun PlaylistSourceSheet(
         sheetState = sheetState,
         containerColor = UaTheme.palette.surface2,
     ) {
+        TvDialogInputRegistration()
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = GapM)) {
             Text(
                 text = stringResource(R.string.home_playlist_sources_title),
@@ -127,13 +130,16 @@ internal fun PlaylistSourceRemovalDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.home_playlist_source_remove)) },
         text = {
+            TvDialogInputRegistration()
             Text(stringResource(
                 if (isActive) R.string.playlist_remove_active_confirmation else R.string.playlist_remove_confirmation,
                 name,
             ))
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(R.string.home_playlist_source_remove)) }
+            TextButton(onClick = onConfirm, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.home_playlist_source_remove))
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
@@ -150,6 +156,7 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
                 if (isActive) UaTheme.palette.accentGradientTop.copy(alpha = 0.10f)
                 else UaTheme.palette.surface1,
             )
+            .tvFocus(shape)
             .clickable(role = Role.RadioButton, onClickLabel = source.displayName, onClick = onSelect)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -173,7 +180,7 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
             )
             Text(text = stringResource(source.type.labelRes()), style = Caption, color = UaTheme.palette.labelSecondary)
         }
-        IconButton(onClick = onRemove) {
+        IconButton(onClick = onRemove, modifier = Modifier.tvFocus()) {
             Icon(
                 AppIcons.Delete,
                 contentDescription = stringResource(R.string.home_playlist_source_remove),

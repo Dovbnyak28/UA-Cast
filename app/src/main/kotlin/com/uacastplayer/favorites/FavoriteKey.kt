@@ -16,4 +16,17 @@ object FavoriteKey {
         val tvgId = channel.tvgId
         return if (!tvgId.isNullOrBlank()) tvgId else "${channel.displayName}:${Fingerprint.of(channel.streamUrl)}"
     }
+
+    /** Same identity as [of], but does not hash URLs of names that cannot match a single key. */
+    fun matches(channel: M3uChannel, key: String): Boolean {
+        val tvgId = channel.tvgId
+        return if (!tvgId.isNullOrBlank()) {
+            tvgId == key
+        } else {
+            // Do not split on ':': names can contain it, and explicit IDs can look like fallback
+            // keys. Only reject impossible candidates; the original key remains authoritative.
+            key.startsWith(channel.displayName) &&
+                key.getOrNull(channel.displayName.length) == ':' && of(channel) == key
+        }
+    }
 }

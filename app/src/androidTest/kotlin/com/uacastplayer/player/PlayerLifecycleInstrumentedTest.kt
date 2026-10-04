@@ -43,6 +43,40 @@ import kotlin.time.Duration.Companion.seconds
  */
 @RunWith(AndroidJUnit4::class)
 class PlayerLifecycleInstrumentedTest {
+    @Test fun liveWindowRecoveryHonorsBackgroundAndExplicitPause() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            val listener = PlayerViewModel::class.java.getDeclaredField("listener").let {
+                it.isAccessible = true
+                it.get(model) as androidx.media3.common.Player.Listener
+            }
+            val failure = androidx.media3.common.PlaybackException(
+                "Controlled live-window failure", null,
+                androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+            )
+            model.start(listOf(checkNotNull(model.uiState.value.currentChannel)), 0)
+            model.onEnterBackground(false)
+            // Stop models Media3's idle error state before the real callback handler runs.
+            model.player.stop()
+            listener.onPlayerError(failure)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertTrue(!model.player.playWhenReady)
+
+            model.onReturnToForeground()
+            assertEquals(androidx.media3.common.Player.STATE_BUFFERING, model.player.playbackState)
+            assertTrue(model.player.playWhenReady)
+
+            model.togglePlayback()
+            model.player.stop()
+            listener.onPlayerError(failure)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertTrue(!model.player.playWhenReady)
+            model.togglePlayback()
+            assertEquals(androidx.media3.common.Player.STATE_BUFFERING, model.player.playbackState)
+            assertTrue(model.player.playWhenReady)
+        }
+    }
+
     @Test fun sleepExpiryCancelsDeferredForegroundResumeUntilExplicitPlay() {
         composeTestRule.activityRule.scenario.onActivity { activity ->
             val model = ViewModelProvider(activity)[PlayerViewModel::class.java]

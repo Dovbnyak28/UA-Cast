@@ -39,6 +39,8 @@ fun List<DlnaDevice>.distinctRenderers(): List<DlnaDevice> = distinctBy { it.con
 data class DlnaConnectionState(
     val connectedDevice: DlnaDevice? = null,
     val isConnecting: Boolean = false,
+    /** SOAP Play was accepted, but this renderer cannot report whether media is still playing. */
+    val playbackStatusUnverified: Boolean = false,
     /**
      * The renderer's current volume on its own scale, or null when it is not known - either the
      * renderer advertises no RenderingControl service, or the read failed. Null is rendered as "no

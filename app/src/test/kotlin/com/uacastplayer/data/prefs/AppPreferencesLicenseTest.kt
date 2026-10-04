@@ -65,7 +65,7 @@ class AppPreferencesLicenseTest {
     @Test
     fun `a trial written on a device that cannot tag is still a trial next launch`() {
         val prefs = preferences(canTag = false)
-        val trial = License.trialStartingAt(1_000_000L)
+        val trial = License(LicenseTier.TRIAL, expiresAtMillis = 2_000_000L, source = "trial")
 
         prefs.storedLicense = trial
 
@@ -114,9 +114,9 @@ class AppPreferencesLicenseTest {
         )
     }
 
-    /** Nothing stored is still nothing stored - the one state that earns a first-launch trial. */
+    /** Nothing stored remains distinguishable from a stored Lite record. */
     @Test
-    fun `an empty store stays null so the trial can still be granted`() {
+    fun `an empty store stays null until the repository initializes Lite`() {
         assertNull(preferences(canTag = false).storedLicense)
         assertNull(preferences(canTag = true).storedLicense)
     }

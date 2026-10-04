@@ -18,9 +18,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.tvReadingFocus
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
@@ -122,6 +122,7 @@ fun TermsScreen(
                     // Inside a LazyColumn item - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
                         .fillMaxWidth()
+                        .tvReadingFocus()
                         .raisedSurface(
                             RoundedCornerShape(RadiusCard),
                             UaTheme.palette.surface1,

@@ -21,6 +21,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.tvTextFieldNavigation
 import com.uacastplayer.R
 import com.uacastplayer.parentalcontrol.ParentalControlPinPolicy
 import com.uacastplayer.ui.theme.AppTheme
@@ -41,6 +44,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
     val bothEntered = pin.length == ParentalControlPinPolicy.PIN_LENGTH &&
         confirmPin.length == ParentalControlPinPolicy.PIN_LENGTH
     val mismatch = bothEntered && pin != confirmPin
+    val canSubmit = bothEntered && !mismatch && ParentalControlPinPolicy.isValidFormat(pin)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -49,6 +53,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
         textContentColor = UaTheme.palette.labelSecondary,
         title = { Text(stringResource(R.string.parental_control_set_pin_title)) },
         text = {
+            TvDialogInputRegistration()
             Column {
                 OutlinedTextField(
                     value = pin,
@@ -58,7 +63,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     colors = uaTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tvTextFieldNavigation(),
                 )
                 OutlinedTextField(
                     value = confirmPin,
@@ -68,7 +73,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     colors = uaTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).tvTextFieldNavigation(),
                 )
                 if (mismatch) {
                     Text(
@@ -83,13 +88,16 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(
                 onClick = { onSubmit(pin) },
-                enabled = bothEntered && !mismatch && ParentalControlPinPolicy.isValidFormat(pin),
+                enabled = canSubmit,
+                modifier = Modifier.tvFocus(enabled = canSubmit),
             ) {
                 Text(stringResource(R.string.common_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.common_cancel))
+            }
         },
     )
 }

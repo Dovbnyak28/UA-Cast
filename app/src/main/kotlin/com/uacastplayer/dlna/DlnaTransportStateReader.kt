@@ -9,7 +9,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 internal enum class DlnaTransportHealth { ACTIVE, INACTIVE, UNREACHABLE, UNSUPPORTED }
 
 /** A small, bounded status query; never opens the media URL or a second provider connection. */
-internal class DlnaTransportStateReader(private val client: OkHttpClient) {
+internal class DlnaTransportStateReader(client: OkHttpClient) {
+    private val client = client.forUpnpControl()
     suspend fun read(controlUrl: String): DlnaTransportHealth = runCatchingNonFatal {
         val request = Request.Builder().url(controlUrl)
             .header("SOAPACTION", AvTransportSoapBuilder.soapAction("GetTransportInfo"))

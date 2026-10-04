@@ -1,6 +1,11 @@
 package com.uacastplayer.ui.layout
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
@@ -28,7 +33,6 @@ import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.settings.DataSettingsSection
 import com.uacastplayer.ui.settings.PlaylistSettingsSection
 import com.uacastplayer.playlist.PlaylistUiState
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -188,17 +192,18 @@ class FontScaleLayoutTest(private val fontScale: Float) {
     }
 
     @Test
-    fun dataActions_keepEqualHeight() {
+    fun dataActions_stayAccessibleWithLargeText() {
         setContentAtScale {
-            DataSettingsSection(onImportBackup = {}, onShowExportWarning = {})
+            // Settings places this section in a scrollable page. The vertical file actions no
+            // longer need equal row heights, but must remain fully reachable at 200% text size.
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                DataSettingsSection(onImportBackup = {}, onShowExportWarning = {})
+            }
         }
-        val exportBounds = composeRule.onNodeWithText("Експортувати").getUnclippedBoundsInRoot()
-        val importBounds = composeRule.onNodeWithText("Імпортувати").getUnclippedBoundsInRoot()
-        assertEquals(
-            (exportBounds.bottom - exportBounds.top).value,
-            (importBounds.bottom - importBounds.top).value,
-            0.5f,
-        )
+        for (label in listOf("Зберегти у файл", "Відновити з файлу")) {
+            composeRule.onNodeWithText(label).performScrollTo().assertHasClickAction()
+            assertFullyOnScreen(label)
+        }
     }
 
     @Test

@@ -50,6 +50,8 @@ fun BatteryOptimizationDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
                     context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                 } catch (_: ActivityNotFoundException) {
                     AppLog.w(TAG) { "no battery optimization settings screen on this device" }
+                } catch (_: SecurityException) {
+                    AppLog.w(TAG) { "this device denied the battery optimization settings screen" }
                 }
                 // Retired either way. The hint is one-shot, and a device that cannot open the
                 // screen is precisely the one that must not be asked about it again on every

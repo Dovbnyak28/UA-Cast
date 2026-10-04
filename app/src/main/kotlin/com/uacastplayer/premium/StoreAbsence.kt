@@ -25,10 +25,8 @@ enum class StoreAbsence {
      * Google Play is not on this device: an Android TV box with no GMS, a de-Googled phone, a
      * sideloaded APK on hardware Play never shipped to.
      *
-     * Permanent, and not the user's problem to solve - which is why premium stays open here rather
-     * than closing after a grace period. Withholding would take features from the one audience that
-     * has been shown to have no way of buying them, and this app supports that audience on purpose:
-     * see the leanback entries in the manifest and `docs/TV_SUPPORT.md`.
+     * Lite remains usable without Google Play and cached paid access remains valid. The absence
+     * of a store does not grant Premium and must be explained without offering an unusable buy button.
      */
     DEVICE_HAS_NO_STORE,
 
@@ -37,8 +35,8 @@ enum class StoreAbsence {
      *
      * Almost always a console that is not ready: a product still in draft, one id spelled
      * differently, a release live before the track it belongs to went out. The user can do nothing
-     * about it either, so the gates stay open (see `FeatureManager`) - but unlike the case above
-     * this one is a mistake somebody should fix, which is why it is worth telling apart.
+     * about it either. Access still follows the licence, but this case is a catalogue configuration
+     * issue somebody should fix, which is why it is worth telling apart.
      */
     STORE_OFFERS_NOTHING,
     ;

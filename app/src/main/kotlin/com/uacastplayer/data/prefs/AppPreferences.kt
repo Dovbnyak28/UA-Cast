@@ -306,14 +306,9 @@ class AppPreferences(
         }
 
     /**
-     * The last license this device saw. Null means it has never held one, which is the single
-     * condition under which [com.uacastplayer.data.premium.PremiumRepository] grants the
-     * first-launch trial - so this staying non-null after the trial ends is what stops it being
-     * granted again on every launch.
-     *
-     * An unrecognised tier resolves to [License.FREE] rather than null, deliberately: null would
-     * read as "never held a license" and hand out a fresh trial, so a corrupted value must not be
-     * more generous than a valid one.
+     * The last licence this device saw. Null means nothing has been stored. Unknown or corrupted
+     * records resolve to Lite; valid legacy tier names are decoded before the repository migrates
+     * them, so integrity verification always checks the original signed payload.
      */
     override var storedLicense: License?
         get() = readTaggedLicense() ?: adoptLegacyLicense()
@@ -404,12 +399,6 @@ class AppPreferences(
         remove(KEY_LICENSE_SOURCE)
     }
 
-    /** Set once, the first time a store answers with a non-empty catalogue, and never cleared -
-     * see [LicenseStorage.storeHasEverOfferedProducts] for why it is remembered rather than asked. */
-    override var storeHasEverOfferedProducts: Boolean
-        get() = prefs.getBoolean(KEY_STORE_HAS_OFFERED, false)
-        set(value) = prefs.edit { putBoolean(KEY_STORE_HAS_OFFERED, value) }
-
     /** See [LicenseStorage.clockHighWaterMark] - the newest time this app has ever seen. */
     override var clockHighWaterMark: Long
         get() = prefs.getLong(KEY_CLOCK_HIGH_WATER_MARK, 0L)
@@ -456,7 +445,6 @@ class AppPreferences(
         const val KEY_LICENSE_SOURCE = "license_source"
         const val KEY_LICENSE_RECORD = "license_record"
         const val LICENSE_FIELD_COUNT = 3
-        const val KEY_STORE_HAS_OFFERED = "store_has_offered_products"
         const val KEY_CLOCK_HIGH_WATER_MARK = "clock_high_water_mark"
     }
 }

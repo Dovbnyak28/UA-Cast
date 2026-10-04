@@ -23,6 +23,8 @@ class CustomIconSourcePolicyTest {
             "https://user:password@cdn.example.com/logos",
             "https://cdn.example.com/logos?token=secret",
             "https://cdn.example.com/logos#fragment",
+            "https://cdn.example.com:0/logos",
+            "https://cdn.example.com:65536/logos",
         ).forEach { value -> assertNull(value, CustomIconSourcePolicy.canonicalize(value)) }
     }
 

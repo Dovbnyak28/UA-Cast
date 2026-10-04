@@ -4,6 +4,7 @@ import android.content.Context
 import com.uacastplayer.core.cast.CastRouteKind
 import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
+import com.uacastplayer.data.cast.ProxySourceObservation
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.log.AppLog
@@ -12,12 +13,18 @@ import okhttp3.OkHttpClient
 
 /** Sole owner of the Cast proxy's socket/resource and foreground-service lifetime.
  * Session SDK callbacks supply a token; the repository never operates the server directly. */
-internal class CastProxySession(context: Context, httpClient: OkHttpClient) {
+internal class CastProxySession(
+    context: Context,
+    httpClient: OkHttpClient,
+    onSourceObserved: (CastProxyDiagnostic) -> Unit = {},
+) {
     private val appContext = context.applicationContext
     private val preferences = AppPreferences(appContext)
     private val metrics = RemuxEffectivenessStore.getInstance(appContext)
     private val attemptId = AtomicLong(0)
-    private val server = ProxyServer(httpClient) { resourceId, route ->
+    private val server = ProxyServer(httpClient, onSourceObserved = { observation ->
+        onSourceObserved(CastProxyDiagnostic(attemptId.get(), observation))
+    }) { resourceId, route ->
         metrics.recordProxyRouteAttemptOnce(attemptId.get(), resourceId, route)
     }
     private var activeResourceId: String? = null
@@ -30,7 +37,13 @@ internal class CastProxySession(context: Context, httpClient: OkHttpClient) {
 
     fun beginPlaybackAttempt() {
         attemptId.incrementAndGet()
+        activeResourceId = null
     }
+
+    /** Main-thread check, performed after the worker's observation has been dispatched. */
+    fun isDiagnosticCurrent(diagnostic: CastProxyDiagnostic): Boolean =
+        diagnostic.attemptId == attemptId.get() && activeResourceId == diagnostic.source.resourceId &&
+            server.isSourceObservationCurrent(diagnostic.source)
 
     fun startEagerly() {
         val host = LocalNetworkAddress.currentIpv4Address(appContext) ?: return
@@ -70,9 +83,10 @@ internal class CastProxySession(context: Context, httpClient: OkHttpClient) {
     fun confirmActiveSession() = server.confirmActiveSession()
 
     fun stop() {
+        attemptId.incrementAndGet()
         activeResourceId = null
         server.stop()
-        CastProxyService.stop(appContext)
+        CastProxyService.stop()
     }
 
     private fun ensureStarted(host: String) {
@@ -88,3 +102,5 @@ internal class CastProxySession(context: Context, httpClient: OkHttpClient) {
         const val TAG = "CastProxySession"
     }
 }
+
+internal data class CastProxyDiagnostic(val attemptId: Long, val source: ProxySourceObservation)

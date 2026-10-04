@@ -12,6 +12,7 @@ import com.uacastplayer.icons.IconCandidate
 import com.uacastplayer.icons.IconFailurePolicy
 import com.uacastplayer.icons.IconMemoryCacheKey
 import com.uacastplayer.icons.IconResolver
+import com.uacastplayer.icons.CustomIconSourcePolicy
 import com.uacastplayer.icons.ImageFormatDetector
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
@@ -32,9 +33,9 @@ import okhttp3.Request
 private data class CachedIcon(val file: File?)
 
 /**
- * Resolves a channel's icon through the tvg-logo -> EPG-icon -> CDN-by-tvg-id priority chain,
- * consulting/populating [IconDiskCache] and [IconFailureStore] along the way. The CDN fallback is
- * cache-only by design (see [IconCandidate.CacheOnly]) - it is never speculatively fetched.
+ * Resolves channel logos only through packs explicitly added by the user, consulting/populating
+ * [IconDiskCache] and [IconFailureStore]. Playlist/EPG metadata and old automatic cache entries
+ * are not logo sources.
  *
  * [memoryCache] sits in front of all of that: [IconDiskCache] still hits actual disk I/O on every
  * call, and a channel with no resolvable icon would otherwise repeat the full candidate chain
@@ -59,6 +60,7 @@ class IconRepository(
     private var writesSinceTrim = 0
     private var bytesSinceTrim = 0L
     private val trimMutex = Mutex()
+    private val resolutionCoordinator = IconResolutionCoordinator()
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
 
     /** Keeps [castArtworkUrl]'s verdict from being written down once a second - see the call site. */
@@ -79,9 +81,10 @@ class IconRepository(
     fun customIconSources(): List<String> = customBaseUrls()
 
     fun addCustomIconSource(baseUrl: String) = synchronized(cacheLock) {
+        val safeUrl = CustomIconSourcePolicy.canonicalize(baseUrl) ?: return@synchronized
         val current = customBaseUrls()
-        if (baseUrl !in current) {
-            customSourceStore.saveBaseUrls(current + baseUrl)
+        if (safeUrl !in current) {
+            customSourceStore.saveBaseUrls(current + safeUrl)
             cachedCustomBaseUrls = null
             invalidateMemoryCache()
         }
@@ -104,27 +107,57 @@ class IconRepository(
      * can actually reach the network. Called on playlist refresh and unmetered-network recovery;
      * permanent 4xx/5xx records remain protected by [IconFailureStore].
      */
-    fun retryTransientFailures() {
+    fun retryTransientFailures() = synchronized(cacheLock) {
+        // Retire publishers atomically with clearing their records, not in two raceable steps.
         failureStore.clearTransientFailures()
         invalidateMemoryCache()
     }
 
-    suspend fun resolveIconFile(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): File? {
-        val cacheKey = IconMemoryCacheKey.of(tvgLogo, epgIconUrl, tvgId)
+    suspend fun resolveIconFile(tvgId: String?): File? {
+        // With no matching ID/pack there is no disk or network work to schedule per visible row.
+        if (tvgId.isNullOrBlank()) return null
+        val cacheKey = IconMemoryCacheKey.of(tvgId)
+        val sources: List<String>
+        val cached: CachedIcon?
         val generation = synchronized(cacheLock) {
-            memoryCache.get(cacheKey)?.let { return it.file }
+            sources = customBaseUrls()
+            cached = memoryCache.get(cacheKey)
             cacheGeneration
         }
-
-        val resolved = resolveIconFileUncached(tvgLogo, epgIconUrl, tvgId)
-        synchronized(cacheLock) {
-            // Invalidation retires in-flight publishers too. Within one generation a failed
-            // duplicate must not replace an icon another resolver has already downloaded.
-            if (generation == cacheGeneration && (resolved != null || memoryCache.get(cacheKey)?.file == null)) {
-                memoryCache.put(cacheKey, CachedIcon(resolved))
-            }
+        return when {
+            sources.isEmpty() -> null
+            cached != null -> cached.file
+            else -> resolveAndPublishIcon(tvgId, cacheKey, sources, generation)
         }
-        return resolved
+    }
+
+    private suspend fun resolveAndPublishIcon(
+        tvgId: String,
+        cacheKey: String,
+        sources: List<String>,
+        generation: Long,
+    ): File? = resolutionCoordinator.withResolution(cacheKey, generation) {
+        // Another row/prefetch may have completed while this caller waited. A cached miss is a
+        // result too; do not repeat its candidate chain. New revisions never wait for old IO.
+        val cached = synchronized(cacheLock) {
+            if (generation == cacheGeneration) memoryCache.get(cacheKey) else null
+        }
+        if (cached != null) cached.file else {
+            val resolved = resolveIconFileUncached(tvgId, sources, generation)
+            publishResolvedIcon(cacheKey, sources, generation, resolved)
+        }
+    }
+
+    private fun publishResolvedIcon(cacheKey: String, sources: List<String>, generation: Long,
+        resolved: File?): File? = synchronized(cacheLock) {
+        // A removed pack must not publish its late network result to a still-visible row.
+        if (sources != customBaseUrls()) return@synchronized null
+        // Invalidation retires in-flight publishers too. Within one generation a failed
+        // duplicate must not replace an icon another resolver has already downloaded.
+        if (generation == cacheGeneration && (resolved != null || memoryCache.get(cacheKey)?.file == null)) {
+            memoryCache.put(cacheKey, CachedIcon(resolved))
+        }
+        resolved
     }
 
     /**
@@ -139,54 +172,44 @@ class IconRepository(
      * used to make per candidate.
      */
     private suspend fun resolveIconFileUncached(
-        tvgLogo: String?,
-        epgIconUrl: String?,
         tvgId: String?,
+        sources: List<String>,
+        generation: Long,
     ): File? = withContext(ioDispatcher) {
-        val candidates = IconResolver.candidates(
-            tvgLogo, epgIconUrl, tvgId,
-            customBaseUrls = customBaseUrls(),
-            cdnFallbackUrl = ::cdnFallbackUrl,
-        )
+        val candidates = IconResolver.candidates(tvgId, sources)
         for (candidate in candidates) {
-            resolveCandidate(candidate)?.let { return@withContext it }
+            if (sources != customBaseUrls()) return@withContext null
+            resolveCandidate(candidate, generation)?.let { return@withContext it }
         }
         null
     }
 
-    private suspend fun resolveCandidate(candidate: IconCandidate): File? {
+    private suspend fun resolveCandidate(candidate: IconCandidate, generation: Long): File? {
         val cached = diskCache.get(candidate.url)
         return cached ?: if (
-            candidate is IconCandidate.CacheOnly || failureStore.shouldSkip(candidate.url)
+            failureStore.shouldSkip(candidate.url)
         ) {
             null
         } else {
-            fetchAndValidate(candidate.url)
+            fetchAndValidate(candidate.url, generation)
         }
     }
 
     /**
      * The URL a Cast receiver should be given as artwork for this channel, picked out of the same
-     * candidate chain [resolveIconFile] walks - see [CastArtworkPolicy] for why it is not simply
-     * the first candidate.
+     * candidate chain [resolveIconFile] walks. [CastArtworkPolicy] selects the first user pack;
+     * the receiver fetches that URL itself, so availability is not verified here.
      *
      * Unlike its two neighbours this touches neither disk nor network: it builds the chain and
      * picks a URL out of it, so it is safe to call straight from the main thread while switching
      * channels. The receiver does its own fetching.
      */
-    fun castArtworkUrl(tvgLogo: String?, epgIconUrl: String?, tvgId: String?): String? {
-        val candidates = IconResolver.candidates(
-            tvgLogo, epgIconUrl, tvgId,
-            customBaseUrls = customBaseUrls(),
-            cdnFallbackUrl = ::cdnFallbackUrl,
-        )
+    fun castArtworkUrl(tvgId: String?): String? {
+        val candidates = IconResolver.candidates(tvgId, customBaseUrls())
         val url = CastArtworkPolicy.artworkUrl(candidates)
         // `cast load: artwork=false` in CastSessionRepository says a receiver got no picture; it
-        // cannot say why, and the two reasons want opposite fixes. A playlist entry with no tvg-id
-        // at all is the provider's doing and nothing here can help. An entry that reaches only the
-        // cache-only CDN guess is *this policy* declining a URL the phone may well be displaying
-        // from disk right now - see CastArtworkPolicy's last paragraph. Never the url itself: this
-        // ends up in a shared diagnostics report.
+        // cannot say why: no selected pack or no matching channel ID both yield no artwork.
+        // Never log the URL itself: this ends up in a shared diagnostics report.
         // Only when the answer changes. This is called on every cast metadata build - about once a
         // second while a channel is playing - and a channel with no logo answers identically every
         // time, so writing it each time filled the whole diagnostics buffer with one sentence. See
@@ -225,13 +248,10 @@ class IconRepository(
     /** See [IconFailureStore.pruneExpiredFailures] - call once per playlist load/refresh. */
     fun pruneExpiredFailures() = failureStore.pruneExpiredFailures()
 
-    private fun cdnFallbackUrl(tvgId: String): String =
-        IconResolver.iconUrl(IconResolver.BUILT_IN_ICON_SOURCE_BASE_URL, tvgId)
-
     // The IOException itself is never surfaced beyond marking this URL as a transient failure
     // (see IconFailurePolicy) - there's nothing about a network/read error worth logging per icon.
     @Suppress("SwallowedException")
-    private suspend fun fetchAndValidate(url: String): File? = withContext(ioDispatcher) {
+    private suspend fun fetchAndValidate(url: String, generation: Long): File? = withContext(ioDispatcher) {
         try {
             // Many icon hosts have hotlink protection that 403s the default OkHttp UA (which
             // identifies itself as "okhttp/<version>") - a browser-looking UA gets through the
@@ -260,13 +280,13 @@ class IconRepository(
             when (fetched) {
                 is IconFetchResult.HttpError -> {
                     val permanent = IconFailurePolicy.isPermanentFailure(fetched.code, isNetworkError = false)
-                    failureStore.recordFailure(url, isPermanent = permanent)
+                    recordFailureIfCurrent(url, isPermanent = permanent, generation)
                     null
                 }
                 IconFetchResult.TooLarge -> {
                     // Permanent: a file over the cap does not get smaller, and this fetch already
                     // downloaded MAX_ICON_BYTES. Without a record every prefetch/scroll repeats it.
-                    failureStore.recordFailure(url, isPermanent = true)
+                    recordFailureIfCurrent(url, isPermanent = true, generation)
                     null
                 }
                 IconFetchResult.InvalidImage -> {
@@ -282,7 +302,7 @@ class IconRepository(
                     // is checked here rather than inferred from a null out of the cache, because the
                     // cache also answers null when it could not write; a full disk is not the icon's
                     // fault and must not blacklist it.
-                    failureStore.recordFailure(url, isPermanent = false)
+                    recordFailureIfCurrent(url, isPermanent = false, generation)
                     null
                 }
                 is IconFetchResult.Ready -> {
@@ -300,17 +320,23 @@ class IconRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (_: IllegalArgumentException) {
-            // Playlist/EPG icon URLs are provider-controlled. OkHttp rejects a malformed URL
+            // User pack URLs and channel IDs are untrusted. OkHttp rejects a malformed URL
             // before a Call exists, so this is neither a network IOException nor something a
             // retry can repair. Remember it as permanent instead of letting one bad logo cancel
             // the whole prefetch (or crash a row's produceState coroutine).
-            failureStore.recordFailure(url, isPermanent = true)
+            recordFailureIfCurrent(url, isPermanent = true, generation)
             null
         } catch (e: IOException) {
-            failureStore.recordFailure(url, isPermanent = false)
+            recordFailureIfCurrent(url, isPermanent = false, generation)
             null
         }
     }
+
+    private fun recordFailureIfCurrent(url: String, isPermanent: Boolean, generation: Long) =
+        synchronized(cacheLock) {
+            // An obsolete 404/503 must not blacklist a URL after a fresh retry already succeeded.
+            if (generation == cacheGeneration) failureStore.recordFailure(url, isPermanent)
+        }
 
     private companion object {
         const val MEMORY_CACHE_SIZE = 256

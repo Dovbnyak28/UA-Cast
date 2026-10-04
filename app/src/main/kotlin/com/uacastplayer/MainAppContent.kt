@@ -21,6 +21,8 @@ import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.ui.platform.launchOrLogAbsence
+import com.uacastplayer.ui.settings.LocalIconPackCheck
+import com.uacastplayer.ui.settings.rememberIconPackCheckAction
 import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
@@ -29,6 +31,9 @@ import com.uacastplayer.parentalcontrol.PlayerChannelAccess
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.guidedtour.GuidedTourHost
+import com.uacastplayer.ui.tv.LocalTvMode
+import com.uacastplayer.ads.BannerAdAudience
+import com.uacastplayer.ui.ads.LocalBannerAdAudience
 import com.uacastplayer.ui.components.UpdateOfferDialog
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.premium.LocalPremiumNotice
@@ -36,7 +41,6 @@ import com.uacastplayer.ui.premium.rememberFeatureGate
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.player.PlayerRequestViewModel
 import com.uacastplayer.update.GitHubRelease
-import java.time.LocalDate
 
 /**
  * Everything past the onboarding gate: the main scaffold (Home/Channels/Favorites/Settings tabs),
@@ -60,12 +64,8 @@ internal fun MainAppContent(
     val pickPlaylistFile = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::loadPlaylistFromFile) }
-    val exportBackupFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri -> uri?.let(viewModel::exportBackupTo) }
-    val importBackupFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::importBackupFrom) }
+    val backupDocuments = rememberBackupDocumentActions(viewModel)
+    val iconPackCheck = rememberIconPackCheckAction(playlistState.channels)
 
     val requestOwner = androidx.lifecycle.viewmodel.compose.viewModel<PlayerRequestViewModel>()
     val playerRequest by requestOwner.request.collectAsStateWithLifecycle()
@@ -132,7 +132,8 @@ internal fun MainAppContent(
 
     // Offered here rather than from AppViewModel's init, so it happens *after* the language and
     // terms gates rather than behind them.
-    LaunchedEffect(Unit) { viewModel.offerGuidedTourOnLaunch() }
+    val television = LocalTvMode.current
+    LaunchedEffect(television) { if (!television) viewModel.offerGuidedTourOnLaunch() }
     // Incremented (never reset) each time a playlist load finishes from AddPlaylistScreen, so
     // RootScaffold's LaunchedEffect(token) fires again even if the value happened to repeat - it's
     // a one-shot "switch to Channels" signal, not a persisted tab selection.
@@ -248,6 +249,11 @@ internal fun MainAppContent(
             section = premiumSection,
         )
         CompositionLocalProvider(
+            LocalIconPackCheck provides iconPackCheck,
+            // Stored paid access is resolved synchronously in AppViewModel's init before this UI.
+            // Suppress all ad work during local/remote playback and first-run guidance.
+            LocalBannerAdAudience provides BannerAdAudience(entitlements,
+                blocked = playerRequest != null || guidedTourState.isVisible),
             com.uacastplayer.ui.epg.LocalEpgRefresh provides viewModel.epgController::refresh,
             LocalFeatureGate provides premiumUi.gate,
             LocalPremiumNotice provides premiumUi.notice,
@@ -290,18 +296,8 @@ internal fun MainAppContent(
                             "pick a playlist",
                         )
                     },
-                    exportBackupFile = {
-                        exportBackupFile.launchOrLogAbsence(
-                            "ua-cast-backup-${LocalDate.now()}.json",
-                            "export a backup",
-                        )
-                    },
-                    importBackupFile = {
-                        importBackupFile.launchOrLogAbsence(
-                            arrayOf("application/json", "*/*"),
-                            "import a backup",
-                        )
-                    },
+                    exportBackupFile = backupDocuments.export,
+                    importBackupFile = backupDocuments.restore,
                     requireParentalControlUnlock = requireParentalControlUnlock,
                     premiumSection = premiumSection,
                 )

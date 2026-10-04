@@ -49,6 +49,9 @@ jobs:
       - name: Debug unit tests and screenshot verification
         run: ./gradlew :core:test :app:verifyRoborazziDebug --stacktrace
 
+      - name: Validate measured performance gate
+        run: python3 -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
+
       - name: Release unit tests
         run: ./gradlew :app:testReleaseUnitTest --stacktrace
 

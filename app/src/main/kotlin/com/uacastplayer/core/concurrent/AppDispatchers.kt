@@ -12,4 +12,6 @@ import kotlinx.coroutines.Dispatchers
 object AppDispatchers {
     @Suppress("InjectDispatcher")
     val io: CoroutineDispatcher = Dispatchers.IO
+    @Suppress("InjectDispatcher")
+    val cpu: CoroutineDispatcher = Dispatchers.Default
 }

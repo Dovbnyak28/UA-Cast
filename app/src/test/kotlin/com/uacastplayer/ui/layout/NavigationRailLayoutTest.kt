@@ -10,7 +10,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.components.GlassNavigationRail
