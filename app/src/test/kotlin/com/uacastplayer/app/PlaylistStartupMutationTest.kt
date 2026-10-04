@@ -99,7 +99,7 @@ class PlaylistStartupMutationTest {
         assertEquals(source(2).id, controller.activePlaylistSourceId.value)
     }
 
-    @Test fun `startup add enforces the saved capacity before making a network request`() = runBlocking {
+    @Test fun `startup add rejects the new download at capacity and restores the saved source`() = runBlocking {
         val existing = List(PlaylistSourcePolicy.MAX_SOURCES) { source(it) }
         assertTrue(repository.saveSources(existing))
         io.holdNext()
@@ -113,9 +113,19 @@ class PlaylistStartupMutationTest {
                 !it.isLoading && (it.sourceReadyToSave || it.sourceSaveState == PlaylistSourceSaveState.LIMIT_REACHED)
             }
         }
+        // Rejecting the pending add deliberately resumes the interrupted saved-source startup.
+        // With no snapshot, that legitimate request can race the LIMIT_REACHED publication.
+        // Wait for its durable-source UI result and distinguish it from the forbidden new URL.
+        withTimeout(5_000) {
+            controller.playlistState.first {
+                !it.isLoading && it.hasChannels && it.sourceUrl == existing.first().location
+            }
+        }
 
         assertEquals(PlaylistSourceSaveState.LIMIT_REACHED, controller.playlistState.value.sourceSaveState)
-        assertEquals(0, requests.get())
+        assertEquals(1, requests.get())
+        assertEquals(listOf(existing.first().location), requestedUrls.toList())
+        assertFalse(controller.playlistState.value.sourceReadyToSave)
         assertEquals(existing, PlaylistRepository(app).loadSources())
     }
 

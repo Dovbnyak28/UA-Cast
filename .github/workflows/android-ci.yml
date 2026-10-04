@@ -52,6 +52,9 @@ jobs:
       - name: Validate measured performance gate
         run: python3 -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
 
+      - name: Validate instrumentation crash reporting and privacy
+        run: bash scripts/tests/run-instrumented-tests-test.sh
+
       - name: Release unit tests
         run: ./gradlew :app:testReleaseUnitTest --stacktrace
 

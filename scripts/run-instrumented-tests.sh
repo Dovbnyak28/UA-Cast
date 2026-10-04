@@ -77,6 +77,17 @@ adb -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE.test" >/dev/null 2>&1 || t
 echo "Running $RUNNER"
 report_dir="app/build/reports/instrumented"
 mkdir -p "$report_dir"
+# Preserve the platform crash before the CI emulator runner shuts down its device. Only capture
+# from disposable emulators: a physical handset's crash buffer may contain unrelated private data.
+capture_failed_emulator_crash() {
+    local exit_status=$?
+    if [ "$exit_status" -ne 0 ] && [ "$device_is_emulator" = "1" ]; then
+        adb -s "$DEVICE_SERIAL" logcat -b crash -d -v threadtime \
+            > "$report_dir/crash-logcat.txt" 2>&1 || true
+    fi
+    return "$exit_status"
+}
+trap capture_failed_emulator_crash EXIT
 # Stream progress to CI and disk instead of retaining everything in a command substitution.
 # If the emulator hangs or the job is cancelled, the completed tests remain diagnosable.
 set +e

@@ -231,5 +231,53 @@ The firmware resolves CreateDocument to `com.google.android.tv.frameworkpackages
 its silent cancellation is now confirmed and guarded. The native portable round-trip used owned
 app files, not an external USB/system document-picker workflow. Export on this TV still requires
 a functional document provider; the guard does not install or implement one. Transferring the
-file to another physical device remains unverified. Mi TV API 28
-cannot certify the API-35 scheduled benchmark budgets; no GitHub performance run is claimed.
+file to another physical device remains unverified. Mi TV API 28 cannot certify the API-35
+scheduled benchmark budgets. The subsequent GitHub runs below are measurements, not a budget pass.
+
+## PR CI follow-up: do not merge on incomplete evidence
+
+The isolated review checkout's full local regression at production revision `5fbba97` passed in
+17m 31s: Debug **2,594 / 442 suites**, Release **2,266 / 371**, Play **2,266 / 371**, Core
+**133 / 16**, with no failures/errors/skips. All three lint variants, detekt, screenshot
+verification and the benchmark harness build passed. Later edits in this follow-up are limited
+to tests, the benchmark capture tail and diagnostic scripts, not application behaviour.
+
+[Android CI at 5fbba97](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37226752963) passed
+lint/architecture, unsigned packaging, and **142/142 native tests on both API 30 and API 36**.
+It did not pass as a whole:
+
+- API 24's runner process crashed during `BackupCipherInstrumentedTest`, without a crash stack
+  in its preserved runner output. The earlier API-24 pass is not evidence to dismiss this crash.
+  Its cause remains unverified. The runner now preserves the platform crash buffer on a failed
+  **disposable emulator** before shutdown, retaining the original failure exit status. It does
+  not collect that buffer from physical phones. Five mocked runner-contract cases cover success,
+  process crash, contradictory FAILURES/OK output, failed ADB transport and physical-device privacy.
+- The Play startup-capacity test expected zero requests of any kind. Capacity rejection deliberately
+  resumes the saved source interrupted by the add attempt; without a snapshot, that source may
+  legitimately download. The assertion raced that restoration. The corrected test waits for the
+  restored source, requires exactly its one original URL, no pending save, the unchanged source
+  list and LIMIT_REACHED. It does not permit a request to the rejected new source. No production
+  capacity or startup policy was changed.
+
+The corrected startup class subsequently passed **9/9 in each of Debug, Release and Play**
+(27 executions). The updated benchmark harness assembled successfully in the same isolated
+follow-up gate (6m 42s). The five mocked runner cases and eight Python evidence-validator cases
+also passed; those mocked cases are not substitutes for the pending API-24 device investigation.
+
+[Measured API-35 CI at 5fbba97](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37226753056)
+completed **7/8**, not a pass. EPG's corrected current-programme selector succeeded. The channel
+journey's second trace stopped with its only `DrawFrames` slice still open: accessibility idle
+preceded RenderThread completion, so AndroidX correctly rejected the missing complete frame.
+The UI-only harness now records a bounded 500ms tail on its instrumentation thread after idle;
+it neither changes production code nor removes frame completeness/budget checks. Its subsequent
+device execution must still be reviewed.
+
+The seven available rows measured cold/warm display medians **1,636 / 795ms**, restoring 40k
+channels **1,686ms**, parsing/indexing 350k programmes **2,230ms**, and worst measured EPG managed
+heap **102,160 KiB**. Player/fullscreen frame CPU P95 were **307.8 / 465.4ms**, above the unchanged
+100ms ceiling. These partial results cannot satisfy the eight-case validator. Perfetto inspection
+of the prior CI traces shows substantial software-GPU shader/flush/synchronization waits, including
+a fullscreen `postAndWait` of 249ms; this is not proof of the same delay on physical TVs, nor a
+reason to silently mark CI green. The performance gate remains unverified until complete evidence
+and reviewed budget compliance exist. Keep PR #4 in draft; no release, merge or schedule activation
+is implied by the local functional passes.

@@ -1,5 +1,6 @@
 package com.uacastplayer.baselineprofile
 
+import android.os.SystemClock
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
@@ -100,6 +101,11 @@ class CriticalJourneysBenchmark {
         ) {
             journey(driver)
             device.waitForIdle()
+            // Accessibility idle is not a GPU fence. The API-35 trace ended with the only
+            // DrawFrames slice still open, so FrameTimingMetric had no completed frame to read.
+            // Keep a bounded capture tail on the instrumentation thread; idle time does not
+            // manufacture frame samples or change the P95/memory budget assertions.
+            SystemClock.sleep(FRAME_CAPTURE_TAIL_MILLIS)
         }
     }
 
@@ -113,6 +119,7 @@ class CriticalJourneysBenchmark {
 
     private companion object {
         const val ITERATIONS = 5
+        const val FRAME_CAPTURE_TAIL_MILLIS = 500L
         const val PLAYLIST_NAME = "Benchmark playlist"
     }
 }
