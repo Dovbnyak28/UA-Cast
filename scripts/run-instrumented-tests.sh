@@ -91,7 +91,9 @@ trap capture_failed_emulator_crash EXIT
 # Stream progress to CI and disk instead of retaining everything in a command substitution.
 # If the emulator hangs or the job is cancelled, the completed tests remain diagnosable.
 set +e
-adb -s "$DEVICE_SERIAL" shell am instrument -w "$RUNNER" 2>&1 | tee "$report_dir/runner.txt"
+# Raw status includes each method's start/end, not just class-level dots. If a method hangs,
+# the partial report identifies it without requiring unrelated device/private log buffers.
+adb -s "$DEVICE_SERIAL" shell am instrument -w -r "$RUNNER" 2>&1 | tee "$report_dir/runner.txt"
 runner_statuses=("${PIPESTATUS[@]}")
 set -e
 if [ "${runner_statuses[0]}" -ne 0 ]; then

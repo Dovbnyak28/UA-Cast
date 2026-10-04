@@ -27,9 +27,12 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         } else {
             device.executeShellCommand("am force-stop $PACKAGE_NAME")
         }
-        device.executeShellCommand(
+        val launchResult = device.executeShellCommand(
             "am start -W -n $FIXTURE_COMPONENT --es $FIXTURE_MODE_EXTRA $mode",
         )
+        check(launchResult.lineSequence().none { it.startsWith("Error:") || it.startsWith("Error type ") }) {
+            "Could not start benchmark fixture: $launchResult"
+        }
         val status = waitForStatus(FIXTURE_STATUS_PATTERN, FIXTURE_TIMEOUT_MILLIS)
         check(status == FIXTURE_READY) { status }
         device.executeShellCommand("am force-stop $PACKAGE_NAME")
@@ -99,7 +102,12 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     private fun waitForStatus(pattern: Pattern, timeoutMillis: Long): String {
         val node = requireNotNull(device.wait(Until.findObject(By.text(pattern)), timeoutMillis)) {
-            "Timed out waiting for benchmark status"
+            // Report only lifecycle/setup state and our fixed synthetic status tokens, not a
+            // whole window hierarchy (a physical benchmark device can contain private content).
+            val visibleStatus = device.findObjects(By.text(VISIBLE_STATUS_PATTERN))
+                .map { it.text.orEmpty() }
+            "Timed out waiting for benchmark status: screenOn=${device.isScreenOn}, " +
+                "foreground=${device.currentPackageName}, visibleStatus=$visibleStatus"
         }
         return node.text.orEmpty()
     }
@@ -129,6 +137,7 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         private const val FIXTURE_TIMEOUT_MILLIS = 180_000L
         private val FIXTURE_STATUS_PATTERN = Pattern.compile("benchmark-fixture-(ready|failed:.*)")
         private val EPG_PARSE_STATUS_PATTERN = Pattern.compile("benchmark-epg-parse-(ready|failed:.*)")
+        private val VISIBLE_STATUS_PATTERN = Pattern.compile("benchmark-(fixture|epg-parse)-(preparing|ready|failed:.*)")
         private val GUIDE_PROGRAMME_PATTERN = Pattern.compile("Benchmark Programme [0-9]{3}")
     }
 }

@@ -35,6 +35,8 @@ scope/executor. Lazy-списки залишаються віртуалізов�
 
 ## Перевірки
 
+Цей перший набір перевірок стосується змін, опублікованих у `33e8dfe`.
+
 - Цільові host assertions, detekt і debug/test APK пройшли перед повним gate.
 - На власному API-36.1 емуляторі пройшли 29 native-сценаріїв: Media3 layout/30 handoffs,
   пошук, lifecycle, fit-mode та player controls за звичайного й великого шрифту.
@@ -57,6 +59,57 @@ scope/executor. Lazy-списки залишаються віртуалізов�
   це fixture UI без реального декодування, а не вимір відео-FPS чи peak heap.
 - 11 repository/static checks, вісім performance-validator tests і п'ять
   CI-runner contract/privacy tests пройшли. Detekt baseline не збільшений.
+
+## Повторний прохід: форма паку логотипів
+
+Підтверджені ще два практичні дефекти:
+
+- `IconSourcesSection` стирала чернетку одразу після виклику `onAddSource`, хоча
+  `CustomIconSettingsController` міг відхилити неправильну адресу, дублікат або
+  перевищення ліміту; feature gate також міг не виконати дію. Сім із восьми нових
+  assertions впали на попередньому коді. Тепер чернетка очищається тільки після
+  появи відповідного канонічного джерела в authoritative списку. Інша адреса,
+  вже наявний пакет або запізніле підтвердження не стирають новіше введення.
+- У режимі TV стрілка Up залишала фокус у полі URL. Окремий keyboard assertion
+  відтворив це до зміни. Додано чинний `tvTextFieldNavigation` та видимий фокус
+  Add/Remove; зайвого focus target не створено.
+
+Не змінені controller/repository, правила валідації, ліміти, Premium або мережеві
+запити. Acknowledgement належить тільки часу життя форми; жодного нового фонового
+scope або постійної роботи не додано. Поле успішного додавання перевіряється саме
+через EditableText: placeholder у семантичному Text не названий дефектом програми.
+
+Усі дев'ять нових host-сценаріїв пройшли. Повний ізольований gate — 11m12s:
+Debug 2 617, Release/Play по 2 268, Core 133; усі 49 goldens, lint, App/Core detekt
+та debug/test APK assembly пройшли. Нуль failures/errors/skips у host XML;
+Core результат повторно використаний Gradle для незміненого Core. Lint має
+тільки один наявний Hint у кожному варіанті. 11 статичних checks також пройшли.
+Нова native-регресія URL/TV/backup/player на власному API-36.1 емуляторі:
+20/20 за 40.87s, включно з усіма чотирма новими URL-сценаріями. Відновлення
+оригінального debug-файла підтверджене SHA-256. Фізичні пристрої не змінені.
+
+Віддалений CI для попереднього `33e8dfe` має успішні unit/goldens,
+quality/architecture, packaging та API 30/36 (по 147 native-тестів). Два інші
+результати **червоні**, а не незавершені:
+
+- API 24 досяг 30-хвилинного timeout у `UiPolishInstrumentedTest` після двох
+  завершених методів. Cipher/provider та попередні player-controls тести пройшли.
+  Старий журнал із крапками не визначає наступний метод чи причину зависання;
+  цей випадок не названий production ANR або доведеною проблемою інфраструктури.
+- API-35 performance run завершився вісьмома timeout очікування fixture-статусу.
+  Жодного повного measurement JSON немає, тому нові FPS/heap/time висновки з нього
+  не робляться. Це збій підготовки тестів, не вимір перевищення бюджету.
+
+У runner додано raw start/end назви методів і запис partial log до завершення
+процесу. Шість mocked runner contract/privacy cases пройшли; strict failure/OK
+перевірки залишені. Benchmark driver перевіряє результат запуску Activity й при
+timeout повідомляє screen/foreground та тільки синтетичні status-токени, без
+повного приватного window dump. Harness зібраний; budgets/timeouts не послаблені.
+
+Той самий `UiPolishInstrumentedTest` локально пройшов 8/8 за 76.272s на API 36.1,
+із підтвердженим відновленням original debug-файла. Локальний fixture також показує
+`benchmark-fixture-ready`. Це звужує пошук, але не доводить виправлення двох CI-збоїв
+і не видається за перевірку на API 24/35 або фізичному TV.
 
 ## Що не підтверджено
 

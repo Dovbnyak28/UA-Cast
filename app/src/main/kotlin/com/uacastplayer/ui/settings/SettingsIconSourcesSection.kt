@@ -12,8 +12,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.icons.CustomIconSourcePolicy
 import com.uacastplayer.settings.IconSourceAddError
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
@@ -30,6 +33,7 @@ import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.tvTextFieldNavigation
 
 /** User-managed channel-logo packs, with no predefined source. */
 @Composable
@@ -41,6 +45,16 @@ internal fun IconSourcesSection(
     onDismissError: () -> Unit,
 ) {
     var newSourceUrl by rememberSaveable { mutableStateOf("") }
+    var pendingSource by remember { mutableStateOf<String?>(null) }
+    // Invoking an action is not success: validation, source limits or the feature gate can reject it.
+    // Use the authoritative source list as acknowledgement, without changing the action contract.
+    LaunchedEffect(customSources, pendingSource) {
+        val submitted = pendingSource
+        if (submitted != null && CustomIconSourcePolicy.canonicalize(submitted) in customSources) {
+            if (newSourceUrl == submitted) newSourceUrl = ""
+            pendingSource = null
+        }
+    }
     Column(
         modifier = Modifier.settingsSearchTarget(stringResource(R.string.settings_icon_sources_title))
             .padding(top = 16.dp),
@@ -72,12 +86,16 @@ internal fun IconSourcesSection(
             hasError = addError != null,
             onValueChange = { value ->
                 newSourceUrl = value
+                pendingSource = null
                 if (addError != null) onDismissError()
             },
             onAdd = {
-                if (newSourceUrl.isNotBlank()) {
-                    onAddSource(newSourceUrl)
-                    newSourceUrl = ""
+                val submitted = newSourceUrl
+                if (submitted.isNotBlank()) {
+                    val canonical = CustomIconSourcePolicy.canonicalize(submitted)
+                    // An existing source must not falsely acknowledge a rejected duplicate attempt.
+                    pendingSource = submitted.takeIf { canonical != null && canonical !in customSources }
+                    onAddSource(submitted)
                 }
             },
         )
@@ -107,7 +125,7 @@ private fun SourceInput(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).tvTextFieldNavigation(),
             placeholder = { Text(stringResource(R.string.settings_icon_sources_placeholder)) },
             singleLine = true,
             isError = hasError,
@@ -117,7 +135,8 @@ private fun SourceInput(
             ),
             colors = uaTextFieldColors(),
         )
-        IconButton(onClick = onAdd, enabled = value.isNotBlank()) {
+        IconButton(onClick = onAdd, enabled = value.isNotBlank(),
+            modifier = Modifier.tvFocus(enabled = value.isNotBlank())) {
             Icon(
                 AppIcons.Plus,
                 contentDescription = stringResource(R.string.settings_icon_sources_add),
@@ -141,7 +160,7 @@ private fun IconSourceRow(urlText: String, onRemoveClick: () -> Unit) {
             color = UaTheme.palette.labelSecondary,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onRemoveClick) {
+        IconButton(onClick = onRemoveClick, modifier = Modifier.tvFocus()) {
             Icon(
                 AppIcons.Delete,
                 contentDescription = stringResource(R.string.settings_icon_sources_remove),

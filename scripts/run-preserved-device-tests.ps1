@@ -129,9 +129,11 @@ try {
     Invoke-AdbChecked @('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
     Invoke-AdbChecked @('shell', 'wm', 'dismiss-keyguard')
     $runner = "$packageName.test/androidx.test.runner.AndroidJUnitRunner"
-    $output = & $AdbPath -s $Serial shell am instrument -w -e class $TestClasses $runner 2>&1
+    # Raw status names identify a stuck method; write each line before the process completes.
+    $output = & $AdbPath -s $Serial shell am instrument -w -r -e class $TestClasses $runner 2>&1 |
+        Tee-Object -FilePath $logPath
     $exitCode = $LASTEXITCODE
-    $output | Tee-Object -FilePath $logPath
+    $output
     if ($exitCode -ne 0 -or ($output -match 'FAILURES!!!') -or -not ($output -match 'OK \([0-9]+ tests?\)')) {
         throw "Instrumented run did not pass; see $logPath"
     }
