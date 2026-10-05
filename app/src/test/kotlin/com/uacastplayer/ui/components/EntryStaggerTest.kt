@@ -1,22 +1,26 @@
 package com.uacastplayer.ui.components
 
 import android.content.Context
+import android.os.Looper
 import android.provider.Settings
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import org.junit.After
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertNotSame
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.experimental.categories.Category
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
 @Category(RequiresComposeTestManifest::class)
@@ -61,13 +65,21 @@ class EntryStaggerTest {
             actual = Modifier.staggeredEntry(rememberEntryStagger("list"), "row", 0, enabled.value)
             Box(checkNotNull(actual))
         }
-        rule.mainClock.advanceTimeBy(32)
-        rule.runOnIdle { enabled.value = false }
-        rule.mainClock.advanceTimeBy(32)
+        rule.runOnIdle { assertNotSame("The initial entry must actually be running", Modifier, actual) }
+        changePolicy(enabled, false)
         rule.runOnIdle { assertSame(Modifier, actual) }
-        rule.runOnIdle { enabled.value = true }
-        rule.mainClock.advanceTimeBy(32)
+        changePolicy(enabled, true)
         rule.runOnIdle { assertSame("Re-enabling motion must not hide already-visible content", Modifier, actual) }
+    }
+
+    private fun changePolicy(enabled: androidx.compose.runtime.MutableState<Boolean>, value: Boolean) {
+        rule.runOnIdle {
+            enabled.value = value
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        rule.mainClock.advanceTimeBy(64)
+        rule.waitForIdle()
     }
 
     private fun assertUnchanged(index: Int, alreadyPlayed: Boolean = false) {

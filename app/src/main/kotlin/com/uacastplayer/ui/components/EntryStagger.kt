@@ -70,25 +70,29 @@ fun Modifier.staggeredEntry(
     // Static/recycled rows need neither an animation clock nor a persistent graphics layer.
     if (index !in 0 until MAX_STAGGERED_ITEMS) return this
     val enabled = animationsEnabled ?: animationsAllowed()
-    // Read once per composition of this item: if it has played before (a scroll-back), the item
-    // starts fully visible and no animation is scheduled at all.
-    val alreadyPlayed = remember(stagger, key) { stagger.hasPlayed(key) }
-    return if (alreadyPlayed || !enabled) this else animatedEntry(stagger, key, index)
+    // Completion belongs to the row, not the disposable animated branch. A policy change must
+    // not hide already-visible content; statically displayed rows also stay seen after recycling.
+    var complete by remember(stagger, key) { mutableStateOf(!enabled || stagger.hasPlayed(key)) }
+    LaunchedEffect(stagger, key, enabled) {
+        if (!enabled) {
+            stagger.markPlayed(key)
+            complete = true
+        }
+    }
+    return if (complete || !enabled) this else animatedEntry(stagger, key, index) { complete = true }
 }
 
 @Composable
-private fun Modifier.animatedEntry(stagger: EntryStagger, key: Any, index: Int): Modifier {
+private fun Modifier.animatedEntry(stagger: EntryStagger, key: Any, index: Int, onComplete: () -> Unit): Modifier {
     val progress = remember(stagger, key) { Animatable(0f) }
-    var complete by remember(stagger, key) { mutableStateOf(false) }
     val lift = with(LocalDensity.current) { EntryLift.toPx() }
 
     LaunchedEffect(stagger, key) {
         stagger.markPlayed(key)
         delay(index.toLong() * STAGGER_MS)
         progress.animateTo(1f, tween(DUR_ENTER, easing = EaseSpring))
-        complete = true
+        onComplete()
     }
-    if (complete) return this
 
     // graphicsLayer's lambda form: the animated value is read at draw time, so each frame of this
     // costs a redraw of one item and no recomposition.

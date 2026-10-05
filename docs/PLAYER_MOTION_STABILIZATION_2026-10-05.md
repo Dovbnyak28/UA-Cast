@@ -108,7 +108,7 @@ results were reused. The preceding interrupted attempt was not labeled green;
 Release/Play completed in the resumed gate. Twelve repository checks, eight
 performance-validator cases and six runner contract/privacy cases also pass.
 
-## Latest completed remote evidence: 21c3be3
+## Previous completed remote evidence: 21c3be3
 
 [Android CI passed all six jobs](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37244290221),
 including native instrumentation on API 24, 30 and 36, unit/screenshots, quality
@@ -124,6 +124,20 @@ rejects it as incomplete. No crash root cause in production code is inferred
 from this transport failure. Partial text/trace values do not replace complete
 JSON evidence; no timing improvement is claimed. The three previously measured
 frame-budget exceedances remain open pending a complete new measurement.
+
+For preceding source head 853f4d2, both push-event Android CI and PR-event Android
+CI are now green (all six jobs). The PR's initial SDK archive installation
+failures are preserved; one failed-jobs-only retry passed without source or
+test-policy changes. The current performance run also completed all nine tests
+and final JSON, but three unchanged frame-budget rules still fail (channels
+164.146ms, first player 437.024ms, fullscreen 396.226ms P95 versus 100ms).
+Native suite counts include six assumption-skipped real-device/opt-in cases per
+API. These are not physical-TV acceptance. Full verified results and trace
+limitations are recorded in `docs/EPG_METADATA_REFRESH_STABILIZATION_2026-10-05.md`.
+
+The later reproduced list-entrance policy/recycling defect and its separate
+regressions are documented in `docs/ENTRY_STAGGER_STABILIZATION_2026-10-05.md`.
+The preceding green CI does not certify that subsequent production change.
 
 ## Completed CI before this production change
 

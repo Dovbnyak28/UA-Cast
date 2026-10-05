@@ -55,3 +55,56 @@ lost ADB before producing complete JSON. Those outcomes do not certify this
 new revision. Three previously measured frame-budget exceedances remain open;
 physical Mi TV/provider acceptance is still unavailable. No frame gain, release,
 merge, version bump or computer shutdown is claimed/performed by this change.
+
+## EPG-fix remote evidence: 853f4d2
+
+The independent [push-event Android CI](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37327512214)
+passed all six jobs for 853f4d2. Downloaded native runner artifacts report
+148/151/151 suite cases for API 24/30/36: 142/145/145 passed, zero failed and
+six assumption-skipped cases per API. Three additional status-zero messages are
+diagnostics without a class/test identity, not test passes. The skipped cases
+are LAN discovery, physical-TV playback, two private-playlist opt-in cases and
+two Mi TV document-stub cases; they do not certify physical-TV acceptance.
+
+The initial [PR-event run](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37327520791)
+passed unit/goldens, quality, packaging and API 30. API 24/36 failed before test
+execution: sdkmanager reported `Error on ZipFile unknown archive` during emulator
+or system-image installation. The subsequent connection-refused cleanup was not
+an application failure. After the workflow completed, one failed-jobs-only retry
+was accepted for the same SHA and attempt 2 passed all six jobs. Downloaded PR
+native artifacts independently confirm the same 142/145/145 passes and six
+assumption skips per API. No SDK version, assertion, timeout or budget was
+changed. The original failed attempt remains part of the evidence.
+
+The [current measured performance run](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37327520841)
+completed nine tests in 311.265s, zero failures/errors/skips, including the
+sleeping-display regression and all eight measured journeys. Downloaded XML and
+final JSON independently reproduce the unchanged validator's exit 1: three
+frame-budget rules still fail. This is complete evidence, not a passing gate.
+
+| Current-head measurement | Result | Limit |
+| --- | ---: | ---: |
+| Open channels frame CPU P95 | 164.146ms | 100ms |
+| First player frame CPU P95 | 437.024ms | 100ms |
+| Fullscreen frame CPU P95 | 396.226ms | 100ms |
+| EPG guide frame CPU P95 | 58.300ms | 100ms |
+| Cold / warm startup median | 1662.379 / 1353.152ms | 5000 / 2500ms |
+| 40k-channel restore median | 1624.639ms | 10000ms |
+| 350k EPG parse/index median | 2276.589ms | 60000ms |
+| Worst EPG managed-heap metric | 101360 KiB | 262144 KiB |
+
+Selected iteration-zero traces contain main-thread postAndWait slices of
+117.922ms (channels), 291.933ms (first player) and 265.701ms (fullscreen), with
+concurrent RenderThread drawing and shader compilation. The first-player
+Compose:recompose slice is 55.884ms and Compose:onRemembered is 2.351ms; the
+earlier trace's long onRemembered/binder observation does not identify a stable
+cause across runs. Overlapping wall-clock slices must not be summed as CPU
+costs. These observations do not identify a particular source function to fix,
+prove a new code regression, or justify an uncontrolled before/after percentage.
+No speculative production modification or performance-budget relaxation was
+made in this verification pass. ADB still has no connected physical device.
+
+The subsequent reproduced EntryStagger policy/recycling defect is separate
+from these measured frame-budget failures. See
+`docs/ENTRY_STAGGER_STABILIZATION_2026-10-05.md`; 853f4d2's evidence is retained
+as parent-head evidence, not presented as verification of the newer source.
