@@ -59,6 +59,40 @@ is added and no screenshot baseline is regenerated.
 
 ## Release and measurement boundaries
 
+### Verified remote results for 8301f71
+
+All six jobs in Android PR CI run 37336364180 passed for this exact commit.
+Downloaded native reports independently confirm API 24/30/36: 142/145/145
+passed, zero failed, six assumption-skipped cases per API. The summary totals
+148/151/151 include those skips; identity-less diagnostic status-zero records
+are not test passes. The redundant same-head push run 37336357549 was cancelled,
+not counted as a passing test run.
+
+Performance run 37336364155 completed nine tests in 282.924s, zero test failures,
+errors or skips, with final JSON for all eight measurement journeys plus the
+sleeping-display readiness regression. Independently rerunning the unchanged
+validator on the downloaded artifact reproduces three still-red frame CPU P95
+rules: channels 131.211ms, first player 416.932ms, fullscreen 367.409ms vs 100ms.
+EPG guide 70.297ms, cold/warm startup 1323.254/763.880ms, 40k restore 1278.593ms,
+350k EPG parse/index 2082.194ms and worst EPG managed heap 113928 KiB meet their
+limits. These emulator metrics do not certify process RSS, a 128MB heap, real
+TV decoding, or a controlled percentage improvement. Budgets remain unchanged.
+
+Sources:
+
+- [Android CI](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37336364180)
+- [Performance gate](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37336364155)
+
+Selected iteration-zero traces from this run again show overlapping rendering
+work/waits, not a unique production root cause: main-thread postAndWait is
+110.478ms / 248.977ms / 254.902ms for channels / first player / fullscreen;
+the longest matching shader_compile slices are 57.412ms / 87.202ms / 146.464ms.
+First-player Compose:recompose is 44.461ms and Compose:onRemembered 2.684ms.
+Overlapping wall times are not summed as CPU cost. No speculative player-state,
+codec or visual simplification is justified solely by these sampled slices.
+
+The following parent evidence is historical, not substituted for this head.
+
 Parent 853f4d2 passed all six Android CI jobs in both push and PR runs. The PR's
 initial SDK-archive setup failure was preserved; one failed-jobs-only retry
 passed without source/SDK/assertion/budget changes. Native artifacts distinguish

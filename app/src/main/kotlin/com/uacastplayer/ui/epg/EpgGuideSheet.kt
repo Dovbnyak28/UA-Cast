@@ -68,7 +68,7 @@ fun EpgGuideSheet(
     hasError: Boolean = false,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val zoneId = remember { ZoneId.systemDefault() }
+    val zoneId = rememberEpgTimeZone()
     val today = remember(nowMillis, zoneId) {
         Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate()
     }
