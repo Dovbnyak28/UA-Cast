@@ -4,6 +4,7 @@ import com.uacastplayer.playlist.GroupVisibilityEntry
 import com.uacastplayer.playlist.GroupVisibilityStorage
 import com.uacastplayer.playlist.GroupVisibilityState
 import com.uacastplayer.playlist.LEGACY_SOURCE_ID
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -22,13 +23,18 @@ import org.junit.Test
  * would be invisible until the next app start otherwise. */
 private class FakeGroupVisibilityStorage(
     initial: List<GroupVisibilityEntry> = emptyList(),
+    private val loadGate: CompletableDeferred<Unit>? = null,
 ) : GroupVisibilityStorage {
     var saved: List<GroupVisibilityEntry> = initial
         private set
     var saveCount: Int = 0
         private set
 
-    override suspend fun load(): List<GroupVisibilityEntry> = saved
+    override suspend fun load(): List<GroupVisibilityEntry> {
+        val snapshot = saved
+        loadGate?.await()
+        return snapshot
+    }
 
     override suspend fun save(entries: List<GroupVisibilityEntry>) {
         saved = entries
@@ -49,6 +55,30 @@ class GroupVisibilityControllerTest {
 
     private fun controller(storage: GroupVisibilityStorage) =
         GroupVisibilityController(storage, TestScope(dispatcher))
+
+    @Test
+    fun `late initial read cannot overwrite an override made while disk IO was pending`() = runTest(dispatcher) {
+        val loadGate = CompletableDeferred<Unit>()
+        val storage = FakeGroupVisibilityStorage(
+            initial = listOf(GroupVisibilityEntry("source-a", "old", GroupVisibilityState.PINNED)),
+            loadGate = loadGate,
+        )
+        val controller = controller(storage)
+        controller.loadInitial()
+        controller.setActiveSource("source-a")
+
+        controller.pinGroup("new")
+        loadGate.complete(Unit)
+
+        assertEquals(setOf("old", "new"), controller.pinnedKeys.value)
+        assertEquals(
+            setOf(
+                GroupVisibilityEntry("source-a", "old", GroupVisibilityState.PINNED),
+                GroupVisibilityEntry("source-a", "new", GroupVisibilityState.PINNED),
+            ),
+            storage.saved.toSet(),
+        )
+    }
 
     @Test
     fun `pinning a group exposes it as pinned for the active source`() = runTest(dispatcher) {

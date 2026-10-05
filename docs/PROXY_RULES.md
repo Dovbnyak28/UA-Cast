@@ -21,7 +21,9 @@ favor of a fallback that could never have worked on this network anyway.
 - A plain `ServerSocket` bound to `0.0.0.0` on a random port (the receiver is a different device on
   the LAN, so `127.0.0.1` won't reach it - see `LocalNetworkAddress` for how the phone's own IPv4
   address is found).
-- One accept thread, a fixed 6-thread pool for connection handling.
+- One accept thread, a bounded 4-thread admission pool for request parsing/authentication, then a
+  bounded 16-thread response pool. The split prevents slow or unauthorised request headers from
+  occupying media-serving workers; both queues reject overload instead of growing without bound.
 - Only `GET` and `HEAD` are served; anything else gets `405`.
 - Request headers are capped at 16KB; anything larger gets rejected rather than parsed.
 - Every path is `/hls/<sessionToken>/<resourceId>`, where `resourceId = SHA-256("type:url")` -
@@ -47,7 +49,8 @@ favor of a fallback that could never have worked on this network anyway.
   way, in place, leaving the rest of the tag untouched.
 - A reference whose scheme isn't `http`/`https` (most commonly `skd://` FairPlay key URIs) is left
   **unrewritten** - we can't proxy it, and rewriting it to a broken local URL would be worse than
-  leaving it alone.
+  leaving it alone. The shared resolver also returns such references as unresolvable to flatten,
+  wrapper-unwrapping and diagnostic callers, so none can accidentally hand a non-HTTP URI to OkHttp.
 - Nested playlists (multi-bitrate variants) get registered as `playlist` resources recursively;
   everything else is `media` and is streamed through as raw passthrough, `Range` header included,
   without ever being buffered fully into memory.
@@ -71,7 +74,7 @@ favor of a fallback that could never have worked on this network anyway.
 
 ## Diagnostics
 
-`cast/TsProgramInfoParser.kt` reads a stream's first TS segment and walks its PAT → PMT to find the
+`core/cast/TsProgramInfoParser.kt` reads a stream's first TS segment and walks its PAT → PMT to find the
 actual video/audio stream types (see `docs/CAST_PLAYBACK_RULES.md` for how this feeds the
 direct-vs-proxy decision, and the "Raw TS remux" section below for the other thing it gates). It
 only handles PAT/PMT sections that fit in a single 188-byte packet - true for essentially every
@@ -90,8 +93,8 @@ Activation (`proxy/RawTsRemuxActivation.kt`, evaluated once per playlist-resourc
 
 - the response isn't already a recognized HLS playlist (`PlaylistDetector`),
 - its first bytes actually look like MPEG-TS (0x47 sync bytes 188 bytes apart),
-- `cast/CastCompatibilityPolicy` classifies the codecs (probed the same way as the Cast pre-flight
-  check, via `cast/TsProgramInfoParser`) as `Compatible` - an incompatible codec would still fail
+- `core/cast/CastCompatibilityPolicy` classifies the codecs (probed the same way as the Cast pre-flight
+  check, via `core/cast/TsProgramInfoParser`) as `Compatible` - an incompatible codec would still fail
   after remuxing, so this path only ever fixes the container, never the codec,
 - `AppPreferences.rawTsRemuxEnabled` is on (default true - an escape hatch in case keyframe
   detection turns out unreliable on some real broadcast; switching it off falls back to the
@@ -122,7 +125,7 @@ owns a dedicated background thread for the rest of that channel's lifetime:
     `awaitInitialPlaylist` blocks until enough segments exist for a non-empty playlist, so shorter
     early segments get a cast session's very first playlist (and thus playback) noticeably sooner,
     at the cost of a couple of smaller-than-usual segments only at the very start of the channel.
-- `proxy/RemuxSegmentBuffer.kt` keeps a sliding window of the most recent segments, capped at 20MB
+- `proxy/RemuxSegmentBuffer.kt` keeps a sliding window of the most recent segments, capped at 48 MiB
   total, evicting the oldest first.
 - `proxy/LiveHlsPlaylistBuilder.kt` turns the buffer's current contents into a live (no
   `#EXT-X-ENDLIST`) HLS media playlist on every request - `#EXT-X-MEDIA-SEQUENCE` tracks the oldest
@@ -136,14 +139,13 @@ outright - the reader thread's blocking read is unblocked by closing the upstrea
 any polling.
 
 **Handoff on a channel switch** (`proxy/RemuxHandoffPolicy.kt`, pure): a channel switch replaces the
-active remux session, but the replaced one isn't stopped immediately - the receiver may still have
-an in-flight request for it (a segment fetch already issued, a stale playlist poll) during the brief
-switch window, and killing it on the spot would turn a successful switch into a visible glitch. It's
-kept "draining" - still servable, both for its playlist and its segments - until either the new
-channel is confirmed loaded on the receiver (`ProxyServer.confirmActiveSession`, called from
-`CastSessionRepository` on a successful load) or 10 seconds elapse, whichever comes first. Only one
-session ever drains at a time; a session that's still draining when a *third* switch lands has
-already waited long enough and is stopped immediately to make room.
+active remux session and stops the replaced session's upstream reader immediately, so it cannot keep
+a second IPTV connection and grow a second 48 MiB buffer beside the new channel. The completed
+buffer remains "draining" and servable for in-flight requests (a segment fetch already issued, a
+stale playlist poll) until either the new channel is confirmed loaded on the receiver
+(`ProxyServer.confirmActiveSession`, called from `CastSessionRepository` on a successful load) or
+10 seconds elapse, whichever comes first. Only one session ever drains at a time; a third switch
+discards the older draining buffer before retaining the newly replaced one.
 
 ### Upstream reconnect
 

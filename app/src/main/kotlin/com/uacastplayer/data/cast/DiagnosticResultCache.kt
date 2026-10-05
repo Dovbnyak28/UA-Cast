@@ -1,15 +1,15 @@
 package com.uacastplayer.data.cast
 
-import com.uacastplayer.cast.CachedDiagnostic
-import com.uacastplayer.cast.CastCompatibilityVerdict
-import com.uacastplayer.cast.DiagnosticCachePolicy
-import com.uacastplayer.cast.TsSourceKind
+import com.uacastplayer.core.cast.CachedDiagnostic
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.DiagnosticCachePolicy
+import com.uacastplayer.core.cast.TsSourceKind
 
 private const val INITIAL_CAPACITY = 16
 private const val LOAD_FACTOR = 0.75f
 
 /** LRU-bounded (see [DiagnosticCachePolicy.MAX_ENTRIES]) cache of diagnosed codec verdicts, keyed
- * by stream URL - see `cast/CastSessionRepository`'s diagnostic warm-up and watchdog-race wiring.
+ * by a caller-supplied request identity. Cast uses URL plus sanitized access headers.
  * A hand-rolled `LinkedHashMap`-based LRU (same approach as `ProxyServer`'s resource table)
  * rather than `android.util.LruCache`, so this stays plain-JUnit testable. */
 class DiagnosticResultCache {

@@ -7,6 +7,8 @@ package com.uacastplayer.player
  */
 object PlayerGesturePolicy {
 
+    private const val GESTURE_ZONE_COUNT = 3f
+
     /** A horizontal swipe shorter than this fraction of the screen width is treated as
      * incidental finger drift, not an intentional channel switch. */
     const val MIN_SWIPE_WIDTH_FRACTION = 0.15f
@@ -19,8 +21,8 @@ object PlayerGesturePolicy {
     enum class SwipeChannelAction { NEXT, PREVIOUS }
 
     fun zoneFor(xFraction: Float): GestureZone = when {
-        xFraction < 1f / 3f -> GestureZone.LEFT
-        xFraction > 2f / 3f -> GestureZone.RIGHT
+        xFraction < 1f / GESTURE_ZONE_COUNT -> GestureZone.LEFT
+        xFraction > 2f / GESTURE_ZONE_COUNT -> GestureZone.RIGHT
         else -> GestureZone.CENTER
     }
 

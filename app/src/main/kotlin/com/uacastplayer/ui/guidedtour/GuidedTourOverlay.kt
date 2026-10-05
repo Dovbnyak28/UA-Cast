@@ -56,10 +56,11 @@ import com.uacastplayer.guidedtour.GuidedTourStep
 import com.uacastplayer.guidedtour.GuidedTourTarget
 import com.uacastplayer.guidedtour.TooltipPosition
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.CardTitle
-import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
@@ -76,7 +77,7 @@ private const val TAG = "GuidedTour"
 /** How much of the screen the scrim takes. Dark enough that the hole reads as the only lit thing,
  * light enough that the user can still tell which screen they are on - the point of highlighting a
  * live element rather than showing a picture of one. */
-private const val SCRIM_ALPHA = 0.82f
+private const val SCRIM_ALPHA = 0.68f
 
 /** Breathing room around the highlighted element, so the hole does not clip the edge of its own
  * touch target. */
@@ -126,11 +127,12 @@ fun GuidedTourOverlay(
     onSkip: () -> Unit,
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
+    onAddPlaylist: () -> Unit = {},
 ) {
     AnimatedVisibility(
         visible = state.isVisible,
-        enter = fadeIn(tween(DurPress, easing = EaseSpring)),
-        exit = fadeOut(tween(DurPress, easing = EaseSpring)),
+        enter = fadeIn(tween(DUR_PRESS, easing = EaseSpring)),
+        exit = fadeOut(tween(DUR_PRESS, easing = EaseSpring)),
         modifier = modifier,
     ) {
         // Back leaves from the welcome card and steps backwards everywhere else. It never falls
@@ -151,6 +153,7 @@ fun GuidedTourOverlay(
                 onNext = onNext,
                 onBack = onBack,
                 onSkip = onSkip,
+                onAddPlaylist = onAddPlaylist,
                 onComplete = onComplete,
             )
         }
@@ -179,7 +182,7 @@ private fun GuidedTourScrim(
     // Fades the hole in rather than snapping it. A step with no target keeps a plain, even dim.
     val holeAlpha by animateFloatAsState(
         targetValue = if (spotlight == null) 0f else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "guidedTourSpotlight",
     )
 
@@ -252,6 +255,7 @@ private fun BoxScope.GuidedTourCard(
     onNext: () -> Unit,
     onBack: () -> Unit,
     onSkip: () -> Unit,
+    onAddPlaylist: () -> Unit,
     onComplete: () -> Unit,
 ) {
     val alignment = cardAlignment(
@@ -277,7 +281,11 @@ private fun BoxScope.GuidedTourCard(
             verticalArrangement = Arrangement.spacedBy(GapM),
         ) {
             when (state.phase) {
-                GuidedTourPhase.WELCOME -> WelcomeContent(onNext = onNext, onSkip = onSkip)
+                GuidedTourPhase.WELCOME -> WelcomeContent(
+                    onNext = onNext,
+                    onSkip = onSkip,
+                    onAddPlaylist = onAddPlaylist,
+                )
                 GuidedTourPhase.STEPS -> state.currentStep?.let { step ->
                     StepContent(state = state, step = step, onNext = onNext, onBack = onBack, onSkip = onSkip)
                 }
@@ -289,29 +297,38 @@ private fun BoxScope.GuidedTourCard(
 }
 
 @Composable
-private fun WelcomeContent(onNext: () -> Unit, onSkip: () -> Unit) {
-    Text(
-        text = stringResource(R.string.guided_tour_welcome_title),
-        style = LargeTitle,
-        color = UaTheme.palette.labelPrimary,
-    )
+private fun WelcomeContent(onNext: () -> Unit, onSkip: () -> Unit, onAddPlaylist: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(R.string.guided_tour_welcome_title),
+            style = LargeTitle,
+            color = UaTheme.palette.labelPrimary,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.IconButton(onClick = onSkip) {
+            androidx.compose.material3.Icon(
+                imageVector = AppIcons.Close,
+                contentDescription = stringResource(R.string.guided_tour_not_now),
+                tint = UaTheme.palette.labelSecondary,
+            )
+        }
+    }
     Text(
         text = stringResource(R.string.guided_tour_welcome_body),
         style = BodyText,
         color = UaTheme.palette.labelSecondary,
     )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(GapS),
-        verticalAlignment = Alignment.CenterVertically,
+    Button(
+        onClick = onAddPlaylist,
+        modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
     ) {
-        TextButton(onClick = onSkip, modifier = Modifier.heightIn(min = ActionMinHeight)) {
-            Text(stringResource(R.string.guided_tour_skip), color = UaTheme.palette.labelSecondary)
-        }
-        Box(modifier = Modifier.weight(1f))
-        Button(onClick = onNext, modifier = Modifier.heightIn(min = ActionMinHeight)) {
-            Text(stringResource(R.string.guided_tour_start))
-        }
+        Text(stringResource(R.string.guided_tour_add_playlist))
+    }
+    TextButton(
+        onClick = onNext,
+        modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
+    ) {
+        Text(stringResource(R.string.guided_tour_start), color = UaTheme.palette.accentText)
     }
 }
 

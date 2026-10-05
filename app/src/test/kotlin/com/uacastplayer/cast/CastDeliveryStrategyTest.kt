@@ -1,5 +1,9 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.AudioCodec
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.TsSourceKind
+import com.uacastplayer.core.cast.VideoCodec
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

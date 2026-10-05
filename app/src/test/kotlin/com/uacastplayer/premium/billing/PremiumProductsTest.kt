@@ -5,6 +5,7 @@ import com.uacastplayer.premium.LicenseTier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -62,17 +63,15 @@ class PremiumProductsTest {
      * this is as much a note to whoever fills in Play Console as it is a test.
      */
     @Test
-    fun lifetimeIsAOneTimePurchaseAndTheRestAreSubscriptions() {
-        assertEquals(PremiumProducts.TYPE_ONE_TIME, PremiumProducts.ALL[PremiumProducts.LIFETIME])
-        assertEquals(PremiumProducts.TYPE_SUBSCRIPTION, PremiumProducts.ALL[PremiumProducts.MONTHLY])
-        assertEquals(PremiumProducts.TYPE_SUBSCRIPTION, PremiumProducts.ALL[PremiumProducts.YEARLY])
+    fun onlyOneTimePremiumIsForSale() {
+        assertEquals(mapOf(PremiumProducts.LIFETIME to PremiumProducts.TYPE_ONE_TIME), PremiumProducts.ALL)
+        assertEquals(listOf(PremiumProducts.LIFETIME), PremiumProducts.ONE_TIME_IDS)
     }
 
-    /** The two query lists together must be the whole catalogue: an id in neither is never asked
-     * about, and would be unbuyable without anything saying so. */
+    /** The sale query must cover exactly the one-time catalogue, with no duplicate products. */
     @Test
-    fun everyProductIsInExactlyOneQueryList() {
-        val queried = PremiumProducts.SUBSCRIPTION_IDS + PremiumProducts.ONE_TIME_IDS
+    fun everySaleProductIsInTheOneTimeQueryList() {
+        val queried = PremiumProducts.ONE_TIME_IDS
 
         assertEquals(PremiumProducts.ALL.keys, queried.toSet())
         assertEquals("no id may be queried twice", queried.size, queried.toSet().size)
@@ -80,11 +79,12 @@ class PremiumProductsTest {
 
     /** Every sellable tier has a product, or it cannot be bought however good the paywall is. */
     @Test
-    fun everyPaidTierCanActuallyBeBought() {
+    fun legacySubscriptionsCanBeRestoredButCannotBeBought() {
         val sold = PremiumProducts.ALL.keys.mapNotNull(PremiumProducts::tierFor).toSet()
 
-        for (tier in LicenseTier.entries.filter { it.isPaid }) {
-            assertTrue("$tier has no product to buy it with", tier in sold)
-        }
+        assertEquals(setOf(LicenseTier.LIFETIME), sold)
+        assertTrue(PremiumProducts.isForSale(PremiumProducts.LIFETIME))
+        assertFalse(PremiumProducts.isForSale(PremiumProducts.MONTHLY))
+        assertFalse(PremiumProducts.isForSale(PremiumProducts.YEARLY))
     }
 }

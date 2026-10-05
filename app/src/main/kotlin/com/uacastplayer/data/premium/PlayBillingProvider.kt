@@ -17,6 +17,7 @@ import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchasesAsync
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.BillingProvider
@@ -24,8 +25,8 @@ import com.uacastplayer.premium.billing.PremiumProducts
 import com.uacastplayer.premium.billing.PurchaseRecord
 import com.uacastplayer.premium.billing.PurchaseResult
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,12 +72,13 @@ class PlayBillingProvider(
     // one thing worth reading here, namely which inputs are rejected and why, harder to see.
 
     private val appContext = context.applicationContext
+    private val closed = AtomicBoolean(false)
 
     private val _connection = MutableStateFlow(BillingConnectionState.DISCONNECTED)
     override val connection: StateFlow<BillingConnectionState> = _connection.asStateFlow()
 
-    private val _purchases = MutableStateFlow<Set<PurchaseRecord>>(emptySet())
-    override val purchases: StateFlow<Set<PurchaseRecord>> = _purchases.asStateFlow()
+    private val purchaseSnapshots = BillingPurchaseSnapshots()
+    override val purchases: StateFlow<Set<PurchaseRecord>?> = purchaseSnapshots.state
 
     /**
      * Play's own objects, kept because its API needs them back.
@@ -91,19 +93,26 @@ class PlayBillingProvider(
 
     /** Completed by [purchasesUpdatedListener]; Play reports the outcome of a purchase through the
      * client-wide listener rather than through the call that started it. */
-    @Volatile private var pendingPurchase: CompletableDeferred<PurchaseResult>? = null
+    private val pendingPurchase = PendingPurchaseCoordinator()
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
-        val records = purchases.orEmpty().mapNotNull(::toRecord)
-        if (records.isNotEmpty()) {
-            _purchases.value = _purchases.value + records
+        if (!closed.get()) {
+            val records = purchases.orEmpty().mapNotNull(::toRecord)
+            if (records.isNotEmpty()) {
+                purchaseSnapshots.notePurchases(records)
+                onReconnected()
+            }
+            pendingPurchase.complete(records) { outcomeOf(result, it) }
         }
-        pendingPurchase?.complete(outcomeOf(result, records.firstOrNull()))
-        pendingPurchase = null
     }
 
     private fun onReconnected() {
-        scope.launch { refreshPurchases() }
+        scope.launch {
+            if (closed.get()) return@launch
+            runCatchingNonFatal { refreshPurchases() }.onFailure { error ->
+                AppLog.w(TAG) { "Ownership refresh failed: ${error.javaClass.simpleName}" }
+            }
+        }
     }
 
     private val client: BillingClient = BillingClient.newBuilder(appContext)
@@ -117,13 +126,14 @@ class PlayBillingProvider(
         .build()
 
     override suspend fun connect() {
-        if (client.isReady) return
+        if (closed.get() || client.isReady) return
         _connection.value = BillingConnectionState.CONNECTING
         val result = suspendCancellableCoroutine { continuation ->
             client.startConnection(object : BillingClientStateListener {
                 @Volatile private var resumed = false
 
                 override fun onBillingSetupFinished(billingResult: BillingResult) {
+                    if (closed.get()) return
                     // Called again on every automatic reconnection, not only for the call that
                     // started this one - which is why the state is published here rather than only
                     // from the result below. Play restarts its service on its own schedule, and
@@ -142,6 +152,7 @@ class PlayBillingProvider(
                 }
 
                 override fun onBillingServiceDisconnected() {
+                    if (closed.get()) return
                     _connection.value = BillingConnectionState.DISCONNECTED
                     if (!resumed) {
                         resumed = true
@@ -166,9 +177,8 @@ class PlayBillingProvider(
     }
 
     override suspend fun products(): List<BillingProduct> {
-        if (!client.isReady) return emptyList()
-        return query(PremiumProducts.SUBSCRIPTION_IDS, PremiumProducts.TYPE_SUBSCRIPTION) +
-            query(PremiumProducts.ONE_TIME_IDS, PremiumProducts.TYPE_ONE_TIME)
+        if (closed.get() || !client.isReady) return emptyList()
+        return query(PremiumProducts.ONE_TIME_IDS, PremiumProducts.TYPE_ONE_TIME)
     }
 
     private suspend fun query(ids: List<String>, type: String): List<BillingProduct> {
@@ -199,47 +209,45 @@ class PlayBillingProvider(
     }
 
     private fun toProduct(details: ProductDetails): BillingProduct? {
+        if (!PremiumProducts.isForSale(details.productId)) return null
         val tier = PremiumProducts.tierFor(details.productId) ?: return null
         val price = details.oneTimePurchaseOfferDetails?.formattedPrice
-            // The *last* pricing phase, not the first. A base plan with an introductory offer -
-            // a free first month, a discounted first year, both of which Play pushes hard - arrives
-            // as a list of phases ending in the one that repeats forever. Taking the first would
-            // print "0,00 ₴" as the price of a monthly subscription: technically what they pay
-            // today, and a lie about what they are agreeing to. Never formatted here - Play has
-            // already applied the user's currency and regional pricing.
-            ?: details.subscriptionOfferDetails
-                ?.firstOrNull()
-                ?.pricingPhases
-                ?.pricingPhaseList
-                ?.lastOrNull()
-                ?.formattedPrice
             ?: return null
-        return BillingProduct(id = details.productId, tier = tier, title = details.title, formattedPrice = price)
+        return BillingProduct(
+            id = details.productId,
+            tier = tier,
+            title = details.title,
+            formattedPrice = price,
+        )
     }
 
     override suspend fun purchase(product: BillingProduct, launchContext: Any?): PurchaseResult {
+        if (closed.get() || !PremiumProducts.isForSale(product.id)) return PurchaseResult.Unavailable
         val activity = launchContext as? Activity ?: return PurchaseResult.Failed("no activity")
         val details = productDetails[product.id] ?: return PurchaseResult.Unavailable
         val paramsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details)
-        // Subscriptions are bought as a specific offer; one-time products have none and setting a
-        // token on them is rejected.
-        details.subscriptionOfferDetails?.firstOrNull()?.offerToken?.let(paramsBuilder::setOfferToken)
         val flow = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(paramsBuilder.build()))
             .build()
 
-        val deferred = CompletableDeferred<PurchaseResult>()
-        pendingPurchase = deferred
-        val launch = client.launchBillingFlow(activity, flow)
+        val attempt = pendingPurchase.begin(product.id) ?: return PurchaseResult.Unavailable
+        val launch = runCatchingNonFatal { client.launchBillingFlow(activity, flow) }.getOrElse { error ->
+            pendingPurchase.launchFailed(attempt)
+            AppLog.w(TAG) { "Purchase sheet launch failed: ${error.javaClass.simpleName}" }
+            return PurchaseResult.Unavailable
+        }
         if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
-            pendingPurchase = null
+            pendingPurchase.launchFailed(attempt)
             return outcomeOf(launch, null)
         }
-        return deferred.await()
+        // Timeout/caller cancellation ends the UI wait, not Play's outstanding flow. Replacing
+        // this slot would deliver its late result to a different purchase. A missing callback
+        // therefore requires reopening the app before another checkout; restore remains available.
+        return PurchaseCallbackTimeoutPolicy.await(attempt.result)
     }
 
     override suspend fun restore(): PurchaseResult {
-        if (!client.isReady) return PurchaseResult.Unavailable
+        if (closed.get() || !client.isReady) return PurchaseResult.Unavailable
         val records = refreshPurchases() ?: return PurchaseResult.Unavailable
         // Reached the store, and this account owns nothing. That is an answer, not a failure, and
         // the user needs to be told which of the two it was.
@@ -256,16 +264,10 @@ class PlayBillingProvider(
      * at all, and Play fails these for ordinary reasons: the service restarting mid-call, a
      * network that dropped between connecting and asking. Returning an empty list there would
      * confiscate features somebody paid for, on a bad connection, silently - the exact failure the
-     * cached license exists to prevent, arriving through a different door. So a failed query leaves
-     * the last known answer standing.
+     * cached license exists to prevent, arriving through a different door. A failed query therefore
+     * publishes Unknown; the repository retains the cached entitlement until a complete answer.
      */
-    private suspend fun refreshPurchases(): Set<PurchaseRecord>? {
-        val subscriptions = queryOwned(PremiumProducts.TYPE_SUBSCRIPTION) ?: return null
-        val oneTime = queryOwned(PremiumProducts.TYPE_ONE_TIME) ?: return null
-        val owned = (subscriptions + oneTime).toSet()
-        _purchases.value = owned
-        return owned
-    }
+    private suspend fun refreshPurchases(): Set<PurchaseRecord>? = purchaseSnapshots.refresh(::queryOwned)
 
     /** What this account owns of [type], or null when the store could not be asked. */
     private suspend fun queryOwned(type: String): List<PurchaseRecord>? {
@@ -325,7 +327,7 @@ class PlayBillingProvider(
      * users who bought early enough to hit the window.
      */
     override suspend fun acknowledge(purchase: PurchaseRecord) {
-        if (!purchase.needsAcknowledgement) return
+        if (closed.get() || !purchase.needsAcknowledgement) return
         val token = purchaseTokens[purchase.productId] ?: return
         val result = client.acknowledgePurchase(
             AcknowledgePurchaseParams.newBuilder().setPurchaseToken(token).build(),
@@ -333,5 +335,12 @@ class PlayBillingProvider(
         if (result.responseCode != BillingClient.BillingResponseCode.OK) {
             AppLog.w(TAG) { "acknowledge failed for ${purchase.productId}: ${result.responseCode}" }
         }
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        pendingPurchase.complete(emptyList()) { PurchaseResult.Unavailable }
+        _connection.value = BillingConnectionState.DISCONNECTED
+        client.endConnection()
     }
 }

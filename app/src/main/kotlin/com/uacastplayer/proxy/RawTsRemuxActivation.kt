@@ -1,6 +1,6 @@
 package com.uacastplayer.proxy
 
-import com.uacastplayer.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
 
 /**
  * Decides whether an origin response should be remuxed into live HLS instead of served as a raw
@@ -8,9 +8,9 @@ import com.uacastplayer.cast.CastCompatibilityVerdict
  * - it isn't already an HLS playlist (nothing to remux, the existing rewrite path already works),
  * - its bytes actually look like MPEG-TS (an unrelated raw format shouldn't be force-fed to the
  *   TS segmenter),
- * - [com.uacastplayer.cast.CastCompatibilityPolicy] didn't find a confirmed-incompatible codec (an
+ * - [com.uacastplayer.core.cast.CastCompatibilityPolicy] didn't find a confirmed-incompatible codec (an
  *   incompatible codec would still fail after remuxing - only the *container* problem is fixable
- *   here, see `cast/CastCompatibilityPolicy.kt`). MPEG-2 video is the only verdict that fails this;
+ *   here, see `core/cast/CastCompatibilityPolicy.kt`). MPEG-2 video is the only verdict that fails this;
  *   Compatible, LikelyCompatible, and Unknown all pass: a raw TS stream is never playable as a bare
  *   passthrough URL regardless of codec verdict (the receiver needs HLS/DASH wrapping either way),
  *   so anything short of a confirmed problem should still get a chance via remux rather than a

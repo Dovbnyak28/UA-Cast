@@ -10,9 +10,15 @@ object CastLoadResultReducer {
         CastLoadResult.Success -> CastReducerResult(state = state.copy(loadPhase = CastLoadPhase.LOADED))
 
         is CastLoadResult.Failure -> CastReducerResult(
-            state = state.copy(loadPhase = CastLoadPhase.FAILED),
+            state = state.copy(
+                loadPhase = CastLoadPhase.FAILED,
+                receiverLoadFailed = true,
+                isRecovering = false,
+                recoveringWithoutPlayback = false,
+            ),
             effects = listOf(
                 CastSideEffect.RecordIncompatibility(result.reason),
+                CastSideEffect.CloseProxySession,
                 CastSideEffect.ResumeLocalPlayer,
             ),
         )

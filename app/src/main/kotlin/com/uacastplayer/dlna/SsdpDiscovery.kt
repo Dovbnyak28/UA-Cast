@@ -2,14 +2,18 @@ package com.uacastplayer.dlna
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
+import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.log.AppLog
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
-import kotlinx.coroutines.Dispatchers
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -43,11 +47,14 @@ private const val SEND_SPACING_MILLIS = 100L
  * exists so a noisy network cannot turn one tap into dozens of requests. */
 private const val MAX_LOCATIONS = 32
 
-private const val MILLIS_PER_SECOND = 1000L
 private const val RECEIVE_POLL_TIMEOUT_MILLIS = 500
 private const val MAX_DEVICE_DESCRIPTION_BYTES = 256 * 1024
 private const val RECEIVE_BUFFER_BYTES = 4096
 private const val MULTICAST_LOCK_TAG = "UACastPlayer:dlnaDiscovery"
+
+/** Keep the packet sender until the description fetch; hostname validation can block in DNS and
+ * must not run inside the four-second UDP receive loop. */
+private data class PendingLocation(val url: String, val sender: InetAddress)
 
 /**
  * SSDP M-SEARCH discovery for `urn:schemas-upnp-org:service:AVTransport:1` renderers, plus the
@@ -61,7 +68,11 @@ private const val MULTICAST_LOCK_TAG = "UACastPlayer:dlnaDiscovery"
  * acquire-before/release-after discipline [com.uacastplayer.data.cast.CastWakeLocks] uses for the
  * proxy session's power/Wi-Fi locks.
  */
-class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
+class SsdpDiscovery(
+    context: Context,
+    private val httpClient: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+) {
 
     private val appContext = context.applicationContext
 
@@ -78,9 +89,9 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
     suspend fun discover(): List<DlnaDevice> {
         val multicastLock = acquireMulticastLock()
         return try {
-            val locations = withContext(Dispatchers.IO) { collectLocations() }
+            val locations = withContext(ioDispatcher) { collectLocations() }
             val devices = coroutineScope {
-                locations.map { location -> async(Dispatchers.IO) { fetchDevice(location) } }.awaitAll()
+                locations.map { location -> async(ioDispatcher) { fetchDevice(location) } }.awaitAll()
             }.filterNotNull().distinctRenderers()
             // The other half of the empty-sheet diagnosis: locations that answered but yielded no
             // usable renderer are the normal ssdp:all result (routers, printers, speakers), so this
@@ -97,15 +108,18 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
      * no narrower type that covers all of that here - the same block spans socket setup, send, and
      * receive. */
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun collectLocations(): List<String> {
-        val locations = LinkedHashSet<String>()
+    private suspend fun collectLocations(): List<PendingLocation> {
+        val locations = LinkedHashSet<PendingLocation>()
         try {
             DatagramSocket().use { socket ->
                 socket.soTimeout = RECEIVE_POLL_TIMEOUT_MILLIS
-                val deadline = System.currentTimeMillis() + DISCOVERY_WINDOW_SECONDS * MILLIS_PER_SECOND
+                val deadlineNanos = System.nanoTime() +
+                    TimeUnit.SECONDS.toNanos(DISCOVERY_WINDOW_SECONDS.toLong())
                 sendSearchRequests(socket)
-                receiveResponsesUntilDeadline(socket, deadline, locations)
+                receiveResponsesUntilDeadline(socket, deadlineNanos, locations)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "SSDP discovery failed: ${e.javaClass.simpleName}" }
         }
@@ -134,6 +148,8 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
             try {
                 socket.send(DatagramPacket(message, message.size, address, SSDP_PORT))
                 sent++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLog.w(TAG) { "M-SEARCH send failed: ${e.javaClass.simpleName}" }
             }
@@ -157,30 +173,55 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
      */
     private suspend fun receiveResponsesUntilDeadline(
         socket: DatagramSocket,
-        deadline: Long,
-        locations: MutableSet<String>,
+        deadlineNanos: Long,
+        locations: MutableSet<PendingLocation>,
     ) {
         val buffer = ByteArray(RECEIVE_BUFFER_BYTES)
-        while (currentCoroutineContext().isActive && System.currentTimeMillis() < deadline) {
+        while (currentCoroutineContext().isActive && System.nanoTime() < deadlineNanos) {
             try {
                 val packet = DatagramPacket(buffer, buffer.size)
                 socket.receive(packet)
-                val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
-                SsdpResponseParser.parse(text).location?.let { locations += it }
+                collectLocationFrom(packet, locations)
             } catch (_: SocketTimeoutException) {
                 // Expected: soTimeout just lets us re-check the overall deadline periodically.
             }
         }
     }
 
+    /**
+     * Records one datagram's LOCATION, up to [MAX_LOCATIONS] of them.
+     *
+     * Bounded here rather than only by the `take()` after the loop, which is where the cap used to
+     * be applied. LOCATION is an unvalidated header value up to the size of the receive buffer, and
+     * nothing rate-limits who may answer an M-SEARCH - anything on the LAN can unicast replies at
+     * this socket for the whole window, and every distinct one was kept until the loop ended.
+     *
+     * Below the cap this changes nothing: the `take()` already discarded everything past it, and a
+     * LinkedHashSet hands back the same first [MAX_LOCATIONS] either way. Above it, a noisy or
+     * hostile network can no longer grow the set without limit, and the parse is skipped along with
+     * it. Receiving continues rather than breaking out, so the window still ends when it always did.
+     */
+    private fun collectLocationFrom(packet: DatagramPacket, locations: MutableSet<PendingLocation>) {
+        if (locations.size >= MAX_LOCATIONS) return
+        val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
+        SsdpResponseParser.parse(text).location
+            ?.let { UpnpHttpEndpoint.discoveryCandidate(it, packet.address) }
+            ?.let { locations += PendingLocation(it, packet.address) }
+    }
+
     /** One unreachable or misbehaving renderer must not lose the whole discovery result - a device
      * whose description cannot be fetched is simply dropped from the list (see the mapNotNull in
      * [discover]), which is why anything thrown here degrades to null rather than propagating. */
     @Suppress("TooGenericExceptionCaught")
-    private fun fetchDevice(location: String): DlnaDevice? {
-        val request = Request.Builder().url(location).build()
+    private suspend fun fetchDevice(candidate: PendingLocation): DlnaDevice? {
+        val location = UpnpHttpEndpoint.discoveryLocation(candidate.url, candidate.sender) ?: return null
         return try {
-            httpClient.newCall(request).execute().use { response -> parseDeviceDescription(response, location) }
+            val request = Request.Builder().url(location).build()
+            httpClient.newCall(request).executeCancellable { response ->
+                parseDeviceDescription(response, location)
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLog.w(TAG) { "Device description fetch failed for $location: ${e.javaClass.simpleName}" }
             null
@@ -188,7 +229,8 @@ class SsdpDiscovery(context: Context, private val httpClient: OkHttpClient) {
     }
 
     private fun parseDeviceDescription(response: Response, location: String): DlnaDevice? {
-        val body = response.body?.byteStream()?.takeIf { response.isSuccessful } ?: return null
+        if (!response.isSuccessful) return null
+        val body = response.body.byteStream()
         return when (val result = BoundedByteReader.readBytes(body, MAX_DEVICE_DESCRIPTION_BYTES)) {
             is BoundedBytesResult.Success -> DeviceDescriptionParser.parse(result.bytes, location)
             BoundedBytesResult.SizeLimitExceeded -> null

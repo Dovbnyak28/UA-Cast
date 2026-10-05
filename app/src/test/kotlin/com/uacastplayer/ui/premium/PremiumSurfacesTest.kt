@@ -12,6 +12,7 @@ import com.uacastplayer.premium.LicenseTier
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
+import com.uacastplayer.premium.billing.PremiumProducts
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -90,65 +91,111 @@ class PremiumSurfacesTest {
     fun lockedFeaturesCarryTheBadgeOnTheFreeTier() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                PremiumContent(section = section(License.FREE), nowMillis = now)
+                PremiumContent(section = section(License.FREE))
             }
         }
 
-        composeRule.onNodeWithText("Безкоштовна версія").assertIsDisplayed()
+        composeRule.onNodeWithText("Lite — безкоштовна версія").assertIsDisplayed()
         composeRule.onNodeWithText("Трансляція на телевізор через DLNA").assertIsDisplayed()
         composeRule.onAllNodesWithContentDescriptionCount("Функція Premium", expected = 7)
     }
 
-    /** During the trial every sold feature is unlocked, so no badge should be drawn at all. */
+    /** One purchase unlocks every feature, so the list has no lock badges. */
     @Test
-    fun nothingIsBadgedDuringTheTrial() {
+    fun nothingIsBadgedAfterThePremiumPurchase() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                PremiumContent(section = section(License.trialStartingAt(now)), nowMillis = now)
+                PremiumContent(section = section(License(LicenseTier.LIFETIME)))
             }
         }
 
         composeRule.onNodeWithContentDescription("Функція Premium").assertDoesNotExist()
     }
 
-    /** With no store there is nothing to buy and nothing to restore - and the button that could
-     * only ever do nothing must be absent, not merely inert. */
+    /** Catalogue failure must not hide restoration of an existing purchase. */
     @Test
-    fun theRestoreButtonIsAbsentWhenThereIsNoStore() {
+    fun theRestorePathRemainsVisibleWhenTheCatalogueIsEmpty() {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                PremiumContent(section = section(License.FREE), nowMillis = now)
+                PremiumContent(section = section(License.FREE))
             }
         }
 
-        val noStore = "Купувати поки нічого — застосунок не опубліковано в магазині. " +
-            "На час пробного періоду Premium відкритий усім."
+        val noStore = "Покупка Premium у цій збірці ще недоступна. Ви можете користуватися Lite. " +
+            "Раніше придбана ліцензія Premium лишається чинною."
         composeRule.onNodeWithText(noStore).assertIsDisplayed()
-        composeRule.onNodeWithText("Відновити покупки").assertDoesNotExist()
+        composeRule.onNodeWithText("Відновити покупки").assertIsDisplayed()
     }
 
     /** And with a store, both the price and the restore path appear. The price comes from the
      * product, never from a string resource. */
     @Test
     fun aStoreBringsItsOwnPricesAndTheRestorePath() {
-        val product = BillingProduct("monthly", LicenseTier.MONTHLY, "Місячна", "60,00 ₴")
+        val product = BillingProduct(PremiumProducts.LIFETIME, LicenseTier.LIFETIME, "Premium", "60,00 ₴")
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                PremiumContent(section = section(License.FREE, listOf(product)), nowMillis = now)
+                PremiumContent(section = section(License.FREE, listOf(product)))
             }
         }
 
-        composeRule.onNodeWithText("Місячна").assertIsDisplayed()
-        composeRule.onNodeWithText("60,00 ₴").assertIsDisplayed()
+        composeRule.onNodeWithText("Premium · Усі функції · Одна покупка").assertIsDisplayed()
+        composeRule.onNodeWithText("Купити · 60,00 ₴").assertIsDisplayed()
         composeRule.onNodeWithText("Відновити покупки").assertIsDisplayed()
     }
 
-    private val product = BillingProduct("monthly", LicenseTier.MONTHLY, "Місячна", "60,00 ₴")
+    private val product = BillingProduct(PremiumProducts.LIFETIME, LicenseTier.LIFETIME, "Premium", "60,00 ₴")
+
+    @Test
+    fun legacyPlansAndAnUnpricedPremiumAreNeverOffered() {
+        val retired = listOf(
+            BillingProduct(PremiumProducts.MONTHLY, LicenseTier.MONTHLY, "Monthly", "15,00 ₴"),
+            BillingProduct(PremiumProducts.YEARLY, LicenseTier.YEARLY, "Yearly", "150,00 ₴"),
+            product.copy(formattedPrice = ""),
+        )
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                PremiumContent(section = section(License.FREE, retired))
+            }
+        }
+        composeRule.onNodeWithText("Monthly").assertDoesNotExist()
+        composeRule.onNodeWithText("Yearly").assertDoesNotExist()
+        composeRule.onNodeWithText("Premium · Усі функції · Одна покупка").assertDoesNotExist()
+        composeRule.onNodeWithText("Відновити покупки").assertIsDisplayed()
+    }
+
+    @Test
+    fun anOwnedPremiumIsNotOfferedForPurchaseAgain() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                PremiumContent(section = section(License(LicenseTier.LIFETIME), listOf(product)))
+            }
+        }
+        composeRule.onNodeWithText("Premium — усі функції відкриті").assertIsDisplayed()
+        composeRule.onNodeWithText("Купити · 60,00 ₴").assertDoesNotExist()
+        composeRule.onNodeWithText("Відновити покупки").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Функція Premium").assertDoesNotExist()
+    }
+
+    @Test
+    fun restorationAndItsOutcomeWorkWithoutAProductCatalogue() {
+        var restored = 0
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                PremiumContent(
+                    section = section(License.FREE, outcome = PurchaseResult.NothingToRestore)
+                        .copy(onRestore = { restored++ }),
+                )
+            }
+        }
+        composeRule.onNodeWithText("Відновити покупки").performClick()
+        assertEquals(1, restored)
+        composeRule.onNodeWithText("На цьому акаунті Google немає що відновлювати.").assertIsDisplayed()
+    }
 
     private fun showOutcome(outcome: PurchaseResult?) {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                PremiumContent(section = section(License.FREE, listOf(product), outcome), nowMillis = now)
+                PremiumContent(section = section(License.FREE, listOf(product), outcome))
             }
         }
     }
@@ -177,13 +224,14 @@ class PremiumSurfacesTest {
         ).assertIsDisplayed()
     }
 
-    /** Money: a purchase that did not go through has to say that nothing was charged, or the user's
-     * next move is to try again and risk paying twice. */
+    /** A timeout may still be followed by a successful store callback. Never claim no charge. */
     @Test
-    fun aFailedPurchaseSaysNothingWasCharged() {
+    fun anUnconfirmedPurchaseOffersRestoreBeforeAnotherPayment() {
         showOutcome(PurchaseResult.Failed("card declined for account foo@example.com"))
 
-        composeRule.onNodeWithText("Покупка не відбулася. Кошти не списано.").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Не вдалося підтвердити покупку. Відновіть покупки та перевірте Google Play перед повторною оплатою.",
+        ).assertIsDisplayed()
         // Play's debug message can name the account or the product. It stays in the log.
         composeRule.onNodeWithText("card declined for account foo@example.com").assertDoesNotExist()
     }
@@ -196,7 +244,9 @@ class PremiumSurfacesTest {
     fun cancellingSaysNothingAtAll() {
         showOutcome(PurchaseResult.Cancelled)
 
-        composeRule.onNodeWithText("Покупка не відбулася. Кошти не списано.").assertDoesNotExist()
+        composeRule.onNodeWithText(
+            "Не вдалося підтвердити покупку. Відновіть покупки та перевірте Google Play перед повторною оплатою.",
+        ).assertDoesNotExist()
         composeRule.onNodeWithText("На цьому акаунті Google немає що відновлювати.").assertDoesNotExist()
     }
 }

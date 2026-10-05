@@ -52,6 +52,14 @@ class MpegTsSnifferTest {
     }
 
     @Test
+    fun `the populated length never inspects bytes outside a reusable buffer prefix`() {
+        val buffer = tsBytes(2)
+
+        assertFalse(MpegTsSniffer.looksLikeMpegTs(buffer, PACKET_SIZE))
+        assertTrue(MpegTsSniffer.looksLikeMpegTs(buffer, PACKET_SIZE + 1))
+    }
+
+    @Test
     fun `empty bytes do not look like TS`() {
         assertFalse(MpegTsSniffer.looksLikeMpegTs(ByteArray(0)))
     }

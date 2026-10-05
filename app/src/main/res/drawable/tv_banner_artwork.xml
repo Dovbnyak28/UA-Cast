@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Editable source for the supersampled TV bitmap. See TvLauncherBannerTest and the banner runbook. -->
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="320"
+                android:endY="180">
+                <item android:offset="0" android:color="#0A1733" />
+                <item android:offset="0.6" android:color="#112D55" />
+                <item android:offset="1" android:color="#174679" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- One coherent TV/play/cast mark, with space for the cast waves in the lower left. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F5F8FF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M29,88V68Q29,60 37,60H100Q108,60 108,68V110Q108,118 100,118H67" />
+    <path
+        android:fillColor="#FFD65A"
+        android:pathData="M61,76L61,102L84,89Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#40DCFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M29,89A29,29 0 0,1 58,118M29,102A16,16 0 0,1 45,118" />
+    <path
+        android:fillColor="#40DCFF"
+        android:pathData="M32.5,118A3.5,3.5 0 1,1 25.5,118A3.5,3.5 0 1,1 32.5,118Z" />
+
+    <!-- Roboto Condensed Bold contours, adapted to this tile. See assets/licenses/tv-wordmark-roboto.txt. -->
+    <group android:translateX="-1">
+        <path
+            android:fillColor="#FFD65A"
+            android:pathData="M140.34,72.09L147.60,72.09L147.60,96.68Q147.60,102.91 144.28,105.67Q140.96,108.42 135.81,108.42Q130.60,108.42 127.30,105.67Q124.00,102.91 124.00,96.68L124.00,72.09L131.26,72.09L131.26,96.68Q131.26,100.20 132.43,101.31Q133.60,102.42 135.81,102.42Q138.05,102.42 139.20,101.31Q140.34,100.20 140.34,96.68L140.34,72.09ZM150.47,107.93L161.67,72.09L168.29,72.09L179.56,107.93L171.86,107.93L169.94,100.60L160.07,100.60L158.15,107.93L150.47,107.93ZM161.65,94.57L168.37,94.57L164.99,81.77L161.65,94.57Z" />
+        <path
+            android:fillColor="#F5F8FF"
+            android:pathData="M212.09,95.97L219.33,95.97Q219.08,102.07 215.88,105.25Q212.68,108.42 206.92,108.42Q201.01,108.42 197.74,104.56Q194.39,100.69 194.39,93.41L194.39,86.98Q194.39,79.48 197.78,75.53Q201.16,71.58 207.02,71.58Q212.88,71.58 215.93,74.86Q218.98,78.15 219.38,84.25L212.14,84.25Q212.02,80.41 210.93,79.00Q209.85,77.58 207.02,77.58Q204.24,77.58 202.96,79.58Q201.68,81.57 201.63,86.54L201.63,93.06Q201.63,98.13 202.74,100.28Q203.85,102.42 206.92,102.42Q209.60,102.42 210.79,101.14Q211.97,99.86 212.09,95.97ZM221.78,107.93L232.98,72.09L239.60,72.09L250.87,107.93L243.17,107.93L241.25,100.60L231.38,100.60L229.46,107.93L221.78,107.93ZM232.95,94.57L239.67,94.57L236.30,81.77L232.95,94.57ZM269.33,98.50Q269.33,96.66 268.43,95.46Q267.53,94.27 263.71,92.72Q259.90,91.17 257.04,88.78Q254.02,86.25 254.02,81.62Q254.02,77.09 257.19,74.35Q260.37,71.60 265.36,71.60Q270.51,71.60 273.57,74.70Q276.64,77.80 276.64,82.65L269.40,82.65Q269.40,80.41 268.43,78.96Q267.46,77.51 265.24,77.51Q263.20,77.51 262.23,78.72Q261.25,79.92 261.25,81.64Q261.25,83.39 262.72,84.57Q264.18,85.75 266.59,86.81Q271.62,88.61 274.10,91.32Q276.59,94.02 276.59,98.45Q276.59,103.18 273.61,105.80Q270.63,108.42 265.51,108.42Q262.43,108.42 259.59,107.17Q256.75,105.91 254.93,103.30Q253.11,100.69 253.11,96.61L260.37,96.61Q260.37,99.86 261.66,101.19Q262.95,102.52 265.51,102.52Q267.60,102.52 268.46,101.37Q269.33,100.23 269.33,98.50ZM279.71,78.12L279.71,72.09L304.54,72.09L304.54,78.12L295.66,78.12L295.66,107.93L288.42,107.93L288.42,78.12L279.71,78.12Z" />
+    </group>
+</vector>

@@ -99,9 +99,10 @@ fun rememberFeatureGate(
 ): PremiumSurfaces {
     var refused by remember { mutableStateOf<Feature?>(null) }
     var showSheet by remember { mutableStateOf(false) }
-    // Keyed on the manager alone: it reads the entitlement StateFlow on each call, so a purchase
-    // that lands while a screen is open changes the answer without rebuilding the gate.
-    val gate = remember(featureManager) {
+    // A click reads the manager's latest value, but a composed lock badge does not collect that
+    // StateFlow. Changing the provided gate on entitlement updates invalidates those children too,
+    // even when their other parameters are unchanged (purchase/refund while a screen stays open).
+    val gate = remember(featureManager, section.entitlements) {
         FeatureGate(
             isUnlocked = featureManager::isUnlocked,
             onPaywall = { feature -> refused = feature },
@@ -113,7 +114,6 @@ fun rememberFeatureGate(
     val notice: @Composable (Modifier) -> Unit = { modifier ->
         UpgradeBanner(
             section = section,
-            nowMillis = System.currentTimeMillis(),
             onSeePremium = { showSheet = true },
             modifier = modifier,
         )
@@ -132,7 +132,6 @@ fun rememberFeatureGate(
         if (showSheet) {
             PremiumBottomSheet(
                 section = section,
-                nowMillis = System.currentTimeMillis(),
                 onDismiss = { showSheet = false },
             )
         }

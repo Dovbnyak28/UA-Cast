@@ -35,7 +35,7 @@
 
 <a name="en"></a>
 <h1>UA Cast Player — Privacy Policy</h1>
-<p class="updated">Last updated: July 14, 2026</p>
+<p class="updated">Last updated: August 28, 2026</p>
 
 <p>
 UA Cast Player is a personal media playlist player. It plays M3U / M3U8 playlists that
@@ -47,8 +47,12 @@ already have.
 
 <h2>Data we collect</h2>
 <p>
-<strong>None.</strong> UA Cast Player has no analytics SDK, no advertising SDK, no crash-reporting
-SDK, and no user accounts. Nothing you do inside the app is transmitted to the app's developer.
+<strong>None for analytics or advertising.</strong> UA Cast Player has no analytics SDK, no
+advertising SDK, no automatic crash-reporting SDK, and no user accounts. The app does make a
+read-only update check to the public GitHub Releases API, and it may download a release APK from
+GitHub when you explicitly choose to install an update. GitHub receives the normal network metadata
+for those requests (such as your IP address and user-agent) under GitHub's own policies; the app
+does not send your playlist or viewing history there.
 </p>
 
 <h2>Data the app processes, and where it goes</h2>
@@ -70,12 +74,23 @@ those addresses (your IPTV/media provider, or the TV-guide/icon source you chose
 you opened those links yourself. No server operated by the app's developer is involved, and no
 copy of this data is sent to the developer.
 </p>
+<p>
+If you choose <strong>Send diagnostics</strong>, the app creates a report locally and opens it in
+your mail or share application. The report contains technical device information and a recent
+activity log. Playlist URLs, credentials, and access tokens are redacted when recognized, but
+provider host names, local network addresses, channel names, and other technical identifiers may
+remain. Nothing is sent until you press Send in the application you chose, and that application
+and its provider then handle the report under their own policies.
+</p>
 
 <h2>Third-party services</h2>
 <p>
 Casting uses the <strong>Google Cast SDK</strong> to communicate with your Chromecast / Google TV
 / Cast-compatible device on your local network, governed by Google's own policies for that SDK. No
-other third-party service is integrated into the app.
+other analytics or advertising service is integrated into the app. The app also uses GitHub for
+optional release update checks/downloads and Google Play Billing only in a build where premium
+sales have been enabled; those services receive the data needed for their respective requests
+under their own policies.
 </p>
 
 <h2>Permissions used</h2>
@@ -88,6 +103,12 @@ other third-party service is integrated into the app.
   <li><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_MEDIA_PLAYBACK</code> — lets the
   app keep a Cast session's local relay running in the background (with a visible, dismissible
   notification) instead of Android stopping it a few seconds after you leave the app.</li>
+  <li><code>CHANGE_WIFI_MULTICAST_STATE</code> — allows local SSDP discovery of DLNA renderers.</li>
+  <li><code>POST_NOTIFICATIONS</code> — allows the visible Cast-session notification on Android 13
+  and later, requested only when a Cast session starts.</li>
+  <li><code>REQUEST_INSTALL_PACKAGES</code> and
+  <code>UPDATE_PACKAGES_WITHOUT_USER_ACTION</code> — used only by the optional sideload updater,
+  when that distribution build includes it and you explicitly start an install.</li>
 </ul>
 <p>The app requests no camera, microphone, contacts, location, storage, or account permissions.</p>
 
@@ -95,7 +116,9 @@ other third-party service is integrated into the app.
 <p>
 App data is kept in the app's private storage only. Automatic backup to any cloud service is
 disabled for this app (<code>android:allowBackup="false"</code>), so this data is never copied off
-your device by the operating system either.
+your device by the operating system either. A backup that you explicitly export is different: it
+is written to the document provider you select and is not encrypted by the app. It may contain
+provider credentials and private stream links; treat it like a password.
 </p>
 
 <h2>Your control over this data</h2>
@@ -123,7 +146,7 @@ If this policy changes, the update will be posted on this page with a new "Last 
 
 <a name="uk"></a>
 <h1>UA Cast Player — Політика конфіденційності</h1>
-<p class="updated">Востаннє оновлено: 14 липня 2026</p>
+<p class="updated">Востаннє оновлено: 28 серпня 2026</p>
 
 <p>
 UA Cast Player — це персональний плеєр медіа-плейлистів. Він відтворює M3U / M3U8 плейлисти, які
@@ -135,9 +158,12 @@ UA Cast Player — це персональний плеєр медіа-плей�
 
 <h2>Які дані ми збираємо</h2>
 <p>
-<strong>Жодних.</strong> UA Cast Player не має SDK аналітики, реклами чи звітування про збої, а
-також не має облікових записів користувачів. Ніщо з того, що ви робите в застосунку, не
-передається розробнику.
+<strong>Жодних для аналітики чи реклами.</strong> UA Cast Player не має SDK аналітики, реклами чи
+автоматичного звітування про збої, а також не має облікових записів користувачів. Застосунок
+виконує лише read-only перевірку оновлень через публічний GitHub Releases API та може завантажити
+APK з GitHub, коли ви явно обираєте встановлення оновлення. GitHub отримує звичайні мережеві
+метадані таких запитів (наприклад, IP-адресу й user-agent) відповідно до власної політики; ваш
+плейлист і історія перегляду туди не надсилаються.
 </p>
 
 <h2>Які дані обробляє застосунок і куди вони йдуть</h2>
@@ -160,12 +186,23 @@ UA Cast Player — це персональний плеєр медіа-плей�
 якби ви відкрили ці посилання самі. Жоден сервер розробника застосунку в цьому не бере участі, і
 копія цих даних розробнику не надсилається.
 </p>
+<p>
+Якщо ви обираєте <strong>Надіслати діагностику</strong>, застосунок створює звіт локально й
+відкриває його у вашій поштовій або іншій програмі для поширення. Звіт містить технічні дані
+пристрою та журнал останніх дій. URL плейлистів, облікові дані й токени доступу маскуються, якщо
+їх розпізнано, але можуть залишитися назви серверів провайдерів, локальні мережеві адреси, назви
+каналів та інші технічні ідентифікатори. Нічого не надсилається, доки ви не натиснете «Надіслати»
+у вибраній програмі; після цього звіт обробляється нею та її провайдером за їхніми політиками.
+</p>
 
 <h2>Сторонні сервіси</h2>
 <p>
 Кастинг використовує <strong>Google Cast SDK</strong> для зв'язку з вашим Chromecast / Google TV /
 сумісним пристроєм у локальній мережі, згідно з власними правилами Google для цього SDK. Жодного
-іншого стороннього сервісу в застосунку немає.
+іншого сервісу аналітики чи реклами в застосунку немає. Також GitHub використовується для
+необов'язкової перевірки/завантаження оновлень, а Google Play Billing — лише у збірці, де ввімкнено
+продаж premium; ці сервіси отримують дані, необхідні для відповідних запитів, за власними
+політиками.
 </p>
 
 <h2>Використовувані дозволи</h2>
@@ -177,6 +214,12 @@ UA Cast Player — це персональний плеєр медіа-плей�
   <li><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_MEDIA_PLAYBACK</code> — дозволяє
   застосунку тримати локальний ретранслятор сеансу Cast активним у фоні (з видимим сповіщенням, яке
   можна закрити) замість того, щоб Android зупиняв його за кілька секунд після виходу із застосунку.</li>
+  <li><code>CHANGE_WIFI_MULTICAST_STATE</code> — для локального SSDP-пошуку DLNA-рендерерів.</li>
+  <li><code>POST_NOTIFICATIONS</code> — для видимого сповіщення сеансу Cast на Android 13 і новіших
+  версіях; запитується лише під час початку сеансу Cast.</li>
+  <li><code>REQUEST_INSTALL_PACKAGES</code> і
+  <code>UPDATE_PACKAGES_WITHOUT_USER_ACTION</code> — лише для необов'язкового sideload-updater у
+  збірці, де він присутній, і тільки після явного запуску встановлення користувачем.</li>
 </ul>
 <p>
 Застосунок не запитує доступ до камери, мікрофона, контактів, геолокації, сховища чи облікових
@@ -187,7 +230,9 @@ UA Cast Player — це персональний плеєр медіа-плей�
 <p>
 Дані застосунку зберігаються лише в його приватному сховищі. Автоматичне резервне копіювання у
 хмару для цього застосунку вимкнено (<code>android:allowBackup="false"</code>), тож ОС також ніколи
-не копіює ці дані за межі вашого пристрою.
+не копіює ці дані за межі вашого пристрою. Явно експортована вами резервна копія — інша річ: вона
+записується у вибраного вами документ-провайдера й не шифрується застосунком. Вона може містити
+дані доступу провайдера та приватні посилання на потоки; поводьтеся з нею як із паролем.
 </p>
 
 <h2>Ваш контроль над цими даними</h2>

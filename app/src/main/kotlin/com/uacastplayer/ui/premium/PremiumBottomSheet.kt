@@ -3,6 +3,8 @@ package com.uacastplayer.ui.premium
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -14,7 +16,10 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.GapL
+import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 
 /**
  * The short path to premium: what it costs and how to restore it, without leaving the screen the
@@ -29,7 +34,6 @@ import com.uacastplayer.ui.theme.UaTheme
 @Composable
 fun PremiumBottomSheet(
     section: PremiumSectionState,
-    nowMillis: Long,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -38,11 +42,14 @@ fun PremiumBottomSheet(
         sheetState = sheetState,
         containerColor = UaTheme.palette.surface1,
     ) {
+        // A missing store/product list must not remove the modal's phone-remote target.
+        TvDialogInputRegistration()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ScreenHPadding)
+                .padding(bottom = GapL),
         ) {
             Text(
                 text = stringResource(R.string.premium_open),
@@ -50,7 +57,7 @@ fun PremiumBottomSheet(
                 color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-            PremiumContent(section = section, nowMillis = nowMillis, showIntro = false)
+            PremiumContent(section = section, showIntro = false)
         }
     }
 }

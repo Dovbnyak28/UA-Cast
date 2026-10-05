@@ -2,6 +2,8 @@
 agp = "8.13.2"
 playBilling = "8.0.0"
 kotlin = "2.4.0"
+# Core 1.19, Lifecycle 2.11 and Compose BOM 2026.08 cross the same compileSdk 37 boundary. Keep
+# these three on the latest API-36-compatible line until the coordinated AGP 9/API 37 migration.
 coreKtx = "1.18.0"
 splashscreen = "1.2.0"
 activityCompose = "1.13.0"
@@ -17,6 +19,8 @@ composeBom = "2026.06.01"
 media3 = "1.10.1"
 nextlibMedia3ext = "1.10.1-0.13.0"
 castFramework = "22.3.1"
+# 5.5.0's okhttp-android AAR requires compileSdk 37. Keep 5.4.0 until the coordinated AGP 9/API 37
+# migration; ECH is opt-in, so pinning here does not remove a feature currently used by the app.
 okhttp = "5.4.0"
 coil = "3.5.0"
 profileinstaller = "1.4.1"
@@ -24,18 +28,17 @@ baselineprofile = "1.4.1"
 benchmarkMacroJunit4 = "1.4.1"
 uiautomator = "2.4.0"
 junit = "4.13.2"
-androidxTestExtJunit = "1.2.1"
-androidxTestEspresso = "3.6.1"
+androidxTestExtJunit = "1.3.0"
+androidxTestEspresso = "3.7.0"
 kotlinxCoroutines = "1.11.0"
-appcompat = "1.7.1"
+appcompat = "1.8.0"
 lifecycle = "2.10.0"
-fragmentKtx = "1.8.9"
-detekt = "1.23.8"
+fragmentKtx = "1.9.0"
+detekt = "2.0.0-alpha.6"
 desugarJdkLibs = "2.1.5"
-orgJson = "20260719"
-leakcanary = "2.14"
-robolectric = "4.16"
-roborazzi = "1.70.0"
+orgJson = "20260814"
+robolectric = "4.16.1"
+roborazzi = "1.72.0"
 
 [libraries]
 # Google Play Billing. The only dependency in this project that exists to take money, and the only
@@ -99,15 +102,10 @@ androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espres
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmarkMacroJunit4" }
 androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
 
-# Debug-only leak detector (never shipped in release). The app previously had NO leak detection at
-# all, which is why the double-ExoPlayer leak surfaced only via OOM crashes and manual logcat -
-# this makes a retained PlayerViewModel/ExoPlayer visible the moment it happens.
 # Backports java.time (and a few other java.util APIs) to the minSdk 24 devices that predate them -
 # without this, every java.time call in the app is a NoClassDefFoundError on Android 7.0/7.1, which
 # is what android lint's NewApi findings were reporting. See app/build.gradle.kts compileOptions.
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
-
-leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
 
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
@@ -124,6 +122,6 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile" }
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }

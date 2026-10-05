@@ -9,6 +9,10 @@ data class BackupPlaylistSource(
     val location: String,
     val displayName: String?,
     val addedAtEpochMillis: Long,
+    /** Original bytes, not decoded text: preserves UTF-16 and legacy Windows-1251 playlists. */
+    val playlistBase64: String? = null,
+    /** SHA-256 of the canonical Base64 string; detects accidental payload corruption. */
+    val playlistDigest: String? = null,
 )
 
 /** Mirrors `com.uacastplayer.favorites.FavoriteChannel` - [streamUrl] is included (despite the
@@ -22,6 +26,10 @@ data class BackupFavorite(
     val tvgId: String?,
     val groupTitle: String?,
     val addedAtMillis: Long,
+    val tvgName: String? = null,
+    val tvgLogo: String? = null,
+    val userAgent: String? = null,
+    val referrer: String? = null,
 )
 
 /**
@@ -44,5 +52,14 @@ data class BackupData(
     val settings: BackupSettings,
 )
 
+/** One-shot user-visible outcome of writing a backup through Android's document provider. */
+enum class BackupExportResult { SUCCESS, FAILURE }
+
 /** Shown to the user after a successful import (see AppViewModel.importBackupFrom). */
-data class BackupImportSummary(val importedSourceCount: Int, val importedFavoriteCount: Int)
+data class BackupImportSummary(
+    val importedSourceCount: Int,
+    val importedFavoriteCount: Int,
+    val persistenceFailed: Boolean = false,
+    val fileRejected: Boolean = false,
+    val sourceLimitExceededCount: Int = 0,
+)

@@ -1,5 +1,8 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.AudioCodec
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.VideoCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -61,9 +64,9 @@ class CastReceiverStatusReducerTest {
     }
 
     @Test
-    fun `IDLE with FINISHED only closes the proxy session`() {
+    fun `IDLE with FINISHED relinquishes playback after recovery is exhausted`() {
         val result = CastReceiverStatusReducer.reduce(CastPlaybackState(), ReceiverStatus.IDLE, IdleReason.FINISHED)
-        assertEquals(listOf(CastSideEffect.CloseProxySession), result.effects)
+        assertEquals(listOf(CastSideEffect.CloseProxySession, CastSideEffect.ResumeLocalPlayer), result.effects)
     }
 
     @Test
@@ -207,7 +210,7 @@ class CastReceiverStatusReducerTest {
             IdleReason.FINISHED,
             selfInitiated = true,
         )
-        assertEquals(listOf(CastSideEffect.CloseProxySession), result.effects)
+        assertEquals(listOf(CastSideEffect.CloseProxySession, CastSideEffect.ResumeLocalPlayer), result.effects)
     }
 
     @Test

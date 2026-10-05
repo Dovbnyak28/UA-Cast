@@ -1,12 +1,19 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.data.epg.EpgFailureReason
 import com.uacastplayer.data.epg.EpgOutcome
 import com.uacastplayer.data.epg.EpgRepository
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.epg.EpgRefreshPolicy
 import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgSourceAutoDetect
 import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.log.AppLog
+import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +23,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val EPG_TICK_MILLIS = 30_000L
+private const val TAG = "EpgController"
 
 /**
  * Owns the active EPG source/data - moved out of [com.uacastplayer.AppViewModel] as a move-only
@@ -30,26 +38,59 @@ class EpgController(
     private val epgRepository: EpgRepository,
     private val scope: CoroutineScope,
     private val onLoaded: () -> Unit,
+    /** Whether the current network is one this app may spend ~50MB on - see [EpgRefreshPolicy].
+     * A lambda rather than a ConnectivityManager so this class stays free of Android. */
+    private val isUnmeteredNetwork: () -> Boolean = { false },
 ) {
     private val _epgState = MutableStateFlow(
         EpgUiState(selectedSource = preferences.epgSource, customUrl = preferences.customEpgUrl)
     )
     val epgState: StateFlow<EpgUiState> = _epgState.asStateFlow()
 
-    var programmeCount: Int = 0
-        private set
+    /**
+     * The one guide load allowed to be in flight, for the same reason [PlaylistController] keeps
+     * one: every entry point here replaces the whole guide, so two of them racing means the one
+     * that happens to finish *last* wins - not the one the user picked last.
+     *
+     * It was worse here than it ever was for playlists, because a load also writes the cache. There
+     * is a single `epg_snapshot.bin` (see [com.uacastplayer.data.epg.EpgSnapshotStore]), so a slow
+     * source that lands after a fast one replaced it both swapped the guide on screen for one the
+     * user had already navigated away from and wrote it to disk, where it outlived the process:
+     * Settings said one source, the guide was another's, and a restart restored the wrong one.
+     *
+     * [startTicking] is deliberately not routed through here - it is a permanent loop, not a load.
+     */
+    private var loadJob: Job? = null
+    private val loadGeneration = AtomicLong()
+    private val initialLoadStarted = AtomicBoolean(false)
 
-    /** Restores the cached snapshot at startup, or does an initial fetch if there isn't one -
-     * called once from AppViewModel.init. */
+    private fun launchLoad(block: suspend (generation: Long) -> Unit) {
+        val generation = loadGeneration.incrementAndGet()
+        loadJob?.cancel()
+        loadJob = scope.launch { block(generation) }
+    }
+
+    /**
+     * Restores the cached snapshot once a playlist is actually available, or does an initial fetch
+     * if there isn't one. The idempotent guard matters because every successful playlist switch
+     * reaches this method; a fresh install with no playlist must not download and parse a large TV
+     * guide that cannot yet be used.
+     */
     fun loadInitial() {
-        scope.launch {
+        if (!initialLoadStarted.compareAndSet(false, true)) return
+        launchLoad { generation ->
             // Before anything else, and regardless of whether this run downloads at all: a process
             // killed mid-download or mid-parse leaves a full feed behind in filesDir, where nothing
             // reclaims it. See EpgRepository.deleteStaleDownloads.
+            // Safe to sit inside a cancellable job: EpgRepository.deleteStaleDownloads is one
+            // non-suspending sweep inside a single withContext, so cancellation can only be
+            // observed on the way out - after the sweep has already run.
             epgRepository.deleteStaleDownloads()
-            val restored = epgRepository.restoreSnapshot()
+            val configuredUrl = preferences.customEpgUrl ?: preferences.epgSource.url
+            val restored = epgRepository.restoreSnapshot(configuredUrl)
             if (restored != null) {
-                applyEpgOutcome(restored)
+                applyEpgOutcome(restored.outcome, loadGeneration = generation)
+                refreshIfFromAnEarlierDay(restored.savedAtMillis, generation)
             } else {
                 // No cached snapshot (fresh install, or cache was cleared) - without this, the
                 // configured source is never fetched until the user manually reopens Settings and
@@ -61,8 +102,37 @@ class EpgController(
                 } else {
                     epgRepository.loadFromSource(preferences.epgSource)
                 }
-                applyEpgOutcome(outcome)
+                applyEpgOutcome(outcome, loadGeneration = generation)
             }
+        }
+    }
+
+    /**
+     * Re-downloads a guide that was cached on an earlier day, behind the restored one.
+     *
+     * Deliberately after the snapshot has already been applied, and without touching `isLoading`:
+     * the user has a usable guide from the first frame and this replaces it quietly if it arrives.
+     * A failed refresh is logged and otherwise ignored - it must not set `hasError`, because the
+     * guide on screen is real and telling somebody it is broken would be false.
+     */
+    private suspend fun refreshIfFromAnEarlierDay(savedAtMillis: Long, generation: Long) {
+        val shouldRefresh = EpgRefreshPolicy.shouldRefresh(
+            savedAtMillis = savedAtMillis,
+            nowMillis = System.currentTimeMillis(),
+            zoneId = ZoneId.systemDefault(),
+            isUnmetered = isUnmeteredNetwork(),
+        )
+        if (!shouldRefresh) return
+        val customUrl = preferences.customEpgUrl
+        val outcome = if (customUrl != null) {
+            epgRepository.loadFromUrl(customUrl)
+        } else {
+            epgRepository.loadFromSource(preferences.epgSource)
+        }
+        if (outcome is EpgOutcome.Loaded) {
+            applyEpgOutcome(outcome, loadGeneration = generation)
+        } else {
+            AppLog.w(TAG) { "Keeping the cached guide: ${EpgFailureReason.of(outcome)}" }
         }
     }
 
@@ -78,14 +148,37 @@ class EpgController(
     }
 
     fun selectEpgSource(source: EpgSource) {
+        initialLoadStarted.set(true)
         preferences.epgSource = source
         preferences.customEpgUrl = null
         preferences.hasChosenEpgSource = true
         _epgState.update {
-            it.copy(selectedSource = source, customUrl = null, suggestedUrl = null, isLoading = true, hasError = false)
+            val sourceChanged = it.customUrl != null || it.selectedSource != source
+            it.copy(
+                data = if (sourceChanged) null else it.data,
+                selectedSource = source,
+                customUrl = null,
+                suggestedUrl = null,
+                isLoading = true,
+                hasError = false,
+                lastFailure = null,
+            )
         }
-        scope.launch {
-            applyEpgOutcome(epgRepository.loadFromSource(source))
+        launchLoad { generation ->
+            applyEpgOutcome(epgRepository.loadFromSource(source), loadGeneration = generation)
+        }
+    }
+
+    /** Retry the current source without changing the user's provider or auto-detection choice. */
+    fun refresh() {
+        if (_epgState.value.isLoading) return
+        initialLoadStarted.set(true)
+        val current = _epgState.value
+        _epgState.update { it.copy(isLoading = true, hasError = false, lastFailure = null) }
+        launchLoad { generation ->
+            val outcome = current.customUrl?.let { epgRepository.loadFromUrl(it) }
+                ?: epgRepository.loadFromSource(current.selectedSource)
+            applyEpgOutcome(outcome, loadGeneration = generation)
         }
     }
 
@@ -97,11 +190,21 @@ class EpgController(
     }
 
     fun applyCustomEpgUrl(url: String, markChosen: Boolean) {
+        initialLoadStarted.set(true)
         preferences.customEpgUrl = url
         if (markChosen) preferences.hasChosenEpgSource = true
-        _epgState.update { it.copy(customUrl = url, suggestedUrl = null, isLoading = true, hasError = false) }
-        scope.launch {
-            applyEpgOutcome(epgRepository.loadFromUrl(url))
+        _epgState.update {
+            it.copy(
+                data = if (it.customUrl == url) it.data else null,
+                customUrl = url,
+                suggestedUrl = null,
+                isLoading = true,
+                hasError = false,
+                lastFailure = null,
+            )
+        }
+        launchLoad { generation ->
+            applyEpgOutcome(epgRepository.loadFromUrl(url), loadGeneration = generation)
         }
     }
 
@@ -117,15 +220,19 @@ class EpgController(
         }
     }
 
-    private fun applyEpgOutcome(outcome: EpgOutcome) {
+    private fun applyEpgOutcome(outcome: EpgOutcome, loadGeneration: Long? = null) {
+        if (loadGeneration != null && this.loadGeneration.get() != loadGeneration) return
+        // The outcome names the problem - an HTTP code, an exception class, a size refusal - and
+        // until now every one of them was flattened into `hasError = true` and never written down.
+        // See EpgFailureReason for the field report where that silence was met.
+        val failure = EpgFailureReason.of(outcome)
+        if (failure != null) AppLog.w(TAG) { "EPG did not load: $failure" }
         _epgState.update { current ->
             when (outcome) {
-                is EpgOutcome.Loaded -> current.copy(data = outcome.data, isLoading = false, hasError = false)
-                else -> current.copy(isLoading = false, hasError = true)
+                is EpgOutcome.Loaded ->
+                    current.copy(data = outcome.data, isLoading = false, hasError = false, lastFailure = null)
+                else -> current.copy(isLoading = false, hasError = true, lastFailure = failure)
             }
-        }
-        if (outcome is EpgOutcome.Loaded) {
-            programmeCount = outcome.data.programmesByChannelId.values.sumOf { it.size }
         }
         onLoaded()
     }

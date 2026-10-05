@@ -10,6 +10,7 @@ local.properties
 .cxx
 *.hprof
 app/build/
+core/build/
 app/release/
 app/debug/
 baselineprofile/build/
@@ -28,3 +29,13 @@ baselineprofile/build/
 # URLs, including Xtream credentials passed as query params, so this must never be committed.
 .claude/
 shots/
+
+# Private diary server data and backups
+diary-data.json
+diary-data.json.*
+
+# Generated Python bytecode from the performance evidence validator.
+__pycache__/
+
+# Local physical-phone captures are diagnostic evidence, not distributable source assets.
+/mi-a2-*.png

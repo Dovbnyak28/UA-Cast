@@ -18,7 +18,11 @@ class CastLoadResultReducerTest {
         val result = CastLoadResultReducer.reduce(CastPlaybackState(), CastLoadResult.Failure("timeout"))
         assertEquals(CastLoadPhase.FAILED, result.state.loadPhase)
         assertEquals(
-            listOf(CastSideEffect.RecordIncompatibility("timeout"), CastSideEffect.ResumeLocalPlayer),
+            listOf(
+                CastSideEffect.RecordIncompatibility("timeout"),
+                CastSideEffect.CloseProxySession,
+                CastSideEffect.ResumeLocalPlayer,
+            ),
             result.effects,
         )
     }

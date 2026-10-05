@@ -2,7 +2,7 @@ package com.uacastplayer.dlna
 
 /** Headers of a single SSDP M-SEARCH response datagram, lower-cased keys. */
 data class SsdpResponse(val headers: Map<String, String>) {
-    val location: String? get() = headers["location"]
+    val location: String? get() = headers["location"]?.let(UpnpHttpEndpoint::absolute)
 }
 
 /**

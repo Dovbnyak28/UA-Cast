@@ -4,11 +4,14 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import com.uacastplayer.ui.theme.DurEnter
+import com.uacastplayer.ui.theme.DUR_ENTER
 import com.uacastplayer.ui.theme.EaseSpring
 
 /** How small the screen starts. Small enough to read as opening outward, large enough that nothing
@@ -35,11 +38,27 @@ private const val OPEN_ORIGIN_Y = 0.28f
  * hardware and would tear away from a scaling parent.
  *
  * Runs once, keyed on [key]: switching channels inside an already-open player must not replay it.
+ * Disabled/completed motion returns the caller's modifier without a graphics layer. Turning
+ * motion back on must not hide a surface that is already visible.
  */
 @Composable
 fun Modifier.openTransform(key: Any?): Modifier {
+    val enabled = animationsAllowed()
+    var complete by remember(key) { mutableStateOf(!enabled) }
+    LaunchedEffect(key, enabled) {
+        if (!enabled) complete = true
+    }
+    if (!enabled || complete) return this
+    return animatedOpenTransform(key) { complete = true }
+}
+
+@Composable
+private fun Modifier.animatedOpenTransform(key: Any?, onComplete: () -> Unit): Modifier {
     val progress = remember(key) { Animatable(0f) }
-    LaunchedEffect(key) { progress.animateTo(1f, tween(DurEnter, easing = EaseSpring)) }
+    LaunchedEffect(key) {
+        progress.animateTo(1f, tween(DUR_ENTER, easing = EaseSpring))
+        onComplete()
+    }
 
     return this.graphicsLayer {
         val value = progress.value

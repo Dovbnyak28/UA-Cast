@@ -20,9 +20,21 @@ package com.uacastplayer.cast
  */
 object PlayingWindowPolicy {
 
+    data class Transition(
+        val nextStartMillis: Long?,
+        /** Duration of the PLAYING window immediately before [status] is applied. Unlike asking
+         * [stableMillis] after [next], this preserves the evidence when BUFFERING/IDLE closes it. */
+        val stableBeforeTransitionMillis: Long,
+    )
+
     /** The new window start given the previous one and the status that just arrived. */
     fun next(current: Long?, status: ReceiverStatus, nowMillis: Long): Long? =
         if (status == ReceiverStatus.PLAYING) current ?: nowMillis else null
+
+    fun transition(current: Long?, status: ReceiverStatus, nowMillis: Long): Transition = Transition(
+        nextStartMillis = next(current, status, nowMillis),
+        stableBeforeTransitionMillis = stableMillis(current, nowMillis),
+    )
 
     /** How long the receiver has been continuously playing, or 0 if it is not - the shape
      * [CastRecoveryPolicy.shouldResetAttemptCounter] expects. */

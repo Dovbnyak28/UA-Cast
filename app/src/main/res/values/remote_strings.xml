@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tv_dpad_hint">Use the arrow keys to move. Press OK to open a channel.</string>
+    <string name="tv_pair_phone">Pair phone</string>
+    <string name="tv_add_favorite">Add to favorites</string>
+    <string name="tv_remove_favorite">Remove from favorites</string>
+    <string name="remote_title">TV remote</string>
+    <string name="remote_scope_help">Control UA-Cast on Android TV, not other TV apps. Choose how to navigate.</string>
+    <string name="remote_mode_buttons">Remote</string>
+    <string name="remote_mode_touchpad">Touchpad</string>
+    <string name="remote_pair_tv_help">On your phone, open UA-Cast → TV remote. Connect both devices to the same local network and enter this address and code.</string>
+    <string name="remote_pair_phone_help">On the TV, open UA-Cast → Pair phone. Connect both devices to the same local network. Enter the address and code shown on the TV.</string>
+    <string name="remote_tv_address">TV address: %1$s</string>
+    <string name="remote_tv_code">Pairing code: %1$s</string>
+    <string name="remote_code_expiry">The code expires in 5 minutes. Pairing closes automatically after connection. Control ends when either app goes into the background.</string>
+    <string name="remote_new_code">New code</string>
+    <string name="remote_tv_network_error">No local Wi-Fi or Ethernet address. Check the TV network connection.</string>
+    <string name="remote_connecting">Connecting…</string>
+    <string name="remote_connected">Connected to UA-Cast on TV</string>
+    <string name="remote_address_label">TV address and port</string>
+    <string name="remote_code_label">8-digit code</string>
+    <string name="remote_connect">Connect</string>
+    <string name="remote_connection_error">Could not connect. Check the address, code and local network. Open pairing on the TV and try a new code.</string>
+    <string name="remote_back">Back</string>
+    <string name="remote_previous_channel">Channel −</string>
+    <string name="remote_next_channel">Channel +</string>
+    <string name="remote_play_pause">Play / pause</string>
+    <string name="remote_volume_down">Volume −</string>
+    <string name="remote_volume_up">Volume +</string>
+    <string name="remote_up">Up</string>
+    <string name="remote_down">Down</string>
+    <string name="remote_left">Left</string>
+    <string name="remote_right">Right</string>
+    <string name="remote_select">Select</string>
+    <string name="remote_touchpad_hint">Swipe to move focus. Tap to select. This is not a system mouse.</string>
+</resources>

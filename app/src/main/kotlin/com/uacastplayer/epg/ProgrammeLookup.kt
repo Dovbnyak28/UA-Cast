@@ -16,8 +16,12 @@ object ProgrammeLookup {
 
     /** [programmes] must already be sorted ascending by [EpgProgramme.startMillis]. */
     fun currentAndNext(programmes: List<EpgProgramme>, nowMillis: Long): CurrentNextProgrammes {
-        if (programmes.isEmpty()) return CurrentNextProgrammes(null, null, null)
+        if (programmes.isEmpty()) return EMPTY_RESULT
+        val currentIndex = findCurrentIndex(programmes, nowMillis)
+        return resultForIndex(programmes, currentIndex, nowMillis)
+    }
 
+    private fun findCurrentIndex(programmes: List<EpgProgramme>, nowMillis: Long): Int {
         var low = 0
         var high = programmes.size - 1
         var currentIndex = -1
@@ -30,15 +34,35 @@ object ProgrammeLookup {
                 high = mid - 1
             }
         }
-
-        if (currentIndex == -1) {
-            val first = programmes[0]
-            return CurrentNextProgrammes(current = null, next = first, effectiveStopMillis = first.startMillis)
-        }
-
-        val current = programmes[currentIndex]
-        val next = programmes.getOrNull(currentIndex + 1)
-        val effectiveStop = next?.startMillis ?: current.stopMillis
-        return CurrentNextProgrammes(current, next, effectiveStop)
+        return currentIndex
     }
+
+    private fun resultForIndex(
+        programmes: List<EpgProgramme>,
+        currentIndex: Int,
+        nowMillis: Long,
+    ): CurrentNextProgrammes = when {
+        currentIndex == -1 -> {
+            val first = programmes[0]
+            CurrentNextProgrammes(current = null, next = first, effectiveStopMillis = first.startMillis)
+        }
+        isLastProgrammeFinished(programmes[currentIndex], programmes.getOrNull(currentIndex + 1), nowMillis) -> {
+            EMPTY_RESULT
+        }
+        else -> {
+            val current = programmes[currentIndex]
+            val next = programmes.getOrNull(currentIndex + 1)
+            CurrentNextProgrammes(current, next, next?.startMillis ?: current.stopMillis)
+        }
+    }
+
+    private fun isLastProgrammeFinished(
+        current: EpgProgramme,
+        next: EpgProgramme?,
+        nowMillis: Long,
+    ): Boolean = next == null &&
+        current.stopMillis > current.startMillis &&
+        nowMillis >= current.stopMillis
+
+    private val EMPTY_RESULT = CurrentNextProgrammes(null, null, null)
 }

@@ -1,0 +1,13 @@
+{
+  "description": "Initial conservative absolute safety budgets on the fixed CI API-35 x86_64 emulator. Tighten only from reviewed device measurements, never to hide a failure. Memory units are KiB, time units ms.",
+  "cases": [
+    {"class":"StartupBenchmark","test":"coldStartup","minIterations":10,"metrics":[{"name":"timeToInitialDisplayMs","statistic":"median","limit":5000}]},
+    {"class":"StartupBenchmark","test":"warmStartup","minIterations":10,"metrics":[{"name":"timeToInitialDisplayMs","statistic":"median","limit":2500}]},
+    {"class":"CriticalJourneysBenchmark","test":"coldRestoreOfFortyThousandChannels","minIterations":5,"metrics":[{"name":"timeToInitialDisplayMs","statistic":"median","limit":10000},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
+    {"class":"CriticalJourneysBenchmark","test":"openFortyThousandChannelPlaylist","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
+    {"class":"CriticalJourneysBenchmark","test":"firstPlayerLaunch","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
+    {"class":"CriticalJourneysBenchmark","test":"enterFullscreen","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
+    {"class":"CriticalJourneysBenchmark","test":"openEpgGuide","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
+    {"class":"EpgParseBenchmark","test":"parseAndBuildIndex","minIterations":5,"metrics":[{"name":"UaCastEpgParseAndIndexSumMs","statistic":"median","limit":60000},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]}
+  ]
+}

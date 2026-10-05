@@ -1,13 +1,16 @@
 package com.uacastplayer.cast
 
+import com.uacastplayer.core.cast.AudioCodec
+import com.uacastplayer.core.cast.VideoCodec
+
 /** What the player should tell the user about a cast that is not playing, if anything. */
-sealed class CastStatusMessage {
-    data class IncompatibleVideo(val codec: VideoCodec) : CastStatusMessage()
-    data object ProxyUnavailableIpv4Only : CastStatusMessage()
-    data object Recovering : CastStatusMessage()
-    data class LikelyIncompatibleVideo(val codec: VideoCodec) : CastStatusMessage()
-    data class LikelyIncompatibleAudio(val codec: AudioCodec) : CastStatusMessage()
-    data object ReceiverLoadFailed : CastStatusMessage()
+sealed interface CastStatusMessage {
+    data class IncompatibleVideo(val codec: VideoCodec) : CastStatusMessage
+    data object ProxyUnavailableIpv4Only : CastStatusMessage
+    data object Recovering : CastStatusMessage
+    data class LikelyIncompatibleVideo(val codec: VideoCodec) : CastStatusMessage
+    data class LikelyIncompatibleAudio(val codec: AudioCodec) : CastStatusMessage
+    data object ReceiverLoadFailed : CastStatusMessage
 }
 
 /**

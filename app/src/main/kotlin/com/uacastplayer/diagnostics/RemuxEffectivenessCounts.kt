@@ -1,10 +1,5 @@
 package com.uacastplayer.diagnostics
 
-/** Which delivery path a channel load actually took - see `cast/CastSessionRepository` (Direct vs
- * Proxy) and `data/cast/ProxyServer` (within Proxy, whether the raw-TS remux engaged or the
- * origin was just passed through/rewritten as ordinary HLS). */
-enum class CastRouteKind { DIRECT, PROXY_REMUX, PROXY_REWRITE }
-
 /** [ATTEMPTED] fires once a route is committed to for a channel load; exactly one of
  * [REACHED_PLAYING] or [FAILED] follows for that same attempt - never both, never neither (a
  * channel switched away from mid-attempt, before either resolves, contributes an [ATTEMPTED] with

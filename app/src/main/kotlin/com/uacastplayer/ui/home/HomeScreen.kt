@@ -1,7 +1,6 @@
 package com.uacastplayer.ui.home
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,18 +22,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ads.AdPlacement
+import com.uacastplayer.ui.ads.BannerAdSlot
+import com.uacastplayer.data.playlist.resolveHomeContent
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.epg.EpgLookup
@@ -43,24 +47,28 @@ import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.epg.ProgrammeProgress
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.home.HomeContentPolicy
+import com.uacastplayer.home.HomeContent
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistUiState
+import com.uacastplayer.ui.playlist.asUserMessage
 import com.uacastplayer.ui.components.ChannelIcon
 import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.IconHeader
+import com.uacastplayer.ui.components.PrimaryButton
+import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.premium.LocalPremiumNotice
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
+import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.GapS
-import com.uacastplayer.ui.theme.DisplayTitle
 import com.uacastplayer.ui.theme.NpLogoSize
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
@@ -89,6 +97,7 @@ data class HomeSourceState(
     val onRemovePlaylistSource: (PlaylistSource) -> Unit,
     val onOpenAddPlaylist: () -> Unit,
     val onRefreshPlaylist: () -> Unit,
+    val onRetrySourceSave: () -> Unit = {},
 )
 
 @Composable
@@ -111,53 +120,67 @@ fun HomeScreen(
     val onRemovePlaylistSource = source.onRemovePlaylistSource
     val onOpenAddPlaylist = source.onOpenAddPlaylist
     val onRefreshPlaylist = source.onRefreshPlaylist
-    // Same idea as ChannelsScreen's iconRefreshKey - forces the icons below to re-resolve once EPG
-    // data arrives or a prefetch run finishes writing new files.
-    val iconRefreshKey: Any = (epgState.data != null) to iconPrefetchState.completedRuns
+    // Refresh on user pack edits or completed downloads, not unrelated EPG updates.
+    val iconRefreshKey: Any = iconPrefetchState.refreshKey
     var showSourceSheet by remember { mutableStateOf(false) }
-    val totalChannels = playlistState.groups.sumOf { it.channels.size }
-    val flatChannels = remember(playlistState.groups) { playlistState.groups.flatMap { it.channels } }
-    val homeContent = remember(lastWatchedChannelKey, flatChannels, favorites) {
-        HomeContentPolicy.resolve(lastWatchedChannelKey, flatChannels, favorites)
+    val flatChannels = playlistState.channels
+    val totalChannels = flatChannels.size
+    val initialHomeContent = remember(favorites) {
+        HomeContent(
+            continueWatching = null,
+            favorites = favorites.take(HomeContentPolicy.MAX_FAVORITES_SHOWN),
+        )
     }
-    val favoriteChannels = remember(homeContent.favorites) {
-        homeContent.favorites.map { fav ->
-            M3uChannel(
-                displayName = fav.displayName,
-                streamUrl = fav.streamUrl,
-                tvgId = fav.tvgId,
-                groupTitle = fav.groupTitle,
-            )
+    val homeContent by produceState(
+        initialValue = initialHomeContent,
+        lastWatchedChannelKey,
+        flatChannels,
+        favorites,
+    ) {
+        value = if (lastWatchedChannelKey == null) {
+            initialHomeContent
+        } else {
+            resolveHomeContent(lastWatchedChannelKey, flatChannels, favorites)
         }
     }
+    val favoriteChannels = remember(homeContent.favorites) {
+        homeContent.favorites.map { it.toChannel() }
+    }
 
-    Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = ScreenHPadding)) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = DisplayTitle,
-            color = UaTheme.palette.labelPrimary,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = ScreenHPadding),
+    ) {
         Text(
             text = stringResource(R.string.home_subtitle),
             style = BodyText,
             color = UaTheme.palette.labelSecondary,
-            modifier = Modifier.padding(top = 2.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
 
-        // Draws nothing at all unless a trial is in its last days or has just ended - see
+        // Draws nothing at all unless legacy paid access has expired - see
         // UpgradeBanner, which owns that rule. Placed above the dashboard because it is news about
         // the app the user is looking at, and below the title because it is not what Home is for.
         LocalPremiumNotice.current(Modifier.padding(top = 12.dp))
 
-        if (playlistState.hasChannels) {
-            PlaylistDashboardCard(
-                playlistState = playlistState,
-                epgState = epgState,
-                totalChannels = totalChannels,
-                favoriteCount = favorites.size,
-                onRefreshPlaylist = onRefreshPlaylist,
+        com.uacastplayer.ui.playlist.PlaylistPersistenceStatus(playlistState.sourceSaveState, source.onRetrySourceSave)
+        if (!playlistState.hasChannels && playlistSources.isNotEmpty()) {
+            PrimaryButton(
+                text = stringResource(R.string.home_playlist_sources_title),
                 onClick = { showSourceSheet = true },
+                leadingIcon = AppIcons.Channels,
+                modifier = Modifier.fillMaxWidth().padding(top = GapL),
+            )
+        }
+
+        if (playlistState.hasChannels) {
+            SecondaryButton(
+                text = stringResource(R.string.home_change_playlist) + " · " +
+                    (playlistState.displayName ?: stringResource(R.string.playlist_unnamed)),
+                onClick = { showSourceSheet = true },
+                modifier = Modifier.fillMaxWidth().padding(top = GapM).guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD),
             )
 
             homeContent.continueWatching?.let { channel ->
@@ -174,10 +197,6 @@ fun HomeScreen(
                 )
             }
 
-            Button(onClick = onOpenChannels, modifier = Modifier.fillMaxWidth().padding(top = GapL)) {
-                Text(stringResource(R.string.home_view_channels_button))
-            }
-
             if (favoriteChannels.isNotEmpty()) {
                 HomeFavoritesRow(
                     channels = favoriteChannels,
@@ -187,6 +206,24 @@ fun HomeScreen(
                     modifier = Modifier.padding(top = GapL, bottom = GapL),
                 )
             }
+            PrimaryButton(
+                text = stringResource(R.string.home_view_channels_button),
+                onClick = onOpenChannels,
+                leadingIcon = AppIcons.Channels,
+                modifier = Modifier.fillMaxWidth().padding(top = GapL),
+            )
+            if (homeContent.continueWatching == null && favoriteChannels.isEmpty()) {
+                HomePersonalizationCard(modifier = Modifier.padding(top = GapL))
+            }
+            PlaylistDashboardCard(
+                playlistState = playlistState,
+                epgState = epgState,
+                totalChannels = totalChannels,
+                favoriteCount = favorites.size,
+                onRefreshPlaylist = onRefreshPlaylist,
+            )
+            BannerAdSlot(AdPlacement.HOME_BANNER,
+                Modifier.fillMaxWidth().padding(top = GapL, bottom = GapL))
         } else if (playlistState.isLoading) {
             // hasChannels wins over isLoading, and isLoading over the empty state - the same order
             // ChannelsScreen uses, and for the same reason: a restore in progress is not the
@@ -195,24 +232,7 @@ fun HomeScreen(
             // the whole restore, which on a debug build over a 2863-channel snapshot is ~30s.
             HomeDashboardSkeleton()
         } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth().padding(top = GapL, bottom = GapL),
-            ) {
-                IconHeader(
-                    icon = AppIcons.Upload,
-                    title = stringResource(R.string.home_empty_message),
-                    subtitle = stringResource(R.string.home_empty_subtitle),
-                )
-                Button(
-                    onClick = onOpenAddPlaylist,
-                    modifier = Modifier
-                        .padding(top = GapM)
-                        .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD),
-                ) {
-                    Text(stringResource(R.string.home_add_playlist_button))
-                }
-            }
+            HomeNoChannelsState(playlistState, onRefreshPlaylist, onOpenAddPlaylist)
         }
     }
 
@@ -230,6 +250,78 @@ fun HomeScreen(
                 onOpenAddPlaylist()
             },
             onDismiss = { showSourceSheet = false },
+            saveState = playlistState.sourceSaveState,
+            onRetrySave = source.onRetrySourceSave,
+        )
+    }
+}
+
+/** Fills the new-user Home state with a useful next step instead of leaving a tall blank canvas. */
+@Composable
+private fun HomePersonalizationCard(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .raisedSurface(
+                RoundedCornerShape(RadiusCard),
+                UaTheme.palette.surface1,
+                edgeColor = UaTheme.palette.hairline,
+                shadow = false,
+            )
+            .padding(CardPadding),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = AppIcons.Favorites,
+                contentDescription = null,
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                text = stringResource(R.string.home_make_it_yours_title),
+                style = CardTitle,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.padding(start = GapM),
+            )
+        }
+        Text(
+            text = stringResource(R.string.home_make_it_yours_body),
+            style = BodyText,
+            color = UaTheme.palette.labelSecondary,
+            modifier = Modifier.padding(top = GapS),
+        )
+    }
+}
+
+@Composable
+private fun HomeNoChannelsState(
+    playlistState: PlaylistUiState,
+    onRefreshPlaylist: () -> Unit,
+    onOpenAddPlaylist: () -> Unit,
+) {
+    val error = playlistState.error
+    val errorMessage = error?.asUserMessage()
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth().padding(vertical = GapL),
+    ) {
+        IconHeader(
+            icon = if (errorMessage == null) AppIcons.Upload else AppIcons.HelpCircle,
+            title = errorMessage ?: stringResource(R.string.home_empty_message),
+            subtitle = stringResource(
+                if (errorMessage == null) R.string.home_empty_subtitle else R.string.channels_error_subtitle,
+            ),
+        )
+        val retryExisting = errorMessage != null && playlistState.sourceUrl != null
+        PrimaryButton(
+            text = stringResource(
+                if (retryExisting) R.string.common_retry else R.string.home_add_playlist_button,
+            ),
+            onClick = if (retryExisting) onRefreshPlaylist else onOpenAddPlaylist,
+            leadingIcon = if (retryExisting) AppIcons.Refresh else AppIcons.Upload,
+            modifier = Modifier
+                .padding(top = GapM)
+                .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD),
         )
     }
 }
@@ -248,7 +340,6 @@ private fun PlaylistDashboardCard(
     totalChannels: Int,
     favoriteCount: Int,
     onRefreshPlaylist: () -> Unit,
-    onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -260,12 +351,6 @@ private fun PlaylistDashboardCard(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(onClick = onClick)
-            // The tour's "add a playlist" target for a user who already has one: this card is what
-            // opens the source sheet, and adding another is what that sheet is for. The empty-state
-            // button below registers the same name - the two branches are mutually exclusive, so
-            // only one of them is ever live.
-            .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD)
             .padding(CardPadding),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -276,10 +361,15 @@ private fun PlaylistDashboardCard(
                     color = UaTheme.palette.labelSecondary,
                 )
                 Text(
-                    text = playlistState.displayName ?: playlistState.activePlaylistId ?: "—",
-                    style = Title,
+                    text = playlistState.displayName ?: stringResource(R.string.playlist_unnamed),
+                    // A source-derived label can still look URL-like (host/file). It identifies
+                    // the playlist, but should not visually outrank the app title or the stats the
+                    // user came here for.
+                    style = CardTitle,
                     color = UaTheme.palette.labelPrimary,
                     modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             // Only a file import has no sourceUrl to re-fetch - nothing to refresh from.
@@ -300,16 +390,19 @@ private fun PlaylistDashboardCard(
             HomeStatCell(
                 count = totalChannels,
                 label = pluralStringResource(R.plurals.home_stat_channels, totalChannels),
+                icon = AppIcons.Tv,
                 modifier = Modifier.weight(1f),
             )
             HomeStatCell(
                 count = playlistState.groups.size,
                 label = pluralStringResource(R.plurals.home_stat_groups, playlistState.groups.size),
+                icon = AppIcons.Channels,
                 modifier = Modifier.weight(1f),
             )
             HomeStatCell(
                 count = favoriteCount,
                 label = pluralStringResource(R.plurals.home_stat_favorites, favoriteCount),
+                icon = AppIcons.Favorites,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -363,15 +456,33 @@ private fun RefreshPlaylistButton(isLoading: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HomeStatCell(count: Int, label: String, modifier: Modifier = Modifier) {
+private fun HomeStatCell(
+    count: Int,
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         Text(text = count.toString(), style = Title, color = UaTheme.palette.labelPrimary)
-        Text(
-            text = label,
-            style = Caption,
-            color = UaTheme.palette.labelSecondary,
+        Row(
             modifier = Modifier.padding(top = 2.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = label,
+                style = Caption,
+                color = UaTheme.palette.labelSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 5.dp),
+            )
+        }
     }
 }
 
@@ -396,7 +507,11 @@ private fun ContinueWatchingCard(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(onClick = onClick)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.home_continue_watching_label),
+                onClick = onClick,
+            )
             .padding(CardPadding),
     ) {
         Text(
@@ -413,7 +528,7 @@ private fun ContinueWatchingCard(
                     color = UaTheme.palette.labelPrimary,
                     maxLines = 1,
                 )
-                val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+                val programme = remember(channel, epgState.data, epgState.nowMillis) {
                     epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
                 }
                 val current = programme?.current
@@ -485,7 +600,9 @@ private fun HomeFavoriteItem(
     onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.width(NpLogoSize + GapM).clickable(onClick = onClick),
+        modifier = Modifier
+            .width(NpLogoSize + GapM)
+            .clickable(role = Role.Button, onClickLabel = channel.displayName, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ChannelIcon(channel, resolveIcon, size = NpLogoSize, refreshKey = iconRefreshKey)

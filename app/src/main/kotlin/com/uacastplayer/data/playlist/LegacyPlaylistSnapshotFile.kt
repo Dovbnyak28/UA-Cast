@@ -1,12 +1,15 @@
 package com.uacastplayer.data.playlist
 
 import android.content.Context
+import androidx.core.util.AtomicFile
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.playlist.PlaylistSnapshot
 import com.uacastplayer.playlist.PlaylistSnapshotCodec
+import com.uacastplayer.playlist.PlaylistChannelLimitExceededException
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 /**
@@ -18,18 +21,32 @@ import kotlinx.coroutines.withContext
 internal object LegacyPlaylistSnapshotFile {
     private const val FILE_NAME = "playlist_snapshot.bin"
 
-    suspend fun read(context: Context): PlaylistSnapshot? = withContext(Dispatchers.IO) {
+    suspend fun read(
+        context: Context,
+        ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    ): PlaylistSnapshot? = withContext(ioDispatcher) {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.isFile) return@withContext null
         try {
             FileInputStream(file).use { PlaylistSnapshotCodec.decode(it) }
+        } catch (limitExceeded: PlaylistChannelLimitExceededException) {
+            throw limitExceeded
         } catch (_: IOException) {
             null
         }
     }
 
-    suspend fun delete(context: Context) = withContext(Dispatchers.IO) {
-        File(context.filesDir, FILE_NAME).delete()
-        Unit
+    /**
+     * Through [AtomicFile] because that is what wrote this file: until multi-playlist support it
+     * was `AtomicFile(File(filesDir, "playlist_snapshot.bin"))`, so an install killed mid-write by
+     * the old build left a `playlist_snapshot.bin.new` beside it. Deleting the base name alone
+     * stranded that one on the first launch after the upgrade, at which point nothing in the app
+     * refers to either name again.
+     */
+    suspend fun delete(
+        context: Context,
+        ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    ) = withContext(ioDispatcher) {
+        AtomicFile(File(context.filesDir, FILE_NAME)).delete()
     }
 }

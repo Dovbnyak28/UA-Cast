@@ -10,10 +10,13 @@ class BackupCodecTest {
     private fun sampleData() = BackupData(
         sources = listOf(
             BackupPlaylistSource("id1", "URL", "http://a.com/p.m3u", "A", 100L),
-            BackupPlaylistSource("id2", "FILE", "content://x/y", null, 200L),
+            BackupPlaylistSource("id2", "FILE", "content://x/y", null, 200L, "YWJj", "checksum"),
         ),
         favorites = listOf(
-            BackupFavorite("k1", "Channel One", "http://a.com/1.m3u8", "tvg1", "News", 10L),
+            BackupFavorite(
+                "k1", "Channel One", "http://a.com/1.m3u8", "tvg1", "News", 10L,
+                "EPG name", "https://x/logo.png", "RequiredAgent", "https://x/",
+            ),
             BackupFavorite("k2", "Channel Two", "http://a.com/2.m3u8", null, null, 20L),
         ),
         settings = BackupSettings(
@@ -121,5 +124,38 @@ class BackupCodecTest {
 
         assertTrue(decoded?.sources.isNullOrEmpty())
         assertTrue(decoded?.favorites.isNullOrEmpty())
+    }
+
+    @Test
+    fun `oversized object trees are refused before org json materializes them`() {
+        val text = buildString {
+            append("""{"version":1,"favorites":[""")
+            repeat(BackupJsonInputGuard.MAX_OBJECTS) { index ->
+                if (index > 0) append(',')
+                append("{}")
+            }
+            append("]}")
+        }
+
+        assertNull(BackupCodec.decode(text))
+    }
+
+    @Test
+    fun `excessive nesting is refused before recursive json parsing`() {
+        val depth = 65
+        val nested = "[".repeat(depth) + "0" + "]".repeat(depth)
+
+        assertNull(BackupCodec.decode("""{"version":1,"favorites":$nested}"""))
+    }
+
+    @Test
+    fun `json punctuation inside string values does not count as structure`() {
+        val json = """
+            {"version":1,"favorites":[{"key":"k","displayName":"},:,[{",
+            "streamUrl":"https://example.test/live"}]}
+        """.trimIndent()
+        val decoded = BackupCodec.decode(json)
+
+        assertEquals("},:,[{", decoded?.favorites?.singleOrNull()?.displayName)
     }
 }

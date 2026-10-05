@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tv_dpad_hint">Usa las flechas para moverte. Pulsa OK para abrir un canal.</string>
+    <string name="tv_pair_phone">Conectar teléfono</string>
+    <string name="tv_add_favorite">Añadir a favoritos</string>
+    <string name="tv_remove_favorite">Quitar de favoritos</string>
+    <string name="remote_title">Mando para TV</string>
+    <string name="remote_scope_help">Controla UA-Cast en Android TV, no otras aplicaciones del televisor. Elige cómo navegar.</string>
+    <string name="remote_mode_buttons">Mando</string>
+    <string name="remote_mode_touchpad">Panel táctil</string>
+    <string name="remote_pair_tv_help">En el teléfono, abre UA-Cast → Mando para TV. Conecta ambos dispositivos a la misma red local e introduce esta dirección y código.</string>
+    <string name="remote_pair_phone_help">En el televisor, abre UA-Cast → Conectar teléfono. Conecta ambos dispositivos a la misma red local. Introduce la dirección y el código de la TV.</string>
+    <string name="remote_tv_address">Dirección de TV: %1$s</string>
+    <string name="remote_tv_code">Código de conexión: %1$s</string>
+    <string name="remote_code_expiry">El código caduca en 5 minutos. La ventana se cierra al conectar. El control finaliza cuando una aplicación pasa a segundo plano.</string>
+    <string name="remote_new_code">Nuevo código</string>
+    <string name="remote_tv_network_error">No hay dirección local de Wi-Fi o Ethernet. Comprueba la red del televisor.</string>
+    <string name="remote_connecting">Conectando…</string>
+    <string name="remote_connected">Conectado a UA-Cast en TV</string>
+    <string name="remote_address_label">Dirección de TV y puerto</string>
+    <string name="remote_code_label">Código de 8 dígitos</string>
+    <string name="remote_connect">Conectar</string>
+    <string name="remote_connection_error">No se pudo conectar. Comprueba la dirección, el código y la red local. Abre la conexión en la TV y prueba un código nuevo.</string>
+    <string name="remote_back">Atrás</string>
+    <string name="remote_previous_channel">Canal −</string>
+    <string name="remote_next_channel">Canal +</string>
+    <string name="remote_play_pause">Reproducir / pausa</string>
+    <string name="remote_volume_down">Volumen −</string>
+    <string name="remote_volume_up">Volumen +</string>
+    <string name="remote_up">Arriba</string>
+    <string name="remote_down">Abajo</string>
+    <string name="remote_left">Izquierda</string>
+    <string name="remote_right">Derecha</string>
+    <string name="remote_select">Seleccionar</string>
+    <string name="remote_touchpad_hint">Desliza para mover el foco. Toca para seleccionar. No es un ratón del sistema.</string>
+</resources>

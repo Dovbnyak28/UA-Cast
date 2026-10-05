@@ -47,13 +47,19 @@ object CastReceiverStatusReducer {
                 effects += CastSideEffect.PauseLocalPlayer
             }
             status == ReceiverStatus.IDLE && idleReason == IdleReason.ERROR -> {
-                newState = newState.copy(receiverLoadFailed = true)
+                newState = newState.copy(
+                    receiverLoadFailed = true, isRecovering = false, recoveringWithoutPlayback = false,
+                )
                 effects += CastSideEffect.RecordIncompatibility("receiver_idle_error")
                 effects += CastSideEffect.CloseProxySession
                 effects += CastSideEffect.ResumeLocalPlayer
             }
             status == ReceiverStatus.IDLE && idleReason == IdleReason.FINISHED -> {
+                newState = newState.copy(
+                    receiverLoadFailed = true, isRecovering = false, recoveringWithoutPlayback = false,
+                )
                 effects += CastSideEffect.CloseProxySession
+                effects += CastSideEffect.ResumeLocalPlayer
             }
         }
 
@@ -78,6 +84,7 @@ object CastReceiverStatusReducer {
 
         val newState = state.copy(
             isSessionConnected = false,
+            isSessionSuspended = false,
             receiverStatus = ReceiverStatus.DISCONNECTED,
             loadPhase = CastLoadPhase.IDLE,
             idleReason = IdleReason.NONE,

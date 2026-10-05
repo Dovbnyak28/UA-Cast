@@ -1,5 +1,6 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.json.JsonDecodeResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,6 +34,7 @@ class GroupVisibilityCodecTest {
     @Test
     fun `decoding malformed JSON returns an empty list instead of throwing`() {
         assertTrue(GroupVisibilityCodec.decode("{not valid").isEmpty())
+        assertTrue(GroupVisibilityCodec.decodeResult("{not valid") is JsonDecodeResult.Malformed)
     }
 
     @Test

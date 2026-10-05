@@ -1,8 +1,8 @@
 package com.uacastplayer.data.cast
 
-import com.uacastplayer.cast.CastCompatibilityVerdict
-import com.uacastplayer.cast.TsSourceKind
-import com.uacastplayer.cast.VideoCodec
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.TsSourceKind
+import com.uacastplayer.core.cast.VideoCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

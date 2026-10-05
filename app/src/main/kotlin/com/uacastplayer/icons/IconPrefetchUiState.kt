@@ -10,4 +10,8 @@ data class IconPrefetchUiState(
     // may have landed on disk since the last resolve, so this is the signal to try again for
     // channels that previously resolved to nothing.
     val completedRuns: Int = 0,
-)
+    val sourceRevision: Long = 0,
+) {
+    /** Pack removal must retire already displayed files, even when no prefetch is possible. */
+    val refreshKey: Pair<Int, Long> get() = completedRuns to sourceRevision
+}

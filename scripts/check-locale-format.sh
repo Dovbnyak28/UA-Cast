@@ -11,11 +11,11 @@
 
 set -euo pipefail
 
-SRC_DIR="app/src/main"
+SRC_DIRS=("app/src/main" "core/src/main")
 # Matches "...%...".format( and String.format( - the two call shapes used in this codebase.
 PATTERN='"[^"]*%[^"]*"\s*\.format\(|String\.format\('
 
-matches=$(grep -RPn --include='*.kt' "$PATTERN" "$SRC_DIR" || true)
+matches=$(grep -RPn --include='*.kt' "$PATTERN" "${SRC_DIRS[@]}" || true)
 
 violations=""
 if [ -n "$matches" ]; then

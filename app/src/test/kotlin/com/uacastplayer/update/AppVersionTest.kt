@@ -73,6 +73,8 @@ class AppVersionTest {
         assertNull(AppVersion.parse("1.2.x"))
         assertNull(AppVersion.parse("1.-2.0"))
         assertNull(AppVersion.parse("release-2026"))
+        assertNull(AppVersion.parse("1.0.0-"))
+        assertNull(AppVersion.parse("1.2.999999999999999999999"))
     }
 
     @Test

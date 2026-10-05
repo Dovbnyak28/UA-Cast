@@ -1,13 +1,21 @@
 package com.uacastplayer.ui.layout
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.testing.RequiresComposeTestManifest
@@ -18,6 +26,13 @@ import com.uacastplayer.guidedtour.GuidedTourSteps
 import com.uacastplayer.ui.guidedtour.GuidedTourOverlay
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
+import com.uacastplayer.ui.components.GlassTabBar
+import com.uacastplayer.ui.components.GlassNavigationRail
+import com.uacastplayer.ui.components.TabBarItem
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.settings.DataSettingsSection
+import com.uacastplayer.ui.settings.PlaylistSettingsSection
+import com.uacastplayer.playlist.PlaylistUiState
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -88,6 +103,13 @@ class FontScaleLayoutTest(private val fontScale: Float) {
         assertFullyOnScreen("Продовжити")
     }
 
+    @Test
+    fun languagePicker_lastLanguageRemainsReachableAbovePinnedAction() {
+        setContentAtScale { LanguagePickerScreen(onLanguageConfirmed = {}) }
+        composeRule.onNodeWithText("Español").performScrollTo().assertIsDisplayed()
+        assertFullyOnScreen("Продовжити")
+    }
+
     /**
      * The guided tour's step card is the densest row of controls in the app - Skip, Back and Next
      * side by side - and it replaced the onboarding walkthrough this test used to cover. At 2.0x on
@@ -122,7 +144,80 @@ class FontScaleLayoutTest(private val fontScale: Float) {
                 onComplete = {},
             )
         }
-        assertFullyOnScreen("Почати")
+        assertFullyOnScreen("Додати плейлист")
+    }
+
+    @Test
+    fun bottomNavigation_keepsEveryDestinationReachable() {
+        setContentAtScale {
+            GlassTabBar(
+                items = listOf(
+                    TabBarItem("Головна", AppIcons.Home, selected = true, onClick = {}),
+                    TabBarItem("Канали", AppIcons.Channels, selected = false, onClick = {}),
+                    TabBarItem("Улюблені", AppIcons.Favorites, selected = false, onClick = {}),
+                    TabBarItem(
+                        label = "Налашт.",
+                        icon = AppIcons.Settings,
+                        selected = false,
+                        onClick = {},
+                        contentDescription = "Налаштування",
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("Налаштування").assertIsDisplayed().assertHasClickAction()
+        composeRule.onNodeWithText("Налаштування").assertDoesNotExist()
+        assertFullyOnScreen("Налашт.")
+    }
+
+    @Test
+    fun navigationRail_keepsFullAccessibilityNameWhenVisualLabelIsCompact() {
+        setContentAtScale {
+            GlassNavigationRail(
+                items = listOf(
+                    TabBarItem(
+                        label = "Налашт.",
+                        icon = AppIcons.Settings,
+                        selected = true,
+                        onClick = {},
+                        contentDescription = "Налаштування",
+                    ),
+                ),
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("Налаштування").assertIsDisplayed()
+        composeRule.onNodeWithText("Налашт.").assertIsDisplayed()
+    }
+
+    @Test
+    fun dataActions_stayAccessibleWithLargeText() {
+        setContentAtScale {
+            // Settings places this section in a scrollable page. The vertical file actions no
+            // longer need equal row heights, but must remain fully reachable at 200% text size.
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                DataSettingsSection(onImportBackup = {}, onShowExportWarning = {})
+            }
+        }
+        for (label in listOf("Зберегти у файл", "Відновити з файлу")) {
+            composeRule.onNodeWithText(label).performScrollTo().assertHasClickAction()
+            assertFullyOnScreen(label)
+        }
+    }
+
+    @Test
+    fun emptyPlaylist_doesNotClaimAnActiveSource() {
+        setContentAtScale {
+            PlaylistSettingsSection(
+                playlistState = PlaylistUiState(),
+                hiddenGroupKeys = emptySet(),
+                onOpenAddPlaylist = {},
+                onRestoreGroup = {},
+            )
+        }
+        composeRule.onNodeWithText("Активний плейлист").assertDoesNotExist()
+        composeRule.onNodeWithText("Додати плейлист").assertIsDisplayed()
     }
 
     companion object {

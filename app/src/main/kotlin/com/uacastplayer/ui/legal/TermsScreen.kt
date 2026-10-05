@@ -14,18 +14,18 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.tvReadingFocus
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.ui.components.PrimaryButton
+import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
@@ -122,6 +122,7 @@ fun TermsScreen(
                     // Inside a LazyColumn item - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
                     modifier = Modifier
                         .fillMaxWidth()
+                        .tvReadingFocus()
                         .raisedSurface(
                             RoundedCornerShape(RadiusCard),
                             UaTheme.palette.surface1,
@@ -154,12 +155,16 @@ fun TermsScreen(
                     style = Caption,
                     color = UaTheme.palette.labelSecondary,
                 )
-                Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.terms_accept_button))
-                }
-                OutlinedButton(onClick = onDecline, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.terms_decline_button))
-                }
+                PrimaryButton(
+                    text = stringResource(R.string.terms_accept_button),
+                    onClick = onAccept,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                SecondaryButton(
+                    text = stringResource(R.string.terms_decline_button),
+                    onClick = onDecline,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

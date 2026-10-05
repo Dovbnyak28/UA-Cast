@@ -26,7 +26,17 @@ class MediaSessionCommandPolicyTest {
     @Test
     fun `unrelated commands are not mapped`() {
         assertNull(MediaSessionCommandPolicy.mapCommand(Player.COMMAND_PLAY_PAUSE))
-        assertNull(MediaSessionCommandPolicy.mapCommand(Player.COMMAND_SEEK_TO_NEXT))
-        assertNull(MediaSessionCommandPolicy.mapCommand(Player.COMMAND_SEEK_TO_PREVIOUS))
+        assertNull(MediaSessionCommandPolicy.mapCommand(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM))
+    }
+
+    @Test fun `generic controller next and previous also mean channel navigation`() {
+        assertEquals(
+            MediaSessionCommandPolicy.Action.NEXT,
+            MediaSessionCommandPolicy.mapCommand(Player.COMMAND_SEEK_TO_NEXT),
+        )
+        assertEquals(
+            MediaSessionCommandPolicy.Action.PREVIOUS,
+            MediaSessionCommandPolicy.mapCommand(Player.COMMAND_SEEK_TO_PREVIOUS),
+        )
     }
 }

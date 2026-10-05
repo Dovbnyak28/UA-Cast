@@ -1,39 +1,50 @@
 package com.uacastplayer.data.epg
 
 import android.content.Context
-import com.uacastplayer.core.io.GzipSniffer
+import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.epg.DecodedEpgSnapshot
 import com.uacastplayer.epg.EpgData
-import com.uacastplayer.epg.EpgIndex
+import com.uacastplayer.epg.EpgDocumentPipeline
 import com.uacastplayer.epg.EpgSource
-import com.uacastplayer.epg.EpgTruncation
-import com.uacastplayer.epg.XmlTvParseResult
-import com.uacastplayer.epg.XmlTvParser
 import com.uacastplayer.log.AppLog
-import java.io.InputStream
-import java.io.PushbackInputStream
-import java.util.zip.GZIPInputStream
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import com.uacastplayer.data.cache.CachePaths
+import com.uacastplayer.data.cache.CacheSizeUtils
 
-sealed class EpgOutcome {
-    data class Loaded(val data: EpgData) : EpgOutcome()
-    data object SizeLimitExceeded : EpgOutcome()
-    data class HttpError(val code: Int) : EpgOutcome()
-    data class ReadError(val message: String?) : EpgOutcome()
+sealed interface EpgOutcome {
+    data class Loaded(val data: EpgData) : EpgOutcome
+    data object SizeLimitExceeded : EpgOutcome
+    data class HttpError(val code: Int) : EpgOutcome
+    /** @param cause an exception class name, never a message - see [EpgDownloadResult.ReadError]. */
+    data class ReadError(val cause: String?) : EpgOutcome
 }
+
+/**
+ * A guide read back from disk, with the day it was written.
+ *
+ * The timestamp is the point: it was already in every snapshot's header and nothing read it, which
+ * is how the cached guide came to have no expiry at all. See [EpgRefreshPolicy].
+ */
+data class RestoredEpg(val outcome: EpgOutcome, val savedAtMillis: Long)
 
 private const val TAG = "EpgRepository"
 
-class EpgRepository(context: Context) {
+class EpgRepository(
+    context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    httpClient: OkHttpClient = AppHttp.client(connectTimeoutSeconds = 15, readTimeoutSeconds = 60),
+) {
 
     private val appContext = context.applicationContext
-    private val httpClient = AppHttp.client(connectTimeoutSeconds = 15, readTimeoutSeconds = 60)
-    private val downloader = EpgDownloader(httpClient, appContext.filesDir)
-    private val snapshotStore = EpgSnapshotStore(appContext)
+    private val downloader = EpgDownloader(httpClient, appContext.filesDir, ioDispatcher)
+    private val snapshotStore = EpgSnapshotStore(appContext, ioDispatcher)
+    private val snapshotMutations = EpgSnapshotMutationCoordinator()
 
     suspend fun loadFromSource(source: EpgSource): EpgOutcome = load(source.url)
 
@@ -41,22 +52,34 @@ class EpgRepository(context: Context) {
      * same pipeline as [loadFromSource], just without a fixed [EpgSource] to key off of. */
     suspend fun loadFromUrl(url: String): EpgOutcome = load(url)
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun load(url: String): EpgOutcome {
+        // Captured before download/parse. A source selected later retires this writer even if its
+        // AtomicFile encode is already in non-cancellable IO by the time the coroutine is cancelled.
+        val snapshotLease = snapshotMutations.begin()
         return when (val result = downloader.download(url)) {
             is EpgDownloadResult.Success -> {
                 try {
-                    val data = withContext(Dispatchers.Default) {
-                        result.documentFile.inputStream().use { buildEpgData(parseDocument(it)) }
+                    val data = withEpgCpuCancellable { checkCancellation ->
+                        result.documentFile.inputStream().use {
+                            parseDocument(it, checkCancellation)
+                        }
                     }
-                    persist(Fingerprint.of(url), data)
+                    persist(snapshotLease, Fingerprint.of(url), data)
                     EpgOutcome.Loaded(data)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    // HTTP success does not imply a valid XML/gzip document. Retain the previous
+                    // guide and expose a recoverable failure instead of escaping viewModelScope.
+                    EpgOutcome.ReadError(error.javaClass.simpleName)
                 } finally {
                     result.documentFile.delete()
                 }
             }
             EpgDownloadResult.SizeLimitExceeded -> EpgOutcome.SizeLimitExceeded
             is EpgDownloadResult.HttpError -> EpgOutcome.HttpError(result.code)
-            is EpgDownloadResult.ReadError -> EpgOutcome.ReadError(result.message)
+            is EpgDownloadResult.ReadError -> EpgOutcome.ReadError(result.cause)
         }
     }
 
@@ -68,18 +91,42 @@ class EpgRepository(context: Context) {
      * download happens at all: the EPG is restored from its snapshot, so a device carrying half a
      * gigabyte of orphans would keep carrying it until the cache happened to expire.
      */
-    suspend fun deleteStaleDownloads() = withContext(Dispatchers.IO) { downloader.deleteStaleDownloads() }
+    suspend fun deleteStaleDownloads() = withContext(ioDispatcher) { downloader.deleteStaleDownloads() }
+
+    suspend fun clearSnapshots() = snapshotMutations.invalidateAndDelete {
+        withContext(ioDispatcher) { CacheSizeUtils.clear(CachePaths.epgSnapshots(appContext.filesDir)) }
+    }
 
     // A corrupt/truncated cached snapshot (any parse failure, not one specific type) should just
     // fall back to null - the caller re-fetches live - not crash startup over stale disk state.
+    suspend fun restoreSnapshot(expectedSourceUrl: String? = null): RestoredEpg? {
+        val snapshotLease = snapshotMutations.begin()
+        return snapshotStore.open()?.let { snapshot ->
+            restoreDecodedSnapshot(snapshot, snapshotLease, expectedSourceUrl)
+        }
+    }
+
     @Suppress("TooGenericExceptionCaught")
-    suspend fun restoreSnapshot(): EpgOutcome? {
-        val snapshot = snapshotStore.open() ?: return null
+    private suspend fun restoreDecodedSnapshot(
+        snapshot: DecodedEpgSnapshot,
+        snapshotLease: EpgSnapshotMutationCoordinator.WriteLease,
+        expectedSourceUrl: String?,
+    ): RestoredEpg? {
+        val expectedFingerprint = expectedSourceUrl?.let(Fingerprint::of)
+        if (expectedFingerprint != null && snapshot.header.sourceFingerprint != expectedFingerprint) {
+            // A v1 snapshot owns an open stream after decode; a mismatch returns before the normal
+            // upgrade path's use{} can close it.
+            if (snapshot is DecodedEpgSnapshot.Document) snapshot.documentStream.close()
+            snapshotMutations.invalidateAndDelete(snapshotStore::delete)
+            AppLog.d(TAG) { "Discarded EPG snapshot belonging to a different configured source" }
+            return null
+        }
         return try {
-            when (snapshot) {
-                is DecodedEpgSnapshot.Parsed -> EpgOutcome.Loaded(snapshot.data)
-                is DecodedEpgSnapshot.Document -> EpgOutcome.Loaded(upgradeFromDocument(snapshot))
+            val data = when (snapshot) {
+                is DecodedEpgSnapshot.Parsed -> snapshot.data
+                is DecodedEpgSnapshot.Document -> upgradeFromDocument(snapshot, snapshotLease)
             }
+            RestoredEpg(EpgOutcome.Loaded(data), snapshot.header.savedAtEpochMillis)
         } catch (e: CancellationException) {
             // Not a failure and not this catch's business: the upgrade below suspends for as long
             // as a real feed takes to parse, so the scope ending mid-restore used to arrive here
@@ -102,21 +149,33 @@ class EpgRepository(context: Context) {
      * already has, which would leave them with no EPG at all until a fresh download finished -
      * offline or not.
      */
-    private suspend fun upgradeFromDocument(snapshot: DecodedEpgSnapshot.Document): EpgData {
+    private suspend fun upgradeFromDocument(
+        snapshot: DecodedEpgSnapshot.Document,
+        snapshotLease: EpgSnapshotMutationCoordinator.WriteLease,
+    ): EpgData {
         val data = snapshot.documentStream.use { stream ->
-            withContext(Dispatchers.Default) { buildEpgData(parseDocument(stream)) }
+            withEpgCpuCancellable { checkCancellation ->
+                parseDocument(stream, checkCancellation)
+            }
         }
         AppLog.w(TAG) { "Upgraded EPG snapshot from the document format; this happens once" }
-        persist(snapshot.header.sourceFingerprint, data)
+        persist(snapshotLease, snapshot.header.sourceFingerprint, data)
         return data
     }
 
     // Best-effort cache write: the EPG data this session already loaded is usable either way,
     // so any persist failure (disk full, I/O error) should just skip the cache, not fail the load.
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun persist(sourceFingerprint: String, data: EpgData) {
+    private suspend fun persist(
+        snapshotLease: EpgSnapshotMutationCoordinator.WriteLease,
+        sourceFingerprint: String,
+        data: EpgData,
+    ) {
         try {
-            snapshotStore.save(sourceFingerprint, System.currentTimeMillis(), data)
+            val persisted = snapshotMutations.runWriteIfCurrent(snapshotLease) {
+                snapshotStore.save(sourceFingerprint, System.currentTimeMillis(), data)
+            }
+            if (!persisted) AppLog.d(TAG) { "Skipped stale EPG snapshot write for superseded source" }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -124,31 +183,22 @@ class EpgRepository(context: Context) {
         }
     }
 
-    /** Sniffs the gzip magic number from the first 2 bytes rather than requiring the whole
-     * document in memory - some feeds are gzip-compressed, others already-plain XML (see [EpgSource]). */
-    private fun parseDocument(rawStream: InputStream): XmlTvParseResult {
-        val pushback = PushbackInputStream(rawStream, 2)
-        val magic = ByteArray(2)
-        val read = pushback.read(magic)
-        if (read > 0) pushback.unread(magic, 0, read)
-        val stream = if (read == 2 && GzipSniffer.isGzip(magic)) GZIPInputStream(pushback) else pushback
-        return stream.use(XmlTvParser::parse)
-    }
-
-    private fun buildEpgData(parsed: XmlTvParseResult): EpgData {
-        val programmesByChannel = parsed.programmes
-            .groupBy { it.channelId }
-            .mapValues { (_, programmes) -> programmes.sortedBy { it.startMillis } }
-        val truncation = EpgTruncation(
-            channelsDropped = parsed.channelLimitExceeded,
-            programmesDropped = parsed.programmeLimitExceeded,
+    /** Delegates the Android-free CPU pipeline while retaining repository-owned diagnostics. */
+    private fun parseDocument(rawInput: java.io.InputStream, checkCancellation: () -> Unit): EpgData {
+        val data = EpgDocumentPipeline.parse(
+            rawInput = rawInput,
+            nowMillis = System.currentTimeMillis(),
+            zoneId = ZoneId.systemDefault(),
+            maxHeapBytes = Runtime.getRuntime().maxMemory(),
+            checkCancellation = checkCancellation,
         )
+        val truncation = data.truncation
         if (truncation.any) {
             AppLog.w(TAG) {
                 "EPG feed exceeded the parser's caps and was cut short " +
-                    "(channels=${parsed.channelLimitExceeded}, programmes=${parsed.programmeLimitExceeded})"
+                    "(channels=${truncation.channelsDropped}, programmes=${truncation.programmesDropped})"
             }
         }
-        return EpgData(EpgIndex(parsed.channels), programmesByChannel, truncation)
+        return data
     }
 }

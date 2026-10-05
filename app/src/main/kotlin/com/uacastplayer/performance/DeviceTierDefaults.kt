@@ -1,9 +1,9 @@
 package com.uacastplayer.performance
 
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 
-/** Computed defaults for a device tier - always overridable, and once the user picks a value explicitly it wins forever. */
+/** Computed defaults for a device tier. Explicit user choices always win. */
 object DeviceTierDefaults {
 
     fun iconDisplayMode(tier: DeviceTier): IconDisplayMode = when (tier) {

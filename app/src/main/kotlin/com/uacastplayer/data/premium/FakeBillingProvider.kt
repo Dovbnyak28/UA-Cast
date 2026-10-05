@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * This is the honest state of the world right now, not a placeholder that pretends. Nothing is for
  * sale, so the Premium screen shows what premium *is* and no prices, and every paid feature stays
- * locked unless a trial is running. On the day Google Play Billing is added, this class is replaced
+ * locked unless a paid licence is already cached. Once Google Play sales are enabled, this class is replaced
  * at one construction site and deleted; nothing else changes.
  *
  * It is deliberately not the developer menu. That one grants licenses, lives in `src/debug`, and is

@@ -1,5 +1,7 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.net.HttpHeaderValuePolicy
+
 /**
  * Hand-rolled, dependency-free M3U/M3U8 parser. Deliberately tolerant of the many small dialect
  * differences seen in real-world IPTV playlists: a UTF-8 BOM, quoted or unquoted attribute
@@ -8,8 +10,12 @@ package com.uacastplayer.playlist
  */
 object M3uParser {
 
+    /** Bounds object amplification from a small playlist containing hundreds of thousands of entries. */
+    const val MAX_CHANNELS = 50_000
+
     private const val UTF8_BOM = "\uFEFF"
-    private val attributePattern = Regex("""([a-zA-Z][\w-]*)=(?:"([^"]*)"|(\S+))""")
+    private const val CANCELLATION_CHECK_INTERVAL_LINES = 256
+    private const val CANCELLATION_CHECK_INTERVAL_CHARS = 1_024
 
     /**
      * [lineSequence] rather than `split("\n").map { it.trimEnd('\r') }`: that built the whole
@@ -23,96 +29,123 @@ object M3uParser {
      * ending, and `\r` is a control character that cannot legitimately appear inside a channel name
      * or url anyway.
      */
-    fun parse(text: String): M3uParseResult {
-        val lines = text.removePrefix(UTF8_BOM).lineSequence()
-
-        val channels = mutableListOf<M3uChannel>()
-        var skippedLineCount = 0
-        var pendingExtinf: PendingExtinf? = null
-        var pendingGroupOverride: String? = null
-        var pendingUserAgent: String? = null
-        var pendingReferrer: String? = null
-        // Only the (normally singular) #EXTM3U line ever carries these, so first-found wins - no
-        // need to keep scanning once set.
-        var epgUrls: List<String> = emptyList()
-
-        for (rawLine in lines) {
+    fun parse(text: String, checkCancellation: () -> Unit = {}): M3uParseResult {
+        val state = ParseState(checkCancellation)
+        var linesUntilCancellationCheck = CANCELLATION_CHECK_INTERVAL_LINES
+        checkCancellation()
+        for (rawLine in text.removePrefix(UTF8_BOM).lineSequence()) {
+            linesUntilCancellationCheck--
+            if (linesUntilCancellationCheck == 0) {
+                checkCancellation()
+                linesUntilCancellationCheck = CANCELLATION_CHECK_INTERVAL_LINES
+            }
             val line = rawLine.trim()
-            if (line.isEmpty()) continue
+            if (line.isNotEmpty()) state.accept(line)
+            if (state.channelLimitExceeded) break
+        }
+        checkCancellation()
+        return state.finish()
+    }
 
+    private class ParseState(private val checkCancellation: () -> Unit) {
+        private val channels = mutableListOf<M3uChannel>()
+        private val groupTitlePool = HashMap<String, String>()
+        private var skippedLineCount = 0
+        private var pendingExtinf: PendingExtinf? = null
+        private var pendingGroupOverride: String? = null
+        private var pendingUserAgent: String? = null
+        private var pendingReferrer: String? = null
+        private var epgUrls: List<String> = emptyList()
+        var channelLimitExceeded = false
+            private set
+
+        fun accept(line: String) {
             when {
-                line.startsWith("#EXTM3U") -> {
-                    if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line.substring("#EXTM3U".length))
-                }
-
-                line.startsWith("#EXTINF:") -> {
-                    if (pendingExtinf != null) skippedLineCount++
-                    pendingExtinf = parseExtinf(line.substring("#EXTINF:".length))
-                }
-
-                line.startsWith("#EXTGRP:") -> {
-                    pendingGroupOverride = line.substring("#EXTGRP:".length).trim().ifEmpty { null }
-                }
-
-                line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
-                    val option = parseExtVlcOpt(line.substring("#EXTVLCOPT:".length))
-                    when (option?.first?.lowercase()) {
-                        "http-user-agent" -> pendingUserAgent = option.second.ifEmpty { null }
-                        "http-referrer" -> pendingReferrer = option.second.ifEmpty { null }
-                    }
-                }
-
-                line.startsWith("#") -> Unit // unrecognized tag/comment, silently ignored
-
-                else -> {
-                    val extinf = pendingExtinf
-                    if (extinf == null) {
-                        skippedLineCount++
-                    } else {
-                        val displayName = extinf.displayName
-                            ?: extinf.tvgName
-                            ?: extinf.tvgId
-                        if (displayName.isNullOrBlank()) {
-                            skippedLineCount++
-                        } else {
-                            channels += M3uChannel(
-                                displayName = displayName,
-                                streamUrl = line,
-                                tvgId = extinf.tvgId,
-                                tvgName = extinf.tvgName,
-                                tvgLogo = extinf.tvgLogo,
-                                groupTitle = extinf.groupTitle ?: pendingGroupOverride,
-                                userAgent = pendingUserAgent,
-                                referrer = pendingReferrer,
-                            )
-                        }
-                    }
-                    pendingExtinf = null
-                    pendingGroupOverride = null
-                    pendingUserAgent = null
-                    pendingReferrer = null
-                }
+                line.startsWith("#EXTM3U", ignoreCase = true) -> acceptHeader(line)
+                line.startsWith("#EXTINF:", ignoreCase = true) -> acceptExtinf(line)
+                line.startsWith("#EXTGRP:", ignoreCase = true) -> acceptGroup(line)
+                line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> acceptVlcOption(line)
+                line.startsWith("#") -> Unit
+                else -> acceptStreamUrl(line)
             }
         }
 
-        if (pendingExtinf != null) skippedLineCount++
+        fun finish(): M3uParseResult {
+            if (pendingExtinf != null) skippedLineCount++
+            return M3uParseResult(channels, skippedLineCount, epgUrls, channelLimitExceeded)
+        }
 
-        return M3uParseResult(channels = channels, skippedLineCount = skippedLineCount, epgUrls = epgUrls)
+        private fun acceptHeader(line: String) {
+            if (epgUrls.isEmpty()) epgUrls = parseEpgUrls(line, checkCancellation)
+        }
+
+        private fun acceptExtinf(line: String) {
+            if (pendingExtinf != null) {
+                skippedLineCount++
+                clearPendingChannel()
+            }
+            pendingExtinf = parseExtinf(line, checkCancellation)
+        }
+
+        private fun acceptGroup(line: String) {
+            pendingGroupOverride = line.substring("#EXTGRP:".length).trim().ifEmpty { null }
+        }
+
+        private fun acceptVlcOption(line: String) {
+            val option = parseExtVlcOpt(line.substring("#EXTVLCOPT:".length))
+            when (option?.first?.lowercase()) {
+                "http-user-agent" -> pendingUserAgent = HttpHeaderValuePolicy.sanitize(option.second)
+                "http-referrer" -> pendingReferrer = HttpHeaderValuePolicy.sanitize(option.second)
+            }
+        }
+
+        private fun acceptStreamUrl(streamUrl: String) {
+            val extinf = pendingExtinf
+            val displayName = extinf?.displayName ?: extinf?.tvgName ?: extinf?.tvgId
+            if (extinf == null || displayName.isNullOrBlank()) {
+                skippedLineCount++
+            } else if (channels.size < MAX_CHANNELS) {
+                channels += extinf.toChannel(streamUrl, displayName)
+            } else {
+                // Reject the entire playlist upstream; a partial channel list looks valid and
+                // silently loses the rest of the user's provider data.
+                channelLimitExceeded = true
+            }
+            clearPendingChannel()
+        }
+
+        private fun PendingExtinf.toChannel(streamUrl: String, displayName: String): M3uChannel =
+            M3uChannel(
+                displayName = displayName,
+                streamUrl = streamUrl,
+                tvgId = tvgId,
+                tvgName = tvgName,
+                tvgLogo = tvgLogo,
+                groupTitle = (groupTitle ?: pendingGroupOverride)
+                    ?.let { groupTitlePool.getOrPut(it) { it } },
+                userAgent = pendingUserAgent,
+                referrer = pendingReferrer,
+            )
+
+        private fun clearPendingChannel() {
+            pendingExtinf = null
+            pendingGroupOverride = null
+            pendingUserAgent = null
+            pendingReferrer = null
+        }
     }
 
     /** `url-tvg`/`x-tvg-url` (case-insensitive, providers use either) on the `#EXTM3U` line - the
      * de-facto convention for pointing a player at the provider's own EPG. The value can be a
-     * comma-separated list of several URLs; [attributePattern] already handles both quoted and
-     * bare attribute values. */
-    private fun parseEpgUrls(content: String): List<String> {
-        val urls = mutableListOf<String>()
-        for (match in attributePattern.findAll(content)) {
-            val key = match.groupValues[1].lowercase()
-            if (key != "url-tvg" && key != "x-tvg-url") continue
-            val value = (match.groups[2]?.value ?: match.groups[3]?.value).orEmpty()
-            urls += value.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+     * comma-separated list of several URLs, in either quoted or bare attribute values. */
+    private fun parseEpgUrls(content: String, checkCancellation: () -> Unit): List<String> {
+        val urls = M3uEpgUrls(checkCancellation)
+        M3uAttributeReader(content, "#EXTM3U".length, content.length, checkCancellation).forEach { key, value ->
+            if (key.equals("url-tvg", ignoreCase = true) || key.equals("x-tvg-url", ignoreCase = true)) {
+                urls.add(value)
+            }
         }
-        return urls
+        return urls.result()
     }
 
     private data class PendingExtinf(
@@ -123,38 +156,31 @@ object M3uParser {
         val groupTitle: String?,
     )
 
-    private fun parseExtinf(content: String): PendingExtinf {
-        val splitIndex = indexOfUnquotedComma(content)
-        val attributesSection: String
-        val displayName: String?
-        if (splitIndex == -1) {
-            attributesSection = content
-            displayName = null
-        } else {
-            attributesSection = content.substring(0, splitIndex)
-            displayName = content.substring(splitIndex + 1).trim().ifEmpty { null }
-        }
+    private fun parseExtinf(content: String, checkCancellation: () -> Unit): PendingExtinf {
+        val splitIndex = indexOfUnquotedComma(content, checkCancellation)
+        val attributesEnd = if (splitIndex == -1) content.length else splitIndex
+        val displayName = if (splitIndex == -1) null else content.substring(splitIndex + 1).trim().ifEmpty { null }
 
         var tvgId: String? = null
         var tvgName: String? = null
         var tvgLogo: String? = null
         var groupTitle: String? = null
 
-        for (match in attributePattern.findAll(attributesSection)) {
-            val key = match.groupValues[1].lowercase()
-            val value = (match.groups[2]?.value ?: match.groups[3]?.value).orEmpty()
-            when (key) {
-                "tvg-id" -> tvgId = value.ifBlank { null }
-                "tvg-name" -> tvgName = value.ifBlank { null }
-                "tvg-logo" -> tvgLogo = value.ifBlank { null }
-                "group-title" -> groupTitle = value.ifBlank { null }
+        M3uAttributeReader(content, "#EXTINF:".length, attributesEnd, checkCancellation).forEach { key, value ->
+            when (key.lowercase()) {
+                "tvg-id" -> tvgId = normalizeAttributeValue(value)
+                "tvg-name" -> tvgName = normalizeAttributeValue(value)
+                "tvg-logo" -> tvgLogo = normalizeAttributeValue(value)
+                "group-title" -> groupTitle = normalizeAttributeValue(value)
             }
         }
 
         return PendingExtinf(displayName, tvgId, tvgName, tvgLogo, groupTitle)
     }
 
-    /** `#EXTVLCOPT:key=value` - value runs to the end of the line (no quoting convention here, unlike EXTINF attributes). */
+    private fun normalizeAttributeValue(value: String): String? = value.trim().ifEmpty { null }
+
+    /** `#EXTVLCOPT:key=value`; unlike EXTINF attributes, its value runs to the line end. */
     private fun parseExtVlcOpt(content: String): Pair<String, String>? {
         val separatorIndex = content.indexOf('=')
         if (separatorIndex == -1) return null
@@ -163,9 +189,10 @@ object M3uParser {
         return key to value
     }
 
-    private fun indexOfUnquotedComma(content: String): Int {
+    private fun indexOfUnquotedComma(content: String, checkCancellation: () -> Unit): Int {
         var inQuotes = false
-        for (i in content.indices) {
+        for (i in "#EXTINF:".length until content.length) {
+            if (i % CANCELLATION_CHECK_INTERVAL_CHARS == 0) checkCancellation()
             when (content[i]) {
                 '"' -> inQuotes = !inQuotes
                 ',' -> if (!inQuotes) return i

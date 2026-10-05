@@ -2,10 +2,10 @@ package com.uacastplayer.cast
 
 /** What to do about a receiver that went IDLE (ERROR, or FINISHED - which for this app's
  * exclusively-live channels always means an unexpected drop, never a legitimate end of content). */
-sealed class CastRecoveryDecision {
-    data class Reload(val attempt: Int, val backoffMillis: Long) : CastRecoveryDecision()
-    data object GiveUp : CastRecoveryDecision()
-    data object Ignore : CastRecoveryDecision()
+sealed interface CastRecoveryDecision {
+    data class Reload(val attempt: Int, val backoffMillis: Long) : CastRecoveryDecision
+    data object GiveUp : CastRecoveryDecision
+    data object Ignore : CastRecoveryDecision
 }
 
 /**
@@ -17,10 +17,9 @@ sealed class CastRecoveryDecision {
  * [com.uacastplayer.cast.CastSessionRepository]'s job.
  */
 object CastRecoveryPolicy {
-    /** Number of fast-backoff attempts before reloads settle into [STEADY_STATE_BACKOFF_MILLIS] -
-     * no longer a hard ceiling (see [onReceiverIdle]'s KDoc for why a live cast route must never
-     * finally give up on its own). */
+    /** Number of fast retries before the slower, still bounded recovery phase. */
     const val MAX_ATTEMPTS = 3
+    const val MAX_TOTAL_ATTEMPTS = 8
     const val STABLE_PLAYING_RESET_MILLIS = 60_000L
     private const val BACKOFF_1_MILLIS = 2_000L
     private const val BACKOFF_2_MILLIS = 4_000L
@@ -34,12 +33,9 @@ object CastRecoveryPolicy {
      * of continuous PLAYING - see [shouldResetAttemptCounter]). [isConfirmedIncompatible] mirrors
      * [CastPlaybackState.codecIncompatibility] being non-null: a confirmed MPEG-2 verdict means
      * reloading can never help (see [com.uacastplayer.proxy.RawTsRemuxActivation]'s own doc), so
-     * there's nothing to retry - this is the *only* case that ends in [CastRecoveryDecision.GiveUp].
-     * Everything else keeps reloading forever: past [MAX_ATTEMPTS] fast attempts, reloads continue
-     * at a steady [STEADY_STATE_BACKOFF_MILLIS] rather than stopping - a receiver dropping to IDLE
-     * is exactly as routine for live IPTV as the local player's own silent stalls (see
-     * [com.uacastplayer.player.StallRetryPolicy]'s KDoc for the identical reasoning), and a route
-     * that already loaded once deserves the same infinite patience a flaky network connection does.
+     * there is nothing to retry. Other failures get [MAX_TOTAL_ATTEMPTS] attempts per episode:
+     * a permanently expired URL must not retain the proxy's foreground service and wake locks
+     * indefinitely. A fresh channel selection or a minute of healthy playback resets this budget.
      * [selfInitiated] mirrors the same flag [CastReceiverStatusReducer.reduce] uses - an IDLE this
      * app itself caused (by issuing a new load) is not a failure to recover from at all.
      */
@@ -52,7 +48,7 @@ object CastRecoveryPolicy {
         val isRecoverableReason = idleReason == IdleReason.ERROR || idleReason == IdleReason.FINISHED
         return when {
             selfInitiated || !isRecoverableReason -> CastRecoveryDecision.Ignore
-            isConfirmedIncompatible -> CastRecoveryDecision.GiveUp
+            isConfirmedIncompatible || attemptsSoFar >= MAX_TOTAL_ATTEMPTS -> CastRecoveryDecision.GiveUp
             else -> {
                 val nextAttempt = attemptsSoFar + 1
                 val backoff = BACKOFF_MILLIS.getOrElse(attemptsSoFar) { STEADY_STATE_BACKOFF_MILLIS }

@@ -1,5 +1,6 @@
 package com.uacastplayer.ui.guidedtour
 
+import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.mutableStateOf
@@ -10,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
+import com.uacastplayer.R
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.guidedtour.GuidedTourPhase
 import com.uacastplayer.guidedtour.GuidedTourState
@@ -54,13 +57,16 @@ class GuidedTourOverlayTest {
     }
 
     @Test
-    fun theWelcomeCardOffersBothStartingAndLeaving() {
+    fun theWelcomeCardOffersPlaylistSetupTourAndDismissal() {
         setOverlay(GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = steps))
 
         composeRule.onNodeWithText("Ласкаво просимо до UA Cast IPTV").assertIsDisplayed()
-        composeRule.onNodeWithText("Швидко покажемо основні можливості додатка.").assertIsDisplayed()
-        composeRule.onNodeWithText("Почати").assertIsDisplayed()
-        composeRule.onNodeWithText("Пропустити").assertIsDisplayed()
+        val welcomeBody = ApplicationProvider.getApplicationContext<Context>()
+            .getString(R.string.guided_tour_welcome_body)
+        composeRule.onNodeWithText(welcomeBody).assertIsDisplayed()
+        composeRule.onNodeWithText("Додати плейлист").assertIsDisplayed()
+        composeRule.onNodeWithText("Показати огляд").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Не зараз").assertExists()
     }
 
     @Test
@@ -68,7 +74,7 @@ class GuidedTourOverlayTest {
         var advanced = 0
         setOverlay(GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = steps), onNext = { advanced++ })
 
-        composeRule.onNodeWithText("Почати").performClick()
+        composeRule.onNodeWithText("Показати огляд").performClick()
 
         assertEquals(1, advanced)
     }
@@ -78,9 +84,25 @@ class GuidedTourOverlayTest {
         var skips = 0
         setOverlay(GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = steps), onSkip = { skips++ })
 
-        composeRule.onNodeWithText("Пропустити").performClick()
+        composeRule.onNodeWithContentDescription("Не зараз").performClick()
 
         assertEquals(1, skips)
+    }
+
+    @Test
+    fun choosingAddPlaylistLeavesTheTourAndOpensTheSetupAction() {
+        var openedSetup = 0
+        var next = 0
+        setOverlay(
+            GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = steps),
+            onNext = { next++ },
+            onAddPlaylist = { openedSetup++ },
+        )
+
+        composeRule.onNodeWithText("Додати плейлист").performClick()
+
+        assertEquals(1, openedSetup)
+        assertEquals(0, next)
     }
 
     /** The one thing the progress indicator has to be: right about which step this is. */
@@ -189,6 +211,7 @@ class GuidedTourOverlayTest {
         onNext: () -> Unit = {},
         onBack: () -> Unit = {},
         onSkip: () -> Unit = {},
+        onAddPlaylist: () -> Unit = {},
         onComplete: () -> Unit = {},
     ) {
         composeRule.setContent {
@@ -198,6 +221,7 @@ class GuidedTourOverlayTest {
                     onNext = onNext,
                     onBack = onBack,
                     onSkip = onSkip,
+                    onAddPlaylist = onAddPlaylist,
                     onComplete = onComplete,
                 )
             }

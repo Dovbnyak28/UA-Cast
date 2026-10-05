@@ -1,6 +1,6 @@
 package com.uacastplayer.data.cast
 
-import com.uacastplayer.cast.TsSourceKind
+import com.uacastplayer.core.cast.TsSourceKind
 import com.uacastplayer.proxy.MpegTsSniffer
 import com.uacastplayer.proxy.PlaylistDetector
 

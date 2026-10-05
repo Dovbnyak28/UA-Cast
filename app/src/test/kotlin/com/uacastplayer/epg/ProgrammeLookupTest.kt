@@ -50,6 +50,38 @@ class ProgrammeLookupTest {
         assertEquals(1000L, result.effectiveStopMillis)
     }
 
+    /**
+     * The mirror of the "before the first programme" case above, which was handled and this was
+     * not. Past the end of a channel's listings the search still returns the last programme, so the
+     * channel row showed a finished programme with a live dot and a full progress bar - and went on
+     * showing it, since nothing after the last programme ever changes the answer. Feeds are ragged:
+     * a channel whose listings end sooner than the rest hits this while the guide is otherwise fine.
+     */
+    @Test
+    fun `past the end of the listings there is no current programme`() {
+        val result = ProgrammeLookup.currentAndNext(programmes, nowMillis = 4500)
+        assertNull("C ended at 4000", result.current)
+        assertNull(result.next)
+    }
+
+    /** The boundary itself: a programme is over at its declared stop, not after it. */
+    @Test
+    fun `exactly at the last programme's declared stop it is over`() {
+        assertNull(ProgrammeLookup.currentAndNext(programmes, nowMillis = 4000).current)
+    }
+
+    /**
+     * A feed that gives no stop time leaves [EpgProgramme] with stop == start, which says nothing
+     * about when the programme ends - so it is left alone rather than declared over the instant it
+     * begins. Guessing "finished" here would blank the badge for every channel on such a feed.
+     */
+    @Test
+    fun `a last programme with no declared duration is not treated as finished`() {
+        val untimed = listOf(programme(1000, 1000, "Untimed"))
+        val result = ProgrammeLookup.currentAndNext(untimed, nowMillis = 9999)
+        assertEquals("Untimed", result.current?.title)
+    }
+
     @Test
     fun `exactly at a programme's start counts as current`() {
         val result = ProgrammeLookup.currentAndNext(programmes, nowMillis = 2000)

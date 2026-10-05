@@ -1,9 +1,10 @@
 package com.uacastplayer.epg
 
 import java.io.ByteArrayInputStream
+import java.util.concurrent.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,6 +12,29 @@ class XmlTvParserTest {
 
     private fun parse(xml: String): XmlTvParseResult =
         XmlTvParser.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
+
+    @Test
+    fun `cancellation probe stops a large XMLTV parse`() {
+        val xml = buildString {
+            append("<tv>")
+            repeat(600) { index ->
+                append("<programme channel=\"ch\" start=\"20240115120000 +0000\">")
+                append("<title>Programme $index</title></programme>")
+            }
+            append("</tv>")
+        }
+        var checks = 0
+
+        val failure = assertThrows(CancellationException::class.java) {
+            XmlTvParser.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8))) {
+                checks++
+                if (checks == 3) throw CancellationException("superseded")
+            }
+        }
+
+        assertEquals("superseded", failure.message)
+        assertTrue(checks >= 3)
+    }
 
     @Test
     fun `parses a channel with multiple display names and an icon`() {
@@ -31,6 +55,35 @@ class XmlTvParserTest {
         assertEquals("bbc.one.uk", channel.id)
         assertEquals(listOf("BBC One", "BBC 1"), channel.displayNames)
         assertEquals("http://example.com/bbc.png", channel.iconUrl)
+    }
+
+    @Test
+    fun `an oversized later icon does not erase a valid earlier one`() {
+        val oversized = "x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH + 1)
+        val result = parse(
+            "<tv><channel id=\"one\"><icon src=\"https://example.test/valid.png\"/>" +
+                "<icon src=\"$oversized\"/></channel></tv>",
+        )
+
+        assertEquals("https://example.test/valid.png", result.channels.single().iconUrl)
+    }
+
+    @Test
+    fun `repeated icons count only the retained URL against the metadata budget`() {
+        val prefix = "https://example.test/"
+        val repeatedIcon = prefix + "x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH - prefix.length)
+        val xml = buildString {
+            append("<tv><channel id=\"one\">")
+            repeat(XmlTvParser.MAX_CHANNEL_METADATA_CHARS / XmlTvParser.MAX_ATTRIBUTE_LENGTH + 2) {
+                append("<icon src=\"$repeatedIcon\"/>")
+            }
+            append("</channel><channel id=\"two\"><icon src=\"https://example.test/two.png\"/>")
+            append("</channel></tv>")
+        }
+
+        val channels = parse(xml).channels
+        assertEquals(repeatedIcon, channels[0].iconUrl)
+        assertEquals("https://example.test/two.png", channels[1].iconUrl)
     }
 
     @Test
@@ -150,6 +203,26 @@ class XmlTvParserTest {
     }
 
     @Test
+    fun `oversized channel metadata is ignored instead of retained`() {
+        val oversizedId = "x".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH + 1)
+        val oversizedIcon = "https://example.test/" + "i".repeat(XmlTvParser.MAX_ATTRIBUTE_LENGTH + 1)
+        val result = parse(
+            """
+            <tv>
+              <channel id="$oversizedId">
+                <display-name>Too large</display-name>
+                <icon src="$oversizedIcon"/>
+              </channel>
+              <programme channel="$oversizedId" start="20240115120000 +0000"><title>Ignored</title></programme>
+            </tv>
+            """.trimIndent(),
+        )
+
+        assertTrue(result.channels.isEmpty())
+        assertTrue(result.programmes.isEmpty())
+    }
+
+    @Test
     fun `a channel with no id is not collected`() {
         val result = parse(
             """
@@ -243,5 +316,23 @@ class XmlTvParserTest {
             """.trimIndent()
         )
         assertEquals(listOf("ch1", "ch2"), result.programmes.map { it.channelId })
+    }
+
+    @Test
+    fun `unique programme channel ids are bounded instead of growing without limit`() {
+        val xml = buildString {
+            append("<tv>")
+            repeat(XmlTvParser.MAX_CHANNEL_ID_POOL + 16) { index ->
+                append(
+                    "<programme channel=\"unique-$index\" start=\"20240115120000 +0000\">" +
+                        "<title>x</title></programme>",
+                )
+            }
+            append("</tv>")
+        }
+
+        val result = parse(xml)
+
+        assertEquals(XmlTvParser.MAX_CHANNEL_ID_POOL, result.programmes.size)
     }
 }

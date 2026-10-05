@@ -8,9 +8,8 @@ package com.uacastplayer.update
 interface ReleaseSource {
 
     /**
-     * The newest published release, or null when that could not be established - offline,
-     * rate-limited, a 5xx, a draft, a tag that is not a version number. One null for every failure
-     * is deliberate: every caller reacts to them identically.
+     * The newest published release, or why there isn't one. See [ReleaseLookup] for why "no release
+     * published yet" is a case of its own rather than a failure like any other.
      */
-    suspend fun fetchLatestRelease(): GitHubRelease?
+    suspend fun fetchLatestRelease(): ReleaseLookup
 }

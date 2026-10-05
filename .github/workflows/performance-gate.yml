@@ -1,0 +1,77 @@
+name: Measured performance gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'app/**'
+      - 'core/**'
+      - 'baselineprofile/**'
+      - 'config/performance/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'scripts/check-performance-budgets.py'
+      - 'scripts/tests/test_performance_budgets.py'
+      - '.github/workflows/performance-gate.yml'
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  # Superseded PR measurements cannot validate the new revision; keep weekly/manual runs intact.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  device-budgets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
+      - name: Test evidence validator and host allocation/complexity budgets
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
+          ./gradlew :app:testReleaseUnitTest --tests '*HomeContentPerformanceTest' --tests '*ChannelSearchPerformanceTest' --tests '*PlaylistParsePerformanceTest' --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Measure eight journeys and sleeping-display readiness on an owned fresh emulator
+        timeout-minutes: 45
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          ram-size: 2048M
+          heap-size: 256M
+          disable-animations: true
+          script: >-
+            ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark,com.uacastplayer.baselineprofile.CriticalJourneysBenchmark,com.uacastplayer.baselineprofile.EpgParseBenchmark,com.uacastplayer.baselineprofile.BenchmarkFixtureReadinessTest
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
+            --stacktrace
+      - name: Enforce complete measured budgets
+        run: python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
+      - name: Preserve measurements, traces and failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: performance-api35-evidence
+          path: |
+            baselineprofile/build/outputs/
+            baselineprofile/build/reports/
+            app/build/test-results/testReleaseUnitTest/
+          if-no-files-found: error
+          retention-days: 30
