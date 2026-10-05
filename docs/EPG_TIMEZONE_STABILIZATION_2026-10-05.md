@@ -79,6 +79,26 @@ golden results. All four Kotlin files are byte-identical between primary and
 review checkouts. Current-head remote execution remains to be verified.
 Goldens, failure checks, budgets and detekt baseline were not relaxed.
 
+### Subsequent remote verification of b486d02
+
+Push Android CI `37347016254` passed all six jobs. Raw native reports verify
+144 / 147 / 147 passed methods on API 24 / 30 / 36, zero failures and six
+assumption skips per API. Both added timezone methods passed on all three APIs.
+PR CI `37347023580` also passed all six jobs after one API-24-only retry. Its
+initial run assembled the APKs, then hung before instrumentation and produced
+no API-24 runner report; this is not reclassified as an initial success.
+
+The first performance attempt `37347023449` failed while downloading/installing
+the API-35 SDK image (`Error on ZipFile unknown archive`), before benchmarks
+could run. Its failed-job-only retry completed nine tests in 314.627s with no
+test failures/errors/skips and complete final JSON. The independently checked
+unchanged validator still rejects three frame CPU P95 budgets: channels
+276.473ms, first player 437.503ms, fullscreen 414.726ms versus 100ms. Startup,
+EPG and measured managed-heap limits pass. Successful measurement is not a
+passing budget gate. Further
+setup evidence and the runner's bounded-diagnostics correction are documented
+in `docs/PLAYLIST_SELECTION_AND_RUNNER_STABILIZATION_2026-10-05.md`.
+
 ## Remaining release boundaries
 
 Parent 8301f71 Android CI passed all six jobs; these are parent results, not a

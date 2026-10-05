@@ -1,7 +1,8 @@
 package com.uacastplayer.ui.home
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -98,7 +99,7 @@ fun PlaylistSourceSheet(
             if (atCapacity) {
                 Text(stringResource(R.string.playlist_sources_limit, PlaylistSourcePolicy.MAX_SOURCES))
             }
-            LazyColumn(modifier = Modifier.weight(1f, fill = false).testTag("playlist-source-list")) {
+            LazyColumn(modifier = Modifier.weight(1f, fill = false).selectableGroup().testTag("playlist-source-list")) {
                 items(orderedSources, key = { it.id }) { source ->
                     PlaylistSourceRow(
                         source = source,
@@ -157,7 +158,7 @@ private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelec
                 else UaTheme.palette.surface1,
             )
             .tvFocus(shape)
-            .clickable(role = Role.RadioButton, onClickLabel = source.displayName, onClick = onSelect)
+            .selectable(selected = isActive, role = Role.RadioButton, onClick = onSelect)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

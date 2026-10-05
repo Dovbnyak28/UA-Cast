@@ -318,6 +318,19 @@ scripts/run-instrumented-tests.sh
 That script is the whole route - build both APKs, install with `-r`, run through `am instrument` -
 and it is what CI's `instrumented` job runs too, so a local pass and a CI pass mean the same thing.
 
+The Bash helper requires GNU `timeout`. Device setup commands are bounded at 30 seconds,
+each APK installation at 180 seconds, and instrumentation at 900 seconds, with a five-second
+termination grace. `INSTRUMENTED_ADB_TIMEOUT_SECONDS`, `INSTRUMENTED_INSTALL_TIMEOUT_SECONDS`
+and `INSTRUMENTED_RUNNER_TIMEOUT_SECONDS` accept positive integer seconds up to 3600 for an
+explicitly slower disposable test device. CI's outer step/job deadlines still apply; increasing
+these values does not bypass failing assertions or grant a passing result.
+`app/build/reports/instrumented/setup.txt` records phase names before installation, and
+`runner.txt` streams per-method progress. The helper resets only its own generated reports at
+the start, so an early setup failure cannot retain a previous passing summary. A timeout fails the run. Failure diagnostics are
+bounded too, and crash buffers are captured only for positively identified disposable emulators,
+never physical handsets. For phones with real data, use `scripts/run-preserved-device-tests.ps1`;
+the Bash helper refuses fixture replacement on a physical device unless explicitly overridden.
+
 It also inspects the runner's output rather than its exit code, because **`am instrument` exits 0
 whether the tests passed or failed**: pointed at a class that does not exist it prints
 `FAILURES!!!` and still returns 0. A check that trusted the exit code would be green forever.
