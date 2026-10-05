@@ -528,7 +528,7 @@ private fun ContinueWatchingCard(
                     color = UaTheme.palette.labelPrimary,
                     maxLines = 1,
                 )
-                val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+                val programme = remember(channel, epgState.data, epgState.nowMillis) {
                     epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
                 }
                 val current = programme?.current

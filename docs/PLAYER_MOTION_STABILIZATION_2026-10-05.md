@@ -64,11 +64,66 @@ barrier assertion.
 After the fixture fix, the focused icon/motion classes passed 23/23 with lint and
 detekt (2m27s task execution), then the complete gate above passed. No previous
 failed run is counted as green or removed from the verification history. The
-new source still needs its own remote Android/performance CI results; preceding
-b3df89c results below are not substituted for that head.
+remote results for that source are recorded separately below; preceding b3df89c
+results are not substituted for that head.
 
 All eleven repository architecture/privacy/Premium checks, six instrumentation
 runner contract/privacy cases and eight performance-validator cases passed.
+
+## Follow-up: retain entrance ownership while collapsed
+
+An integration regression using the actual PlayerHost reproduced a separate UX
+defect: after a completed opening, collapsing and expanding the same host added
+an entrance layer again (expected zero, actual one). The modifier was created
+inside the expanded branch; that branch leaves composition on collapse, so its
+remembered completion state was lost despite an unchanged key.
+
+PlayerHost now creates the opening modifier before its child conditional and
+applies it only to PlayerScreen. The mini bar is not scaled/faded. The same key,
+duration and curve remain; a fully disposed/reopened host and a new key can still
+animate. Playback/lifecycle callbacks, Media3 creation/release, request startup,
+Cast and DLNA ownership are unchanged.
+
+Four real-host Compose regressions cover ten collapse/expand cycles (same
+ExoPlayer and one live ViewModel), collapse during entrance, full close/reopen,
+and a new key. They use empty requests to avoid unrelated network/decoder work;
+they do not prove stream decoding or physical-TV rendering. Paused-clock state
+changes explicitly flush Snapshot notifications and the Main Looper before
+advancing 64ms, less than the 220ms entrance. This prevents stale test state from
+being mistaken for a missing transition. The first single regression failed
+before the production change and passed afterwards; all four plus the eleven
+modifier cases pass. The complete isolated gate for this hoist passed in 9m9s:
+Debug 2634, Release/Play 2270 each, zero failures/errors/skips, unchanged Core
+133 results reused, all 49 unchanged goldens, lint/detekt, debug/test APKs and
+both application/harness benchmark Kotlin variants. The new test's initially
+overlong line was fixed; no detekt suppression was added. Later EPG metadata
+regressions and verification are documented separately in
+`docs/EPG_METADATA_REFRESH_STABILIZATION_2026-10-05.md`.
+
+The combined final gate with those five EPG regressions succeeded in 10m16s:
+Debug 2639, Release/Play 2270 each, zero failures/errors/skips; 49 unchanged
+goldens, lint/detekt, APK assembly and app/harness benchmark Kotlin compilation
+pass. The completed same-source Debug/golden phase and unchanged Core 133
+results were reused. The preceding interrupted attempt was not labeled green;
+Release/Play completed in the resumed gate. Twelve repository checks, eight
+performance-validator cases and six runner contract/privacy cases also pass.
+
+## Latest completed remote evidence: 21c3be3
+
+[Android CI passed all six jobs](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37244290221),
+including native instrumentation on API 24, 30 and 36, unit/screenshots, quality
+checks and unsigned packaging. This head contains the preceding modifier/socket
+fixture fixes, not the subsequent PlayerHost hoist.
+
+The [performance run](https://github.com/Dovbnyak28/UA-Cast/actions/runs/37244290218)
+is incomplete, not green: ADB instrumentation ended with EOF and UTP reported
+`device 'emulator-5554' not found`. The artifact contains three completed XML
+records (cold/warm startup and channel opening), not all nine requested tests,
+and no final benchmark JSON. Independently running the unchanged validator
+rejects it as incomplete. No crash root cause in production code is inferred
+from this transport failure. Partial text/trace values do not replace complete
+JSON evidence; no timing improvement is claimed. The three previously measured
+frame-budget exceedances remain open pending a complete new measurement.
 
 ## Completed CI before this production change
 

@@ -135,7 +135,7 @@ fun MiniPlayerBar(
                     )
                 }
             }
-            val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+            val programme = remember(channel, epgState.data, epgState.nowMillis) {
                 epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
             }
             programme?.current?.title?.let { title ->

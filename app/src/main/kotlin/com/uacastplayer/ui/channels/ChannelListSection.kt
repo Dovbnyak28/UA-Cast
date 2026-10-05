@@ -206,7 +206,7 @@ internal fun SingleGroupChannelList(
                         // nowMillis only changes once a minute (see EpgUiState), so this only
                         // recomputes on an actual minute tick or a channel/data change - not on
                         // every recomposition this row goes through while scrolling.
-                        val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+                        val programme = remember(channel, epgState.data, epgState.nowMillis) {
                             epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
                         }
                         ChannelRow(

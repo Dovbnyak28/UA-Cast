@@ -185,6 +185,35 @@ execution пройшов 9/9 за 257.36s (вісім journeys + sleeping-displa
 не є виміром наступної production-зміни opening motion; деталі й межі нового
 проходу: `docs/PLAYER_MOTION_STABILIZATION_2026-10-05.md`.
 
+На `21c3be3` усі шість Android CI jobs пройшли, включно з API 24/30/36.
+Performance run цього head перервався на ADB EOF / `emulator-5554 not found`:
+лише три XML records замість дев'яти, фінального benchmark JSON немає.
+Незмінний validator незалежно відхилив артефакти як неповні. Це не вимір
+прискорення й не підтверджений crash production-коду; три попередні frame
+перевищення залишаються відкритими до повного повтору.
+
+Наступний вузький integration regression підтвердив повтор opening-анімації
+при розгортанні мініплеєра: remember усередині expanded branch втрачав стан
+після collapse. Modifier тепер створюється в стабільному PlayerHost, а
+застосовується тільки до PlayerScreen. Чотири host-тести перевіряють десять
+переходів, перерване відкриття, новий ключ та повне закриття/відкриття;
+це не зміна Media3 lifecycle чи доказ роботи IPTV на фізичному TV.
+
+П'ять UI-регресій також підтвердили стару програму EPG після зміни метаданих
+за тієї самої URL: список каналів (tvg-id/tvg-name/назва), Home continue-watching
+(tvg-name зі стабільною FavoriteKey) та мініплеєр. Три remember тепер залежать
+від M3uChannel, а не лише streamUrl; рівні значення й далі використовують кеш.
+Усі п'ять тестів падали до зміни та пройшли після неї. Деталі:
+`docs/EPG_METADATA_REFRESH_STABILIZATION_2026-10-05.md`.
+
+Фінальний ізольований прогін обох виправлень успішний (10m16s): Debug 2639,
+Release/Play 2270 кожен, нуль падінь/пропусків, 49 незмінних golden comparisons,
+lint/detekt, APK та benchmark Kotlin variants. Завершені Debug/golden результати
+того самого коду й незмінні Core 133 повторно використані; попередній перерваний
+прогін не зараховано як успішний. Також пройшли 12 repository checks, 8 validator
+і 6 runner contract/privacy tests. Це локальна регресія, не новий вимір FPS і не
+підтвердження роботи реального IPTV на TV.
+
 ## Що не підтверджено
 
 Mi TV під час цього проходу недоступний; старі успішні TV-тести не видаються за тести

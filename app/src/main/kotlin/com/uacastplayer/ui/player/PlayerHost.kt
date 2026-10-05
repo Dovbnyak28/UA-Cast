@@ -128,6 +128,9 @@ fun PlayerHost(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Keep entrance state in the host: the expanded child leaves composition when collapsed,
+    // so remembering the same key inside that branch would still replay on every expansion.
+    val openingModifier = Modifier.openTransform(key = channels to startIndex)
     Box(modifier = modifier) {
         if (collapsed && !LocalTvMode.current) {
             val iconRefreshKey: Any = iconPrefetchState.refreshKey
@@ -149,10 +152,7 @@ fun PlayerHost(
                 resolveIcon = resolveIcon,
                 epgState = epgState,
                 iconPrefetchState = iconPrefetchState,
-                // Keyed on the request, not on `collapsed`: expanding the mini bar back to full
-                // screen is a return to something already open, and replaying the opening there
-                // would say a channel had just been picked when none had.
-                modifier = Modifier.openTransform(key = channels to startIndex),
+                modifier = openingModifier,
             )
         }
     }
