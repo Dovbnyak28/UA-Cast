@@ -184,6 +184,20 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
   Це залишається невдалим результатом; вплив async Cast setup потребує нового CI.
 - Останні зміни проходять новий повний Android CI і performance gate у PR №4;
   результат попереднього SHA не переноситься на наступний. Пристрої не використано.
+- Commit `3f862be` пройшов повні unit/screenshot suites: Debug 2814,
+  Release 2365, Play 2365, core 133, decoder Debug/Release по 5; нуль failures/skips.
+  Quality та packaging jobs також успішні. Native тест на API 24/30/36 підтвердив
+  повторний video output, але перевірив зупинку одразу після click, до Compose
+  disposal. Helper тепер чекає фактичного видалення mini-player та idle перед
+  перевіркою зупинки й очищення media items. Measurement fixture задає фіксовану
+  landscape геометрію; production sensor transitions перевіряє lifecycle suite.
+  Ці test-only зміни потребують наступного повного CI; assertions не вилучено.
+- Performance [40418231238, attempt 2](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40418231238/attempts/2)
+  отримав усі вісім вимірів: fullscreen P95 96.987 ms у бюджеті, player P95
+  146.719 ms перевищує 100 ms; startup/playlist/EPG/heap у бюджеті. Async Cast
+  усуває синхронний module setup, але цей прогін не доводить frame-time speedup.
+  Перша спроба цього run не дійшла до build/tests через пошкоджений CMake ZIP;
+  друга на тому самому SHA успішно зібрала native inputs і виміряла застосунок.
 
 ## Незакриті питання
 

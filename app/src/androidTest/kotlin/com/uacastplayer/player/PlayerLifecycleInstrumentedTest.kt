@@ -209,6 +209,10 @@ class PlayerLifecycleInstrumentedTest {
         composeTestRule.onNodeWithContentDescription(
             composeTestRule.activity.getString(R.string.player_mini_close),
         ).performClick()
+        // A click schedules composition; PlayerHost releases playback from its disposal effect.
+        // Wait for actual removal before asserting engine cleanup on the Activity thread.
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertDoesNotExist()
+        composeTestRule.waitForIdle()
     }
 
     @Test
