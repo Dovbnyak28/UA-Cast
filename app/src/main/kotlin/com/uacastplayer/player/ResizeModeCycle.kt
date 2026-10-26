@@ -4,7 +4,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.PlayerResizeMode
+import com.uacastplayer.core.settings.PlayerResizeMode
 
 /**
  * Fit -> Fill -> Zoom -> Fit. Also maps [PlayerResizeMode] to the two things every caller actually

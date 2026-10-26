@@ -1,0 +1,272 @@
+name: Build signed Play and GitHub artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: Monotonically increasing Play versionCode
+        required: true
+        type: string
+      version_name:
+        description: User-visible versionName (for example 0.9.6)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+
+jobs:
+  native:
+    uses: ./.github/workflows/software-decoder-native.yml
+
+  instrumented:
+    name: Instrumented tests (API ${{ matrix.api-level }})
+    runs-on: ubuntu-24.04
+    needs: native
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [24, 30, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0, Node 24
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
+
+      - name: Enable KVM
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
+        with:
+          name: software-decoder-native
+          path: ffmpegdecoder/build/native-libraries
+
+      - name: Verify native inputs
+        run: python3 scripts/prepare-software-decoder.py --verify-only
+
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            bash scripts/run-instrumented-tests.sh
+            ./gradlew :ffmpegdecoder:connectedDebugAndroidTest --stacktrace
+
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
+        with:
+          name: signed-release-instrumented-reports-api-${{ matrix.api-level }}
+          path: app/build/reports/
+          retention-days: 14
+
+  signed-artifacts:
+    name: Signed Play AAB and GitHub APK
+    needs: [native, instrumented]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    env:
+      RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+      RELEASE_VERSION_NAME: ${{ inputs.version_name }}
+      UACAST_KEYSTORE_BASE64: ${{ secrets.UACAST_KEYSTORE_BASE64 }}
+      UACAST_STORE_PASSWORD: ${{ secrets.UACAST_STORE_PASSWORD }}
+      UACAST_KEY_ALIAS: ${{ secrets.UACAST_KEY_ALIAS }}
+      UACAST_KEY_PASSWORD: ${{ secrets.UACAST_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0, Node 24
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
+
+      - name: Verify legal release readiness before signing
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
+        with:
+          name: software-decoder-native
+          path: ffmpegdecoder/build/native-libraries
+
+      - name: Verify native inputs
+        run: python3 scripts/prepare-software-decoder.py --verify-only
+
+      - name: Download corresponding source for this native build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
+        with:
+          name: software-decoder-corresponding-source
+          path: build/software-decoder-dist
+
+      - name: Verify legal release readiness before using signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate-legal-documents.py --check
+          python3 scripts/verify-software-decoder-bundle.py
+          mkdir -p build/legal-audit
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain > build/legal-audit/release-dependencies.txt
+          python3 scripts/check-release-legal.py --dependency-report build/legal-audit/release-dependencies.txt
+
+      - name: Validate release inputs and materialize keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || {
+            echo "version_code must be a positive integer" >&2
+            exit 1
+          }
+          [[ "$RELEASE_VERSION_NAME" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]] || {
+            echo "version_name contains unsupported characters" >&2
+            exit 1
+          }
+          for name in UACAST_KEYSTORE_BASE64 UACAST_STORE_PASSWORD UACAST_KEY_ALIAS UACAST_KEY_PASSWORD; do
+            [ -n "${!name:-}" ] || {
+              echo "Required production secret is missing: $name" >&2
+              exit 1
+            }
+          done
+          keystore="$RUNNER_TEMP/uacast-release.p12"
+          printf '%s' "$UACAST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          [ -s "$keystore" ] || {
+            echo "Decoded keystore is empty" >&2
+            exit 1
+          }
+          echo "UACAST_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+
+      - name: Run release gate and build signed Play bundle
+        run: >-
+          ./gradlew
+          :core:test
+          :core:detekt
+          :ffmpegdecoder:testReleaseUnitTest
+          :app:verifyRoborazziDebug
+          :app:testPlayUnitTest
+          :app:lintPlay
+          :app:detekt
+          :app:bundlePlay
+          --stacktrace
+          -Puacast.requireSigning=true
+          -Puacast.versionCode=$RELEASE_VERSION_CODE
+          -Puacast.versionName=$RELEASE_VERSION_NAME
+
+      - name: Verify architecture, premium and Play policy surfaces
+        shell: bash
+        run: |
+          bash scripts/tests/check-detekt-baseline-test.sh
+          bash scripts/check-detekt-baseline.sh
+          bash scripts/check-architecture-boundaries.sh
+          bash scripts/tests/check-doc-references-test.sh
+          bash scripts/check-doc-references.sh
+          bash scripts/check-locale-format.sh
+          bash scripts/check-no-hardcoded-colors.sh
+          bash scripts/check-glow-not-text.sh
+          bash scripts/check-cast-icon-placement.sh
+          bash scripts/check-oncleared-super.sh
+          bash scripts/check-applog-sensitive-vars.sh
+          bash scripts/check-premium-purity.sh
+          bash scripts/check-sold-features-are-gated.sh
+          bash scripts/check-play-distribution.sh
+          bash scripts/check-legal-assets.sh app/build/outputs/bundle/play
+
+      - name: Verify bundle signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=$(find app/build/outputs/bundle/play -maxdepth 1 -type f -name '*.aab' -print -quit)
+          [ -n "$bundle" ] || {
+            echo "Signed Play bundle was not produced" >&2
+            exit 1
+          }
+          verification=$(LC_ALL=C jarsigner -verify "$bundle")
+          if ! grep -F 'jar verified.' <<< "$verification" >/dev/null; then
+            echo "Play bundle signature verification did not report success" >&2
+            exit 1
+          fi
+
+      # Run separately: app/build.gradle.kts disables ABI splits for bundle tasks, while
+      # assembleRelease must produce the universal APK accepted by the self-updater.
+      - name: Build signed sideload APKs
+        run: >-
+          ./gradlew
+          :app:assembleRelease
+          --stacktrace
+          -Puacast.requireSigning=true
+          -Puacast.versionCode=$RELEASE_VERSION_CODE
+          -Puacast.versionName=$RELEASE_VERSION_NAME
+
+      - name: Verify universal APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*universal*.apk' -print -quit)
+          [ -n "$apk" ] || {
+            echo "Signed universal APK was not produced" >&2
+            exit 1
+          }
+          apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner -print -quit)
+          [ -n "$apksigner" ] || {
+            echo "Android apksigner is unavailable" >&2
+            exit 1
+          }
+          "$apksigner" verify --min-sdk-version 24 "$apk"
+
+      - name: Upload signed Play bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
+        with:
+          name: play-aab-signed-${{ inputs.version_name }}-${{ inputs.version_code }}
+          path: |
+            app/build/outputs/bundle/play/*.aab
+            build/software-decoder-dist/*.zip
+            build/software-decoder-dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload signed GitHub APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
+        with:
+          name: github-apk-signed-${{ inputs.version_name }}-${{ inputs.version_code }}
+          path: |
+            app/build/outputs/apk/release/*universal*.apk
+            build/software-decoder-dist/*.zip
+            build/software-decoder-dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload release diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
+        with:
+          name: signed-play-diagnostics-${{ inputs.version_code }}
+          path: |
+            app/build/outputs/mapping/play/mapping.txt
+            app/build/outputs/native-debug-symbols/play/
+          if-no-files-found: ignore
+          retention-days: 30

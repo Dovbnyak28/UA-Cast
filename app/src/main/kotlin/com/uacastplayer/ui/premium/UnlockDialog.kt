@@ -4,12 +4,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.uacastplayer.R
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
 
 /**
  * Shown when a locked control is tapped - and only then.
@@ -40,6 +43,7 @@ fun UnlockDialog(
             )
         },
         text = {
+            TvDialogInputRegistration()
             Text(
                 text = stringResource(R.string.premium_unlock_message),
                 style = BodyRegular,
@@ -47,12 +51,12 @@ fun UnlockDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = onSeePremium) {
+            TextButton(onClick = onSeePremium, modifier = Modifier.tvFocus()) {
                 Text(stringResource(R.string.premium_unlock_cta), color = UaTheme.palette.azure)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, modifier = Modifier.tvFocus()) {
                 Text(stringResource(R.string.premium_unlock_later), color = UaTheme.palette.labelSecondary)
             }
         },

@@ -24,11 +24,15 @@ object PlaylistUnwrapPolicy {
      * player makes; the rest are alternates for manual failover, not simultaneous streams. All
      * entries must be non-playlist URLs for the wrapper reading to apply at all. */
     fun unwrapTarget(playlistText: String, baseUrl: String): String? {
-        val lines = playlistText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
-        val isRealPlaylist = lines.any {
-            it.startsWith("#EXT-X-STREAM-INF") || it.startsWith("#EXT-X-TARGETDURATION")
+        val parsed = HlsMediaPlaylistParser.parse(playlistText)
+        if (!parsed.hasPlaylistHeader) return null
+
+        // Keep the raw tag-presence check for a malformed TARGETDURATION: it is still evidence of
+        // a media playlist and must not turn its first segment into an endless wrapper stream.
+        val isRealPlaylist = parsed.isMaster || playlistText.lineSequence().any {
+            it.trimStart().startsWith("#EXT-X-TARGETDURATION")
         }
-        val uris = lines.filter { !it.startsWith("#") }
+        val uris = parsed.segmentUris
         val isWrapper = !isRealPlaylist && uris.isNotEmpty() && uris.none { looksLikePlaylistUrl(it) }
         return if (isWrapper) M3u8Rewriter.resolveUrl(baseUrl, uris.first()) else null
     }

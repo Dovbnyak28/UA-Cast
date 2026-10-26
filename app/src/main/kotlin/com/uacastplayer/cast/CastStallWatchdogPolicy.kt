@@ -1,15 +1,15 @@
 package com.uacastplayer.cast
 
-sealed class CastStallDecision {
+sealed interface CastStallDecision {
     /** The receiver reached PLAYING - there is nothing left for the watchdog to catch. */
-    data object Settled : CastStallDecision()
+    data object Settled : CastStallDecision
 
     /** Not playing yet, but the load is demonstrably progressing - give it another tick. */
-    data object KeepWaiting : CastStallDecision()
+    data object KeepWaiting : CastStallDecision
 
     /** Nothing has moved for a whole tick (or the ceiling is up) - synthesize the IDLE/ERROR that
      * drives [CastRecoveryPolicy]'s reload cycle. */
-    data object Fire : CastStallDecision()
+    data object Fire : CastStallDecision
 }
 
 /**

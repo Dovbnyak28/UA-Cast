@@ -7,13 +7,12 @@ package com.uacastplayer.premium
  * The set is computed once, when the license or the clock moves it, rather than evaluated per
  * question. That is what lets the UI treat access as ordinary state it can subscribe to - and it
  * removes a whole class of bug where two screens ask the same question a second apart and get
- * different answers because a trial expired between them.
+ * different answers because legacy paid access expired between them.
  */
 data class Entitlements(
     val license: License,
     val unlocked: Set<Feature>,
-    /** True when a granted entitlement has run out - the Premium screen says "renew" rather than
-     * "upgrade", and the upgrade banner is allowed to appear. */
+    /** True when legacy paid access has run out; the UI explains the previous purchase history. */
     val hasLapsed: Boolean = false,
 ) {
 
@@ -30,10 +29,13 @@ data class Entitlements(
          * "what is unlocked"; both [com.uacastplayer.premium.FeatureManager] and the repository go
          * through it, so an expired license cannot be interpreted two ways.
          */
-        fun of(license: License, nowMillis: Long): Entitlements = Entitlements(
-            license = license,
-            unlocked = FeaturePolicy.featuresFor(license.effectiveTier(nowMillis)),
-            hasLapsed = license.hasLapsed(nowMillis),
-        )
+        fun of(license: License, nowMillis: Long): Entitlements {
+            val current = license.currentModel()
+            return Entitlements(
+                license = current,
+                unlocked = FeaturePolicy.featuresFor(current.effectiveTier(nowMillis)),
+                hasLapsed = current.hasLapsed(nowMillis),
+            )
+        }
     }
 }

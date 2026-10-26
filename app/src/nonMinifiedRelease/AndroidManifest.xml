@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Throwaway profile-generation APK only. Never move these declarations to src/main or src/release. -->
+        <activity
+            android:name=".benchmark.BenchmarkFixtureActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true" />
+        <activity
+            android:name=".benchmark.EpgParseBenchmarkActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true" />
+    </application>
+</manifest>

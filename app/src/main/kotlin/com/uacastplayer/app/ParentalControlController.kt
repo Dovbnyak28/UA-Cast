@@ -1,17 +1,22 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.core.concurrent.LatestValueWriter
 import com.uacastplayer.core.security.PinHasher
 import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinPolicy
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
+import com.uacastplayer.log.AppLog
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val TAG = "ParentalControlController"
 
 /**
  * Owns the parental-control PIN lock (see [LockedChannelsStorage]/[ParentalControlPinStorage.parentalControlPinHash]).
@@ -29,6 +34,15 @@ class ParentalControlController(
      * tests stay on their own dispatcher instead of hopping to a real thread pool mid-assertion. */
     private val hashingDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
+    private val writer = LatestValueWriter(scope, store::save) { error ->
+        AppLog.w(TAG) { "Parental-control persistence failed: ${error.javaClass.simpleName}" }
+    }
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+    private var initialLoadJob: Job? = null
+    private val pendingAdds = mutableSetOf<String>()
+    private val pendingRemovals = mutableSetOf<String>()
+    private var pendingReset = false
     private val _lockedKeys = MutableStateFlow<Set<String>>(emptySet())
     val lockedKeys: StateFlow<Set<String>> = _lockedKeys.asStateFlow()
 
@@ -37,17 +51,36 @@ class ParentalControlController(
 
     private val _unlockedThisSession = MutableStateFlow(false)
     val unlockedThisSession: StateFlow<Boolean> = _unlockedThisSession.asStateFlow()
+    // Mutations are owned by the UI scope; hashing suspends outside it. Retire old hash results.
+    private var pinRevision = 0L
 
     fun loadInitial() {
-        scope.launch { _lockedKeys.value = store.load() }
+        if (initialLoadJob != null) return
+        initialLoadJob = scope.launch {
+            val loaded = store.load()
+            val hadPendingMutation = pendingReset || pendingAdds.isNotEmpty() || pendingRemovals.isNotEmpty()
+            val base = if (pendingReset) emptySet() else loaded
+            val resolved = (base - pendingRemovals) + pendingAdds
+            pendingReset = false
+            pendingAdds.clear()
+            pendingRemovals.clear()
+            _lockedKeys.value = resolved
+            _isReady.value = true
+            if (hadPendingMutation) writer.submit(resolved)
+        }
     }
 
-    fun isLocked(channelKey: String): Boolean = channelKey in _lockedKeys.value
+    fun isLocked(channelKey: String): Boolean = !_isReady.value || channelKey in _lockedKeys.value
 
     fun lockChannel(channelKey: String) {
         if (channelKey in _lockedKeys.value) return
-        _lockedKeys.value = _lockedKeys.value + channelKey
-        scope.launch { store.save(_lockedKeys.value) }
+        val updated = _lockedKeys.value + channelKey
+        if (!_isReady.value) {
+            pendingAdds += channelKey
+            pendingRemovals -= channelKey
+        }
+        _lockedKeys.value = updated
+        if (_isReady.value) writer.submit(updated)
     }
 
     /** Permanently removes [channelKey] from the locked set. Callers must gate this behind
@@ -56,8 +89,13 @@ class ParentalControlController(
      * channel. */
     fun unlockChannelPermanently(channelKey: String) {
         if (channelKey !in _lockedKeys.value) return
-        _lockedKeys.value = _lockedKeys.value - channelKey
-        scope.launch { store.save(_lockedKeys.value) }
+        val updated = _lockedKeys.value - channelKey
+        if (!_isReady.value) {
+            pendingRemovals += channelKey
+            pendingAdds -= channelKey
+        }
+        _lockedKeys.value = updated
+        if (_isReady.value) writer.submit(updated)
     }
 
     /** Verifies [pin] against the stored hash and, on success, flips [unlockedThisSession] for the
@@ -72,9 +110,12 @@ class ParentalControlController(
         val hash = preferences.parentalControlPinHash
         val salt = preferences.parentalControlPinSalt
         if (hash == null || salt == null) return false
+        val revision = pinRevision
         val matches = withContext(hashingDispatcher) { PinHasher.verify(pin, salt, hash) }
-        if (matches) _unlockedThisSession.value = true
-        return matches
+        val matchesCurrentPin = matches && revision == pinRevision &&
+            hash == preferences.parentalControlPinHash && salt == preferences.parentalControlPinSalt
+        if (matchesCurrentPin) _unlockedThisSession.value = true
+        return matchesCurrentPin
     }
 
     /** Sets a new PIN, replacing any existing one. Callers must gate *replacing* an existing PIN
@@ -83,26 +124,36 @@ class ParentalControlController(
      * [ParentalControlPinPolicy.isValidFormat]. Suspending for the same reason as [verifyPin]. */
     suspend fun setPin(pin: String): Boolean {
         if (!ParentalControlPinPolicy.isValidFormat(pin)) return false
+        val revision = ++pinRevision
         val salt = PinHasher.generateSalt()
         val hash = withContext(hashingDispatcher) { PinHasher.hash(pin, salt) }
         // Written together, after the hash succeeds: a salt persisted without its hash would leave
         // isPinSet false with a stale salt on disk for the next setPin to overwrite anyway, but
         // pairing the writes keeps the two fields' invariant obvious.
-        preferences.parentalControlPinSalt = salt
-        preferences.parentalControlPinHash = hash
-        _isPinSet.value = true
-        return true
+        return if (revision == pinRevision) {
+            preferences.setParentalControlPin(hash = hash, salt = salt)
+            _isPinSet.value = true
+            true
+        } else {
+            false
+        }
     }
 
     /** Clears the PIN and every locked channel - the "forgot PIN" escape hatch. Deliberately not
      * gated behind [unlockedThisSession]; the only guard this gets is Settings' own confirmation
      * dialog before calling it. */
     fun resetParentalControl() {
-        preferences.parentalControlPinHash = null
-        preferences.parentalControlPinSalt = null
+        pinRevision++
+        preferences.clearParentalControlPin()
         _isPinSet.value = false
         _unlockedThisSession.value = false
         _lockedKeys.value = emptySet()
-        scope.launch { store.save(emptySet()) }
+        if (_isReady.value) {
+            writer.submit(emptySet())
+        } else {
+            pendingReset = true
+            pendingAdds.clear()
+            pendingRemovals.clear()
+        }
     }
 }

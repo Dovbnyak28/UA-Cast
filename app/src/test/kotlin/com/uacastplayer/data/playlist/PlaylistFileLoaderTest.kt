@@ -8,7 +8,11 @@ import java.io.ByteArrayInputStream
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.function.Supplier
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -111,6 +115,35 @@ class PlaylistFileLoaderTest {
         }
 
         assertTrue(load() is PlaylistLoadResult.ReadError)
+    }
+
+    @Test
+    fun cancellingAProviderPipeClosesItsStream() = runTest {
+        val readStarted = CountDownLatch(1)
+        val closed = CountDownLatch(1)
+        answerWith {
+            object : InputStream() {
+                override fun read(): Int {
+                    readStarted.countDown()
+                    closed.await(5, TimeUnit.SECONDS)
+                    return -1
+                }
+
+                override fun close() {
+                    closed.countDown()
+                }
+            }
+        }
+
+        val loading = async(Dispatchers.IO) { load() }
+        assertTrue("provider read never started", readStarted.await(1, TimeUnit.SECONDS))
+        loading.cancel()
+
+        assertTrue(
+            "cancelling playlist import must close a blocking provider stream",
+            closed.await(1, TimeUnit.SECONDS),
+        )
+        loading.join()
     }
 
     /**

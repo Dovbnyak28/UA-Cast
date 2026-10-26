@@ -1,8 +1,8 @@
 package com.uacastplayer.proxy
 
-import com.uacastplayer.cast.AudioCodec
-import com.uacastplayer.cast.CastCompatibilityVerdict
-import com.uacastplayer.cast.VideoCodec
+import com.uacastplayer.core.cast.AudioCodec
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.VideoCodec
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_password_title">Захищена резервна копія</string>
+    <string name="backup_password_export_hint">Використайте унікальну парольну фразу із 12–128 символів. Збережіть її: без неї відновити файл неможливо. UA-Cast не зберігає пароль.</string>
+    <string name="backup_password_import_hint">Введіть пароль, яким захищено цю копію.</string>
+    <string name="backup_password_label">Пароль</string>
+    <string name="backup_password_repeat">Повторіть пароль</string>
+    <string name="backup_password_continue">Розблокувати</string>
+    <string name="backup_password_failed">Неправильний пароль або пошкоджена копія. Нічого не змінено.</string>
+    <string name="backup_preview_title">Перегляд відновлення</string>
+    <string name="backup_preview_counts">Джерел: %1$d\nНових улюблених: %2$d\nВбудованих локальних плейлистів: %3$d</string>
+    <string name="backup_preview_merge_hint">Наявні дані зберігаються. Джерела об’єднаються в межах ліміту. До підтвердження нічого не змінюється.</string>
+    <string name="backup_preview_settings">Налаштувань до зміни: %1$d</string>
+    <string name="backup_preview_confirm">Відновити</string>
+    <string name="backup_setting_icons">Показ логотипів каналів</string>
+    <string name="backup_setting_density">Щільність списку каналів</string>
+    <string name="backup_working">Обробка резервної копії…</string>
+</resources>

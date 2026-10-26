@@ -13,9 +13,11 @@ object IconCacheTrimmer {
         maxTotalBytes: Long = MAX_TOTAL_BYTES,
         maxCount: Int = MAX_COUNT,
     ): List<CacheEntry> {
-        val sortedOldestFirst = entries.sortedBy { it.lastAccessedMillis }
         var totalBytes = entries.sumOf { it.sizeBytes }
         var count = entries.size
+        if (totalBytes <= maxTotalBytes && count <= maxCount) return emptyList()
+
+        val sortedOldestFirst = entries.sortedBy { it.lastAccessedMillis }
         val toEvict = mutableListOf<CacheEntry>()
 
         for (entry in sortedOldestFirst) {

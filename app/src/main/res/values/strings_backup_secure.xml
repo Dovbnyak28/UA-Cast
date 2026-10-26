@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_password_title">Protected backup</string>
+    <string name="backup_password_export_hint">Use a unique passphrase of 12–128 characters. Keep it safely: without it this file cannot be restored. The password is not saved by UA-Cast.</string>
+    <string name="backup_password_import_hint">Enter the password used to protect this backup.</string>
+    <string name="backup_password_label">Password</string>
+    <string name="backup_password_repeat">Repeat password</string>
+    <string name="backup_password_continue">Unlock</string>
+    <string name="backup_password_failed">Incorrect password or damaged backup. Nothing has been changed.</string>
+    <string name="backup_preview_title">Review restoration</string>
+    <string name="backup_preview_counts">Sources: %1$d\nNew favorites: %2$d\nEmbedded local playlists: %3$d</string>
+    <string name="backup_preview_merge_hint">Existing data is kept. Sources are merged within the saved-source limit. No changes are made until you confirm.</string>
+    <string name="backup_preview_settings">Settings to change: %1$d</string>
+    <string name="backup_preview_confirm">Restore</string>
+    <string name="backup_setting_icons">Channel logo display</string>
+    <string name="backup_setting_density">Channel list density</string>
+    <string name="backup_working">Processing backup…</string>
+</resources>

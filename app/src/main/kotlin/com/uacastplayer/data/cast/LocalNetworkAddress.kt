@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.log.RepeatedNoteFilter
 import java.net.Inet4Address
 
 private const val TAG = "LocalNetworkAddress"
@@ -21,8 +22,23 @@ private const val TAG = "LocalNetworkAddress"
  */
 object LocalNetworkAddress {
 
-    // allNetworks has no synchronous, callback-free replacement - this is a one-shot lookup at
-    // proxy-start time, not something worth the async NetworkCallback registration API for.
+    /**
+     * Keeps the line below to one per *answer* rather than one per call.
+     *
+     * The comment under this used to say this was a one-shot lookup at proxy-start time. It stopped
+     * being one when [com.uacastplayer.dlna.DlnaSessionRepository.checkSessionStillServable] began
+     * calling it from a `NetworkCallback` - `onCapabilitiesChanged` fires whenever Wi-Fi re-estimates
+     * its own bandwidth or signal, which on a real phone is constantly. A field report measured 63
+     * copies of one unchanging address in twelve minutes, in a 500-entry ring that was already
+     * losing everything else to the proxy (see [com.uacastplayer.proxy.ProxyServeRollup]).
+     *
+     * The address changing is the event worth recording, and this still records it every time.
+     */
+    private val addressNotes = RepeatedNoteFilter()
+
+    // allNetworks has no synchronous, callback-free replacement, and the async NetworkCallback
+    // registration API would not fit the callers, which need an answer now (see currentIpv4Address's
+    // three call sites).
     @Suppress("DEPRECATION")
     fun currentIpv4Address(context: Context): String? {
         val connectivityManager =
@@ -40,7 +56,8 @@ object LocalNetworkAddress {
         // it says whether the address handed out is the one the receiver shares a LAN with. A
         // private LAN address is not sensitive - it identifies nothing about the user - and without
         // it a wrong-interface failure is indistinguishable from a codec or content problem.
-        AppLog.d(TAG) { "Local LAN address for the proxy: ${address ?: "none found"}" }
+        val note = "Local LAN address for the proxy: ${address ?: "none found"}"
+        if (addressNotes.isWorthLogging(note)) AppLog.d(TAG) { note }
         return address
     }
 

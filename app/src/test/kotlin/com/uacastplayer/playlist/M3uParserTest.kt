@@ -1,10 +1,35 @@
 package com.uacastplayer.playlist
 
+import java.util.concurrent.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class M3uParserTest {
+
+    @Test
+    fun `cancellation probe stops a large parse before the remaining lines are consumed`() {
+        val playlist = buildString {
+            appendLine("#EXTM3U")
+            repeat(1_000) { index ->
+                appendLine("#EXTINF:-1,Channel $index")
+                appendLine("http://example.com/$index.ts")
+            }
+        }
+        var checks = 0
+
+        val failure = assertThrows(CancellationException::class.java) {
+            M3uParser.parse(playlist) {
+                checks++
+                if (checks == 3) throw CancellationException("superseded")
+            }
+        }
+
+        assertEquals("superseded", failure.message)
+        assertTrue(checks >= 3)
+    }
 
     @Test
     fun `parses a basic entry with quoted attributes`() {
@@ -27,6 +52,36 @@ class M3uParserTest {
     }
 
     @Test
+    fun `accepts lower case extinf and extgrp directives`() {
+        val result = M3uParser.parse(
+            """
+            #extm3u
+            #extinf:-1,Channel One
+            #extgrp:News
+            http://example.com/1.m3u8
+            """.trimIndent()
+        )
+
+        assertEquals(1, result.channels.size)
+        assertEquals("Channel One", result.channels[0].displayName)
+        assertEquals("News", result.channels[0].groupTitle)
+    }
+
+    @Test
+    fun `drops control characters from channel request headers`() {
+        val result = M3uParser.parse(
+            "#EXTM3U\n" +
+                "#EXTVLCOPT:http-user-agent=Agent\u0000Injected\n" +
+                "#EXTVLCOPT:http-referrer=https://site.example/\u007fpath\n" +
+                "#EXTINF:-1,Channel\n" +
+                "https://example.com/live.ts",
+        )
+
+        assertNull(result.channels.single().userAgent)
+        assertNull(result.channels.single().referrer)
+    }
+
+    @Test
     fun `strips a leading UTF-8 BOM`() {
         val result = M3uParser.parse(
             "﻿#EXTM3U\n#EXTINF:-1,Channel\nhttp://example.com/1.m3u8"
@@ -42,6 +97,21 @@ class M3uParserTest {
         )
         val channel = result.channels[0]
         assertEquals("ch1", channel.tvgId)
+        assertEquals("News", channel.groupTitle)
+    }
+
+    @Test
+    fun `trims surrounding whitespace from quoted attributes`() {
+        val result = M3uParser.parse(
+            "#EXTINF:-1 tvg-id=\" ch1 \" tvg-name=\" Channel One \" " +
+                "tvg-logo=\" https://example.com/logo.png \" group-title=\" News \"\n" +
+                "http://example.com/1.m3u8",
+        )
+        val channel = result.channels.single()
+
+        assertEquals("ch1", channel.tvgId)
+        assertEquals("Channel One", channel.tvgName)
+        assertEquals("https://example.com/logo.png", channel.tvgLogo)
         assertEquals("News", channel.groupTitle)
     }
 
@@ -174,6 +244,23 @@ class M3uParserTest {
     }
 
     @Test
+    fun `accepts the supported channel limit but rejects the next valid entry`() {
+        val playlist = buildString {
+            repeat(M3uParser.MAX_CHANNELS + 1) { index ->
+                append("#EXTINF:-1,Channel $index\nhttps://example.test/$index\n")
+            }
+        }
+
+        val result = M3uParser.parse(playlist)
+
+        assertEquals(M3uParser.MAX_CHANNELS, result.channels.size)
+        assertTrue(
+            "overflow must be explicit so callers do not publish a partial playlist",
+            result.channelLimitExceeded,
+        )
+    }
+
+    @Test
     fun `missing attributes resolve to null rather than empty strings`() {
         val result = M3uParser.parse("#EXTINF:-1,Channel\nhttp://example.com/1.m3u8")
         val channel = result.channels[0]
@@ -267,6 +354,16 @@ class M3uParserTest {
             """.trimIndent()
         )
         assertEquals(listOf("http://example.com/epg.xml"), result.epgUrls)
+    }
+
+    @Test
+    fun `parses epg metadata from a lower-case EXTM3U header`() {
+        val result = M3uParser.parse(
+            "#extm3u url-tvg=\"https://example.com/epg.xml\"\n" +
+                "#EXTINF:-1,Channel\nhttps://example.com/stream.ts\n",
+        )
+
+        assertEquals(listOf("https://example.com/epg.xml"), result.epgUrls)
     }
 
     @Test

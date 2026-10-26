@@ -5,16 +5,47 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.icons.IconMemoryCacheKey
 import com.uacastplayer.icons.PrefetchGate
+import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.M3uChannel
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val MAX_CONCURRENT_FETCHES = 6
+private const val TAG = "IconPrefetcher"
+
+/** Stops sibling workers and the bounded producer together when the network becomes ineligible. */
+private class PrefetchNetworkUnavailable : Exception()
 
 data class PrefetchProgress(val completed: Int, val total: Int)
+
+internal data class IconPrefetchWork(
+    val channel: M3uChannel,
+    /** Number of input channels represented by this unique resolution key. */
+    val progressWeight: Int,
+)
+
+/** Builds the bounded worker queue up front and coalesces channels with the same candidate chain. */
+internal fun iconPrefetchWork(
+    channels: List<M3uChannel>,
+): List<IconPrefetchWork> {
+    val unique = linkedMapOf<String, IconPrefetchWork>()
+    for (channel in channels) {
+        val key = IconMemoryCacheKey.of(channel.tvgId)
+        val previous = unique[key]
+        unique[key] = if (previous == null) {
+            IconPrefetchWork(channel, progressWeight = 1)
+        } else {
+            previous.copy(progressWeight = previous.progressWeight + 1)
+        }
+    }
+    return unique.values.toList()
+}
 
 class IconPrefetcher(context: Context, private val iconRepository: IconRepository) {
 
@@ -24,48 +55,83 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
     suspend fun prefetch(
         channels: List<M3uChannel>,
         wifiOnly: Boolean,
-        epgIconUrlFor: (M3uChannel) -> String? = { null },
         onProgress: (PrefetchProgress) -> Unit,
-    ) {
-        if (!PrefetchGate.canPrefetchNow(wifiOnly, isConnected(), isMetered())) return
-        if (channels.isEmpty()) return
+    ): Boolean {
+        if (channels.isEmpty() || !canPrefetch(wifiOnly)) return false
 
-        val semaphore = Semaphore(MAX_CONCURRENT_FETCHES)
+        val work = iconPrefetchWork(channels)
+        // The callback must be serialized with the increment, not merely fed an atomic number.
+        // Otherwise coroutine A can increment to 1, pause, coroutine B report 2, then A report 1:
+        // a StateFlow consumer visibly moves backwards and the final callback need not be `total`.
+        val progressMutex = Mutex()
         var completed = 0
 
-        coroutineScope {
-            channels.map { channel ->
-                async {
-                    semaphore.withPermit {
-                        iconRepository.resolveIconFile(channel.tvgLogo, epgIconUrlFor(channel), tvgId = channel.tvgId)
-                    }
-                    completed++
-                    onProgress(PrefetchProgress(completed, channels.size))
+        return try {
+            coroutineScope {
+                val queue = Channel<IconPrefetchWork>(capacity = MAX_CONCURRENT_FETCHES)
+                val producer = launch {
+                    for (item in work) queue.send(item)
+                    queue.close()
                 }
-            }.forEach { it.await() }
+                val workers = List(minOf(MAX_CONCURRENT_FETCHES, work.size)) {
+                    launch {
+                        for (item in queue) {
+                            // Initial eligibility can change while earlier HTTP calls suspend.
+                            // Throwing ends the producer too; merely breaking the workers could
+                            // leave it suspended forever on the bounded queue's send().
+                            if (!canPrefetch(wifiOnly)) throw PrefetchNetworkUnavailable()
+                            iconRepository.resolveIconFile(item.channel.tvgId)
+                            progressMutex.withLock {
+                                completed += item.progressWeight
+                                onProgress(PrefetchProgress(completed, channels.size))
+                            }
+                        }
+                    }
+                }
+                producer.join()
+                workers.forEach { worker -> worker.join() }
+            }
+            iconRepository.trimCache()
+            true
+        } catch (_: PrefetchNetworkUnavailable) {
+            false
         }
-
-        iconRepository.trimCache()
     }
 
-    /** Registers [onUnmeteredAvailable] to fire once an unmetered network becomes available, so a deferred prefetch can resume. Caller must [AutoCloseable.close] the result to unregister. */
-    fun awaitUnmeteredNetwork(onUnmeteredAvailable: () -> Unit): AutoCloseable {
+    /** Resumes a deferred prefetch when an internet-capable network becomes available. The caller
+     * must close the result to unregister the callback. Metered eligibility stays in
+     * [PrefetchGate], so a mobile network can resume a prefetch when the user has allowed it while
+     * a metered callback remains harmless when Wi-Fi-only mode is enabled. */
+    fun awaitNetwork(onNetworkAvailable: () -> Unit): AutoCloseable {
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
             .build()
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = onUnmeteredAvailable()
+            override fun onAvailable(network: Network) = onNetworkAvailable()
         }
-        connectivityManager.registerNetworkCallback(request, callback)
-        return AutoCloseable { connectivityManager.unregisterNetworkCallback(callback) }
+        val registered = runCatchingNonFatal {
+            connectivityManager.registerNetworkCallback(request, callback)
+        }.onFailure { error ->
+            AppLog.w(TAG) { "Cannot watch for an internet-capable network: ${error.javaClass.simpleName}" }
+        }.isSuccess
+        return AutoCloseable {
+            if (registered) {
+                runCatchingNonFatal { connectivityManager.unregisterNetworkCallback(callback) }
+                    .onFailure { error ->
+                        AppLog.w(TAG) { "Cannot stop the network watch: ${error.javaClass.simpleName}" }
+                    }
+            }
+        }
     }
 
     private fun isConnected(): Boolean {
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val capabilities = connectivityManager.activeNetwork
+            ?.let(connectivityManager::getNetworkCapabilities)
+        return capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }
 
     private fun isMetered(): Boolean = connectivityManager.isActiveNetworkMetered
+
+    private fun canPrefetch(wifiOnly: Boolean): Boolean =
+        PrefetchGate.canPrefetchNow(wifiOnly, isConnected(), wifiOnly && isMetered())
 }

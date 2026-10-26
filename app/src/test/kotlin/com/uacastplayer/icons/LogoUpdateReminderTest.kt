@@ -13,7 +13,12 @@ class LogoUpdateReminderTest {
 
     @Test
     fun `is not due before 10 days have passed`() {
-        assertFalse(LogoUpdateReminder.isDue(lastPrefetchAtMillis = 0L, nowMillis = LogoUpdateReminder.INTERVAL_MILLIS - 1))
+        assertFalse(
+            LogoUpdateReminder.isDue(
+                lastPrefetchAtMillis = 0L,
+                nowMillis = LogoUpdateReminder.INTERVAL_MILLIS - 1,
+            ),
+        )
     }
 
     @Test

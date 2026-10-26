@@ -21,8 +21,8 @@ object DeveloperMode {
     var states: List<String> = emptyList()
 
     /**
-     * Puts the app into [state]: writes whatever stored license that state implies (a trial and an
-     * expired subscription are not purchases, so no store can express them) and returns the
+     * Puts the app into [state]: writes whatever stored license that state implies (an offline or
+     * expired legacy licence cannot be expressed by a current store purchase) and returns the
      * provider to listen to from then on.
      *
      * Null in a release build.

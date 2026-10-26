@@ -1,5 +1,39 @@
 # Performance: thread rules
 
+## Scheduled measured regression gate
+
+`.github/workflows/performance-gate.yml` runs on relevant pull requests, by manual dispatch,
+and every Monday at 04:00 UTC after it reaches the default branch. It uses an owned API-30
+x86_64 emulator, explicit lavapipe graphics, 2 GiB RAM and a 256 MiB heap.
+
+All eight journeys must produce complete AndroidX Benchmark 1.4.1 JSON: cold/warm startup,
+restoring/opening 40,000 channels, first player, fullscreen, opening EPG, and parsing/indexing
+350,000 programmes. `config/performance/ci-api30.json` specifies the limits: median startup/parse
+time, worst per-run managed heap and CPU frame P95. Every iteration is required. Wrong/missing
+API metadata, empty frame iterations, duplicate, zero, non-finite or interrupted evidence fails.
+Emulator suppression remains limited to `EMULATOR`; functional tests cannot replace measurements.
+
+The API-35 emulator produced completed UI/RenderThread slices but unfinished FrameTimeline
+slices (`dur=-1`). AndroidX's API31+ matching discarded those frames. Two isolated API30 runs
+returned complete evidence through the standard pre-31 CPU metric. They still exposed real
+budget overruns; no numeric limit was increased. The older API35 config is retained for historical
+diagnostics with its own explicit API identity. API/renderer migrations are not app speedups.
+See `RELEASE_COMPLETION_2026-10-26.md` for measured results and limitations.
+
+```bash
+python3 -B -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
+python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
+```
+
+CPU frame timing is supported before API31; `frameOverrunMs` is not available on API30.
+[Android metric documentation](https://developer.android.com/reference/androidx/benchmark/macro/FrameTimingMetric).
+The pinned 1.4.1 source confirms the separate basic and FrameTimeline matching paths.
+
+Measurements, traces and failures are retained for 30 days. These absolute shared-runner safety
+limits are not calibrated physical-device baselines or a native/GPU memory guarantee. Keep host
+complexity/allocation tests too; tighten budgets only from reviewed measurements. A Mi TV run
+cannot certify this fixed CI environment, and CI cannot certify a physical receiver's protocol.
+
 Motivated by a real complaint on a 2863-channel, 11-group playlist: the whole app froze for the
 duration of every playlist load. The root cause and the fixes below are collectively "Block 1-3" in
 the UI-jank fix pass; see the git log for the exact commits.
@@ -34,9 +68,10 @@ happens at the lowest level that actually does the blocking/CPU work, once, not 
   in the same `withContext(Dispatchers.IO)` block - not a UI freeze (IO isn't the main thread either),
   but the wrong dispatcher for CPU work. Split into its own `Dispatchers.Default` hop for consistency.
 
-See `PlaylistParsePerformanceTest` for a regression guard: parsing+grouping 3000 channels is asserted
-to complete in well under 2 seconds, so a future accidental main-thread reintroduction (or an O(n)→O(n²)
-regression) shows up as a slow/failing test, not just as a support complaint.
+See `PlaylistParsePerformanceTest` for two regression guards: 3000 channels stay well under the
+interactive budget, and a provider-scale 40,000-channel fixture must parse and group within a loose
+8-second shared-runner ceiling. The second test is intentionally large enough to expose O(n²)
+behaviour while remaining stable in the ordinary unit-test gate.
 
 ## Background prefetch isn't exempt either
 
@@ -49,6 +84,46 @@ likely to be seen soon (favorites, last-watched, first group - see its doc comme
 entirely while something is actually playing/casting (`PlaybackActivity`), and skipped altogether on
 `DeviceTier.LOW_END`. Anything outside that selection still gets its icon lazily, one row at a time,
 the first time it's actually scrolled into view - that path was already correct.
+
+Channel logos use only explicitly added packs, matched by `tvg-id`. EPG completion no longer
+restarts logo prefetch or invalidates channel-logo composition; provider logo metadata is not a
+fetch source. With no pack selected, there is no bulk logo work or icon network watcher. Source
+edits retire prior work and advance a UI revision, including on low-end devices where no bulk
+prefetch runs. A removed pack's late request cannot return a stale displayed logo.
+
+The selected pass is drained by a fixed six-worker queue. Equal channel icon IDs are collapsed
+before any coroutine is launched, with each unique item carrying a progress weight, so a 40k-channel
+playlist cannot create 40k suspended `async` objects or fetch the same logo repeatedly. A pass that
+the connectivity/Wi-Fi-only gate refuses reports a distinct not-executed outcome: the controller
+clears the transient progress state but does not advance `completedRuns`, update the last-prefetch
+timestamp, or dismiss the refresh reminder for work that never happened.
+
+## Diagnostics stay inside a fixed memory budget
+
+`LogcatReader` streams the process log into a bounded tail instead of materialising the complete
+`logcat -d` output and trimming it afterwards. At most 4,000 complete lines and 512K characters are
+retained while reading; an oversized individual line is clipped to its newest tail. This matters on
+low-memory devices because diagnostics are commonly generated immediately after a playback failure,
+when Media3 and proxy logging are at their busiest and the player still owns its buffers.
+
+## Device benchmarks
+
+The `:baselineprofile` module contains the profile generator plus deterministic device
+Macrobenchmarks. They require an API 33+ connected device or emulator:
+
+```bash
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark
+```
+
+Startup results belong in release evidence rather than unit-test timing: Macrobenchmark controls
+process state and compilation mode on the target device, which a desktop JVM test cannot emulate.
+`CriticalJourneysBenchmark` adds peak-memory/frame measurements for a 40,000-channel restore/open,
+first player launch, fullscreen and EPG guide. `EpgParseBenchmark` runs the production SAX +
+retention + heap-budget + index pipeline over 350,000 synthetic programmes and reports both peak
+memory and the `UaCastEpgParseAndIndex` trace duration. The fixture is credential-free and compiled
+only into `benchmarkRelease`/`nonMinifiedRelease`; exact commands and the destructive-data warning
+are in `docs/RELEASING.md`.
 
 ## The EPG snapshot no longer stores XML
 
@@ -81,16 +156,28 @@ v1 snapshots stay readable, parsed once and immediately rewritten as v2, so upgr
 away a guide the user already has. That one launch still pays the 53 seconds; every launch after it
 pays 6.6.
 
-`EpgSnapshotSizeTest` guards the decode-vs-parse margin. It deliberately asserts **nothing about file
-size**: synthetic titles are near-identical, so gzip crushes a generated XMLTV document about
-eighteenfold (41KB against 737KB for the binary) and such a test measures the fixture, not the
-format. What actually shrinks a real file is dropping `<desc>`, which no honest synthetic fixture
-here reproduces - hence the end-to-end device measurement above.
+Guide initialization is also deferred until a playlist is actually available. An empty fresh
+install therefore pays neither the initial XMLTV download nor the parse/restore cost; selecting or
+restoring a playlist starts the one idempotent initial guide load.
+
+`EpgSnapshotSizeTest` guards the decode-vs-parse margin. Its parity regression requires both inputs
+to preserve the same channels, programme timestamps and truncation state. Both timed paths return
+query-ready `EpgData`: binary decode versus `EpgDocumentPipeline` (gzip, XML guards, retention,
+parsing, grouping/sorting and index construction), not just the raw SAX parser. The host guard
+requires decode to take less than 75% of the XML pipeline's time, using the quickest of five warmed
+runs; it is not a device latency guarantee.
+
+It deliberately asserts **nothing about file size**: synthetic titles are near-identical, so gzip
+compresses the generated XML especially well and such a test measures the fixture, not the format.
+What actually shrinks a real file is dropping `<desc>`, which no honest synthetic fixture here
+reproduces - hence the end-to-end device measurement above.
 
 ### Note the caps while you are here
 
-That feed hits `XmlTvParser.MAX_PROGRAMMES` (250,000) *exactly*, which is not a coincidence - it is
-being cut off. XMLTV is normally ordered by channel, so the cap does not thin the guide out evenly,
-it leaves the last channels in the file with nothing. The parser had always computed
-`programmeLimitExceeded` and nothing anywhere read it; it now reaches `EpgData.truncation`, gets
-logged, and is shown in Settings under the source picker.
+The original field run hit the then-current 250,000-programme cap *exactly*, which was not a
+coincidence: the feed was being cut off. XMLTV is normally ordered by channel, so a cap does not
+thin the guide evenly; it leaves later channels with nothing. The hard safety backstop is now
+400,000, but production first applies the three-day retention window and then
+`HeapBudget.maxProgrammes(Runtime.maxMemory())`, so a 128MB heap deliberately keeps far less than a
+roomy device. Any real truncation reaches `EpgData.truncation`, is logged, and is shown in Settings
+under the source picker. `EpgParseBenchmark` exercises that exact device-specific decision.

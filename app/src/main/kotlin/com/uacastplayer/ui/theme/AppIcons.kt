@@ -12,6 +12,66 @@ import androidx.compose.ui.unit.dp
  * on any bundled Material icon set at all (see E4 in the optimization plan).
  */
 object AppIcons {
+    val Remote: ImageVector by lazy {
+        ImageVector.Builder("Remote", 24.dp, 24.dp, 24f, 24f).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(8f, 1f); lineTo(16f, 1f); lineTo(18f, 3f); lineTo(18f, 21f)
+                lineTo(16f, 23f); lineTo(8f, 23f); lineTo(6f, 21f); lineTo(6f, 3f); close()
+                moveTo(8f, 3f); lineTo(16f, 3f); lineTo(16f, 21f); lineTo(8f, 21f); close()
+                moveTo(11f, 6f); lineTo(13f, 6f); lineTo(13f, 9f); lineTo(16f, 9f)
+                lineTo(16f, 11f); lineTo(13f, 11f); lineTo(13f, 14f); lineTo(11f, 14f)
+                lineTo(11f, 11f); lineTo(8f, 11f); lineTo(8f, 9f); lineTo(11f, 9f); close()
+                moveTo(10f, 17f); lineTo(14f, 17f); lineTo(14f, 19f); lineTo(10f, 19f); close()
+            }
+        }.build()
+    }
+    val Home: ImageVector get() = PrimaryAppIcons.Home
+    val Channels: ImageVector get() = PrimaryAppIcons.Channels
+    val Favorites: ImageVector get() = PrimaryAppIcons.Favorites
+    val Settings: ImageVector get() = PrimaryAppIcons.Settings
+    val ArrowBack: ImageVector get() = PrimaryAppIcons.ArrowBack
+    val Play: ImageVector get() = PrimaryAppIcons.Play
+    val Pause: ImageVector get() = PrimaryAppIcons.Pause
+    val SkipNext: ImageVector get() = PrimaryAppIcons.SkipNext
+    val SkipPrevious: ImageVector get() = PrimaryAppIcons.SkipPrevious
+    val Fullscreen: ImageVector get() = PrimaryAppIcons.Fullscreen
+    val FullscreenExit: ImageVector get() = PrimaryAppIcons.FullscreenExit
+
+    val Globe: ImageVector get() = MediaAppIcons.Globe
+    val Tv: ImageVector get() = MediaAppIcons.Tv
+    val Image: ImageVector get() = MediaAppIcons.Image
+    val ViewList: ImageVector get() = MediaAppIcons.ViewList
+    val GridView: ImageVector get() = MediaAppIcons.GridView
+    val LargeIcons: ImageVector get() = MediaAppIcons.LargeIcons
+    val Storage: ImageVector get() = MediaAppIcons.Storage
+    val HelpCircle: ImageVector get() = MediaAppIcons.HelpCircle
+
+    val Upload: ImageVector get() = ActionAppIcons.Upload
+    val Search: ImageVector get() = ActionAppIcons.Search
+    val Delete: ImageVector get() = ActionAppIcons.Delete
+    val Check: ImageVector get() = ActionAppIcons.Check
+    val Close: ImageVector get() = ActionAppIcons.Close
+    val ChevronDown: ImageVector get() = ActionAppIcons.ChevronDown
+    val Plus: ImageVector get() = ActionAppIcons.Plus
+    val Minus: ImageVector get() = ActionAppIcons.Minus
+    val Sort: ImageVector get() = ActionAppIcons.Sort
+    val More: ImageVector get() = ActionAppIcons.More
+
+    val Timer: ImageVector get() = UtilityAppIcons.Timer
+    val Kids: ImageVector get() = UtilityAppIcons.Kids
+    val Refresh: ImageVector get() = UtilityAppIcons.Refresh
+    val PictureInPicture: ImageVector get() = UtilityAppIcons.PictureInPicture
+    val Brightness: ImageVector get() = UtilityAppIcons.Brightness
+    val Lock: ImageVector get() = UtilityAppIcons.Lock
+    val Volume: ImageVector get() = UtilityAppIcons.Volume
+    val AudioTrack: ImageVector get() = UtilityAppIcons.Volume
+    val Subtitles: ImageVector get() = PlayerAppIcons.Subtitles
+    val Quality: ImageVector get() = PlayerAppIcons.Quality
+    val AspectRatio: ImageVector get() = PlayerAppIcons.AspectRatio
+    val Guide: ImageVector get() = PlayerAppIcons.Guide
+}
+
+private object PrimaryAppIcons {
 
     val Home: ImageVector by lazy {
         ImageVector.Builder(
@@ -300,6 +360,9 @@ object AppIcons {
         }.build()
     }
 
+}
+
+private object MediaAppIcons {
     val Globe: ImageVector by lazy {
         ImageVector.Builder(
             name = "Globe", defaultWidth = 24.dp, defaultHeight = 24.dp,
@@ -342,82 +405,6 @@ object AppIcons {
                 curveTo(13.6f, 14f, 13.1f, 15.9f, 12f, 17.7f)
                 curveTo(10.9f, 15.9f, 10.4f, 14f, 10.4f, 12f)
                 curveTo(10.4f, 10f, 10.9f, 8.1f, 12f, 6.3f)
-                close()
-            }
-        }.build()
-    }
-
-    /**
-     * "Send this to a TV" - a screen with a stand, and broadcast waves radiating from its
-     * bottom-left corner.
-     *
-     * Deliberately the same waves-in-a-screen idiom as the Google Cast button it sits beside,
-     * because to a user those two buttons do the same thing and only differ in which TVs they
-     * reach; an unrelated shape would read as an unrelated feature. The stand is what tells them
-     * apart, and it is also what says "TV" rather than "monitor". The plain [Tv] glyph this
-     * replaced said only "there is a television somewhere in this app" - nothing about casting.
-     *
-     * Drawn to fill the viewport at roughly the density of the Cast button's own glyph. The old
-     * one used 11 of 24 units of height for the screen, which is most of why it looked shrunken
-     * next to it even though both buttons are the same size.
-     */
-    val CastToTv: ImageVector by lazy {
-        ImageVector.Builder(
-            name = "CastToTv", defaultWidth = 24.dp, defaultHeight = 24.dp,
-            viewportWidth = 24f, viewportHeight = 24f
-        ).apply {
-            // Screen frame: outer rect minus inner rect under EvenOdd leaves the border. 2.3 units
-            // rather than 2 - the Cast button's glyph next to it is drawn heavier, and a thinner
-            // frame is most of what made this one look like the lesser of the two.
-            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
-                moveTo(2f, 3f)
-                lineTo(22f, 3f)
-                lineTo(22f, 17f)
-                lineTo(2f, 17f)
-                close()
-                moveTo(4.3f, 5.3f)
-                lineTo(4.3f, 14.7f)
-                lineTo(19.7f, 14.7f)
-                lineTo(19.7f, 5.3f)
-                close()
-            }
-            // Stand: neck plus foot, the half that distinguishes this from the Cast glyph.
-            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
-                moveTo(11f, 17f)
-                lineTo(13f, 17f)
-                lineTo(13f, 19f)
-                lineTo(11f, 19f)
-                close()
-                moveTo(8f, 19f)
-                lineTo(16f, 19f)
-                lineTo(16f, 21f)
-                lineTo(8f, 21f)
-                close()
-            }
-            // Broadcast waves anchored at the screen's bottom-left corner (6.3, 12.7): a solid
-            // quarter disc and two quarter rings, each 1.4 units thick with a 1.4 gap.
-            //
-            // The radii are the point. A first attempt used 1.4/2.6/3.8 and the three arcs blurred
-            // into one smudge at 24dp - the size these are actually rendered at. The Cast glyph
-            // beside it spends most of its height on the waves, so these reach 7.3 of the ~9.4
-            // units of screen interior; anything smaller reads as a monitor with a scuff on it
-            // rather than a screen receiving a signal.
-            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
-                moveTo(6.3f, 12.7f)
-                lineTo(6.3f, 11f)
-                arcTo(1.7f, 1.7f, 0f, isMoreThanHalf = false, isPositiveArc = true, 8f, 12.7f)
-                close()
-            }
-            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
-                moveTo(6.3f, 8.2f)
-                arcTo(4.5f, 4.5f, 0f, isMoreThanHalf = false, isPositiveArc = true, 10.8f, 12.7f)
-                lineTo(9.4f, 12.7f)
-                arcTo(3.1f, 3.1f, 0f, isMoreThanHalf = false, isPositiveArc = false, 6.3f, 9.6f)
-                close()
-                moveTo(6.3f, 5.4f)
-                arcTo(7.3f, 7.3f, 0f, isMoreThanHalf = false, isPositiveArc = true, 13.6f, 12.7f)
-                lineTo(12.2f, 12.7f)
-                arcTo(5.9f, 5.9f, 0f, isMoreThanHalf = false, isPositiveArc = false, 6.3f, 6.8f)
                 close()
             }
         }.build()
@@ -646,6 +633,24 @@ object AppIcons {
         }.build()
     }
 
+}
+
+private object ActionAppIcons {
+    val More: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "More", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.Black)) {
+                listOf(5f, 12f, 19f).forEach { x ->
+                    moveTo(x + 2f, 12f)
+                    arcTo(2f, 2f, 0f, false, true, x - 2f, 12f)
+                    arcTo(2f, 2f, 0f, false, true, x + 2f, 12f)
+                    close()
+                }
+            }
+        }.build()
+    }
     val Upload: ImageVector by lazy {
         ImageVector.Builder(
             name = "Upload", defaultWidth = 24.dp, defaultHeight = 24.dp,
@@ -863,6 +868,9 @@ object AppIcons {
         }.build()
     }
 
+}
+
+private object UtilityAppIcons {
     val Timer: ImageVector by lazy {
         ImageVector.Builder(
             name = "Timer", defaultWidth = 24.dp, defaultHeight = 24.dp,
@@ -1068,6 +1076,101 @@ object AppIcons {
                 curveTo(18.01f, 19.86f, 21f, 16.28f, 21f, 12f)
                 curveTo(21f, 7.72f, 18.01f, 4.14f, 14f, 3.23f)
                 close()
+            }
+        }.build()
+    }
+}
+
+/** Player-specific glyphs whose meaning should be recognizable without reading the label. */
+private object PlayerAppIcons {
+
+    val Subtitles: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Subtitles",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(3f, 5f); lineTo(21f, 5f); lineTo(21f, 19f); lineTo(3f, 19f); close()
+                moveTo(5f, 7f); lineTo(5f, 17f); lineTo(19f, 17f); lineTo(19f, 7f); close()
+            }
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(6.5f, 11f); lineTo(11.5f, 11f); lineTo(11.5f, 13f); lineTo(6.5f, 13f); close()
+                moveTo(13f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 13f); lineTo(13f, 13f); close()
+                moveTo(6.5f, 14f); lineTo(10f, 14f); lineTo(10f, 16f); lineTo(6.5f, 16f); close()
+                moveTo(11.5f, 14f); lineTo(17.5f, 14f); lineTo(17.5f, 16f); lineTo(11.5f, 16f); close()
+            }
+        }.build()
+    }
+
+    val Quality: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Quality",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(3f, 6f); lineTo(21f, 6f); lineTo(21f, 18f); lineTo(3f, 18f); close()
+                moveTo(5f, 8f); lineTo(5f, 16f); lineTo(19f, 16f); lineTo(19f, 8f); close()
+            }
+            // Compact "HD" mark.
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(7f, 9.5f); lineTo(8.5f, 9.5f); lineTo(8.5f, 11.3f); lineTo(10.5f, 11.3f)
+                lineTo(10.5f, 9.5f); lineTo(12f, 9.5f); lineTo(12f, 14.5f); lineTo(10.5f, 14.5f)
+                lineTo(10.5f, 12.7f); lineTo(8.5f, 12.7f); lineTo(8.5f, 14.5f); lineTo(7f, 14.5f); close()
+                moveTo(13f, 9.5f); lineTo(15.5f, 9.5f); curveTo(17.2f, 9.5f, 18f, 10.4f, 18f, 12f)
+                curveTo(18f, 13.6f, 17.2f, 14.5f, 15.5f, 14.5f); lineTo(13f, 14.5f); close()
+                moveTo(14.5f, 10.9f); lineTo(14.5f, 13.1f); lineTo(15.5f, 13.1f)
+                curveTo(16.2f, 13.1f, 16.5f, 12.8f, 16.5f, 12f)
+                curveTo(16.5f, 11.2f, 16.2f, 10.9f, 15.5f, 10.9f); close()
+            }
+        }.build()
+    }
+
+    val AspectRatio: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "AspectRatio",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(3f, 6f); lineTo(9f, 6f); lineTo(9f, 8f); lineTo(5f, 8f)
+                lineTo(5f, 11f); lineTo(3f, 11f); close()
+                moveTo(15f, 6f); lineTo(21f, 6f); lineTo(21f, 11f); lineTo(19f, 11f); lineTo(19f, 8f)
+                lineTo(15f, 8f); close()
+                moveTo(3f, 13f); lineTo(5f, 13f); lineTo(5f, 16f); lineTo(9f, 16f); lineTo(9f, 18f)
+                lineTo(3f, 18f); close()
+                moveTo(19f, 13f); lineTo(21f, 13f); lineTo(21f, 18f); lineTo(15f, 18f); lineTo(15f, 16f)
+                lineTo(19f, 16f); close()
+            }
+        }.build()
+    }
+
+    val Guide: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Guide",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(4f, 4f); lineTo(20f, 4f); lineTo(20f, 21f); lineTo(4f, 21f); close()
+                moveTo(6f, 9f); lineTo(6f, 19f); lineTo(18f, 19f); lineTo(18f, 9f); close()
+            }
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                moveTo(7f, 2f); lineTo(9f, 2f); lineTo(9f, 6f); lineTo(7f, 6f); close()
+                moveTo(15f, 2f); lineTo(17f, 2f); lineTo(17f, 6f); lineTo(15f, 6f); close()
+                moveTo(8f, 11f); lineTo(11f, 11f); lineTo(11f, 14f); lineTo(8f, 14f); close()
+                moveTo(13f, 11f); lineTo(16f, 11f); lineTo(16f, 14f); lineTo(13f, 14f); close()
+                moveTo(8f, 15f); lineTo(11f, 15f); lineTo(11f, 18f); lineTo(8f, 18f); close()
+                moveTo(13f, 15f); lineTo(16f, 15f); lineTo(16f, 18f); lineTo(13f, 18f); close()
             }
         }.build()
     }

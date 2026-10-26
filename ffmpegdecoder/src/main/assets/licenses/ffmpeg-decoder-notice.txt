@@ -1,0 +1,22 @@
+UA-Cast software decoder module — independently built audio/video extensions.
+
+Java/JNI bridge derived from AndroidX Media contribution #1591 (Apache-2.0),
+commit ddf578a27a97e6296062d1997ba41784b0dcf497, AOSP copyright 2016/2019/2020.
+Local changes include bounded multi-frame/EOS processing, cancellation-safe native
+ownership, padded buffers, sample-count corrections and JNI bounds checks.
+The module's Apache licence does not relicense the rest of the application.
+
+FFmpeg 6.1.6 — Copyright the FFmpeg developers — LGPL 2.1 or later.
+Built independently from the official source archive; no GPL/nonfree/version3
+components, external TLS libraries or encoders are enabled. Linking is dynamic.
+Source and exact build inputs are recorded in native-sources.json and ORIGIN.md.
+Release distribution still requires the verified corresponding-source/relinking
+package alongside the APK; a pointer alone is not the completed release package.
+
+libyuv commit eeb06a6451ba2e21f8ff272c7b42fc62b9faecc5 — BSD-3-Clause.
+Copyright 2011 The LibYuv Project Authors. Full licence bundled separately.
+
+Android NDK r26b stock NOTICE is bundled as android-ndk-runtime-notices.txt
+for linked runtime contributions. It is a broad attribution inventory, not an
+assertion that every NDK component is present in the application.
+No NextLib Java classes or GPL JNI wrapper are included here.

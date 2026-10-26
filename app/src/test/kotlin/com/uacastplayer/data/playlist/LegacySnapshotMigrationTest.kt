@@ -16,6 +16,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import com.uacastplayer.testing.AndroidAtomicRenameShadow
 
 /**
  * The one-time upgrade off the pre-multi-playlist snapshot file, and the crash window it used to
@@ -27,6 +29,7 @@ import org.robolectric.RobolectricTestRunner
  * is not a crash but a silence: the playlist is simply gone the next time the app opens.
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [AndroidAtomicRenameShadow::class])
 class LegacySnapshotMigrationTest {
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()

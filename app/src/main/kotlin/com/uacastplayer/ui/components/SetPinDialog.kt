@@ -12,7 +12,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -21,6 +21,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.tvTextFieldNavigation
 import com.uacastplayer.R
 import com.uacastplayer.parentalcontrol.ParentalControlPinPolicy
 import com.uacastplayer.ui.theme.AppTheme
@@ -35,11 +38,13 @@ import com.uacastplayer.ui.theme.UaCastTheme
  */
 @Composable
 fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
-    var pin by rememberSaveable { mutableStateOf("") }
-    var confirmPin by rememberSaveable { mutableStateOf("") }
+    // PIN material must never be serialized into the Activity saved-state Bundle.
+    var pin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
     val bothEntered = pin.length == ParentalControlPinPolicy.PIN_LENGTH &&
         confirmPin.length == ParentalControlPinPolicy.PIN_LENGTH
     val mismatch = bothEntered && pin != confirmPin
+    val canSubmit = bothEntered && !mismatch && ParentalControlPinPolicy.isValidFormat(pin)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -48,6 +53,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
         textContentColor = UaTheme.palette.labelSecondary,
         title = { Text(stringResource(R.string.parental_control_set_pin_title)) },
         text = {
+            TvDialogInputRegistration()
             Column {
                 OutlinedTextField(
                     value = pin,
@@ -57,7 +63,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     colors = uaTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tvTextFieldNavigation(),
                 )
                 OutlinedTextField(
                     value = confirmPin,
@@ -67,7 +73,7 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     colors = uaTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).tvTextFieldNavigation(),
                 )
                 if (mismatch) {
                     Text(
@@ -82,13 +88,16 @@ fun SetPinDialog(onSubmit: (String) -> Unit, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(
                 onClick = { onSubmit(pin) },
-                enabled = bothEntered && !mismatch && ParentalControlPinPolicy.isValidFormat(pin),
+                enabled = canSubmit,
+                modifier = Modifier.tvFocus(enabled = canSubmit),
             ) {
                 Text(stringResource(R.string.common_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.common_cancel))
+            }
         },
     )
 }

@@ -4,12 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
-import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.playlist.ChannelGroup
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
@@ -89,6 +90,7 @@ class GroupsOverviewScreenshotTest {
                 ) {
                     GroupsOverviewGrid(
                         groups = sampleGroups(),
+                        gridState = rememberLazyGridState(),
                         layout = ChannelLayout.GRID,
                         onLayoutChange = {},
                         onGroupClick = {},

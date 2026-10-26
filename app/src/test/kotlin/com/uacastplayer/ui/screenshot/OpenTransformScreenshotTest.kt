@@ -14,6 +14,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.components.openTransform
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.DUR_ENTER
 import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.ui.theme.UaTheme
@@ -28,7 +29,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Pins the player's opening animation at a fixed point on a frozen clock.
  *
- * The animation is a third of a second long on a real device, which is exactly long enough to see
+ * The animation lasts [DUR_ENTER] milliseconds on a real device, which is long enough to see
  * and far too short to screenshot by hand - `adb screencap` takes longer than the whole transition,
  * so every capture lands on the settled state and proves nothing. Stopping Compose's clock is the
  * only way to assert that the surface is genuinely smaller and semi-transparent partway through,
@@ -70,6 +71,6 @@ class OpenTransformScreenshotTest {
     }
 
     private companion object {
-        const val ONE_THIRD_OF_ENTER_MILLIS = 230L
+        const val ONE_THIRD_OF_ENTER_MILLIS = DUR_ENTER / 3L
     }
 }

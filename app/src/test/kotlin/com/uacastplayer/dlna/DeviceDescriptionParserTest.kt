@@ -154,6 +154,88 @@ class DeviceDescriptionParserTest {
     }
 
     @Test
+    fun `URLBase overrides the description location for relative service endpoints`() {
+        val withUrlBase = SAMSUNG_DEVICE_DESCRIPTION.replace(
+            "<device>",
+            "<URLBase>http://192.168.1.50:8080/services/</URLBase><device>",
+        ).replace(
+            "<controlURL>/upnp/control/AVTransport1</controlURL>",
+            "<controlURL>transport/control</controlURL>",
+        )
+
+        val device = parse(withUrlBase, "http://192.168.1.50:9197/dmr/description.xml")
+
+        assertEquals("http://192.168.1.50:8080/services/transport/control", device?.controlUrl)
+    }
+
+    @Test
+    fun `invalid URLBase falls back to the description location`() {
+        val withInvalidUrlBase = SAMSUNG_DEVICE_DESCRIPTION.replace(
+            "<device>",
+            "<URLBase>file:///tmp/device/</URLBase><device>",
+        )
+
+        val device = parse(withInvalidUrlBase, "http://192.168.1.50:9197/dmr")
+
+        assertEquals("http://192.168.1.50:9197/upnp/control/AVTransport1", device?.controlUrl)
+    }
+
+    @Test
+    fun `cross-host URLBase is ignored instead of redirecting SOAP to another machine`() {
+        val withRemoteUrlBase = SAMSUNG_DEVICE_DESCRIPTION.replace(
+            "<device>",
+            "<URLBase>http://attacker.example:8080/services/</URLBase><device>",
+        ).replace(
+            "<controlURL>/upnp/control/AVTransport1</controlURL>",
+            "<controlURL>transport/control</controlURL>",
+        )
+
+        val device = parse(withRemoteUrlBase, "http://192.168.1.50:9197/dmr/description.xml")
+
+        assertEquals("http://192.168.1.50:9197/dmr/transport/control", device?.controlUrl)
+    }
+
+    @Test
+    fun `cross-host absolute controlURL is rejected`() {
+        val unsafe = SAMSUNG_DEVICE_DESCRIPTION.replace(
+            "<controlURL>/upnp/control/AVTransport1</controlURL>",
+            "<controlURL>http://attacker.example/control</controlURL>",
+        )
+
+        assertNull(parse(unsafe, "http://192.168.1.50:9197/dmr"))
+    }
+
+    @Test
+    fun `non HTTP transport endpoint is rejected`() {
+        val unsafe = SAMSUNG_DEVICE_DESCRIPTION.replace(
+            "<controlURL>/upnp/control/AVTransport1</controlURL>",
+            "<controlURL>file:///tmp/transport</controlURL>",
+        )
+
+        assertNull(parse(unsafe, "http://192.168.1.50:9197/dmr"))
+    }
+
+    @Test
+    fun `doctype description is rejected before entity expansion`() {
+        val withDoctype = """
+            <!DOCTYPE root [<!ENTITY name "Expanded TV">]>
+            <root>
+              <device>
+                <friendlyName>&name;</friendlyName>
+                <serviceList>
+                  <service>
+                    <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+                    <controlURL>/control</controlURL>
+                  </service>
+                </serviceList>
+              </device>
+            </root>
+        """.trimIndent()
+
+        assertNull(parse(withDoctype, "http://192.168.1.50/device.xml"))
+    }
+
+    @Test
     fun theRenderingControlUrlIsExtractedAndResolvedLikeTheTransportOne() {
         val device = parse(SAMSUNG_DEVICE_DESCRIPTION, "http://192.168.0.42:9197/dmr")
 

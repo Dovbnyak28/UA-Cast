@@ -16,7 +16,8 @@ package com.uacastplayer.cast
  *   left to fall back to; retrying would loop.
  * - **Only when no codec incompatibility has been confirmed.** The proxy remuxes containers, not
  *   video - it cannot turn MPEG-2 into something a Chromecast decodes. Once
- *   [CastCompatibilityVerdict.IncompatibleVideo] has been established for this stream the proxy
+ *   [com.uacastplayer.core.cast.CastCompatibilityVerdict.IncompatibleVideo] has been established
+ *   for this stream the proxy
  *   attempt is known to be futile before it starts, and spending a load on it only delays telling
  *   the user. Note the diagnostic may well resolve *after* the failure, which is why this reads the
  *   confirmed verdict rather than assuming the ordering.

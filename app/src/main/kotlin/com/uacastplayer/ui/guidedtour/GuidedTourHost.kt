@@ -26,6 +26,7 @@ fun GuidedTourHost(
     onSkip: () -> Unit,
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
+    onAddPlaylist: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val registry = remember { GuidedTourTargetRegistry() }
@@ -55,6 +56,7 @@ fun GuidedTourHost(
                 onNext = onNext,
                 onBack = onBack,
                 onSkip = onSkip,
+                onAddPlaylist = onAddPlaylist,
                 onComplete = onComplete,
             )
         }

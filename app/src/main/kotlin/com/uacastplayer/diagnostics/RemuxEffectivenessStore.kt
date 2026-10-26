@@ -3,6 +3,7 @@ package com.uacastplayer.diagnostics
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.uacastplayer.core.cast.CastRouteKind
 
 /**
  * Persists [RemuxEffectivenessCounts] across app restarts - see [RemuxEffectivenessPolicy] for the
@@ -10,18 +11,22 @@ import androidx.core.content.edit
  * Android. Local-only: nothing here is ever sent anywhere except as part of a user-initiated
  * diagnostics report.
  *
- * [recordProxyRouteAttemptOnce] separately dedupes by resourceId: an ordinary (non-remuxed) HLS
+ * [recordProxyRouteAttemptOnce] separately dedupes by playback-attempt + resourceId + route: an
+ * ordinary (non-remuxed) HLS
  * proxy resource is re-classified on every live-manifest poll from the receiver (see
  * `ProxyServer.fetchAndServeUpstreamResource`, which has no "already decided" shortcut for that
  * case the way an active remux session does), so counting on every call there would inflate
  * PROXY_REWRITE's attempted count by roughly one per manifest poll instead of once per channel.
+ * Resource ids themselves are stable SHA fingerprints and are deliberately reused when the same
+ * channel is played again, so they cannot be the whole key: doing that produced impossible reports
+ * such as `1 attempted / 2 reached PLAYING`.
  */
 class RemuxEffectivenessStore(context: Context) {
 
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
-    private val attemptCountedResourceIds = HashSet<String>()
+    private val attemptTracker = ProxyRouteAttemptTracker()
 
     fun record(route: CastRouteKind, outcome: CastRouteOutcome) {
         synchronized(lock) {
@@ -29,19 +34,17 @@ class RemuxEffectivenessStore(context: Context) {
         }
     }
 
-    fun recordProxyRouteAttemptOnce(resourceId: String, route: CastRouteKind) {
+    fun recordProxyRouteAttemptOnce(playbackAttemptId: Long, resourceId: String, route: CastRouteKind) {
         synchronized(lock) {
-            if (!attemptCountedResourceIds.add(resourceId)) return
+            if (!attemptTracker.markIfNew(playbackAttemptId, resourceId, route)) return
             persist(RemuxEffectivenessPolicy.apply(readCounts(), route, CastRouteOutcome.ATTEMPTED))
         }
     }
 
-    /** [attemptCountedResourceIds] only ever grows - resourceIds are per-session-scoped and never
-     * reused (see ProxyServer), so nothing else ever removes an entry. Call when a cast session
-     * ends: a long-lived process with a lot of channel switching would otherwise accumulate one
-     * entry per proxy resource for the process's entire lifetime. */
+    /** Attempt keys only matter inside one Cast session. Clear them when it ends so a long-lived
+     * process cannot retain one entry per channel playback forever. */
     fun resetAttemptTracking() {
-        synchronized(lock) { attemptCountedResourceIds.clear() }
+        synchronized(lock) { attemptTracker.clear() }
     }
 
     fun snapshot(): RemuxEffectivenessCounts = synchronized(lock) { readCounts() }
@@ -91,4 +94,22 @@ class RemuxEffectivenessStore(context: Context) {
         private const val KEY_PROXY_REWRITE_PLAYING = "proxy_rewrite_playing"
         private const val KEY_PROXY_REWRITE_FAILED = "proxy_rewrite_failed"
     }
+}
+
+internal data class ProxyRouteAttemptKey(
+    val playbackAttemptId: Long,
+    val resourceId: String,
+    val route: CastRouteKind,
+)
+
+/** Pure, thread-safe de-duplication kept outside SharedPreferences so its invariants are unit tested. */
+internal class ProxyRouteAttemptTracker {
+    private val seen = HashSet<ProxyRouteAttemptKey>()
+
+    @Synchronized
+    fun markIfNew(playbackAttemptId: Long, resourceId: String, route: CastRouteKind): Boolean =
+        seen.add(ProxyRouteAttemptKey(playbackAttemptId, resourceId, route))
+
+    @Synchronized
+    fun clear() = seen.clear()
 }

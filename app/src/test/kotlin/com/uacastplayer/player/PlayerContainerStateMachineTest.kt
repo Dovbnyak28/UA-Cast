@@ -9,6 +9,17 @@ import org.junit.Test
 class PlayerContainerStateMachineTest {
 
     @Test
+    fun `only a collapsed player with a request occupies mini player space`() {
+        State.entries.forEach { state ->
+            assertEquals(false, PlayerContainerStateMachine.isMiniPlayerVisible(state, hasRequest = false))
+            assertEquals(
+                state == State.COLLAPSED,
+                PlayerContainerStateMachine.isMiniPlayerVisible(state, hasRequest = true),
+            )
+        }
+    }
+
+    @Test
     fun `Open always goes to Expanded, from any state`() {
         assertEquals(State.EXPANDED, reduce(State.CLOSED, Event.Open))
         assertEquals(State.EXPANDED, reduce(State.COLLAPSED, Event.Open))

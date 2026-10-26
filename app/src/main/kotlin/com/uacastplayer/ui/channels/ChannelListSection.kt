@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -34,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -43,12 +43,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
+import com.uacastplayer.data.playlist.filterPlaylistChannels
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
-import com.uacastplayer.data.prefs.ChannelLayout
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.epg.CurrentNextProgrammes
 import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
@@ -64,17 +67,18 @@ import com.uacastplayer.ui.components.GlowStatusDot
 import com.uacastplayer.ui.components.StatusPillVariant
 import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.rememberEntryStagger
 import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.DurPress
+import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.ItemPadding
-import com.uacastplayer.ui.theme.PressScaleRound
+import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
 import com.uacastplayer.ui.theme.RadiusField
 import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.Title
@@ -103,16 +107,19 @@ internal fun SingleGroupChannelList(
 ) {
     var query by rememberSaveable(groupDisplayKey(grouped.group)) { mutableStateOf("") }
     val trimmedQuery = rememberDebounced(query.trim())
-    val filteredChannels = remember(grouped.channels, trimmedQuery) {
-        if (trimmedQuery.isEmpty()) {
+    val filteredChannels by produceState(grouped.channels, grouped.channels, trimmedQuery) {
+        value = if (trimmedQuery.isEmpty()) {
             grouped.channels
         } else {
-            grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
+            // One provider can put every channel in a single group. Filtering that list belongs
+            // beside whole-playlist search, not in the composition that draws the text field.
+            filterPlaylistChannels(grouped.channels, trimmedQuery)
         }
     }
     // Replays when the filter changes: a search that narrows 400 rows to 3 is new content arriving,
     // and the wave is what makes that legible. Also covers opening a different group.
     val entryStagger = rememberEntryStagger(filteredChannels)
+    val animateItems = animationsAllowed()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
@@ -129,6 +136,7 @@ internal fun SingleGroupChannelList(
                 color = UaTheme.palette.labelPrimary,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
             )
             Box(modifier = Modifier.align(Alignment.CenterEnd)) {
@@ -141,6 +149,14 @@ internal fun SingleGroupChannelList(
             onValueChange = { query = it },
             placeholder = { Text(stringResource(R.string.channels_search_hint)) },
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
+            trailingIcon = if (query.isNotEmpty()) {
+                {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(AppIcons.Close, contentDescription = stringResource(R.string.channels_clear_search),
+                            tint = UaTheme.palette.labelSecondary)
+                    }
+                }
+            } else null,
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
             colors = uaTextFieldColors(),
@@ -154,7 +170,7 @@ internal fun SingleGroupChannelList(
         )
 
         if (filteredChannels.isEmpty()) {
-            NoSearchResults(trimmedQuery)
+            NoSearchResults(trimmedQuery, onClearSearch = { query = "" })
         } else if (layout == ChannelLayout.LIST) {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
                 // One LazyColumn item per channel - NOT a single item wrapping a forEachIndexed
@@ -182,15 +198,15 @@ internal fun SingleGroupChannelList(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index)
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, entryKey, index, animationsEnabled = animateItems)
                             .clip(shape)
                             .background(UaTheme.palette.surface1),
                     ) {
                         // nowMillis only changes once a minute (see EpgUiState), so this only
                         // recomputes on an actual minute tick or a channel/data change - not on
                         // every recomposition this row goes through while scrolling.
-                        val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+                        val programme = remember(channel, epgState.data, epgState.nowMillis) {
                             epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
                         }
                         ChannelRow(
@@ -219,7 +235,11 @@ internal fun SingleGroupChannelList(
                 }
             }
         } else {
-            val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) ChannelTileMinWidthLarge else ChannelTileMinWidth
+            val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) {
+                ChannelTileMinWidthLarge
+            } else {
+                ChannelTileMinWidth
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(tileMinWidth),
                 modifier = Modifier.fillMaxSize().padding(top = GapM),
@@ -240,8 +260,8 @@ internal fun SingleGroupChannelList(
                         onClick = { onChannelClick(channel) },
                         onLongClick = { onLongPressChannel(channel) },
                         modifier = Modifier
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index),
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, entryKey, index, animationsEnabled = animateItems),
                     )
                 }
             }
@@ -318,8 +338,8 @@ private fun ChannelRow(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScaleRound else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
+        targetValue = if (pressed) PRESS_SCALE_ROUND else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
         label = "channelRowScale",
     )
     Row(
@@ -329,6 +349,9 @@ private fun ChannelRow(
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = channel.displayName,
+                onLongClickLabel = stringResource(R.string.channels_more_actions),
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
@@ -388,16 +411,13 @@ private fun ChannelRow(
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 AppIcons.Favorites,
-                contentDescription = stringResource(R.string.favorites_title),
+                contentDescription = stringResource(
+                    if (isFavorite) R.string.channels_channel_remove_favorite
+                    else R.string.channels_channel_add_favorite,
+                ),
                 tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
             )
         }
-        Icon(
-            AppIcons.ChevronDown,
-            contentDescription = null,
-            tint = UaTheme.palette.labelSecondary,
-            modifier = Modifier.size(16.dp).padding(start = 2.dp),
-        )
     }
 }
 
@@ -419,7 +439,13 @@ private fun ChannelTile(
             .fillMaxWidth()
             // Inside a LazyVerticalGrid - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
             .raisedSurface(tileShape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                role = Role.Button,
+                onClickLabel = channel.displayName,
+                onLongClickLabel = stringResource(R.string.channels_more_actions),
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(12.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {

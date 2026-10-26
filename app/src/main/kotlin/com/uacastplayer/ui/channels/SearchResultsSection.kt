@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,7 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.playlist.ChannelListKeys
@@ -28,6 +34,8 @@ import com.uacastplayer.playlist.ChannelRowShape
 import com.uacastplayer.playlist.ChannelSearchResult
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.ChannelIcon
+import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
@@ -38,13 +46,28 @@ import com.uacastplayer.ui.theme.RadiusList
 import java.io.File
 
 @Composable
-internal fun NoSearchResults(query: String) {
+internal fun NoSearchResults(query: String, onClearSearch: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = stringResource(R.string.channels_no_search_results, query),
-            style = BodyText,
-            color = UaTheme.palette.labelSecondary,
-        )
+        Column(
+            modifier = Modifier.widthIn(max = 480.dp).verticalScroll(rememberScrollState()).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.azure)
+            Text(
+                text = stringResource(R.string.channels_no_search_results, query),
+                style = BodyText,
+                color = UaTheme.palette.labelSecondary,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            SecondaryButton(
+                text = stringResource(R.string.channels_clear_search),
+                onClick = onClearSearch,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
     }
 }
 
@@ -60,6 +83,7 @@ internal fun ChannelSearchResultsList(
     onToggleFavorite: (M3uChannel) -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
 ) {
+    val animateItems = animationsAllowed()
     // One LazyColumn item per result - see the itemsIndexed usage in SingleGroupChannelList for
     // why this must not collapse back into a single item wrapping a forEachIndexed Column.
     LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
@@ -80,7 +104,7 @@ internal fun ChannelSearchResultsList(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItem()
+                    .then(if (animateItems) Modifier.animateItem() else Modifier)
                     .clip(shape)
                     .background(UaTheme.palette.surface1),
             ) {
@@ -116,7 +140,14 @@ private fun ChannelSearchResultRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(ItemPadding),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClickLabel = result.channel.displayName,
+                onClick = onClick,
+            )
+            .padding(ItemPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ChannelIcon(result.channel, resolveIcon, refreshKey = iconRefreshKey)
@@ -138,7 +169,10 @@ private fun ChannelSearchResultRow(
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 AppIcons.Favorites,
-                contentDescription = stringResource(R.string.favorites_title),
+                contentDescription = stringResource(
+                    if (isFavorite) R.string.channels_channel_remove_favorite
+                    else R.string.channels_channel_add_favorite,
+                ),
                 tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
             )
         }

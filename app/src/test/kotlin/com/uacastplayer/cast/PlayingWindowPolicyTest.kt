@@ -52,4 +52,16 @@ class PlayingWindowPolicyTest {
     fun `a closed window reports zero stable millis, not a negative or a huge number`() {
         assertEquals(0L, PlayingWindowPolicy.stableMillis(current = null, nowMillis = START))
     }
+
+    @Test
+    fun `closing a stable window preserves its duration for recovery reset`() {
+        val transition = PlayingWindowPolicy.transition(
+            current = START,
+            status = ReceiverStatus.IDLE,
+            nowMillis = START + CastRecoveryPolicy.STABLE_PLAYING_RESET_MILLIS + 1,
+        )
+
+        assertNull(transition.nextStartMillis)
+        assertEquals(CastRecoveryPolicy.STABLE_PLAYING_RESET_MILLIS + 1, transition.stableBeforeTransitionMillis)
+    }
 }

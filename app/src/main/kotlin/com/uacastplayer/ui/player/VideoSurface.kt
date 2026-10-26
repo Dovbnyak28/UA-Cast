@@ -8,17 +8,15 @@ import androidx.media3.ui.PlayerView
 import com.uacastplayer.R
 import com.uacastplayer.player.PlayerViewModel
 
-/** internal, not private - reused by [com.uacastplayer.ui.player.MiniPlayerBar], and called from
- * two different sites within [PlayerScreen] (inline and fullscreen) - each call site is a distinct
- * composition node, so switching between them (e.g. collapsing fullscreen into the mini-bar)
- * disposes one `PlayerView` and creates another. */
+/** Native video binding shared by the phone and TV layouts. The phone screen hoists movable
+ * content so inline/fullscreen reuse this view; actual removal still detaches its player. */
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
 internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
-            // Inflated from res/layout/player_view.xml instead of PlayerView(ctx) purely to get
-            // surface_type=texture_view applied - see that file's doc for why: a SurfaceView (the
+            // XML sets the video-only content layout (no duplicate native controls) and
+            // surface_type=texture_view - see that file's doc for why: a SurfaceView (the
             // constructor default) under Compose overlay buttons in the same Box was swallowing
             // their taps. useController is still set here since app:use_controller in that layout
             // only seeds PlayerView's initial value, not a persistent binding.

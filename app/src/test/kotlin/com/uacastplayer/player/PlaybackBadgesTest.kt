@@ -42,6 +42,15 @@ class PlaybackBadgesTest {
     }
 
     @Test
+    fun `mpeg audio layers and subtitle formats are not mislabeled`() {
+        assertEquals("MP3", PlaybackBadges.audioCodecLabel("audio/mpeg"))
+        assertEquals("MP2", PlaybackBadges.audioCodecLabel("audio/mpeg-l2"))
+        assertEquals("MP1", PlaybackBadges.audioCodecLabel("audio/mpeg-L1"))
+        assertEquals("SSA/ASS", PlaybackBadges.textCodecLabel("text/x-ssa"))
+        assertEquals("SRT", PlaybackBadges.textCodecLabel("application/x-subrip"))
+    }
+
+    @Test
     fun `channel layout maps common channel counts`() {
         assertEquals(AudioChannelLayout.MONO, PlaybackBadges.channelLayout(1))
         assertEquals(AudioChannelLayout.STEREO, PlaybackBadges.channelLayout(2))

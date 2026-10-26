@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="icon_pack_check_action">Check</string>
+    <string name="icon_pack_check_title">Logo pack check</string>
+    <string name="icon_pack_check_summary">Found: %1$d of %2$d samples\nChannels without tvg-id: %3$d</string>
+    <string name="icon_pack_check_hint">This checks up to six unique channel IDs, not the entire pack. Files must be named tvg-id.png. A 404 can mean a different ID or filename; channels without an ID cannot match.</string>
+    <string name="icon_pack_check_no_channels">Add or select a playlist first.</string>
+    <string name="icon_pack_check_found">Image received</string>
+    <string name="icon_pack_check_missing">No matching file (404)</string>
+    <string name="icon_pack_check_network">Server or network unavailable</string>
+    <string name="icon_pack_check_invalid">Not a supported image</string>
+    <string name="icon_pack_check_large">Exceeds the 256 KiB check limit</string>
+</resources>

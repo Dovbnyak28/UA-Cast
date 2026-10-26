@@ -1,7 +1,7 @@
 package com.uacastplayer.dlna
 
 /**
- * The `errorCode`/`errorDescription` out of a UPnP SOAP fault body, for logging only.
+ * The `errorCode`/`errorDescription` out of a bounded UPnP SOAP fault body, for retry policy and logs.
  *
  * A renderer that refuses an action answers HTTP 500 with a fault document rather than throwing
  * anything at the client, so without pulling the code out of it every refusal looks the same from
@@ -15,9 +15,8 @@ package com.uacastplayer.dlna
  *   Typically the follow-on failure after a `SetAVTransportURI` that was itself refused.
  * - **705 Transport is locked** - another controller owns the transport.
  *
- * Parsed by hand rather than with a SAX reader: this is a tiny fixed-shape document read only to
- * produce a log line, and a malformed body must degrade to "no detail" rather than cost a parser
- * setup or throw inside an error path.
+ * Field parsing shares the hardened SOAP reader: prefixes, attributes and XML text representations
+ * do not change the error code. A malformed body still degrades to "no detail", never an exception.
  */
 internal data class UpnpFault(val code: String?, val description: String?) {
 
@@ -36,15 +35,9 @@ internal data class UpnpFault(val code: String?, val description: String?) {
         /** "Transition not available" - see [isTransitionNotAvailable]. */
         const val TRANSITION_NOT_AVAILABLE = "701"
 
-        fun parse(body: String): UpnpFault =
-            UpnpFault(tagValue(body, "errorCode"), tagValue(body, "errorDescription"))
-
-        private fun tagValue(body: String, tag: String): String? {
-            val open = body.indexOf("<$tag>")
-            if (open < 0) return null
-            val start = open + tag.length + 2
-            val end = body.indexOf("</$tag>", start)
-            return if (end > start) body.substring(start, end).trim().ifEmpty { null } else null
+        fun parse(body: String): UpnpFault {
+            val fields = SoapResponseFields.read(body, "errorCode", "errorDescription")
+            return UpnpFault(fields["errorCode"], fields["errorDescription"])
         }
     }
 }

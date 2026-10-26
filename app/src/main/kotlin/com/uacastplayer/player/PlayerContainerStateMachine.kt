@@ -10,20 +10,19 @@ object PlayerContainerStateMachine {
 
     enum class State { CLOSED, EXPANDED, COLLAPSED }
 
-    sealed class Event {
+    sealed interface Event {
         /** A channel was picked (from a channel list, "continue watching", or restored after
          * process death) - always opens fullscreen, regardless of the previous state. */
-        data object Open : Event()
+        data object Open : Event
 
         /** The collapsed bar itself was tapped - expands to fullscreen. */
-        data object Tap : Event()
+        data object Tap : Event
 
         /** The system back gesture/button - collapses from fullscreen, or closes from collapsed. */
-        data object Back : Event()
+        data object Back : Event
 
-        /** The bar's own close (X) button, or exiting fullscreen via its own exit affordance -
-         * always closes outright, regardless of the previous state. */
-        data object Close : Event()
+        /** Explicit close (X), never the on-screen Back button: always closes outright. */
+        data object Close : Event
     }
 
     fun reduce(state: State, event: Event): State = when (event) {
@@ -36,4 +35,7 @@ object PlayerContainerStateMachine {
             State.CLOSED -> State.CLOSED
         }
     }
+
+    /** A restored layout marker alone must not reserve space before a channel request is restored. */
+    fun isMiniPlayerVisible(state: State, hasRequest: Boolean): Boolean = hasRequest && state == State.COLLAPSED
 }

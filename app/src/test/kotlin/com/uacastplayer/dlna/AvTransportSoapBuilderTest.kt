@@ -9,6 +9,20 @@ import org.w3c.dom.Document
 
 class AvTransportSoapBuilderTest {
 
+    @Test fun `video files advertise their actual mime and byte seeking rather than live broadcast`() {
+        val xml = AvTransportSoapBuilder.didlLite("http://phone/hls/token/id", "Фільм & Movie", "video/mp4")
+        org.junit.Assert.assertTrue(xml.contains("http-get:*:video/mp4:DLNA.ORG_OP=01;DLNA.ORG_CI=0"))
+        org.junit.Assert.assertTrue(xml.contains("<upnp:class>object.item.videoItem</upnp:class>"))
+        org.junit.Assert.assertFalse(xml.contains("videoBroadcast"))
+        org.junit.Assert.assertTrue(xml.contains("Фільм &amp; Movie"))
+    }
+
+    @Test fun `invalid video mime cannot inject DIDL attributes`() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            AvTransportSoapBuilder.didlLite("http://phone/video", "Movie", "video/mp4\" bad=\"yes")
+        }
+    }
+
     private fun parseXml(xml: String): Document =
         DocumentBuilderFactory.newInstance().newDocumentBuilder()
             .parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))

@@ -3,6 +3,7 @@ package com.uacastplayer.app
 import com.uacastplayer.core.security.PinHasher
 import com.uacastplayer.parentalcontrol.LockedChannelsStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -12,16 +13,24 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-private class FakeLockedChannelsStorage(initial: Set<String> = emptySet()) : LockedChannelsStorage {
+private class FakeLockedChannelsStorage(
+    initial: Set<String> = emptySet(),
+    private val loadGate: CompletableDeferred<Unit>? = null,
+) : LockedChannelsStorage {
     var saved: Set<String> = initial
         private set
 
-    override suspend fun load(): Set<String> = saved
+    override suspend fun load(): Set<String> {
+        val snapshot = saved
+        loadGate?.await()
+        return snapshot
+    }
 
     override suspend fun save(keys: Set<String>) {
         saved = keys
@@ -31,6 +40,20 @@ private class FakeLockedChannelsStorage(initial: Set<String> = emptySet()) : Loc
 private class FakePinStorage : ParentalControlPinStorage {
     override var parentalControlPinHash: String? = null
     override var parentalControlPinSalt: String? = null
+    var setRecordCalls = 0
+    var clearRecordCalls = 0
+
+    override fun setParentalControlPin(hash: String, salt: String) {
+        setRecordCalls++
+        parentalControlPinHash = hash
+        parentalControlPinSalt = salt
+    }
+
+    override fun clearParentalControlPin() {
+        clearRecordCalls++
+        parentalControlPinHash = null
+        parentalControlPinSalt = null
+    }
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -48,6 +71,20 @@ class ParentalControlControllerTest {
         storage: LockedChannelsStorage = FakeLockedChannelsStorage(),
         pins: ParentalControlPinStorage = FakePinStorage(),
     ) = ParentalControlController(storage, pins, TestScope(dispatcher), hashingDispatcher = dispatcher)
+
+    @Test
+    fun `late initial read cannot overwrite a lock made while disk IO was pending`() = runTest(dispatcher) {
+        val loadGate = CompletableDeferred<Unit>()
+        val storage = FakeLockedChannelsStorage(initial = setOf("old"), loadGate = loadGate)
+        val controller = controller(storage)
+        controller.loadInitial()
+
+        controller.lockChannel("new")
+        loadGate.complete(Unit)
+
+        assertEquals(setOf("old", "new"), controller.lockedKeys.value)
+        assertEquals(setOf("old", "new"), storage.saved)
+    }
 
     @Test
     fun `locking a channel needs no PIN and persists immediately`() = runTest(dispatcher) {
@@ -146,12 +183,24 @@ class ParentalControlControllerTest {
         controller(pins = second).setPin("1234")
 
         assertTrue(first.parentalControlPinHash != null && first.parentalControlPinSalt != null)
-        assertFalse(first.parentalControlPinHash!!.contains("1234"))
+        assertNotEquals("the stored hash must not be the plaintext PIN", "1234", first.parentalControlPinHash)
         assertTrue(
             "same PIN must not produce the same stored hash on two installs",
             first.parentalControlPinHash != second.parentalControlPinHash,
         )
         assertTrue(PinHasher.verify("1234", first.parentalControlPinSalt!!, first.parentalControlPinHash!!))
+    }
+
+    @Test
+    fun `setting and clearing a PIN use one storage transaction each`() = runTest(dispatcher) {
+        val pins = FakePinStorage()
+        val controller = controller(pins = pins)
+
+        assertTrue(controller.setPin("1234"))
+        controller.resetParentalControl()
+
+        assertEquals(1, pins.setRecordCalls)
+        assertEquals(1, pins.clearRecordCalls)
     }
 
     @Test

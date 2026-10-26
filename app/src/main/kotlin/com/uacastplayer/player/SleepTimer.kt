@@ -4,12 +4,19 @@ import java.util.Locale
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
+private const val QUARTER_HOUR_MINUTES = 15
+private const val HALF_HOUR_MINUTES = 30
+private const val THREE_QUARTER_HOUR_MINUTES = 45
+private const val ONE_HOUR_MINUTES = 60
+private const val MILLIS_PER_SECOND = 1_000L
+private const val SECONDS_PER_MINUTE = 60
+
 /** Preset durations offered in the player's sleep timer dialog. */
 enum class SleepTimerDuration(val minutes: Int) {
-    MIN_15(15),
-    MIN_30(30),
-    MIN_45(45),
-    MIN_60(60);
+    MIN_15(QUARTER_HOUR_MINUTES),
+    MIN_30(HALF_HOUR_MINUTES),
+    MIN_45(THREE_QUARTER_HOUR_MINUTES),
+    MIN_60(ONE_HOUR_MINUTES);
 
     val duration: Duration get() = minutes.minutes
 }
@@ -28,9 +35,9 @@ object SleepTimerCalculator {
 /** Formats the sleep timer's remaining time for display on the player's action button. */
 object SleepTimerFormatter {
     fun formatRemaining(remainingMillis: Long): String {
-        val totalSeconds = (remainingMillis / 1000L).coerceAtLeast(0L)
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
+        val totalSeconds = (remainingMillis / MILLIS_PER_SECOND).coerceAtLeast(0L)
+        val minutes = totalSeconds / SECONDS_PER_MINUTE
+        val seconds = totalSeconds % SECONDS_PER_MINUTE
         return String.format(Locale.ROOT, "%d:%02d", minutes, seconds)
     }
 }

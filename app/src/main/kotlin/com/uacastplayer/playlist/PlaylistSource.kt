@@ -8,7 +8,7 @@ enum class PlaylistSourceType { URL, FILE, XTREAM }
  * stable non-reversible id (see PlaylistUiState.activePlaylistId) - deriving it from [location]
  * means adding the same URL/file twice naturally upserts instead of duplicating. [location] is a
  * URL for [PlaylistSourceType.URL]/[PlaylistSourceType.XTREAM] (Xtream's built m3u_plus URL - see
- * XtreamUrlBuilder) or a content:// URI string for [PlaylistSourceType.FILE].
+ * XtreamUrlBuilder) or a content:// document URI / app-owned file:// URI for [PlaylistSourceType.FILE].
  */
 data class PlaylistSource(
     val id: String,

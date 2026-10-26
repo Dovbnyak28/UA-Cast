@@ -7,7 +7,8 @@ package com.uacastplayer.cast
  * outliving the retry budget). That meant a channel that's normally fine could get skipped straight
  * to the proxy for the next 30 days over one bad moment. Recording is reserved for cases where
  * retrying can't reasonably be expected to help: a confirmed hard-incompatible codec
- * ([CastCompatibilityVerdict.IncompatibleVideo]), or a channel that never reached `PLAYING` at all
+ * ([com.uacastplayer.core.cast.CastCompatibilityVerdict.IncompatibleVideo]), or a channel that
+ * never reached `PLAYING` at all
  * this casting episode (including every recovery reload) - if it played even briefly, the failure
  * was transient, not a genuine incompatibility.
  */

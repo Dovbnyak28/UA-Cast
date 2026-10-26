@@ -1,11 +1,12 @@
 # Design system
 
 Every screen is built from the tokens in `ui/theme/` and the components in `ui/components/`
-(mainly `DesignSystemControls.kt`). Vanilla Material3 widgets (`FilterChip`, `OutlinedButton`,
-`MaterialTheme.typography.*`, `MaterialTheme.colorScheme.*`, `Toast`) should not appear in new UI
-code - they don't track this palette/type scale and drift out of sync with the rest of the app the
-moment a token changes. `TermsScreen`/`HelpScreen`/`PlayerScreen` are the reference implementations
-for "screen built entirely from tokens."
+(mainly `DesignSystemControls.kt`). User-facing chrome uses the app wrappers (`PrimaryButton`,
+`SecondaryButton`, `SegmentedControl`, `uaTextFieldColors`) rather than raw Material defaults.
+Material3 remains allowed for behavior-heavy primitives such as dialogs, switches, text fields,
+progress indicators, pull-to-refresh and menus, provided their colors and typography are mapped to
+`UaTheme`. A bare `MaterialTheme.*` value is acceptable only inside a shared component that performs
+that mapping; screens read `UaTheme.palette` and the named type tokens directly.
 
 **Colors specifically go through `UaTheme.palette` (see "Themes" below), not a bare Color.kt
 constant.** The color names below (`Void`, `Azure`, `LabelPrimary`, ...) are still where the
@@ -16,15 +17,15 @@ plain top-level constants.
 
 ## Color (`ui/theme/Color.kt`)
 
-- **Backgrounds** - `Void` (app background), `VoidElevated` (~2.5% brighter, elevated surfaces),
+- **Backgrounds** - `Void` (app background), `VoidElevated` (theme-tinted lift for elevated surfaces),
   `Surface1`/`Surface2` (card and row backgrounds, `Surface2` is the "raised" one - selected chip,
   pressed round button, progress track).
 - **Accent** - `Azure`/`Azure2`, and `AzureGradient` (linear gradient between them) for primary
-  actions (play button, selected segment glow).
+  actions (play button, selected navigation and selected segments).
 - **Route health semantics** - `RouteGreen`/`RouteAmber`/`RouteRed`, each with a matching `*Glow`
   color at low alpha for soft glows behind status dots.
-- **Text** - `LabelPrimary` (main text), `LabelSecondary` (secondary/hint text, ~60% alpha),
-  `LabelTertiary` (disabled, ~30% alpha).
+- **Text** - `LabelPrimary` (main text), `LabelSecondary` (secondary/hint text),
+  `LabelTertiary` (muted supporting/disabled labels, kept AA-readable on raised surfaces).
 - **Lines** - `Hairline`, a near-transparent white for 1dp borders/dividers.
 
 ## Spacing & shape (`ui/theme/Dimens.kt`)
@@ -48,14 +49,21 @@ reaching for `MaterialTheme.typography.bodyMedium` etc.
 
 ## Motion (`ui/theme/Motion.kt`)
 
+- **Navigation transition** (`DUR_NAV = 220ms`) - top-level destination changes use a short,
+  directional slide/fade. The transition is skipped when Android reduced-motion is enabled.
+
 - `EaseSpring` - the standard easing curve for all token-driven animations.
 - `DurPress` (250ms) - press/release scale and highlight-slide animations.
-- `DurEnter` (700ms) + `StaggerMs` (70ms) - list/grid entry, via `Modifier.staggeredEntry` (see
-  `ui/components/EntryStagger.kt`).
+- `DUR_ENTER` (220ms) + `STAGGER_MS` (30ms) - list/grid entry for the first 10 items only, via
+  `Modifier.staggeredEntry`. Later items appear immediately; returning to a recycled row does not
+  replay its entrance. Maximum first-screen delay plus animation is 490ms (9 × 30 + 220).
 - `GlideMs` (2200ms) - the loading skeleton's shimmer sweep (`ui/components/Skeleton.kt`).
 - `DurRing` (1400ms) - the ring that leaves a Cast/DLNA button while a session is live
   (`ui/components/LiveRing.kt`).
 - `BreatheMs` (2000ms) - the player overlay's ambient pulse.
+- **Reduced motion** - stagger, shimmer and live-ring effects read Android's animator-duration
+  scale through `MotionAccessibility.kt`. At scale `0` content appears immediately, shimmer becomes
+  static and connection state keeps a non-animated ring.
 - **Rule 2 (press-scale)** - interactive controls scale down slightly on press using
   `collectIsPressedAsState()` + `animateFloatAsState`: `PressScalePlay` (0.94, play button),
   `PressScaleRound` (0.88, round icon buttons), `PressScaleIcon` (0.90, small icon buttons). New
@@ -127,36 +135,75 @@ one-off shape - for any other "explain transient/dismissible state inline" need.
 
 ### `SettingsChip`
 
-A private composable in `ui/settings/SettingsScreen.kt`, not part of the shared catalog above
-(same visual language, but settings-specific: it renders a leading checkmark when selected instead
-of swapping label color). Built directly on `Box`/`Row`/`clickable` - `Surface2` background when
-unselected, `Azure` when selected, `RadiusItem` corners, `BodyRegular` label. Used for chip rows
-with more than 4 options or long labels (language, EPG source, icon display mode) where
-`SegmentedControl` wouldn't fit.
+An internal composable in `ui/settings/SettingsComponents.kt`. It uses radio-selection semantics,
+a leading checkmark and a minimum 48dp height. Unselected: `surface2` / `labelSecondary`.
+Selected: `azure` / `accentOnFill` for both text and checkmark; never `labelPrimary` on the accent
+fill. `PaletteContrastTest` checks these actual pairs with sRGB luminance and alpha compositing.
+
+Language and EPG source choices use `SettingsChoiceRow`: a labelled row opens a scrollable radio
+dialog, so long localized choices do not require sideways scrolling. Short presets still use
+`SegmentedControl`.
+
+### Navigation and player menus
+
+- Bottom navigation keeps visible labels at large font scales. `navigationBarHeight(fontScale)`
+  is shared with mini-player positioning; changing one without the other would create overlap.
+  At ordinary sizes tabs use role/action wording (`Overview` / `Watch` in English; localized
+  equivalents) to distinguish the dashboard from the channel browser, while the screen heading and
+  spoken accessibility label retain the full destination names.
+  At font scale 1.5 and above, `TabBarItem.largeTextLabel` supplies localized short words while
+  `contentDescription` retains the full destination name. `LargeTextNavigationTest` verifies one-line,
+  non-overflowing labels at 320dp / 200% in EN/UK/RU/ES; never hide the labels to make them fit.
+  Root content also reserves `miniPlayerContentPadding` outside its scroll viewport while the mini
+  player is visible. A search target must be above the overlay, not merely inside screen bounds.
+- Settings has six task-oriented pages: appearance/language, playlists/guide, playback, parental
+  control, data/backup, and help/about. `SettingsSearch` maps localized controls to these pages;
+  opening a result brings that control into view and highlights it without changing its value.
+- Both player layouts use `PlayerActionsSheet` for secondary actions and one TV entry that opens
+  `PlayerDevicePicker`. Chromecast retains its native SDK control; DLNA has explicit connecting,
+  cancellation, failure and retry UI. TV actions remain player-only.
+- The on-screen Back and Android Back collapse the player. The mini-player close action ends it.
+- Source deletion requires confirmation. Favorites exposes removal and reordering in edit mode,
+  not in the ordinary play-focused rows. Cancelling a drag restores the pre-drag order.
+
+### Phone remote and TV browsing
+
+- Phone remote modes use selected radio semantics and an accent-filled active choice, not a disabled
+  button. Selecting the current mode is a no-op; changing presentation does not reconnect the client.
+  `RemoteModeSelector` stacks the choices on narrow screens or with large fonts. Check EN/UK/RU/ES
+  at 320dp / 200% before restoring an equal-width-only layout.
+- Direction controls use the shared vector glyph and retain 72dp targets. The center OK action is
+  visually primary and has a localized spoken Select label. The touchpad also exposes Select and
+  four directional accessibility actions; these must not duplicate ordinary tap/swipe commands.
+- Connected status has both a checkmark and text. The touchpad boundary remains visible without
+  adding a glow, background timer or a new palette outside `ui/theme`.
+- An empty TV favorites view explains the star action. No search matches, no saved favorites and
+  no playlist are different states; do not recommend another import when saved favorites are usable.
+  Empty search results provide a clear action below the field, reachable with Down. Clearing brings
+  focus back to search; a trailing icon alone is not proof of D-pad reachability.
+- The language form and Continue action share the same 640dp width cap, including short landscape
+  screens. Apply `widthIn(max = ContentMaxWidth)` before `fillMaxWidth()` so the cap takes effect.
 
 ## Themes (`ui/theme/UaPalette.kt`, `CinemaPalette.kt`, `MidnightPalette.kt`, `Theme.kt`, `Background.kt`)
 
 The app has three selectable visual styles. Users pick one in Settings; it applies instantly,
-app-wide.
+app-wide. All retain a dark, low-distraction canvas for long viewing sessions, but use distinct,
+more legible surface tints and vivid accents so controls and hierarchy do not disappear into grey.
 
 | Theme | Background | Accent | Character |
 | --- | --- | --- | --- |
-| `AppTheme.AZURE` (default) | neutral near-black, textured | cool blue | unchanged from before themes existed |
-| `AppTheme.CINEMA` | warm charcoal, textured | champagne gold | serif display type, pill-shaped controls |
-| `AppTheme.MIDNIGHT` | true `#000000`, flat | muted pewter | no wallpaper texture, no vignette, maximum contrast |
+| `AppTheme.AZURE` | deep blue-black, textured | electric blue to mint | cool, crisp, modern |
+| `AppTheme.CINEMA` (default) | aubergine ink, textured | champagne to coral | warm, expressive, pill-shaped controls |
+| `AppTheme.MIDNIGHT` | true `#000000`, flat | lavender to ice blue | vivid OLED option, maximum contrast |
 
 They're deliberately spread across the axes rather than being three shades of the same idea: Azure
-and Cinema differ in *temperature* while painting the same faint wallpaper texture a few percent
-above black, so Midnight takes the axis both leave open - unlit, textureless, and the only one whose
-`void` is actually black.
+and Cinema differ in temperature and accent family while painting a faint wallpaper texture; the
+wallpaper hue follows the active accent. Midnight keeps the background truly unlit and textureless
+while adding color through controls, not by lifting its black canvas.
 
-**Midnight's accent is deliberately near-neutral, and that is the theme's idea rather than a
-compromise.** A saturated accent on true black is the loudest thing a phone screen can do: there is
-no ambient tone for it to sit against, so it glows. The first attempt was a violet and read as
-candy. At a fifth of normal saturation the chrome reads as chrome, and saturation belongs to the
-only things that should compete for the eye - `routeGreen`, `routeAmber`, `routeRed`. In this theme
-colour means status and nothing else, so a new element that wants attention has to earn it with
-contrast or size rather than by turning the accent up.
+**Midnight's vivid accents do not tint the canvas.** Lavender and ice-blue add a clear identity to
+active controls and selection, while the true-black background stays untouched for OLED viewing.
+Status remains separately encoded by `routeGreen`, `routeAmber` and `routeRed`.
 
 ### How it works
 
@@ -168,6 +215,11 @@ contrast or size rather than by turning the accent up.
 - **`wallpaperTexture = false`** makes `Background.kt` return a flat `void` fill and skip the
   gradient/noise layers entirely, rather than tinting them to nothing. That's what keeps Midnight's
   black actually `#000000` on an OLED panel: a texture drawn at 2% over black is still lit pixels.
+- **`appBackground(plain = true)`** uses the same early-return flat path for settings and the import
+  form, regardless of theme. It preserves palette colors without loading decorative wallpaper or
+  allocating overlay brushes. Home and content screens keep their themed background plus two
+  static, low-opacity accent blooms (cached with `drawWithCache`; no animation clock or
+  animation-driven redraws).
 - **`LocalUaPalette`** (a `staticCompositionLocalOf<UaPalette>`) carries the active palette down
   the tree; **`UaTheme.palette`** is the `@Composable` accessor components actually call.
   `staticCompositionLocalOf` is deliberate, not an oversight - a theme switch is meant to force the
@@ -177,7 +229,7 @@ contrast or size rather than by turning the accent up.
   palette for `theme`, provides it via `LocalUaPalette`, and builds the Material3 `ColorScheme`
   from it too (so Material internals - ripples, `OutlinedTextField`, etc. - track the theme as
   well, even though new UI code shouldn't be reading `MaterialTheme.colorScheme.*` directly).
-- **`AppPreferences.appTheme`** (default `AppTheme.AZURE`) persists the choice.
+- **`AppPreferences.appTheme`** (default `AppTheme.CINEMA`) persists the choice.
   `AppViewModel.selectAppTheme` writes it and updates `AppUiState.appTheme`; `MainActivity` passes
   that straight into `UaCastTheme(theme = uiState.appTheme)`, so picking a theme in Settings
   recomposes the whole app on the spot - no restart.
@@ -247,28 +299,40 @@ without turning into a full skeuomorphic style.
   shadow re-triggers layer compositing on every scroll frame for every visible row. Use
   `raisedSurface(shadow = false)` (the default) for list rows; the gradient/border alone is cheap.
 
-### The three-glow rule
+### The focused-glow rule
 
-Only three places in the app may use an **accent-colored** glow (`spotColor`/`ambientColor` beyond
+Only four places in the app may use an **accent-colored** glow (`spotColor`/`ambientColor` beyond
 `UaPalette.shadowSoft`'s neutral tone): the play button (`GradientPlayButton`, `azureGlow`), the
-current-programme progress indicator, and the live indicator. Nowhere else - a glow on every raised
-surface reads as visual noise instead of drawing the eye to what's actually live/actionable.
+current-programme progress indicator, the live indicator, and the selected bottom-navigation pill.
+Nowhere else - a glow on every raised surface reads as visual noise instead of drawing the eye to
+what's actually live/actionable.
 `raisedSurface` itself never glows for this reason; a glowing control layers its own
 `.shadow(spotColor = ...)` separately, the same way `GradientPlayButton` already does.
 
-### Serif display type
+### Display type
 
-`UaPalette.displayFontFamily` (`FontFamily.Serif` in Cinema, the platform default elsewhere) is
-consumed through `Type.kt`'s `DisplayTitle`/`DisplayName` styles, not read directly at call sites -
-see the "Typography" section above for the base styles they wrap. `FontFamily.Serif` is Android's
-generic serif alias (resolves to whatever serif face the device ships) rather than a specific
-bundled typeface like Playfair Display: no font binary was available when this was built, and the
-first attempt (Android's Downloadable Fonts API against the Google Play Services Fonts provider)
-was confirmed on-device to silently fail on de-Googled ROMs (LineageOS + microG) - package-visibility
-blocked the query since microG doesn't implement that provider, so it fell back to the platform
-default with no error. `FontFamily.Serif` has none of that risk (no network, no GMS dependency) at
-the cost of not being a specific named typeface. A future iteration could swap in an actually-bundled
-OFL font file by changing just `CinemaPalette.kt`'s `displayFontFamily` value.
+`UaPalette.displayFontFamily` is consumed through `Type.kt`'s `DisplayTitle`/`DisplayName` styles,
+not read directly at call sites - see the "Typography" section above for the base styles they
+wrap. Cinema deliberately uses Android's offline `FontFamily.SansSerif`, matching the rest of the
+app so long titles keep predictable metrics across OEMs and locales. A future iteration can still
+swap in an actually-bundled OFL font file by changing just `CinemaPalette.kt`'s
+`displayFontFamily` value.
+
+## Player interaction contract (2026-09-06)
+
+- Play/Pause follows Media3 `playWhenReady`, not `isPlaying`: buffering still offers Pause.
+  Local controls are disabled while a remote receiver owns playback. Previous/Next expose disabled
+  semantics at unavailable boundaries, including a one-channel session. Live wrap-around changes
+  update both availability and preview without restarting the stream.
+- Fullscreen preserves the 66 dp primary control and existing secondary touch targets. The ellipsis
+  opens More; brightness/volume step buttons live in a scrollable sheet accessible from both layouts,
+  instead of permanently covering a second row of video. Gestures remain an optional shortcut.
+- Controls hide only after an idle interval of at least 3 seconds, extended by accessibility timeout
+  preferences. Pointer activity restarts it; an open sheet, held pointer, keyboard focus or touch
+  exploration holds controls visible. Closing a sheet gives a fresh interval.
+- The full channel picker remains the route to untruncated names. Search is debounced and cancellable
+  on the playlist CPU worker, with indices scoped to the current playback session.
+- Midnight never starts artwork-tone resolution or bitmap sampling for its disabled color wash.
 
 ## §E Equal-share rows
 
@@ -292,3 +356,16 @@ cannot create a place to wrap. So when adding an item to a row like this, check 
 longest **word**, not the longest string - and where a term is unavoidably long, translate it as two
 short words instead of one long one (`"Формат кадру"`, not `"Співвідношення"`). Roughly: keep the
 longest word under about 9 characters for a six-item row at 411dp.
+
+## Future Lite banner placements (2026-10-03)
+
+Advertising is disabled until a provider and permission flow are deliberately installed.
+The only allowed phone slots are the bottom of populated Home content and a non-overlay
+footer below Channels. No player, mini-player, remote-control, TV or first-run placements.
+Premium prevents renderer mounting, rather than hiding a view that already requested ads.
+
+`BannerAdSlot` has zero layout footprint for disabled, blocked, Premium, paused or no-fill
+states. Only a ready renderer uses `BannerAdFrame`: localized advertising label, existing
+semantic typography/colors, centered content capped at 640dp. Do not substitute shimmer,
+placeholder cards or a permanent blank footer for an unavailable ad. Follow the adapter
+lifecycle/privacy contract in `docs/LITE_ADVERTISING_FOUNDATION_2026-10-03.md`.

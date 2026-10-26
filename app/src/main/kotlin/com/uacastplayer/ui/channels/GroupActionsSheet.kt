@@ -13,6 +13,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.ui.theme.BodyText
@@ -58,7 +59,12 @@ fun GroupActionsSheet(
 
 @Composable
 private fun GroupActionRow(label: String, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .padding(vertical = 14.dp),
+    ) {
         Text(text = label, style = BodyText, color = UaTheme.palette.labelPrimary)
     }
 }

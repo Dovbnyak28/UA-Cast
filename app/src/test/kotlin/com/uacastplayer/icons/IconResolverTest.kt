@@ -1,98 +1,62 @@
 package com.uacastplayer.icons
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IconResolverTest {
-
-    private val cdnBuilder: (String) -> String = { id -> "https://cdn.example.com/$id.png" }
-
-    @Test
-    fun `prefers tvg-logo first`() {
-        val result = IconResolver.candidates(
-            tvgLogo = "http://logo",
-            epgIconUrl = "http://epg-icon",
-            tvgId = "ch1",
-            cdnFallbackUrl = cdnBuilder,
-        )
-        assertEquals(IconCandidate.Fetchable("http://logo"), result[0])
+    @Test fun `no user pack means no automatic candidates`() {
+        assertTrue(IconResolver.candidates("ch1").isEmpty())
     }
 
-    @Test
-    fun `falls back to EPG icon when tvg-logo is absent`() {
-        val result = IconResolver.candidates(
-            tvgLogo = null,
-            epgIconUrl = "http://epg-icon",
-            tvgId = "ch1",
-            cdnFallbackUrl = cdnBuilder,
-        )
-        assertEquals(IconCandidate.Fetchable("http://epg-icon"), result[0])
+    @Test fun `missing channel ID means no candidate even with a pack`() {
+        assertTrue(IconResolver.candidates(null, listOf("https://example.com/logos")).isEmpty())
     }
 
-    @Test
-    fun `CDN fallback is cache-only and comes last`() {
-        val result = IconResolver.candidates(
-            tvgLogo = "http://logo",
-            epgIconUrl = "http://epg-icon",
-            tvgId = "ch1",
-            cdnFallbackUrl = cdnBuilder,
-        )
-        assertEquals(IconCandidate.CacheOnly("https://cdn.example.com/ch1.png"), result.last())
-        assertEquals(3, result.size)
+    @Test fun `blank channel ID means no candidate`() {
+        assertTrue(IconResolver.candidates("  ", listOf("https://example.com/logos")).isEmpty())
     }
 
-    @Test
-    fun `blank values are treated as absent`() {
-        val result = IconResolver.candidates(
-            tvgLogo = "   ",
-            epgIconUrl = "",
-            tvgId = "ch1",
-            cdnFallbackUrl = cdnBuilder,
-        )
-        assertEquals(1, result.size)
-        assertEquals(IconCandidate.CacheOnly("https://cdn.example.com/ch1.png"), result[0])
-    }
-
-    @Test
-    fun `no signals at all yields no candidates`() {
-        val result = IconResolver.candidates(null, null, null, cdnFallbackUrl = cdnBuilder)
-        assertEquals(emptyList<IconCandidate>(), result)
-    }
-
-    @Test
-    fun `custom sources are fetchable and tried before the CDN fallback`() {
-        val result = IconResolver.candidates(
-            tvgLogo = null,
-            epgIconUrl = null,
-            tvgId = "ch1",
-            customBaseUrls = listOf("https://mycdn.com/logos/", "https://other.example.com/icons"),
-            cdnFallbackUrl = cdnBuilder,
-        )
+    @Test fun `user pack order is preserved without appending a default source`() {
         assertEquals(
             listOf(
-                IconCandidate.Fetchable("https://mycdn.com/logos/ch1.png"),
-                IconCandidate.Fetchable("https://other.example.com/icons/ch1.png"),
-                IconCandidate.CacheOnly("https://cdn.example.com/ch1.png"),
+                IconCandidate("https://first.example/logos/ch1.png"),
+                IconCandidate("https://second.example/ch1.png"),
             ),
-            result,
+            IconResolver.candidates("ch1", listOf("https://first.example/logos/", "https://second.example")),
         )
     }
 
-    @Test
-    fun `custom sources are skipped without a tvg-id, same as the CDN fallback`() {
-        val result = IconResolver.candidates(
-            tvgLogo = "http://logo",
-            epgIconUrl = null,
-            tvgId = null,
-            customBaseUrls = listOf("https://mycdn.com/logos/"),
-            cdnFallbackUrl = cdnBuilder,
+    @Test fun `equivalent pack addresses are deduplicated`() {
+        assertEquals(
+            listOf(IconCandidate("https://example.com/logos/ch1.png")),
+            IconResolver.candidates("ch1", listOf("https://example.com/logos", " https://example.com/logos/ ")),
         )
-        assertEquals(listOf(IconCandidate.Fetchable("http://logo")), result)
     }
 
-    @Test
-    fun `iconUrl trims a trailing slash on the base url`() {
+    @Test fun `unsafe pack addresses are skipped`() {
+        assertEquals(
+            listOf(IconCandidate("https://safe.example/ch1.png")),
+            IconResolver.candidates("ch1", listOf("javascript:alert(1)", "file:///logos", "https://safe.example")),
+        )
+    }
+
+    @Test fun `a user may explicitly add any valid host including a formerly built in source`() {
+        assertEquals(
+            listOf(IconCandidate("https://custom.example/logo/ch1.png")),
+            IconResolver.candidates("ch1", listOf("https://custom.example/logo")),
+        )
+    }
+
+    @Test fun `iconUrl trims a trailing slash on the base url`() {
         assertEquals("https://mycdn.com/logos/ch1.png", IconResolver.iconUrl("https://mycdn.com/logos/", "ch1"))
         assertEquals("https://mycdn.com/logos/ch1.png", IconResolver.iconUrl("https://mycdn.com/logos", "ch1"))
+    }
+
+    @Test fun `reserved and unicode channel IDs stay inside one path segment`() {
+        assertEquals(
+            "https://mycdn.com/logos/news%2Fde%3Fedition%3D%CE%B1%20%CE%B2.png",
+            IconResolver.iconUrl("https://mycdn.com/logos/", "news/de?edition=α β"),
+        )
     }
 }

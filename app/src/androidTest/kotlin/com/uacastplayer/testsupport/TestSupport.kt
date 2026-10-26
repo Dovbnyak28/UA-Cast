@@ -3,11 +3,15 @@ package com.uacastplayer.testsupport
 import android.content.Context
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
@@ -16,9 +20,28 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.uacastplayer.AppViewModel
 import com.uacastplayer.MainActivity
 import com.uacastplayer.R
+import com.uacastplayer.acceptTerms
+import com.uacastplayer.guidedTourSkip
+import com.uacastplayer.loadPlaylistFromUrl
+import com.uacastplayer.removePlaylistSource
+import com.uacastplayer.selectLanguage
 import com.uacastplayer.data.prefs.AppPreferences
 
-private typealias MainActivityComposeRule = AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+internal typealias MainActivityComposeRule = AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+
+/** Waits for the Activity's first Compose tree, not merely for the test clock to go idle. The
+ * Samsung J3's cold start can exceed 15 seconds while ART compiles the large channels screen, so
+ * keep this gate generous enough for the slowest supported test handset without changing any
+ * functional assertion timeout. */
+fun MainActivityComposeRule.awaitComposeHierarchy(timeoutMillis: Long = DEFAULT_COMPOSE_TIMEOUT_MILLIS) {
+    waitUntil(timeoutMillis) {
+        runCatching {
+            onRoot().fetchSemanticsNode()
+            true
+        }.getOrDefault(false)
+    }
+    waitForIdle()
+}
 
 /** The same [AppViewModel] instance Compose is using, fetched the same way `by viewModels()`
  * would - both resolve against the Activity's own [androidx.lifecycle.ViewModelStore] via the
@@ -75,13 +98,45 @@ fun setAutoSkipDeadChannels(context: Context, enabled: Boolean): Boolean {
 /** Starts loading channels from [server] the same way AddPlaylistScreen's URL field would,
  * without depending on that screen's UI. */
 fun loadTestPlaylist(activity: MainActivity, server: FakeOriginServer) {
-    appViewModelOf(activity).loadPlaylistFromUrl(server.playlistUrl())
+    val viewModel = appViewModelOf(activity)
+    // Instrumentation installs with -r, and each test method gets a fresh Activity but the same
+    // app data. Player suites therefore accumulated one ephemeral localhost source per method
+    // until PlaylistSourcePolicy's production limit rejected every later setup. Clear the
+    // source set before adding this test's isolated server. Sequencing the load after the final
+    // wholesale write is essential: otherwise the next Activity can restore an older asynchronous
+    // removal write. This callback must stay asynchronous because `onActivity` runs on Android's
+    // main thread; blocking it while a viewModelScope job tries to resume there would deadlock.
+    viewModel.playlistSources.value.toList().forEach { source ->
+        viewModel.removePlaylistSource(source.id)
+    }
+    viewModel.playlistController.applyImportedSources(emptyList()).invokeOnCompletion { failure ->
+        if (failure == null) {
+            activity.runOnUiThread { viewModel.loadPlaylistFromUrl(server.playlistUrl()) }
+        }
+    }
 }
 
 /** Waits (polling [AndroidComposeTestRule.waitUntil]) until [FakeOriginServer]'s playlist has been
  * parsed and is visible in [AppViewModel.playlistState]. */
-fun MainActivityComposeRule.waitForChannelsLoaded(timeoutMillis: Long = 10_000) {
-    waitUntil(timeoutMillis) { appViewModelOf(activity).playlistState.value.hasChannels }
+fun MainActivityComposeRule.waitForChannelsLoaded(
+    server: FakeOriginServer,
+    timeoutMillis: Long = 10_000,
+) {
+    try {
+        waitUntil(timeoutMillis) { appViewModelOf(activity).playlistState.value.hasChannels }
+    } catch (timeout: ComposeTimeoutException) {
+        val viewModel = appViewModelOf(activity)
+        val state = viewModel.playlistState.value
+        throw AssertionError(
+            "Playlist setup timed out: loading=${state.isLoading}, hasChannels=${state.hasChannels}, " +
+                "error=${state.error}, sourceCount=${viewModel.playlistSources.value.size}, " +
+                "activeSource=${viewModel.activePlaylistSourceId.value != null}, " +
+                "originRequests=${server.playlistRequestCount}, " +
+                "responses=${server.completedResponseCount}, failures=${server.failedResponseCount}, " +
+                "activeSockets=${server.activeSocketCount}",
+            timeout,
+        )
+    }
 }
 
 /**
@@ -92,11 +147,15 @@ fun MainActivityComposeRule.waitForChannelsLoaded(timeoutMillis: Long = 10_000) 
  * plain `onNodeWithText(nav_channels)` finds two nodes and fails with "Expected exactly '1' node
  * but found '2'". Narrowing by [Role.Tab] - which [com.uacastplayer.ui.components.GlassTabBar]
  * already sets - picks the tab without needing a test tag or a production change, and keeps
- * working if the card's wording changes.
+ * working if the card's wording changes. Match the full accessibility label rather than the
+ * visible text, which intentionally uses short aliases at large font scales.
  */
 fun MainActivityComposeRule.openChannelsTab() {
+    // A state update (e.g. playlist load) can complete before the corresponding tab has been
+    // composed on a cold device. Synchronize the first semantics query with that composition.
+    awaitComposeHierarchy()
     onNode(
-        hasText(activity.getString(R.string.nav_channels)) and
+        hasContentDescription(activity.getString(R.string.nav_channels)) and
             SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     ).performClick()
 }
@@ -145,7 +204,7 @@ fun MainActivityComposeRule.openChannelViaSearch(channelName: String) {
  *    to settle, not for a real-time `delay`.
  */
 fun MainActivityComposeRule.tapChannelRow(channelName: String) {
-    val row = hasText(channelName) and hasSetTextAction().not()
+    val row = hasText(channelName) and hasSetTextAction().not() and hasClickAction()
     waitUntil(SEARCH_RESULT_TIMEOUT_MILLIS) { onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
     onNode(row).performClick()
     waitForIdle()
@@ -154,3 +213,4 @@ fun MainActivityComposeRule.tapChannelRow(channelName: String) {
 /** Generous next to the 200ms search debounce - this is a "did it ever appear" bound, not a
  * performance assertion, and a cold first search also pays for the initial filter pass. */
 private const val SEARCH_RESULT_TIMEOUT_MILLIS = 5_000L
+private const val DEFAULT_COMPOSE_TIMEOUT_MILLIS = 30_000L

@@ -51,7 +51,7 @@ class UpgradeBannerTest {
     private fun show(license: License) {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
-                UpgradeBanner(section = sectionFor(license), nowMillis = now, onSeePremium = {})
+                UpgradeBanner(section = sectionFor(license), onSeePremium = {})
             }
         }
     }
@@ -72,9 +72,9 @@ class UpgradeBannerTest {
     }
 
     @Test
-    fun theLastFewDaysOfTheTrialAreAnnounced() {
+    fun aRetiredTrialDoesNotShowACountdown() {
         show(License(LicenseTier.TRIAL, expiresAtMillis = now + 2 * day, source = "trial"))
-        composeRule.onNodeWithTag(UiTestTags.UPGRADE_BANNER).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiTestTags.UPGRADE_BANNER).assertDoesNotExist()
     }
 
     /** Saying so beats letting the user find out by tapping something that used to work. */
@@ -113,7 +113,6 @@ class UpgradeBannerTest {
                     Box(modifier = Modifier.size(40.dp).testTag("spacer"))
                     UpgradeBanner(
                         section = sectionFor(License.FREE),
-                        nowMillis = now,
                         onSeePremium = {},
                         modifier = Modifier.padding(top = 12.dp),
                     )
@@ -126,11 +125,9 @@ class UpgradeBannerTest {
         assertEquals("the 12dp of host padding must not survive the banner being hidden", spacer, host)
     }
 
-    /** Rounded up: "0 days left" on a trial that still has hours in it is a lie in the direction
-     * that costs the user something. */
     @Test
-    fun remainingDaysRoundUp() {
-        val section = sectionFor(License(LicenseTier.TRIAL, expiresAtMillis = now + day + 1, source = "trial"))
-        org.junit.Assert.assertEquals(2, section.daysRemaining(now))
+    fun anExpiredTrialDoesNotNagForAPlanThatNoLongerExists() {
+        show(License(LicenseTier.TRIAL, expiresAtMillis = now - day, source = "trial"))
+        composeRule.onNodeWithTag(UiTestTags.UPGRADE_BANNER).assertDoesNotExist()
     }
 }
