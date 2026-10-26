@@ -361,6 +361,13 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Download isolated relink probe
+        if: matrix.api-level == 30
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: software-decoder-relink-probe-test-only
+          path: build/software-decoder-relink-probe
+
       - name: Run instrumented tests
         # Leave time inside the 45-minute job budget to upload partial results after a hang.
         timeout-minutes: 30
@@ -373,6 +380,7 @@ jobs:
           script: |
             bash scripts/run-instrumented-tests.sh
             ./gradlew :ffmpegdecoder:connectedDebugAndroidTest --stacktrace
+            if [ '${{ matrix.api-level }}' = 30 ]; then bash scripts/run-software-decoder-relink-test.sh; fi
 
       - name: Upload instrumentation reports
         if: always()

@@ -29,7 +29,9 @@ public class SoftwareDecoderInstrumentedTest {
   @Test public void independentNativeLibraryPreservesRequiredSoftwareCapabilities() {
     assertTrue("Independent FFmpeg JNI must load", FfmpegLibrary.isAvailable());
     assertTrue(FfmpegLibrary.getVersion(), FfmpegLibrary.getVersion().startsWith("Lavc60."));
-    assertEquals("LGPL version 2.1 or later", FfmpegLibrary.getNativeLicense());
+    boolean relinkProbe = "true".equals(InstrumentationRegistry.getArguments().getString("uacast.relinkProbe"));
+    assertEquals("LGPL version 2.1 or later" + (relinkProbe ? " (UA-Cast relink probe)" : ""),
+        FfmpegLibrary.getNativeLicense());
     for (String mime : new String[] {MimeTypes.AUDIO_MPEG_L2, MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3,
         MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_OPUS, MimeTypes.AUDIO_VORBIS, MimeTypes.AUDIO_FLAC,
         MimeTypes.VIDEO_H264, MimeTypes.VIDEO_H265, MimeTypes.VIDEO_MPEG2, MimeTypes.VIDEO_VP8, MimeTypes.VIDEO_VP9}) {

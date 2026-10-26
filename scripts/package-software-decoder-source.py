@@ -50,6 +50,13 @@ Replacing/relinking libraries for personal use:
 5. The publisher's official APK signature/update checks do not apply to your modified
    build. You are responsible for the modified build's security and compatibility.
 
+The included scripts/relink-software-decoder-apk.py automates replacement of one
+compatible .so and removes the old APK signatures while checking unchanged DEX/resources:
+  python scripts/relink-software-decoder-apk.py --apk original.apk \\
+    --library rebuilt/libavcodec.so --abi x86_64 --output unsigned.apk
+It never installs/uninstalls anything. Run zipalign -P 16 -f 4 unsigned.apk aligned.apk,
+then apksigner sign --ks YOUR_OWN_KEYSTORE --out modified.apk aligned.apk.
+
 The application terms permit modification/reverse engineering needed to exercise the
 third-party component licences. This technical source bundle is not a legal opinion;
 distribution must include this bundle alongside the APK and publish correct attribution.
@@ -81,6 +88,7 @@ def create_bundle(root, output):
     if run is None:
         raise ValueError("Matching actual native build/configuration evidence missing")
     files = {name: root / name for name in NATIVE.INPUTS}
+    files['scripts/relink-software-decoder-apk.py'] = root / 'scripts/relink-software-decoder-apk.py'
     for path in (root / "ffmpegdecoder/src/main").rglob("*"):
         if path.is_file():
             files[str(path.relative_to(root)).replace("\\", "/")] = path

@@ -40,6 +40,15 @@ jobs:
           path: build/software-decoder-dist/
           if-no-files-found: error
           retention-days: 30
+      - name: Build isolated modified-library relink probe
+        run: python3 scripts/prepare-software-decoder-relink-probe.py
+      - name: Upload test-only replacement library
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: software-decoder-relink-probe-test-only
+          path: build/software-decoder-relink-probe/
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload native compiler logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
