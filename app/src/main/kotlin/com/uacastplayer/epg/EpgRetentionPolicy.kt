@@ -6,7 +6,7 @@ import java.time.ZoneId
 /**
  * Which part of a downloaded guide is worth keeping in memory.
  *
- * Measured against the feed this app ships with (`epg.it999.ru/epg2.xml.gz`, 494MB of XML) on a
+ * Historical measurement against a user-configured guide (494MB of XML) on a
  * real 2863-channel playlist: 793,417 programmes, of which **388,863 had already finished before
  * today began**. Over half of every guide download was last week's television, held in RAM for the
  * lifetime of the app and then written into the snapshot cache.

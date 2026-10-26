@@ -45,6 +45,7 @@ import com.uacastplayer.premium.Feature
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.UiTestTags
+import com.uacastplayer.ui.legal.ThirdPartyLicensesButton
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.diagnostics.DiagnosticsPreviewDialog
 import com.uacastplayer.ui.diagnostics.sendDiagnostics
@@ -290,6 +291,7 @@ internal fun HelpSettingsSection(
             modifier = Modifier.padding(top = 8.dp),
             buttonTag = UiTestTags.SETTINGS_OPEN_PRIVACY_BUTTON,
         )
+        ThirdPartyLicensesButton()
         SendDiagnosticsRow(
             onBuildReport = onBuildDiagnosticsReport,
             ioDispatcher = ioDispatcher,

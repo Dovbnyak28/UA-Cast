@@ -7,12 +7,17 @@ on:
       - 'app/**'
       - 'core/**'
       - 'baselineprofile/**'
+      - 'ffmpegdecoder/**'
       - 'config/performance/**'
       - 'gradle/**'
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'scripts/check-performance-budgets.py'
       - 'scripts/tests/test_performance_budgets.py'
+      - 'scripts/prepare-software-decoder.py'
+      - 'scripts/build-ffmpeg-android.sh'
+      - 'scripts/patches/**'
+      - '.github/workflows/software-decoder-native.yml'
       - '.github/workflows/performance-gate.yml'
   schedule:
     - cron: '0 4 * * 1'
@@ -27,8 +32,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  native:
+    uses: ./.github/workflows/software-decoder-native.yml
+
   device-budgets:
     runs-on: ubuntu-latest
+    needs: native
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -38,6 +47,13 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
       - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
+      - name: Download verified native inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: software-decoder-native
+          path: ffmpegdecoder/build/native-libraries
+      - name: Verify native inputs
+        run: python3 scripts/prepare-software-decoder.py --verify-only
       - name: Test evidence validator and host allocation/complexity budgets
         run: |
           python3 -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'

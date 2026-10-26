@@ -65,6 +65,7 @@ internal object PlayerCastMapping {
         userAgent = channel.userAgent,
         referrer = channel.referrer,
         logoUrl = channel.logoUrl,
+        localVideo = channel.localVideo,
     )
 
     fun effect(effect: CastSideEffect): PlayerCastSideEffect = when (effect) {

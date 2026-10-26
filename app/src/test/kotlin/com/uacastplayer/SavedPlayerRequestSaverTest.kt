@@ -9,6 +9,25 @@ import org.junit.Test
 
 class SavedPlayerRequestSaverTest {
 
+    @Test fun durableVideoRestoresWithoutUsingTheLastIptvChannelKey() {
+        val video = com.uacastplayer.media.LocalVideo("content://media/video/1", "Movie.mp4", "video/mp4", true)
+        val marker = PlayerRequest.forLocalVideo(video).toSavedRequest()!!
+        val restored = SavedPlayerRequestSaver.restore(
+            listOf(marker.channelKey, 0, video.uri, video.displayName, video.mimeType),
+        )!!
+        assertEquals(video, restored.localVideo)
+        assertEquals(marker.channelKey, restored.preferredChannelKey("last-iptv-channel"))
+    }
+
+    @Test fun temporaryGrantsNeverProduceAnAutomaticRestorationMarker() {
+        val video = com.uacastplayer.media.LocalVideo("content://media/video/1", "Movie.mp4", "video/mp4")
+        assertNull(PlayerRequest.forLocalVideo(video).toSavedRequest())
+        assertNull(SavedPlayerRequestSaver.restore(listOf("key", 0, "file:///private/movie", "Movie", "video/mp4")))
+        assertNull(SavedPlayerRequestSaver.restore(
+            listOf("key", 0, "content://media/1", "Movie", "video/mp4\r\nBad: yes"),
+        ))
+    }
+
     @Test
     fun openRequestProducesCompactMarkerForTheSelectedChannel() {
         val channels = listOf(

@@ -2,19 +2,13 @@ package com.uacastplayer.dlna
 
 import java.io.ByteArrayInputStream
 import java.net.URI
-import java.io.StringReader
-import javax.xml.XMLConstants
-import javax.xml.parsers.SAXParserFactory
 import org.xml.sax.Attributes
-import org.xml.sax.EntityResolver
 import org.xml.sax.InputSource
-import org.xml.sax.XMLReader
 import org.xml.sax.helpers.DefaultHandler
 
 private const val AV_TRANSPORT_SERVICE_TYPE_PREFIX = "urn:schemas-upnp-org:service:avtransport:"
 private const val RENDERING_CONTROL_SERVICE_TYPE_PREFIX = "urn:schemas-upnp-org:service:renderingcontrol:"
 private const val MAX_TEXT_LENGTH = 4 * 1024
-private const val DISALLOW_DOCTYPE_FEATURE = "http://apache.org/xml/features/disallow-doctype-decl"
 
 /**
  * Hardened SAX parser for a UPnP device description XML body (fetched from a discovered device's
@@ -32,7 +26,7 @@ object DeviceDescriptionParser {
     fun parse(xml: ByteArray, locationUrl: String): DlnaDevice? {
         val handler = DeviceDescriptionHandler()
         val reader = try {
-            hardenedReader(handler)
+            UpnpXmlReader.create(handler)
         } catch (_: Exception) {
             return null
         }
@@ -46,35 +40,6 @@ object DeviceDescriptionParser {
 
     fun resolveControlUrl(locationUrl: String, controlUrl: String): String? =
         UpnpHttpEndpoint.resolve(locationUrl, controlUrl)
-
-    private fun hardenedReader(handler: DefaultHandler): XMLReader {
-        val factory = SAXParserFactory.newInstance()
-        trySetFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true)
-
-        val reader = factory.newSAXParser().xmlReader
-        trySetFeature(reader, DISALLOW_DOCTYPE_FEATURE, true)
-        trySetFeature(reader, "http://xml.org/sax/features/external-general-entities", false)
-        trySetFeature(reader, "http://xml.org/sax/features/external-parameter-entities", false)
-        reader.entityResolver = EntityResolver { _, _ -> InputSource(StringReader("")) }
-        reader.contentHandler = handler
-        return reader
-    }
-
-    private fun trySetFeature(factory: SAXParserFactory, name: String, value: Boolean) {
-        try {
-            factory.setFeature(name, value)
-        } catch (_: Exception) {
-            // Feature unsupported by this platform's parser implementation; skip it.
-        }
-    }
-
-    private fun trySetFeature(reader: XMLReader, name: String, value: Boolean) {
-        try {
-            reader.setFeature(name, value)
-        } catch (_: Exception) {
-            // Feature unsupported by this platform's parser implementation; skip it.
-        }
-    }
 
 }
 

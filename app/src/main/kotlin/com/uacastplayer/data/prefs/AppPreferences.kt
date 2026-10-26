@@ -10,7 +10,6 @@ import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.core.settings.PlayerResizeMode
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.guidedtour.GuidedTourStorage
 import com.uacastplayer.parentalcontrol.ParentalControlPinStorage
 import com.uacastplayer.performance.HeapBudget
@@ -66,20 +65,14 @@ class AppPreferences(
     val hasChosenLanguage: Boolean
         get() = prefs.contains(KEY_LANGUAGE)
 
-    var epgSource: EpgSource
-        get() = EpgSource.fromId(prefs.getString(KEY_EPG_SOURCE, null))
-        set(value) = prefs.edit { putString(KEY_EPG_SOURCE, value.id) }
-
-    /** A playlist- or Xtream-provided EPG URL (see EpgSourceAutoDetect), active in place of
-     * [epgSource] above when non-null. Cleared when the user picks one of the fixed [epgSource]
-     * entries manually instead. */
+    /** User-configured or playlist-provided guide. Legacy built-in preset IDs are ignored. */
     var customEpgUrl: String?
         get() = prefs.getString(KEY_CUSTOM_EPG_URL, null)
         set(value) = prefs.edit { putString(KEY_CUSTOM_EPG_URL, value) }
 
-    /** True only once the user has deliberately picked an EPG source themselves - either a fixed
-     * [epgSource] entry or by tapping "Use" on an auto-detected suggestion. Distinct from merely
-     * *having* an active source, since [EpgSourceAutoDetect] can also set one automatically
+    /** True only once the user has deliberately configured an EPG URL or accepted a suggestion.
+     * Distinct from merely
+     * *having* an active source, since [com.uacastplayer.epg.EpgSourceAutoDetect] can set one automatically
      * without this becoming true, so it keeps auto-applying newly discovered URLs until the user
      * actually steps in. */
     var hasChosenEpgSource: Boolean
@@ -408,7 +401,6 @@ class AppPreferences(
         const val PREFS_NAME = "uacast_prefs"
         const val KEY_LANGUAGE = "language_code"
         const val KEY_APP_THEME = "app_theme"
-        const val KEY_EPG_SOURCE = "epg_source_id"
         const val KEY_CUSTOM_EPG_URL = "custom_epg_url"
         const val KEY_HAS_CHOSEN_EPG_SOURCE = "has_chosen_epg_source"
         const val KEY_ICON_WIFI_ONLY = "icon_wifi_only"

@@ -23,6 +23,7 @@ import com.uacastplayer.premium.Feature
 import com.uacastplayer.remote.dispatchTvRemote
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.components.SecondaryButton
+import com.uacastplayer.ui.components.SleepTimerDialog
 import com.uacastplayer.ui.diagnostics.DiagnosticsPreviewDialog
 import com.uacastplayer.ui.premium.UnlockDialog
 import com.uacastplayer.ui.player.TrackPickerDialog
@@ -54,6 +55,16 @@ class TvConfirmationDialogInputTest {
     private var actions = 0
     private var underlyingBack = 0
     private var underlyingSelect = 0
+
+    @Test fun `sleep timer routes phone back and close to its own window`() {
+        showDialog { dismiss, action -> SleepTimerDialog(true, { action() }, action, dismiss) }
+        checkDismissal(R.string.common_close)
+    }
+
+    @Test fun `sleep timer cancellation executes once through the phone dispatcher`() {
+        showDialog { dismiss, action -> SleepTimerDialog(true, { action() }, action, dismiss) }
+        checkAction(R.string.player_sleep_timer_cancel)
+    }
 
     @Test fun `premium unlock routes phone back and select to its own window`() {
         showDialog { dismiss, action -> UnlockDialog(Feature.BACKUP, action, dismiss) }

@@ -1,0 +1,49 @@
+name: Verified software decoder native build
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate fail-closed native build guards
+        run: python3 -m unittest discover -s scripts/tests -p 'test_software_decoder_build.py'
+      - name: Install pinned Android native toolchain
+        run: sdkmanager 'ndk;26.1.10909125' 'cmake;3.22.1'
+      - name: Build from hash-verified sources, not a decoder AAR
+        run: |
+          python3 scripts/prepare-software-decoder.py \
+            --ndk "$ANDROID_HOME/ndk/26.1.10909125" \
+            --cmake "$ANDROID_HOME/cmake/3.22.1/bin/cmake" \
+            --ninja "$ANDROID_HOME/cmake/3.22.1/bin/ninja"
+          python3 scripts/prepare-software-decoder.py --verify-only
+          python3 scripts/package-software-decoder-source.py
+          python3 scripts/verify-software-decoder-bundle.py
+      - name: Upload verified native inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: software-decoder-native
+          path: ffmpegdecoder/build/native-libraries/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload native build evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: software-decoder-corresponding-source
+          path: build/software-decoder-dist/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload native compiler logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: software-decoder-native-evidence
+          path: ffmpegdecoder/build/native-bootstrap/**/*.log
+          if-no-files-found: ignore
+          retention-days: 14

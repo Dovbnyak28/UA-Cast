@@ -19,6 +19,9 @@ import kotlinx.coroutines.sync.withLock
 private const val MAX_CONCURRENT_FETCHES = 6
 private const val TAG = "IconPrefetcher"
 
+/** Stops sibling workers and the bounded producer together when the network becomes ineligible. */
+private class PrefetchNetworkUnavailable : Exception()
+
 data class PrefetchProgress(val completed: Int, val total: Int)
 
 internal data class IconPrefetchWork(
@@ -54,7 +57,7 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
         wifiOnly: Boolean,
         onProgress: (PrefetchProgress) -> Unit,
     ): Boolean {
-        if (channels.isEmpty() || !PrefetchGate.canPrefetchNow(wifiOnly, isConnected(), isMetered())) return false
+        if (channels.isEmpty() || !canPrefetch(wifiOnly)) return false
 
         val work = iconPrefetchWork(channels)
         // The callback must be serialized with the increment, not merely fed an atomic number.
@@ -63,31 +66,36 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
         val progressMutex = Mutex()
         var completed = 0
 
-        coroutineScope {
-            val queue = Channel<IconPrefetchWork>(capacity = MAX_CONCURRENT_FETCHES)
-            val producer = launch {
-                for (item in work) queue.send(item)
-                queue.close()
-            }
-            val workers = List(minOf(MAX_CONCURRENT_FETCHES, work.size)) {
-                launch {
-                    for (item in queue) {
-                        iconRepository.resolveIconFile(item.channel.tvgId)
-                        progressMutex.withLock {
-                            completed += item.progressWeight
-                            onProgress(PrefetchProgress(completed, channels.size))
+        return try {
+            coroutineScope {
+                val queue = Channel<IconPrefetchWork>(capacity = MAX_CONCURRENT_FETCHES)
+                val producer = launch {
+                    for (item in work) queue.send(item)
+                    queue.close()
+                }
+                val workers = List(minOf(MAX_CONCURRENT_FETCHES, work.size)) {
+                    launch {
+                        for (item in queue) {
+                            // Initial eligibility can change while earlier HTTP calls suspend.
+                            // Throwing ends the producer too; merely breaking the workers could
+                            // leave it suspended forever on the bounded queue's send().
+                            if (!canPrefetch(wifiOnly)) throw PrefetchNetworkUnavailable()
+                            iconRepository.resolveIconFile(item.channel.tvgId)
+                            progressMutex.withLock {
+                                completed += item.progressWeight
+                                onProgress(PrefetchProgress(completed, channels.size))
+                            }
                         }
                     }
                 }
+                producer.join()
+                workers.forEach { worker -> worker.join() }
             }
-            producer.join()
-            workers.forEach { worker ->
-                worker.join()
-            }
+            iconRepository.trimCache()
+            true
+        } catch (_: PrefetchNetworkUnavailable) {
+            false
         }
-
-        iconRepository.trimCache()
-        return true
     }
 
     /** Resumes a deferred prefetch when an internet-capable network becomes available. The caller
@@ -123,4 +131,7 @@ class IconPrefetcher(context: Context, private val iconRepository: IconRepositor
     }
 
     private fun isMetered(): Boolean = connectivityManager.isActiveNetworkMetered
+
+    private fun canPrefetch(wifiOnly: Boolean): Boolean =
+        PrefetchGate.canPrefetchNow(wifiOnly, isConnected(), wifiOnly && isMetered())
 }

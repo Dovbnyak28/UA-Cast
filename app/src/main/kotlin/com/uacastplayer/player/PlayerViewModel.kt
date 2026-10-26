@@ -6,10 +6,7 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.Tracks
-import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.uacastplayer.BuildConfig
@@ -21,8 +18,6 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.R
 import com.uacastplayer.playlist.M3uChannel
 import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,7 +60,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var castArtworkUrlFor: (M3uChannel) -> String? = DEFAULT_CAST_ARTWORK
     private val sessionStateMachine = PlayerSessionStateMachine()
-    private var retryJob: Job? = null
+    private val retryScheduler = PlayerRetryScheduler(viewModelScope,
+        { networkGate.awaitValidatedNetworkOrTimeout(DeadChannelPolicy.NO_NETWORK_RETRY_MILLIS) },
+        ::performScheduledPlaybackRetry)
     private val stallRecovery = PlayerStallRecovery(
         scope = viewModelScope,
         session = sessionStateMachine,
@@ -106,6 +103,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _uiState = MutableStateFlow(PlayerUiState(resizeMode = preferences.playerResizeMode))
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+    private val hasEndedLocalVideo: Boolean get() = _uiState.value.currentChannel?.localVideo != null &&
+        exoPlayer.playbackState == Player.STATE_ENDED
     val dlna = PlayerDlnaController(
         dlnaRepository,
         beforeConnect = { handleDlnaStateChange(DlnaConnectionState(isConnecting = true)) },
@@ -152,50 +151,35 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val trackMapper = PlayerTrackMapper { index ->
         getApplication<Application>().getString(R.string.player_track_unknown, index)
     }
+    private val failures = PlayerFailureHandler(PlayerFailureContext(
+        exoPlayer, sessionStateMachine, retryScheduler, _uiState,
+        { PlayerFailureFlags(sleepTimerExpired, isRemoteCasting,
+            autoSkipDeadEnabled && !autoSkipCancelledForSession, wrapAroundEnabled) },
+        networkGate::hasValidatedNetwork, ::performScheduledPlaybackRetry,
+        { cancelPendingStallRecovery() }, ::applyChannelSwitch, ::syncPlaybackControls,
+    ))
 
-    private val listener = object : Player.Listener {
-        override fun onEvents(player: Player, events: Player.Events) {
-            syncPlaybackControls()
-        }
-
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) {
+    private val listener = PlayerEventListener(_uiState, PlayerEventHooks(
+        playbackConfirmed = {
                 sessionStateMachine.onPlaybackConfirmed()
                 // Natural recovery can beat the scheduled backoff. Leaving that job alive would
                 // seek/re-prepare a stream that is healthy again a few seconds later.
                 cancelPendingStallRecovery(resetBudget = false)
+        },
+        playbackPaused = { cancelPendingStallRecovery() },
+        controlsChanged = ::syncPlaybackControls,
+        seekabilityChanged = ::updateSeekability,
+        error = failures::handle,
+        playbackEnded = {
+            // Natural file completion is not a pause intent or an instruction to restart IPTV.
+            // Read the engine too: an already queued old END must not pause its replacement.
+            if (!isRemoteCasting && hasEndedLocalVideo) {
+                pausedForBackground = false
+                resumeLocalWhenForeground = false
+                exoPlayer.pause()
             }
-            _uiState.update {
-                it.copy(
-                    isPlaying = isPlaying,
-                    autoSkipRecovery = if (isPlaying) null else it.autoSkipRecovery,
-                )
-            }
-            syncPlaybackControls()
-        }
-
-        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-            if (!playWhenReady) cancelPendingStallRecovery()
-            syncPlaybackControls()
-        }
-
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            _uiState.update { it.copy(isBuffering = playbackState == Player.STATE_BUFFERING) }
-            updateSeekability()
-        }
-
-        override fun onPlayerError(error: PlaybackException) {
-            handlePlaybackError(error)
-        }
-
-        override fun onTracksChanged(tracks: Tracks) {
-            updateBadgesAndTrackLists(tracks)
-        }
-
-        override fun onVideoSizeChanged(videoSize: VideoSize) {
-            _uiState.update { it.copy(videoSize = videoSize) }
-        }
-    }
+        },
+    ), trackMapper::map)
 
     private val playbackPreferencesSubscription = preferences.observePlaybackChanges {
         wrapAroundEnabled = preferences.wrapAroundEnabled
@@ -323,13 +307,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     @VisibleForTesting
     internal fun resumeLocalPlayback() {
         if (sleepTimerExpired || !sessionStateMachine.hasCurrentChannel) return
+        val autoplay = _uiState.value.currentChannel?.localVideo == null
+        if (!autoplay) exoPlayer.pause()
         if (isInBackground) {
             AppLog.d(TAG) { "Cast ended off screen - local playback owed until the app is back" }
-            resumeLocalWhenForeground = true
-            return
+            resumeLocalWhenForeground = autoplay
+        } else {
+            exoPlayer.prepare()
+            if (autoplay) exoPlayer.play()
         }
-        exoPlayer.prepare()
-        exoPlayer.play()
     }
 
     private fun handleCastSideEffect(effect: PlayerCastSideEffect) {
@@ -438,15 +424,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         // that inherited the same empty budget and died on its first error too. One broken channel
         // could bury a run of working ones, which is the same cascade DeadChannelPolicy's network
         // check exists to prevent, arriving by the one door that check does not cover.
-        // And its pending work. retryJob holds a delayed exoPlayer.prepare() aimed at the channel
+        // And its pending work. The retry scheduler holds a delayed prepare() aimed at the channel
         // being left; releasePlayback and onCleared both cancel it, this path did not. Left alive
         // it re-prepares the *new* channel mid-play, which on a live stream is a rebuffer on a
         // channel that was working.
-        retryJob?.cancel()
+        retryScheduler.cancel()
         val channel = transition.channel
-        preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
+        if (channel.localVideo == null) preferences.lastWatchedChannelKey = FavoriteKey.of(channel)
         dataSourceFactory.setChannelHeaders(channel.userAgent, channel.referrer)
-        exoPlayer.setMediaItem(MediaItemFactory.forChannel(channel.streamUrl))
+        exoPlayer.setMediaItem(MediaItemFactory.forChannel(channel))
         val preparesLocally = LocalPlaybackPolicy.shouldPrepareLocally(isRemoteCasting) && !isInBackground
         if (preparesLocally) {
             exoPlayer.prepare()
@@ -463,13 +449,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 userAgent = channel.userAgent,
                 referrer = channel.referrer,
                 logoUrl = castArtworkUrlFor(channel),
+                localVideo = channel.localVideo,
             ),
         )
         // No-op unless a DLNA renderer is actually connected. Unconditional on purpose: the local
         // player has already stood down for a remote target above, so without this a channel switch
         // during a DLNA cast would change nothing anywhere - the TV keeps the old channel and the
         // phone plays nothing.
-        dlnaRepository.setActiveChannel(channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)
+        dlnaRepository.setActiveChannel(
+            channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer, channel.localVideo,
+        )
         _uiState.update {
             it.copy(
                 currentChannel = channel,
@@ -499,6 +488,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             exoPlayer.prepare()
         } else if (play) {
             if (exoPlayer.playbackState == Player.STATE_IDLE) exoPlayer.prepare()
+            else if (hasEndedLocalVideo) exoPlayer.seekToDefaultPosition()
             exoPlayer.play()
         } else exoPlayer.pause()
         syncPlaybackControls()
@@ -538,66 +528,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(autoSkipRecovery = null) }
     }
 
-    private fun handlePlaybackError(error: PlaybackException) {
-        if (sleepTimerExpired) return
-        val fallback = MediaItemFactory.progressiveFallback(exoPlayer.currentMediaItem, error.errorCode)
-        if (fallback != null && !isRemoteCasting) {
-            exoPlayer.setMediaItem(fallback)
-            performScheduledPlaybackRetry()
-            return
-        }
-        val errorType = PlayerErrorClassifier.classify(error)
-        when (
-            val effect = sessionStateMachine.onPlaybackError(
-                errorType = errorType,
-                nowMillis = System.currentTimeMillis(),
-                hasNetwork = networkGate.hasValidatedNetwork(),
-                autoSkipDead = autoSkipDeadEnabled && !autoSkipCancelledForSession,
-                wrapAround = wrapAroundEnabled,
-            )
-        ) {
-            is PlayerSessionStateMachine.PlaybackFailureEffect.RecoverLiveWindow -> {
-                AppLog.d(TAG) {
-                    "Recovering from BehindLiveWindowException " +
-                        "(attempt ${effect.attemptInWindow} in the last 60s)"
-                }
-                exoPlayer.seekToDefaultPosition()
-                // A live-window error can arrive after pause, backgrounding or cast handoff.
-                // Use the same ownership/foreground gate as every other local error retry.
-                performScheduledPlaybackRetry()
-            }
-            is PlayerSessionStateMachine.PlaybackFailureEffect.Retry -> {
-                retryJob?.cancel()
-                retryJob = viewModelScope.launch {
-                    delay(effect.delayMillis)
-                    performScheduledPlaybackRetry()
-                }
-            }
-            PlayerSessionStateMachine.PlaybackFailureEffect.RetryWhenNetworkAvailable -> {
-                AppLog.d(TAG) { "No network: retrying the same channel instead of marking it dead" }
-                retryJob?.cancel()
-                retryJob = viewModelScope.launch {
-                    networkGate.awaitValidatedNetworkOrTimeout(DeadChannelPolicy.NO_NETWORK_RETRY_MILLIS)
-                    performScheduledPlaybackRetry()
-                }
-            }
-            is PlayerSessionStateMachine.PlaybackFailureEffect.SwitchChannel ->
-                applyChannelSwitch(
-                    transition = effect.transition,
-                    autoSkipRecovery = AutoSkipRecoveryState(
-                        skippedChannels = effect.skippedChannels,
-                        totalChannels = effect.totalChannels,
-                    ),
-                )
-            PlayerSessionStateMachine.PlaybackFailureEffect.Fatal -> {
-                _uiState.update {
-                    it.copy(fatalError = true, isBuffering = false, autoSkipRecovery = null)
-                }
-                syncPlaybackControls()
-            }
-        }
-    }
-
     private fun observeStall(): PlayerStallObservation = PlayerStallObservation(
         tick = StallDetectionPolicy.Tick(
             nowMillis = SystemClock.elapsedRealtime(),
@@ -623,7 +553,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             PlayerSessionStateMachine.StallEffect.GiveUp -> {
-                retryJob?.cancel()
+                retryScheduler.cancel()
                 exoPlayer.stop()
                 _uiState.update {
                     it.copy(
@@ -668,17 +598,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(canSeek = SeekPolicy.canSeek(isLive, isSeekable, isRemoteCasting)) }
     }
 
-    private fun updateBadgesAndTrackLists(tracks: Tracks) {
-        val snapshot = trackMapper.map(tracks)
-        _uiState.update {
-            it.copy(
-                badges = snapshot.badges,
-                audioTracks = snapshot.audioTracks,
-                textTracks = snapshot.textTracks,
-            )
-        }
-    }
-
     /** True only between a pause this app made because the screen went away and the resume that
      * undoes it - see [BackgroundPlaybackPolicy.shouldResumeOnStart]. */
     private var pausedForBackground = false
@@ -720,8 +639,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun cancelLocalRecoveryForRemotePlayback() {
-        retryJob?.cancel()
-        retryJob = null
+        retryScheduler.cancel()
         retryLocalWhenForeground = false
         cancelPendingStallRecovery()
     }
@@ -824,8 +742,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         resumeLocalWhenForeground = false
         retryLocalWhenForeground = false
         navigation.cancelPendingSwitch()
-        retryJob?.cancel()
-        retryJob = null
+        retryScheduler.cancel()
         cancelPendingStallRecovery()
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
@@ -848,8 +765,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         playbackPreferencesSubscription.close()
         stallRecovery.stop()
         navigation.cancelPendingSwitch()
-        retryJob?.cancel()
-        retryJob = null
+        retryScheduler.cancel()
         cancelPendingStallRecovery()
         exoPlayer.removeListener(listener)
         mediaSession?.release()

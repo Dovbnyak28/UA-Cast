@@ -212,6 +212,7 @@ fun HomeScreen(
                 leadingIcon = AppIcons.Channels,
                 modifier = Modifier.fillMaxWidth().padding(top = GapL),
             )
+            com.uacastplayer.ui.media.OpenLocalVideoButton()
             if (homeContent.continueWatching == null && favoriteChannels.isEmpty()) {
                 HomePersonalizationCard(modifier = Modifier.padding(top = GapL))
             }
@@ -234,6 +235,7 @@ fun HomeScreen(
         } else {
             HomeNoChannelsState(playlistState, onRefreshPlaylist, onOpenAddPlaylist)
         }
+        if (!playlistState.hasChannels) com.uacastplayer.ui.media.OpenLocalVideoButton()
     }
 
     if (showSourceSheet) {

@@ -147,31 +147,24 @@ fun PlayerScreen(
         InlinePlayerContent(content, actions, transientState, modifier)
     }
 
-    if (transientState.showChannelsSheet) {
-        PlayerChannelSheet(channels, uiState.currentChannel, viewModel.navigation::requestSwitch) {
-            transientState.showChannelsSheet = false
-        }
-    }
+    val isFile = uiState.currentChannel?.localVideo != null
+    PlayerChannelPicker(channels, content, actions, transientState)
     val isRemote = remotePlaybackOwnsControls(uiState, dlnaState)
+    FilePlaybackDialogEffect(isFile, transientState)
     RemotePlaybackDialogEffect(isRemote, transientState)
     if (transientState.showActionsSheet) {
-        PlayerActionsSheet(transientState, actions, uiState.hasPreviousChannel, isRemote)
+        PlayerActionsSheet(transientState, actions, uiState.hasPreviousChannel, isRemote, isFile)
     }
     if (transientState.showLevelsSheet && !isRemote) PlayerLevelsSheet(transientState, environment)
-    if (transientState.showDevicePicker) {
-        PlayerDevicePicker(
-            onDlna = { transientState.showDlnaSheet = true },
-            onDismiss = { transientState.showDevicePicker = false },
-        )
-    }
     if (transientState.showDlnaSheet) {
+        val volumeDevice = dlnaState.connectedDevice
         DlnaDeviceSheet(
             connectionState = dlnaState,
             discoverDevices = viewModel.dlna::discoverDevices,
             onDismiss = { transientState.showDlnaSheet = false },
             onDeviceSelected = viewModel.dlna::connect,
             onStopCasting = viewModel.dlna::stop,
-            onVolumeChange = viewModel.dlna::setVolume,
+            onVolumeChange = { volume -> volumeDevice?.let { viewModel.dlna.setVolume(it, volume) } },
         )
     }
     PlayerDialogs(
@@ -312,6 +305,7 @@ internal fun PlaybackFailureCard(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     canGoNext: Boolean = true,
+    localVideo: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -321,7 +315,9 @@ internal fun PlaybackFailureCard(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(R.string.player_fatal_error),
+            text = stringResource(
+                if (localVideo) R.string.local_video_playback_failed else R.string.player_fatal_error,
+            ),
             color = Color.White,
             style = BodyText,
             textAlign = TextAlign.Center,
@@ -331,14 +327,16 @@ internal fun PlaybackFailureCard(
             onClick = onRetry,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
-        SecondaryButton(
-            text = stringResource(R.string.player_next),
-            onClick = onNext,
-            enabled = canGoNext,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
+        if (!localVideo) {
+            SecondaryButton(
+                text = stringResource(R.string.player_next),
+                onClick = onNext,
+                enabled = canGoNext,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
         Text(
-            text = stringResource(R.string.player_back_to_channels),
+            text = stringResource(if (localVideo) R.string.common_back else R.string.player_back_to_channels),
             color = UaTheme.palette.azure,
             style = Caption,
             modifier = Modifier
@@ -346,7 +344,9 @@ internal fun PlaybackFailureCard(
                 .minimumInteractiveComponentSize()
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = stringResource(R.string.player_back_to_channels),
+                    onClickLabel = stringResource(
+                        if (localVideo) R.string.common_back else R.string.player_back_to_channels,
+                    ),
                     onClick = onExit,
                 )
                 .padding(horizontal = 8.dp),
@@ -422,5 +422,5 @@ internal fun AudioChannelLayout.labelRes(): Int = when (this) {
     AudioChannelLayout.STEREO -> R.string.audio_layout_stereo
     AudioChannelLayout.SURROUND_5_1 -> R.string.audio_layout_surround_5_1
     AudioChannelLayout.SURROUND_7_1 -> R.string.audio_layout_surround_7_1
-    AudioChannelLayout.OTHER -> R.string.audio_layout_stereo
+    AudioChannelLayout.OTHER -> R.string.audio_layout_other
 }

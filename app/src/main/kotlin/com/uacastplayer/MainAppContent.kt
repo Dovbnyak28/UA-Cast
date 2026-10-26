@@ -23,7 +23,6 @@ import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.ui.platform.launchOrLogAbsence
 import com.uacastplayer.ui.settings.LocalIconPackCheck
 import com.uacastplayer.ui.settings.rememberIconPackCheckAction
-import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
 import com.uacastplayer.player.PlayerRequest
@@ -144,47 +143,33 @@ internal fun MainAppContent(
     // find it by key. The original sub-list (e.g. a specific group or search results) isn't
     // recoverable, so this falls back to the full flat playlist; if the channel is gone entirely,
     // the saved marker is dropped and the player just stays closed.
-    LaunchedEffect(savedPlayerRequest, playlistState.groups, parentalReady, lockedKeys, sessionUnlocked) {
-        val saved = savedPlayerRequest ?: return@LaunchedEffect
-        if (requestOwner.request.value != null || !playlistState.hasChannels || !parentalReady) return@LaunchedEffect
-        // Off the main thread: FavoriteKey.of is a SHA-256 per channel without a tvg-id, and this
-        // scans the entire flattened playlist - tens of thousands of channels on a large provider
-        // list, at exactly the moment the app is being restored and the user is waiting on a frame.
-        val restored = withPlaylistCpu {
-            // PlayerViewModel persists every switch, while AppViewModel's StateFlow is refreshed
-            // only when the player closes. Prefer that synchronous value so a process death or a
-            // rotation after Next/Previous restores the channel that was actually on screen, not
-            // the channel that originally opened this PlayerHost.
-            val restoreKey = saved.preferredChannelKey(viewModel.persistedLastWatchedChannelKey())
-            PlayerChannelAccess.forRestore(
-                playlistState.channels, restoreKey, lockedKeys, FavoriteKey::of, sessionUnlocked, parentalReady,
-            )
-        }
-        // A new open/close can arrive during the CPU hop. It must win over this old restore.
-        if (savedPlayerRequest != saved || requestOwner.request.value != null) return@LaunchedEffect
-        // A locked channel must not come back on its own - see
-        // PlayerChannelAccess.mayRestoreAfterProcessDeath. This path reopens the player without a
-        // tap, so it is the one place the PIN gate can never have run.
-        if (restored != null) {
-            // playerContainerState is itself rememberSaveable, so the Expanded/Collapsed layout the
-            // user left it in normally survives process death on its own - this only needs to force
-            // it open if that somehow didn't happen (fresh state).
-            requestOwner.open(PlayerRequest(restored.channels, restored.startIndex))
+    RestorePlayerRequest(
+        savedPlayerRequest, playlistState, parentalReady, lockedKeys, sessionUnlocked, requestOwner,
+        { savedPlayerRequest }, viewModel::persistedLastWatchedChannelKey,
+        onRestored = {
             if (playerContainerState == PlayerContainerStateMachine.State.CLOSED) {
                 playerContainerState = PlayerContainerStateMachine.reduce(
                     playerContainerState,
                     PlayerContainerStateMachine.Event.Open,
                 )
             }
-        } else {
-            savedPlayerRequest = null
-        }
-    }
+        },
+        onMissing = { savedPlayerRequest = null },
+    )
 
     // Wraps everything, including the player and the dialogs: the tour is drawn over the app, and
     // the app is what it is pointing at. Placed here rather than inside ScaffoldZone so a target
     // registered anywhere - the player Cast button, a channel row's star - reaches the same
     // registry.
+    com.uacastplayer.ui.media.LocalVideoDocumentHost(onVideo = { video ->
+        viewModel.guidedTourSkip()
+        showHelp = false
+        showTerms = false
+        showPrivacyPolicy = false
+        showAddPlaylist = false
+        val request = PlayerRequest.forLocalVideo(video)
+        openPlayer(request.channels, request.startIndex)
+    }) {
     GuidedTourHost(
         state = guidedTourState,
         onNext = viewModel::guidedTourNext,
@@ -337,6 +322,7 @@ internal fun MainAppContent(
                 premiumUi.overlays()
             }
         }
+    }
     }
 }
 

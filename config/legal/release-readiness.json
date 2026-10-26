@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "checks": {
+    "decoder_license_migration": {"approved": true, "evidence": "docs/SOFTWARE_DECODER_MIGRATION_2026-10-12.md: independent Apache/LGPL extensions wired; no NextLib runtime/DEX/GPL wrapper .so; Mi A2 main 28/28, codec 15/15, R8 JNI probe 1/1; Debug 2743, Release/Play 2335 each and local release/Play gate passed."},
+    "native_corresponding_source": {"approved": false, "evidence": "2026-10-25: all three ABIs rebuilt and native/source ZIP hashes verified; signed-release workflow requires the matching source bundle in APK/AAB artifacts. Still pending public distribution with the matching new APK and practical modified-library install/relink validation. CI artifact retention alone is not public source distribution."},
+    "raster_asset_rights": {"approved": true, "evidence": "Publisher explicitly declared on 2026-10-25 that main logo/background are self-created or AI-created. Scope and limitations recorded in docs/ASSET_PROVENANCE_2026-10-25.md; this does not certify trademark clearance or AI output exclusivity."},
+    "epg_source_permissions": {"approved": true, "evidence": "2026-10-25: removed built-in provider catalogue and fallback; only user/playlist URLs remain. Legacy preset IDs are ignored, existing custom URLs retained. EpgNoSourceTest and EpgUrlPolicyTest passed; no production it999/epg.one URLs remain."},
+    "public_privacy_deployment": {"approved": true, "evidence": "2026-10-25: https://dovbnyak28.github.io/UA-Cast/legal/privacy-policy.html returned HTTP 200 with SHA256 aa731bd51fb5c84fee5ad1ce510b58214cf50a8593e4f39182e6e73a557e2bcd matching the packaged source. Terms and both root aliases verified too. Pages branch codex/legal-pages, commit f5074e673c2320a0f09968da3bb24f71aeb0eaf4."},
+    "cast_entry_point": {"approved": true, "evidence": "2026-10-25: native MediaRouteButton now present directly in inline/fullscreen phone player; DLNA has a separate button. PlayerCastEntryPointTest passed at 320dp/200% font scale, player screenshots reviewed and updated. Receiver interoperability still requires real-device validation."},
+    "historical_gpl_distribution": {"approved": false, "evidence": "Previously published v0.9.7 and other NextLib APKs need separate licence-holder/legal remediation; replacing the current dependency does not retroactively establish compliance."}
+  },
+  "commerce": {"enabled": false, "sellerReviewApproved": false, "evidence": "Checkout remains disabled; publisher legal/tax residence and paid seller terms need confirmation."}
+}

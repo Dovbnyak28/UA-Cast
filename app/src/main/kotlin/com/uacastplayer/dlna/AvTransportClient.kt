@@ -25,8 +25,10 @@ class AvTransportClient(
     private val httpClient = httpClient.forUpnpControl()
     private val setUriHttpClient = setUriHttpClient.forUpnpControl()
 
-    suspend fun setAvTransportUri(controlUrl: String, mediaUrl: String, title: String): Boolean {
-        val envelope = AvTransportSoapBuilder.setAvTransportUriEnvelope(mediaUrl, title)
+    suspend fun setAvTransportUri(
+        controlUrl: String, mediaUrl: String, title: String, contentType: String? = null,
+    ): Boolean {
+        val envelope = AvTransportSoapBuilder.setAvTransportUriEnvelope(mediaUrl, title, contentType)
         return postSoapAction(controlUrl, "SetAVTransportURI", envelope, setUriHttpClient) == SoapOutcome.OK
     }
 

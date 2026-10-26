@@ -114,3 +114,17 @@ internal fun PlayerChannelSheet(
         }
     }
 }
+
+/** Channel-only navigation stays unavailable while a standalone video owns the player. */
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+@Composable
+internal fun PlayerChannelPicker(
+    channels: List<M3uChannel>, content: PlayerScreenContent,
+    actions: PlayerScreenActions, transientState: PlayerScreenTransientState,
+) {
+    if (transientState.showChannelsSheet && content.uiState.currentChannel?.localVideo == null) {
+        PlayerChannelSheet(channels, content.uiState.currentChannel, actions.viewModel.navigation::requestSwitch) {
+            transientState.showChannelsSheet = false
+        }
+    }
+}

@@ -33,7 +33,6 @@ import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.guidedtour.GuidedTourSectionState
 import com.uacastplayer.playlist.M3uChannel
@@ -56,7 +55,7 @@ fun SettingsScreen(
     currentAppTheme: AppTheme,
     onAppThemeSelected: (AppTheme) -> Unit,
     epgState: EpgUiState,
-    onEpgSourceSelected: (EpgSource) -> Unit,
+    onEpgUrlChanged: (String) -> Unit,
     onUseSuggestedEpgUrl: () -> Unit,
     iconWifiOnly: Boolean,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
@@ -179,7 +178,7 @@ fun SettingsScreen(
                                 onRestoreGroup = onRestoreGroup,
                             )
                             EpgSettingsSection(
-                                epgState, onEpgSourceSelected, onUseSuggestedEpgUrl,
+                                epgState, onEpgUrlChanged, onUseSuggestedEpgUrl,
                             )
                         }
                         SettingsPage.PLAYBACK -> PlaybackSettingsSection(

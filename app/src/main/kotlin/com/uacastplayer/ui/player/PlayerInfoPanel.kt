@@ -136,6 +136,7 @@ internal fun ChannelInfoCard(
     iconRefreshKey: Any,
     resolveIcon: suspend (M3uChannel) -> File?,
 ) {
+    channel.localVideo?.let { video -> FileInfoCard(video, badges); return }
     // Borrowed from the logo about to be drawn two lines below, so the card belongs to the channel
     // playing rather than being the same grey box for all 2863 of them. Skipped entirely on a theme
     // that paints no wallpaper texture: Midnight is true black on purpose, and any wash at all is
@@ -164,7 +165,8 @@ internal fun ChannelInfoCard(
     ) {
         ChannelIcon(channel = channel, resolveIcon = resolveIcon, size = 64.dp, refreshKey = iconRefreshKey)
         Column(modifier = Modifier.padding(start = GapM).weight(1f)) {
-            Text(text = channel.displayName, style = DisplayName, color = UaTheme.palette.labelPrimary, maxLines = 1)
+            Text(text = channel.displayName, style = DisplayName, color = UaTheme.palette.labelPrimary,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
             BadgesRow(badges, modifier = Modifier.padding(top = 4.dp))
         }
     }
@@ -176,6 +178,7 @@ internal fun QuickSettingsRow(
     onGuideClick: () -> Unit,
     onMoreClick: () -> Unit,
     showAudio: Boolean = true,
+    showGuide: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
@@ -189,7 +192,11 @@ internal fun QuickSettingsRow(
                 Modifier.weight(1f),
             )
         }
-        QuickSettingItem(AppIcons.Guide, stringResource(R.string.player_tv_guide), onGuideClick, Modifier.weight(1f))
+        if (showGuide) {
+            QuickSettingItem(
+                AppIcons.Guide, stringResource(R.string.player_tv_guide), onGuideClick, Modifier.weight(1f),
+            )
+        }
         QuickSettingItem(
             AppIcons.More,
             stringResource(R.string.player_more_controls),

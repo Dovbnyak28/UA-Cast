@@ -10,6 +10,7 @@ import com.uacastplayer.core.net.executeCancellable
 import com.uacastplayer.icons.CastArtworkPolicy
 import com.uacastplayer.icons.IconCandidate
 import com.uacastplayer.icons.IconFailurePolicy
+import com.uacastplayer.icons.FailureRecord
 import com.uacastplayer.icons.IconMemoryCacheKey
 import com.uacastplayer.icons.IconResolver
 import com.uacastplayer.icons.CustomIconSourcePolicy
@@ -30,7 +31,7 @@ import okhttp3.Request
 /** Wraps a resolved icon [File] so a *negative* result (channel has no icon) can be cached in
  * [IconRepository.memoryCache] too - [LruCache.get] returning null is otherwise indistinguishable
  * from a cache miss. */
-private data class CachedIcon(val file: File?)
+private data class CachedIcon(val file: File?, val miss: FailureRecord?)
 
 /**
  * Resolves channel logos only through packs explicitly added by the user, consulting/populating
@@ -48,6 +49,7 @@ class IconRepository(
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
     private val trimAfterWrites: Int = TRIM_AFTER_WRITES,
     private val trimAfterBytes: Long = TRIM_AFTER_BYTES,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
 
     private val appContext = context.applicationContext
@@ -121,7 +123,7 @@ class IconRepository(
         val cached: CachedIcon?
         val generation = synchronized(cacheLock) {
             sources = customBaseUrls()
-            cached = memoryCache.get(cacheKey)
+            cached = cachedIcon(cacheKey)
             cacheGeneration
         }
         return when {
@@ -140,12 +142,21 @@ class IconRepository(
         // Another row/prefetch may have completed while this caller waited. A cached miss is a
         // result too; do not repeat its candidate chain. New revisions never wait for old IO.
         val cached = synchronized(cacheLock) {
-            if (generation == cacheGeneration) memoryCache.get(cacheKey) else null
+            if (generation == cacheGeneration) cachedIcon(cacheKey) else null
         }
         if (cached != null) cached.file else {
             val resolved = resolveIconFileUncached(tvgId, sources, generation)
             publishResolvedIcon(cacheKey, sources, generation, resolved)
         }
+    }
+
+    /** Called under cacheLock. A memory miss must not hide an expired URL failure forever. */
+    private fun cachedIcon(key: String): CachedIcon? {
+        val cached = memoryCache.get(key) ?: return null
+        return if (cached.miss != null && IconFailurePolicy.isExpired(cached.miss, nowMillis())) {
+            memoryCache.remove(key)
+            null
+        } else cached
     }
 
     private fun publishResolvedIcon(cacheKey: String, sources: List<String>, generation: Long,
@@ -155,7 +166,8 @@ class IconRepository(
         // Invalidation retires in-flight publishers too. Within one generation a failed
         // duplicate must not replace an icon another resolver has already downloaded.
         if (generation == cacheGeneration && (resolved != null || memoryCache.get(cacheKey)?.file == null)) {
-            memoryCache.put(cacheKey, CachedIcon(resolved))
+            val miss = if (resolved == null) FailureRecord(nowMillis(), isPermanent = false) else null
+            memoryCache.put(cacheKey, CachedIcon(resolved, miss))
         }
         resolved
     }
@@ -187,7 +199,7 @@ class IconRepository(
     private suspend fun resolveCandidate(candidate: IconCandidate, generation: Long): File? {
         val cached = diskCache.get(candidate.url)
         return cached ?: if (
-            failureStore.shouldSkip(candidate.url)
+            failureStore.shouldSkip(candidate.url, nowMillis())
         ) {
             null
         } else {
@@ -335,7 +347,7 @@ class IconRepository(
     private fun recordFailureIfCurrent(url: String, isPermanent: Boolean, generation: Long) =
         synchronized(cacheLock) {
             // An obsolete 404/503 must not blacklist a URL after a fresh retry already succeeded.
-            if (generation == cacheGeneration) failureStore.recordFailure(url, isPermanent)
+            if (generation == cacheGeneration) failureStore.recordFailure(url, isPermanent, nowMillis())
         }
 
     private companion object {

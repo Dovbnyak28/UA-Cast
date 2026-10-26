@@ -23,7 +23,6 @@ internal class DlnaTransportStateReader(client: OkHttpClient) {
 
     companion object {
         private val successCodes = 200..299
-        private val stateTag = Regex("<(?:[\\w-]+:)?CurrentTransportState[^>]*>([^<]*)</")
 
         internal fun parse(code: Int, body: String): DlnaTransportHealth = when {
             code !in successCodes -> if (UpnpFault.parse(body).code == "401") {
@@ -31,7 +30,9 @@ internal class DlnaTransportStateReader(client: OkHttpClient) {
             } else {
                 DlnaTransportHealth.UNREACHABLE
             }
-            else -> when (stateTag.find(body)?.groupValues?.get(1)?.trim()?.uppercase()) {
+            else -> when (
+                SoapResponseFields.read(body, "CurrentTransportState")["CurrentTransportState"]?.uppercase()
+            ) {
                 "PLAYING", "PAUSED_PLAYBACK", "RECORDING" -> DlnaTransportHealth.ACTIVE
                 "STOPPED", "NO_MEDIA_PRESENT", "TRANSITIONING" -> DlnaTransportHealth.INACTIVE
                 else -> DlnaTransportHealth.UNSUPPORTED

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -22,6 +23,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
@@ -49,6 +51,13 @@ fun ChannelIcon(
     // could change the result becomes available (user pack edits or completed downloads).
     refreshKey: Any? = null,
 ) {
+    if (channel.localVideo != null) {
+        Box(modifier.size(size).raisedSurface(RoundedCornerShape(ChannelLogoRadius), UaTheme.palette.surface2),
+            contentAlignment = Alignment.Center) {
+            Icon(AppIcons.Play, null, tint = UaTheme.palette.azure, modifier = Modifier.size(size / 2))
+        }
+        return
+    }
     // produceState restarts work for new keys but retains its previous value. Own the file,
     // decode error and painter by the same generation so none can leak into a different channel
     // or prevent a repaired file at the same path from being decoded after an explicit refresh.

@@ -5,6 +5,7 @@ import com.uacastplayer.core.net.HttpDefaults
 import com.uacastplayer.core.net.HttpHeaderValuePolicy
 import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.proxy.RemuxHandoffPolicy
+import com.uacastplayer.media.LocalVideo
 import kotlin.concurrent.thread
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
@@ -14,6 +15,7 @@ private const val MAX_RESOURCES = 512
 
 internal const val RESOURCE_TYPE_PLAYLIST = "playlist"
 internal const val RESOURCE_TYPE_MEDIA = "media"
+internal const val RESOURCE_TYPE_LOCAL_VIDEO = "local-video"
 
 /** [userAgent] always has a value (defaulted to [HttpDefaults.BROWSER_USER_AGENT] at registration
  * time if the channel didn't specify one via `#EXTVLCOPT:http-user-agent=`); [referrer] is only
@@ -24,6 +26,7 @@ internal data class ResourceEntry(
     val originalUrl: String,
     val userAgent: String,
     val referrer: String?,
+    val localVideo: LocalVideo? = null,
 )
 
 /**
@@ -58,10 +61,12 @@ internal class ProxyResourceRegistry(private val httpClient: OkHttpClient) {
     private val remuxLock = Any()
     private var remuxOwner: RemuxRequestLease? = null
 
-    fun registerPlaylist(url: String, userAgent: String?, referrer: String?): String {
+    fun registerPlaylist(url: String, userAgent: String?, referrer: String?, localVideo: LocalVideo? = null): String {
+        require(localVideo == null || localVideo.uri == url)
         val entry = ResourceEntry(
-            RESOURCE_TYPE_PLAYLIST, url,
+            if (localVideo == null) RESOURCE_TYPE_PLAYLIST else RESOURCE_TYPE_LOCAL_VIDEO, url,
             HttpHeaderValuePolicy.userAgentOrDefault(userAgent), HttpHeaderValuePolicy.sanitize(referrer),
+            localVideo,
         )
         return synchronized(remuxLock) {
             manifests.beginRoot(entry)
@@ -73,17 +78,9 @@ internal class ProxyResourceRegistry(private val httpClient: OkHttpClient) {
                 activeRemuxSession?.let(::beginDraining)
                 activeRemuxSession = null
             }
-            register(entry.type, entry.originalUrl, entry.userAgent, entry.referrer)
+            synchronized(resourcesLock) { resources[id] = entry }
+            id
         }
-    }
-
-    private fun register(type: String, url: String, userAgent: String, referrer: String?): String {
-        // Same URL with different provider credentials/headers is a different resource. Otherwise
-        // an old receiver request silently acquires the newest channel's access requirements.
-        val entry = ResourceEntry(type, url, userAgent, referrer)
-        val id = entry.resourceId()
-        synchronized(resourcesLock) { resources[id] = entry }
-        return id
     }
 
     fun get(resourceId: String): ResourceEntry? = manifests.get(resourceId)

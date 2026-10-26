@@ -12,7 +12,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.core.i18n.AppLanguage
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.ui.components.SecondaryButton
@@ -52,22 +51,15 @@ internal fun GeneralSettingsSection(
 @Composable
 internal fun EpgSettingsSection(
     state: EpgUiState,
-    onEpgSourceSelected: (EpgSource) -> Unit,
+    onEpgUrlChanged: (String) -> Unit,
     onUseSuggestedEpgUrl: () -> Unit,
 ) {
     val gate = LocalFeatureGate.current
     SettingsSection(title = stringResource(R.string.home_epg_label), icon = AppIcons.Tv) {
-        SettingsChoiceRow(
-            label = stringResource(R.string.settings_epg_source_label),
-            icon = AppIcons.Tv,
-            options = EpgSource.entries.map { stringResource(it.labelRes()) },
-            selectedIndex = if (state.customUrl == null) EpgSource.entries.indexOf(state.selectedSource) else -1,
-            onSelected = { onEpgSourceSelected(EpgSource.entries[it]) },
-            selectedLabel = state.customUrl?.let { stringResource(R.string.settings_epg_custom_active) },
-        )
+        EpgSourceEditor(state.customUrl, state.hasError, onEpgUrlChanged)
         EpgSettingsStatus(state)
         Text(
-            stringResource(R.string.settings_epg_variants_hint),
+            stringResource(R.string.settings_epg_user_source_hint),
             style = Caption,
             color = UaTheme.palette.labelSecondary,
         )
@@ -101,14 +93,6 @@ private fun AppLanguage.nativeNameRes(): Int = when (this) {
     AppLanguage.ENGLISH -> R.string.language_name_en
     AppLanguage.RUSSIAN -> R.string.language_name_ru
     AppLanguage.SPANISH -> R.string.language_name_es
-}
-
-private fun EpgSource.labelRes(): Int = when (this) {
-    EpgSource.RECT_TRANSPARENT -> R.string.epg_source_rect_transparent
-    EpgSource.SQUARE_DARK -> R.string.epg_source_square_dark
-    EpgSource.PERFECT_PLAYER -> R.string.epg_source_perfect_player
-    EpgSource.RECT_TRANSPARENT_SIMPLE -> R.string.epg_source_rect_transparent_simple
-    EpgSource.SQUARE_DARK_SIMPLE -> R.string.epg_source_square_dark_simple
 }
 
 @Composable

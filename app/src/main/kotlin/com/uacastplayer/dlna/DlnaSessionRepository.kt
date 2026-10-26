@@ -16,6 +16,8 @@ import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
 import com.uacastplayer.diagnostics.CorrelationId
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.data.media.AndroidLocalVideoSource
+import com.uacastplayer.media.LocalVideo
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -82,7 +84,10 @@ private data class DlnaConnectRequest(
     val generation: Long,
 )
 
-private data class DlnaMedia(val url: String, val title: String, val userAgent: String?, val referrer: String?)
+private data class DlnaMedia(
+    val url: String, val title: String, val userAgent: String?, val referrer: String?,
+    val localVideo: LocalVideo? = null,
+)
 
 /**
  * App-wide singleton (same lifetime rationale as [com.uacastplayer.cast.CastSessionRepository]:
@@ -138,7 +143,7 @@ class DlnaSessionRepository internal constructor(
      * [com.uacastplayer.data.cast.RawTsRemuxSession]'s reader into a backoff reconnect and a
      * discontinuity, i.e. exactly the stall-and-rebuffer symptom the proxy exists to avoid.
      */
-    private val proxyServer = ProxyServer(proxyHttpClient)
+    private val proxyServer = ProxyServer(proxyHttpClient, localVideoSource = AndroidLocalVideoSource(appContext))
     private val setUriHttpClient = soapHttpClient.newBuilder()
         .readTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .callTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -280,7 +285,8 @@ class DlnaSessionRepository internal constructor(
         title: String,
         userAgent: String? = null,
         referrer: String? = null,
-    ) = startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer), isRepoint = false)
+        localVideo: LocalVideo? = null,
+    ) = startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer, localVideo), isRepoint = false)
 
     private fun startSession(device: DlnaDevice, media: DlnaMedia, isRepoint: Boolean) {
         rendererWatchdog.stop()
@@ -370,10 +376,13 @@ class DlnaSessionRepository internal constructor(
      * never told about the new url and kept playing the old one, while the phone (which stands down
      * for a remote target, see `LocalPlaybackPolicy`) played nothing either.
      */
-    fun setActiveChannel(streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null) {
+    fun setActiveChannel(
+        streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null,
+        localVideo: LocalVideo? = null,
+    ) {
         // A channel selected while the first connection is preparing must replace that attempt.
         val device = pendingConnectDevice ?: _state.value.connectedDevice ?: return
-        startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer), isRepoint = true)
+        startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer, localVideo), isRepoint = true)
     }
 
     /**
@@ -391,9 +400,13 @@ class DlnaSessionRepository internal constructor(
      * was not necessarily accepted, and a timed-out command may still have reached the TV. If the
      * read also fails, null honestly represents unknown volume instead of inventing a rollback.
      */
-    fun setVolume(volume: Int) {
-        val device = _state.value.takeUnless { it.isConnecting }?.connectedDevice ?: return
-        val url = device.renderingControlUrl ?: return
+    fun setVolume(expectedDevice: DlnaDevice, volume: Int) {
+        val current = _state.value
+        val device = current.connectedDevice ?: return
+        val url = device.renderingControlUrl
+        // The UI can still deliver a gesture before it has observed the next renderer state.
+        val matchesTarget = device.controlUrl == expectedDevice.controlUrl && url == expectedDevice.renderingControlUrl
+        if (current.isConnecting || url == null || !matchesTarget) return
         val requested = VolumeRange.clamp(volume)
         val generation = volumeGeneration.incrementAndGet()
         _state.update { it.copy(volume = requested) }
@@ -462,6 +475,7 @@ class DlnaSessionRepository internal constructor(
             request.device.controlUrl,
             prepared.localUrl,
             request.media.title,
+            request.media.localVideo?.mimeType,
         )
         checkpoint()
         val ok = uriAccepted && avTransportClient.play(request.device.controlUrl)
@@ -521,7 +535,9 @@ class DlnaSessionRepository internal constructor(
                 flattenHlsToStream = true,
             )
             val localUrl = proxyServer.buildLocalUrl(
-                proxyServer.registerPlaylist(request.media.url, request.media.userAgent, request.media.referrer),
+                proxyServer.registerPlaylist(
+                    request.media.url, request.media.userAgent, request.media.referrer, request.media.localVideo,
+                ),
             )
             sessionHost = host
             PreparedDlnaProxy(token, localUrl)

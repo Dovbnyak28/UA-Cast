@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -64,6 +66,7 @@ internal fun InlinePlayerContent(
 ) {
     val uiState = content.uiState
     val currentChannel = uiState.currentChannel
+    val isFile = currentChannel?.localVideo != null
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -75,6 +78,7 @@ internal fun InlinePlayerContent(
         InlinePlayerHeader(currentChannel, uiState.isCasting, content, actions, transientState)
         if (uiState.fatalError) {
             PlaybackFailureCard(
+                localVideo = currentChannel?.localVideo != null,
                 canGoNext = uiState.canGoNext,
                 onRetry = actions.viewModel::retryCurrentChannel,
                 onNext = actions.viewModel.navigation::requestNext,
@@ -88,7 +92,11 @@ internal fun InlinePlayerContent(
         // The terminal error card already owns Retry/Next/Back. Keeping the ordinary navigation
         // row visible at the same time produced two identically named "Next channel" actions in
         // the accessibility tree and an ambiguous TalkBack destination.
-        if (!uiState.fatalError) ChannelNavigationRow(actions, uiState)
+        if (isFile && !uiState.fatalError && !remotePlaybackOwnsControls(uiState, content.dlnaState)) {
+            FilePlaybackSeekBar(actions.viewModel, uiState,
+                Modifier.padding(horizontal = ScreenHPadding, vertical = GapM))
+        }
+        if (!uiState.fatalError && !isFile) ChannelNavigationRow(actions, uiState)
         currentChannel?.takeUnless { uiState.fatalError }?.let { channel ->
             ChannelInfoCard(
                 channel = channel,
@@ -98,6 +106,7 @@ internal fun InlinePlayerContent(
             )
         }
         QuickSettingsRow(
+            showGuide = !isFile,
             showAudio = !uiState.fatalError && !remotePlaybackOwnsControls(uiState, content.dlnaState),
             onAudioClick = { transientState.showAudioDialog = true },
             onGuideClick = { transientState.showGuideSheet = true },
@@ -114,7 +123,7 @@ internal fun InlinePlayerContent(
         }
         if (!uiState.fatalError) {
             SecondaryButton(
-                text = stringResource(R.string.player_back_to_channels),
+                text = stringResource(if (isFile) R.string.common_back else R.string.player_back_to_channels),
                 onClick = actions.onExit,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapL),
             )
@@ -130,6 +139,28 @@ private fun InlinePlayerHeader(
     actions: PlayerScreenActions,
     transientState: PlayerScreenTransientState,
 ) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val stacked = maxWidth < INLINE_HEADER_STACK_WIDTH || LocalDensity.current.fontScale > INLINE_HEADER_STACK_SCALE
+        val title = if (currentChannel?.localVideo != null) stringResource(R.string.local_video_label)
+            else currentChannel?.displayName ?: stringResource(R.string.app_name)
+        Column(Modifier.fillMaxWidth()) {
+            InlinePlayerHeaderButtons(currentChannel, isCasting, content, actions, transientState,
+                if (stacked) null else title)
+            if (stacked) InlinePlayerTitle(title,
+                Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun InlinePlayerHeaderButtons(
+    currentChannel: M3uChannel?,
+    isCasting: Boolean,
+    content: PlayerScreenContent,
+    actions: PlayerScreenActions,
+    transientState: PlayerScreenTransientState,
+    title: String?,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -139,16 +170,8 @@ private fun InlinePlayerHeader(
             onClick = actions.onExit,
             contentDescription = stringResource(R.string.common_back),
         )
-        Text(
-            text = currentChannel?.displayName ?: stringResource(R.string.app_name),
-            style = Title,
-            color = UaTheme.palette.labelPrimary,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        currentChannel?.let { channel ->
+        if (title == null) Box(Modifier.weight(1f)) else InlinePlayerTitle(title, Modifier.weight(1f))
+        currentChannel?.takeIf { it.localVideo == null }?.let { channel ->
             SmallRoundIconButton(
                 icon = AppIcons.Favorites,
                 onClick = { actions.onToggleFavorite(channel) },
@@ -164,19 +187,29 @@ private fun InlinePlayerHeader(
             )
         }
         val dlnaConnected = content.dlnaState.connectedDevice != null
+        PlayerCastButton(isCasting = isCasting,
+            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON))
         SmallRoundIconButton(
-            icon = AppIcons.CastToTv,
-            onClick = { transientState.showDevicePicker = true },
+            icon = AppIcons.Tv,
+            onClick = { transientState.showDlnaSheet = true },
             contentDescription = stringResource(
-                R.string.player_devices,
+                R.string.dlna_sheet_title,
             ),
-            tint = if (dlnaConnected || isCasting) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
+            tint = if (dlnaConnected) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
             iconSize = CastPeerIconGlyphSize,
-            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON)
-                .liveRing(active = dlnaConnected || isCasting, color = UaTheme.palette.azure),
+            modifier = Modifier.liveRing(active = dlnaConnected, color = UaTheme.palette.azure),
         )
     }
 }
+
+@Composable
+private fun InlinePlayerTitle(title: String, modifier: Modifier) {
+    Text(title, style = Title, color = UaTheme.palette.labelPrimary, textAlign = TextAlign.Center,
+        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+}
+
+private val INLINE_HEADER_STACK_WIDTH = 420.dp
+private const val INLINE_HEADER_STACK_SCALE = 1.3f
 
 @Composable
 private fun InlineVideoPanel(

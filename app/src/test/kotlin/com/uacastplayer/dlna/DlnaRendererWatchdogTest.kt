@@ -8,6 +8,15 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DlnaRendererWatchdogTest {
+    @Test fun `cdata status and qualified unsupported fault keep their real meaning`() {
+        assertEquals(DlnaTransportHealth.INACTIVE, DlnaTransportStateReader.parse(
+            200, "<CurrentTransportState><![CDATA[STOPPED]]></CurrentTransportState>",
+        ))
+        assertEquals(DlnaTransportHealth.UNSUPPORTED, DlnaTransportStateReader.parse(
+            500, "<u:UPnPError xmlns:u='urn:upnp'><u:errorCode>401</u:errorCode></u:UPnPError>",
+        ))
+    }
+
     @Test fun `three consecutive unreachable observations end the session exactly once`() = runTest {
         var ended = 0
         val watchdog = DlnaRendererWatchdog(backgroundScope) { DlnaTransportHealth.UNREACHABLE }

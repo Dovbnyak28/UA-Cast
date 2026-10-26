@@ -70,7 +70,6 @@ import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.DiagnosticsReportBuilder
 import com.uacastplayer.diagnostics.DiagnosticsSnapshot
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgWorkloadPolicy
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
@@ -522,7 +521,7 @@ class AppViewModel @JvmOverloads constructor(
                 epgChannelCount = epgState.value.data?.index?.channels?.size,
                 epgProgrammeCount = epgState.value.data?.programmesByChannelId?.values?.sumOf { it.size },
                 epgTruncated = epgState.value.data?.truncation?.any == true,
-                epgSource = epgState.value.customUrl?.let { "custom" } ?: epgState.value.selectedSource.id,
+                epgSource = if (epgState.value.customUrl != null) "custom" else "none",
                 epgFailure = epgState.value.lastFailure,
                 network = describeNetwork(),
                 freeStorageBytes = getApplication<Application>().filesDir.usableSpace,
@@ -589,11 +588,6 @@ class AppViewModel @JvmOverloads constructor(
                 it.tvgName, it.tvgLogo, it.userAgent, it.referrer,
             )
         }
-        val exportEpgSourceId = if (preferences.hasChosenEpgSource && preferences.customEpgUrl == null) {
-            preferences.epgSource.id
-        } else {
-            null
-        }
         val settings = BackupSettings(
             // Only what the user actually chose - the same rule the EPG fields below already
             // follow. These two are exactly the settings DeviceTierDefaults computes per device, so
@@ -616,7 +610,6 @@ class AppViewModel @JvmOverloads constructor(
                 .takeIf { preferences.hasChosenListDensity },
             bufferSize = settingsState.value.bufferSize.name
                 .takeIf { preferences.hasChosenBufferSize },
-            epgSourceId = exportEpgSourceId,
             epgCustomUrl = if (preferences.hasChosenEpgSource) preferences.customEpgUrl else null,
         )
         return BackupData(sources, favoritesBackup, settings)
@@ -635,12 +628,8 @@ class AppViewModel @JvmOverloads constructor(
         settings.bufferSize
             ?.let { name -> runCatchingNonFatal { BufferSize.valueOf(name) }.getOrNull() }
             ?.let(::setBufferSize)
-        when {
-            settings.epgCustomUrl != null -> epgController.applyCustomEpgUrl(settings.epgCustomUrl, markChosen = true)
-            settings.epgSourceId != null ->
-                EpgSource.entries.firstOrNull { it.id == settings.epgSourceId }?.let(::selectEpgSource)
-            else -> Unit
-        }
+        // Legacy built-in EPG IDs never reactivate a publisher-provided feed.
+        settings.epgCustomUrl?.let(epgController::setUserEpgUrl)
     }
 
     fun clearCache(kind: CacheKind) {

@@ -7,7 +7,6 @@ import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.epg.DecodedEpgSnapshot
 import com.uacastplayer.epg.EpgData
 import com.uacastplayer.epg.EpgDocumentPipeline
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.log.AppLog
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -46,10 +45,7 @@ class EpgRepository(
     private val snapshotStore = EpgSnapshotStore(appContext, ioDispatcher)
     private val snapshotMutations = EpgSnapshotMutationCoordinator()
 
-    suspend fun loadFromSource(source: EpgSource): EpgOutcome = load(source.url)
-
-    /** For a playlist/Xtream-provided EPG URL (see [com.uacastplayer.epg.EpgSourceAutoDetect]) -
-     * same pipeline as [loadFromSource], just without a fixed [EpgSource] to key off of. */
+    /** Loads only a user-configured or user-playlist-provided guide. */
     suspend fun loadFromUrl(url: String): EpgOutcome = load(url)
 
     @Suppress("TooGenericExceptionCaught")

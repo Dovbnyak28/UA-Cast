@@ -16,6 +16,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 private const val TAG = "EpgSnapshotStore"
@@ -50,16 +51,16 @@ class EpgSnapshotStore(
      * [DecodedEpgSnapshot.Parsed] result has already consumed everything it needs and this closes
      * the stream itself.
      */
-    suspend fun open(): DecodedEpgSnapshot? = withContext(ioDispatcher) {
+    suspend fun open(): DecodedEpgSnapshot? = readEpgSnapshotOnIo(ioDispatcher) {
         val stream = try {
             atomicFile.openRead()
         } catch (_: FileNotFoundException) {
-            return@withContext null
+            return@readEpgSnapshotOnIo null
         } catch (e: IOException) {
             // Cache only - a null here means "parse from the network instead", which is exactly
             // what an unreadable snapshot calls for. Escaping would take the EPG load down with it.
             AppLog.w(TAG) { "EPG snapshot read failed, will refetch: ${e.javaClass.simpleName}" }
-            return@withContext null
+            return@readEpgSnapshotOnIo null
         }
         if (atomicFile.baseFile.length() > MAX_SNAPSHOT_BYTES) {
             // The parser caps the decompressed source at 64 MiB and the binary snapshot adds
@@ -68,7 +69,7 @@ class EpgSnapshotStore(
             runCatchingNonFatal { stream.close() }
             atomicFile.delete()
             AppLog.w(TAG) { "EPG snapshot exceeds the supported size; discarded and will refetch" }
-            return@withContext null
+            return@readEpgSnapshotOnIo null
         }
         val decoded = EpgSnapshotCodec.decode(stream, maxProgrammes)
         if (decoded == null || decoded is DecodedEpgSnapshot.Parsed) {
@@ -81,5 +82,24 @@ class EpgSnapshotStore(
         /** Twice the decompressed XML cap, leaving headroom for binary framing and text encoding. */
         @VisibleForTesting
         internal const val MAX_SNAPSHOT_BYTES = 128L * 1024 * 1024
+    }
+}
+
+/** Dispatcher boundary where ownership of a legacy document stream passes to the caller. */
+internal suspend fun readEpgSnapshotOnIo(
+    dispatcher: CoroutineDispatcher,
+    read: () -> DecodedEpgSnapshot?,
+): DecodedEpgSnapshot? {
+    // Prompt cancellation can discard the IO result before the caller enters its use{} block.
+    // Retain ownership here until that dispatcher handoff has completed successfully.
+    var unclaimed: DecodedEpgSnapshot.Document? = null
+    return try {
+        withContext(dispatcher) {
+            read().also { unclaimed = it as? DecodedEpgSnapshot.Document }
+        }
+    } catch (cancelled: CancellationException) {
+        runCatchingNonFatal { unclaimed?.documentStream?.close() }
+            .onFailure(cancelled::addSuppressed)
+        throw cancelled
     }
 }

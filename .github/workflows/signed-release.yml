@@ -20,9 +20,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native:
+    uses: ./.github/workflows/software-decoder-native.yml
+
   instrumented:
     name: Instrumented tests (API ${{ matrix.api-level }})
     runs-on: ubuntu-latest
+    needs: native
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -44,6 +48,15 @@ jobs:
         uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
 
       - name: Enable KVM
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: software-decoder-native
+          path: ffmpegdecoder/build/native-libraries
+
+      - name: Verify native inputs
+        run: python3 scripts/prepare-software-decoder.py --verify-only
+
+      - name: Enable emulator KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -56,7 +69,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: bash scripts/run-instrumented-tests.sh
+          script: |
+            bash scripts/run-instrumented-tests.sh
+            ./gradlew :ffmpegdecoder:connectedDebugAndroidTest --stacktrace
 
       - name: Upload instrumentation reports
         if: always()
@@ -68,7 +83,7 @@ jobs:
 
   signed-artifacts:
     name: Signed Play AAB and GitHub APK
-    needs: instrumented
+    needs: [native, instrumented]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
@@ -93,6 +108,31 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+
+      - name: Verify legal release readiness before signing
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: software-decoder-native
+          path: ffmpegdecoder/build/native-libraries
+
+      - name: Verify native inputs
+        run: python3 scripts/prepare-software-decoder.py --verify-only
+
+      - name: Download corresponding source for this native build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: software-decoder-corresponding-source
+          path: build/software-decoder-dist
+
+      - name: Verify legal release readiness before using signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate-legal-documents.py --check
+          python3 scripts/verify-software-decoder-bundle.py
+          mkdir -p build/legal-audit
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain > build/legal-audit/release-dependencies.txt
+          python3 scripts/check-release-legal.py --dependency-report build/legal-audit/release-dependencies.txt
 
       - name: Validate release inputs and materialize keystore
         shell: bash
@@ -201,7 +241,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: play-aab-signed-${{ inputs.version_name }}-${{ inputs.version_code }}
-          path: app/build/outputs/bundle/play/*.aab
+          path: |
+            app/build/outputs/bundle/play/*.aab
+            build/software-decoder-dist/*.zip
+            build/software-decoder-dist/*.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -209,7 +252,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: github-apk-signed-${{ inputs.version_name }}-${{ inputs.version_code }}
-          path: app/build/outputs/apk/release/*universal*.apk
+          path: |
+            app/build/outputs/apk/release/*universal*.apk
+            build/software-decoder-dist/*.zip
+            build/software-decoder-dist/*.sha256
           if-no-files-found: error
           retention-days: 14
 

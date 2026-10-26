@@ -11,6 +11,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -127,6 +128,57 @@ class IconPrefetcherProgressTest {
 
         assertFalse(executed)
         assertEquals(0, progressCallbacks)
+    }
+
+    @Test(timeout = 15_000) fun `network loss stops the queued work without reporting completion`() = runBlocking {
+        val manager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val prefetcher = IconPrefetcher(application, IconRepository(application))
+        var completed = 0
+        val executed = prefetcher.prefetch(uniqueChannels(), wifiOnly = false) { progress ->
+            completed = progress.completed
+            shadowOf(manager).setNetworkCapabilities(manager.activeNetwork, ShadowNetworkCapabilities.newInstance())
+        }
+        assertEquals(1, completed)
+        assertFalse(executed)
+    }
+
+    @Test(timeout = 15_000) fun `wifi-only stops queued work when the active network becomes metered`() = runBlocking {
+        setMeteredNetwork(false)
+        val prefetcher = IconPrefetcher(application, IconRepository(application))
+        var completed = 0
+        val executed = prefetcher.prefetch(uniqueChannels(), wifiOnly = true) { progress ->
+            completed = progress.completed
+            setMeteredNetwork(true)
+        }
+        assertEquals(1, completed)
+        assertFalse(executed)
+    }
+
+    @Test(timeout = 15_000) fun `allowed metered handover completes the same queue`() = runBlocking {
+        setMeteredNetwork(false)
+        val prefetcher = IconPrefetcher(application, IconRepository(application))
+        val channels = uniqueChannels()
+        var completed = 0
+        val executed = prefetcher.prefetch(channels, wifiOnly = false) { progress ->
+            completed = progress.completed
+            setMeteredNetwork(true)
+        }
+        assertEquals(channels.size, completed)
+        assertTrue(executed)
+    }
+
+    private fun uniqueChannels() = (1..30).map { channel(it).copy(tvgId = "id-$it") }
+
+    @Suppress("DEPRECATION")
+    private fun setMeteredNetwork(metered: Boolean) {
+        val manager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        shadowOf(requireNotNull(manager.activeNetworkInfo)).setConnectionType(
+            if (metered) ConnectivityManager.TYPE_MOBILE else ConnectivityManager.TYPE_WIFI,
+        )
+        val capabilities = ShadowNetworkCapabilities.newInstance()
+        shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        shadowOf(manager).setNetworkCapabilities(requireNotNull(manager.activeNetwork), capabilities)
+        assertEquals(metered, manager.isActiveNetworkMetered)
     }
 
     private companion object {

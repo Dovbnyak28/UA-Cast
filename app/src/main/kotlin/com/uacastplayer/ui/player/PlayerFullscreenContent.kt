@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.player.PlayerGesturePolicy
 import com.uacastplayer.ui.theme.GapL
+import com.uacastplayer.ui.theme.ScreenHPadding
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -176,8 +177,13 @@ private fun FullscreenControls(
             }
         },
         onOpenSleepTimer = { transientState.showSleepTimerDialog = true },
+        fileProgress = {
+            if (!remotePlaybackOwnsControls(uiState, content.dlnaState)) {
+                FilePlaybackSeekBar(viewModel, uiState, Modifier.padding(horizontal = ScreenHPadding))
+            }
+        },
         isDlnaCasting = content.dlnaState.connectedDevice != null,
-        onOpenDlnaSheet = { transientState.showDevicePicker = true },
+        onOpenDlnaSheet = { transientState.showDlnaSheet = true },
         onOpenActions = { transientState.showActionsSheet = true },
         onSelectPreview = { viewModel.navigation.requestSwitch(it.index) },
     )
@@ -206,6 +212,7 @@ private fun FullscreenPlaybackStatus(
     }
     if (uiState.fatalError) {
         PlaybackFailureCard(
+            localVideo = uiState.currentChannel?.localVideo != null,
             canGoNext = uiState.canGoNext,
             onRetry = actions.viewModel::retryCurrentChannel,
             onNext = actions.viewModel.navigation::requestNext,

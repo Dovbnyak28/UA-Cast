@@ -33,8 +33,8 @@ data class BackupFavorite(
 )
 
 /**
- * Only settings explicitly worth carrying to another device/install. [epgSourceId] and
- * [epgCustomUrl] are only ever populated when the user chose an EPG source themselves (see
+ * Only settings explicitly worth carrying to another device/install. [epgCustomUrl]
+ * is only exported when the user chose an EPG source themselves (see
  * AppPreferences.hasChosenEpgSource) - a device-tier default or not-yet-applied suggestion isn't
  * meaningful to replay elsewhere.
  */
@@ -42,6 +42,7 @@ data class BackupSettings(
     val iconDisplayMode: String? = null,
     val listDensity: String? = null,
     val bufferSize: String? = null,
+    /** Read/write compatibility with old backups only; never applied or newly exported. */
     val epgSourceId: String? = null,
     val epgCustomUrl: String? = null,
 )

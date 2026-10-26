@@ -15,6 +15,7 @@ import com.uacastplayer.diagnostics.CastRouteOutcome
 import com.uacastplayer.diagnostics.CorrelationId
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.media.LocalVideo
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineDispatcher
@@ -59,6 +60,7 @@ data class CastChannel(
      * [LoadRetryContext] because nothing about *retrying* depends on it: a wrong thumbnail on a
      * racing channel switch is cosmetic, where a wrong stream URL would not be. */
     val logoUrl: String? = null,
+    val localVideo: LocalVideo? = null,
 )
 
 /** What [CastSessionRepository.applyLoadResult] needs to retry on the proxy if a direct load fails. */
@@ -262,6 +264,14 @@ class CastSessionRepository private constructor(
      * Anything else (Ignore, GiveUp, or a status this isn't even about) falls through to the
      * existing reducer unchanged. */
     private fun handleReceiverStatus(status: ReceiverStatus, idleReason: IdleReason, selfInitiated: Boolean) {
+        // FINISHED is normal for a file, but a recovery signal for an endless IPTV channel.
+        if (bufferedVideoFinished(activeChannel, status, idleReason)) {
+            watchdogJob?.cancel()
+            playbackWatchdogs.cancelAll()
+            recovery.cancel()
+            _state.update { it.withBufferedVideoFinished() }
+            return
+        }
         // Centralized here so synthetic watchdog IDLE events observe and close the same PLAYING
         // window as callbacks received from the Cast SDK.
         val stablePlayingMillis = trackPlayingWindow(status, android.os.SystemClock.elapsedRealtime())
@@ -363,6 +373,7 @@ class CastSessionRepository private constructor(
             expectedContentId = expectedReceiverContentId,
             actualContentId = status?.mediaInfo?.contentId,
             status = status?.let { mapPlayerState(it.playerState) } ?: ReceiverStatus.IDLE,
+            completedBufferedItem = bufferedVideoFinished(activeChannel, status),
         )
         suspendedChannel = null
         _state.update { it.copy(isSessionSuspended = false, isRecovering = false) }
@@ -479,7 +490,7 @@ class CastSessionRepository private constructor(
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
         val cached = diagnosticCoordinator.cached(CastChannel(0, streamUrl, title, userAgent, referrer))
         val cachedDecision = cached?.let { CastDeliveryStrategy.onDiagnosticResult(it.verdict, it.sourceKind) }
-        val mode = if (cachedDecision == CastRouteDecision.ProxyImmediately) {
+        val mode = if (activeChannel?.localVideo != null || cachedDecision == CastRouteDecision.ProxyImmediately) {
             CastDeliveryMode.Proxy
         } else {
             CastDeliveryStrategy.initialMode(knownIncompatible)
@@ -638,6 +649,7 @@ class CastSessionRepository private constructor(
         }
         val prepared = proxy.prepare(
             host, streamUrl, title, userAgent, referrer, currentSession?.castDevice?.friendlyName,
+            activeChannel?.localVideo,
         ).getOrElse { error ->
             AppLog.w(TAG) { "Cast proxy preparation failed: ${error.javaClass.simpleName}" }
             routeHistory.clearAbandonedRoute()
@@ -675,7 +687,7 @@ class CastSessionRepository private constructor(
         // channel that is active right now (the recovery reload guards that with StaleChannelGuard
         // before it gets this far), and the worst a race could produce is the wrong thumbnail.
         val logoUrl = activeChannel?.logoUrl
-        val request = CastMediaLoader.buildRequest(urlToLoad, context.title, lastKnownSourceKind, logoUrl)
+        val request = CastMediaLoader.forPlayback(urlToLoad, context.title, activeChannel, lastKnownSourceKind)
         // Whether artwork went out, never the url itself (it is a third-party host, and this line
         // ends up in a shared diagnostics report). Blank-vs-absent is not worth distinguishing here
         // - CastMediaLoader treats both the same - but "we sent none at all" vs "the receiver
@@ -685,7 +697,7 @@ class CastSessionRepository private constructor(
             // A malformed provider URL or an SDK-side request validation failure must become the
             // same recoverable load failure as a rejected PendingResult, never an exception on the
             // main thread from a channel tap or a delayed recovery callback.
-            expectedReceiverContentId = urlToLoad
+            expectedReceiverContentId = request.mediaInfo?.contentId ?: urlToLoad
             client.load(request)
         } catch (error: IllegalArgumentException) {
             handleSdkLoadException(error, generation, context)
@@ -797,21 +809,6 @@ class CastSessionRepository private constructor(
             lastLocalControlEffect = effect
         }
         _sideEffects.tryEmit(effect)
-    }
-
-    private fun mapPlayerState(playerState: Int): ReceiverStatus = when (playerState) {
-        MediaStatus.PLAYER_STATE_PLAYING -> ReceiverStatus.PLAYING
-        MediaStatus.PLAYER_STATE_PAUSED -> ReceiverStatus.PAUSED
-        MediaStatus.PLAYER_STATE_BUFFERING, MediaStatus.PLAYER_STATE_LOADING -> ReceiverStatus.BUFFERING
-        else -> ReceiverStatus.IDLE
-    }
-
-    private fun mapIdleReason(reason: Int): IdleReason = when (reason) {
-        MediaStatus.IDLE_REASON_FINISHED -> IdleReason.FINISHED
-        MediaStatus.IDLE_REASON_ERROR -> IdleReason.ERROR
-        MediaStatus.IDLE_REASON_CANCELED -> IdleReason.CANCELLED
-        MediaStatus.IDLE_REASON_INTERRUPTED -> IdleReason.INTERRUPTED
-        else -> IdleReason.NONE
     }
 
     companion object {

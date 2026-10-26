@@ -7,6 +7,15 @@
 -->
 <lint>
 
+    <!-- Intentional density override, not duplicate artwork: phones retain their xxxhdpi
+         decode while TV must keep the same 720px PNG without density downsampling. Sharing a
+         nodpi asset globally would increase phone startup memory too. TvSplashLogoTest verifies
+         both decoded sizes, filtering and the two-MiB TV bound. Keep this exception file-scoped. -->
+    <issue id="IconDuplicatesConfig">
+        <ignore path="src/main/res/drawable-xxxhdpi/splash_logo_artwork.png" />
+        <ignore path="src/main/res/drawable-television-nodpi/splash_logo_artwork.png" />
+    </issue>
+
     <!-- False positive. Lint looks for setAutoEnterEnabled/setSourceRectHint on a
          PictureInPictureParams.Builder inside the Activity; both are called, just from
          PipController.syncParams (ui/player/PlayerGestureLayer.kt), which PlayerScreen drives on

@@ -138,8 +138,12 @@ class IconController(
     }
 
     fun setIconWifiOnly(enabled: Boolean) {
+        if (preferences.iconWifiOnly == enabled) return
         preferences.iconWifiOnly = enabled
         _iconPrefetchState.update { it.copy(wifiOnly = enabled) }
+        // Retire the job which captured the old policy, including its HTTP calls and progress.
+        // The replacement rechecks eligibility and can also resume a previously refused pass.
+        if (hasPrefetchRequest()) startPrefetchJob()
     }
 
     /** [context] narrows a large playlist down to what's worth a background fetch right now - see

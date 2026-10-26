@@ -127,11 +127,11 @@ class UiPolishInstrumentedTest {
         screenshot("settings-wifi-target")
     }
 
-    @Test fun devicePickerExplainsProtocolsWithoutConnectingToAnyRealTv() {
-        rule.onNodeWithContentDescription(label(R.string.player_devices)).performClick()
+    @Test fun separateCastAndDlnaControlsOpenOnlyTheRequestedPicker() {
+        rule.onNodeWithContentDescription(label(R.string.player_chromecast_cast)).assertIsDisplayed()
+        rule.onNodeWithContentDescription(label(R.string.dlna_sheet_title)).performClick()
         rule.onNodeWithText(label(R.string.dlna_sheet_title)).assertIsDisplayed()
-        rule.onNodeWithText(label(R.string.player_chromecast_cast)).assertIsDisplayed()
-        screenshot("player-device-picker")
+        screenshot("player-dlna-picker")
     }
 
     @Test fun settingsSearchRoutesGuideAndBufferToTheirTaskPages() {

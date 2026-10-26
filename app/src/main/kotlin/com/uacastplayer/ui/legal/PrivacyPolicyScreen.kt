@@ -36,7 +36,7 @@ import com.uacastplayer.ui.theme.UaTheme
  * Shows the same privacy document that is published from [legal/privacy-policy.html].
  *
  * The document is local and static. JavaScript, DOM storage, file access and content access are
- * disabled, and all links are ignored so a compromised policy asset cannot turn this screen into
+ * disabled, and only this document's language anchors are allowed so an edited asset cannot turn this screen into
  * a general-purpose browser.
  */
 @Composable
@@ -61,11 +61,12 @@ fun PrivacyPolicyScreen(
             disableLegacyFileOriginAccess()
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean = true
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean =
+                    !isPrivacyLanguageAnchor(request.url.toString())
             }
             val html = context.assets.open("privacy-policy.html").bufferedReader().use { it.readText() }
             loadDataWithBaseURL(
-                "file:///android_asset/",
+                PRIVACY_DOCUMENT_URL,
                 html,
                 "text/html",
                 "UTF-8",
@@ -110,6 +111,14 @@ fun PrivacyPolicyScreen(
         )
     }
 }
+
+private const val PRIVACY_DOCUMENT_URL = "file:///android_asset/privacy-policy.html"
+
+/** Exact in-memory fragment navigation only; no other files, URLs, or scripts may be opened. */
+internal fun isPrivacyLanguageAnchor(url: String): Boolean =
+    url == "$PRIVACY_DOCUMENT_URL#en" ||
+        url == "$PRIVACY_DOCUMENT_URL#uk" ||
+        url == "$PRIVACY_DOCUMENT_URL#ru"
 
 /** These two flags are deprecated in newer WebView SDKs but remain the only explicit guard on
  * older WebViews, which this app still supports. Keep the suppression limited to this bridge. */

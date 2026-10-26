@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The artwork keeps its existing xxxhdpi decoding on phones. Its television-nodpi variant
+     preserves all 720px on TV instead of decoding to 180/240/360px and then enlarging those pixels.
+     Filter the final scale and retain the original transparent, mask-safe padding. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/splash_logo_artwork"
+    android:filter="true"
+    android:antialias="true"
+    android:gravity="fill" />

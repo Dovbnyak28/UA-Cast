@@ -62,7 +62,6 @@ import com.uacastplayer.favorites.FavoritesSortOrder
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.guidedtour.GuidedTourKeys
@@ -136,7 +135,7 @@ fun RootScaffold(
     focusChannelsToken: Int,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     epgState: EpgUiState,
-    onEpgSourceSelected: (EpgSource) -> Unit,
+    onEpgUrlChanged: (String) -> Unit,
     onUseSuggestedEpgUrl: () -> Unit,
     iconPrefetchState: IconPrefetchUiState,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
@@ -360,7 +359,7 @@ fun RootScaffold(
                     currentAppTheme = currentAppTheme,
                     onAppThemeSelected = onAppThemeSelected,
                     epgState = epgState,
-                    onEpgSourceSelected = onEpgSourceSelected,
+                    onEpgUrlChanged = onEpgUrlChanged,
                     onUseSuggestedEpgUrl = onUseSuggestedEpgUrl,
                     iconWifiOnly = iconPrefetchState.wifiOnly,
                     onIconWifiOnlyChanged = onIconWifiOnlyChanged,

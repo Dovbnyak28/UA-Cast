@@ -8,6 +8,8 @@ import com.uacastplayer.data.cast.ProxySourceObservation
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.data.media.AndroidLocalVideoSource
+import com.uacastplayer.media.LocalVideo
 import java.util.concurrent.atomic.AtomicLong
 import okhttp3.OkHttpClient
 
@@ -22,7 +24,8 @@ internal class CastProxySession(
     private val preferences = AppPreferences(appContext)
     private val metrics = RemuxEffectivenessStore.getInstance(appContext)
     private val attemptId = AtomicLong(0)
-    private val server = ProxyServer(httpClient, onSourceObserved = { observation ->
+    private val server = ProxyServer(httpClient, localVideoSource = AndroidLocalVideoSource(appContext),
+        onSourceObserved = { observation ->
         onSourceObserved(CastProxyDiagnostic(attemptId.get(), observation))
     }) { resourceId, route ->
         metrics.recordProxyRouteAttemptOnce(attemptId.get(), resourceId, route)
@@ -60,9 +63,10 @@ internal class CastProxySession(
         userAgent: String?,
         referrer: String?,
         receiverName: String?,
+        localVideo: LocalVideo? = null,
     ): Result<PreparedCastProxy> = CastProxyOperation.run {
         ensureStarted(host)
-        val resourceId = server.registerPlaylist(streamUrl, userAgent, referrer)
+        val resourceId = server.registerPlaylist(streamUrl, userAgent, referrer, localVideo)
         val prepared = PreparedCastProxy(resourceId, server.buildLocalUrl(resourceId))
         CastProxyService.start(appContext, title, receiverName.orEmpty())
         activeResourceId = resourceId

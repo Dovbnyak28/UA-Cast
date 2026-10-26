@@ -140,6 +140,11 @@ fun TermsScreen(
                     )
                 }
             }
+            item(key = "third-party-licenses") {
+                Text(stringResource(R.string.legal_ffmpeg_notice), style = Caption,
+                    color = UaTheme.palette.labelSecondary, modifier = Modifier.tvReadingFocus())
+                ThirdPartyLicensesButton()
+            }
             item(key = "terms-bottom-spacer") {
                 Spacer(modifier = Modifier.height(8.dp))
             }

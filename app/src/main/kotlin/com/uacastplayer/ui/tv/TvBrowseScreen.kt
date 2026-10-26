@@ -111,6 +111,7 @@ fun TvBrowseScreen(
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.tv_dpad_hint), style = Caption, color = UaTheme.palette.labelSecondary)
         if (destination == BottomDestination.HOME) TvSourceActions(source)
+        if (destination == BottomDestination.HOME) com.uacastplayer.ui.media.OpenLocalVideoButton()
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
             label = { Text(stringResource(R.string.channels_search_hint)) }, colors = uaTextFieldColors(),

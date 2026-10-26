@@ -34,7 +34,7 @@ sealed interface EpgDownloadResult {
 
 /**
  * Downloads an XMLTV feed's raw bytes as-is - never inflated at download time, since some feeds
- * are gzip-compressed and others are already-plain XML (see [EpgSource]). Streams straight to a
+ * are gzip-compressed and others are already-plain XML. Streams straight to a
  * temp file under [tempDir] instead of buffering in memory: feeds can run tens of megabytes, and
  * a single in-memory ByteArray that size is wasteful on top of whatever else is loaded at once.
  * Callers own the returned [EpgDownloadResult.Success.documentFile] and must delete it once done.

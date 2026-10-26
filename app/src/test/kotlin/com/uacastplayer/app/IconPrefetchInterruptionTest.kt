@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.data.icons.IconPrefetcher
 import com.uacastplayer.data.icons.IconRepository
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.player.PlaybackActivity
 import com.uacastplayer.playlist.M3uChannel
@@ -286,6 +287,63 @@ class IconPrefetchInterruptionTest {
                 "nothing is prefetching once playback has cancelled it, and the progress bars must agree",
                 controller.iconPrefetchState.value.isRunning,
             )
+        }
+    }
+
+    @Test fun `enabling wifi-only cancels an active metered prefetch immediately`() {
+        HeldIconServer().use { server ->
+            val controller = controller(server.url)
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE,
+                IconController.PrefetchContext(firstGroupChannels = channels))
+            assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(controller.awaitRunning(true))
+
+            controller.setIconWifiOnly(true)
+
+            assertTrue("The active job must observe the new network policy", controller.awaitRunning(false))
+            assertEquals(0, controller.iconPrefetchState.value.completedRuns)
+        }
+    }
+
+    @Test fun `allowing metered traffic restarts a previously blocked prefetch`() {
+        HeldIconServer().use { server ->
+            val controller = controller(server.url)
+            controller.setIconWifiOnly(true)
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE,
+                IconController.PrefetchContext(firstGroupChannels = channels))
+            // Unconfined resumes the controller on the single selection worker. Drain that
+            // worker so the policy change happens after the initial pass was actually refused.
+            runBlocking { withPlaylistCpu {} }
+            assertTrue(controller.awaitRunning(false))
+            assertEquals(0, server.requestCount.get())
+
+            controller.setIconWifiOnly(false)
+
+            assertTrue("Changing policy must re-evaluate the remembered request", server.awaitRequestCount(1))
+            assertTrue(controller.awaitRunning(true))
+        }
+    }
+
+    @Test fun `setting the same network policy does not interrupt a running pass`() {
+        HeldIconServer().use { server ->
+            val controller = controller(server.url)
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE,
+                IconController.PrefetchContext(firstGroupChannels = channels))
+            assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(controller.awaitRunning(true))
+            val observations = mutableListOf<Boolean>()
+            val observer = scope.launch {
+                controller.iconPrefetchState.collect { observations += it.isRunning }
+            }
+
+            controller.setIconWifiOnly(false)
+
+            assertEquals(listOf(true), observations)
+            assertEquals(1, server.requestCount.get())
+            observer.cancel()
         }
     }
 

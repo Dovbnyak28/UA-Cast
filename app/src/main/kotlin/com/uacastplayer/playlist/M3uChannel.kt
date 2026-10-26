@@ -1,5 +1,7 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.media.LocalVideo
+
 /** A single channel entry parsed out of an M3U playlist. */
 data class M3uChannel(
     val displayName: String,
@@ -11,6 +13,8 @@ data class M3uChannel(
     /** From a preceding `#EXTVLCOPT:http-user-agent=`/`http-referrer=` line, if the playlist has one. */
     val userAgent: String? = null,
     val referrer: String? = null,
+    /** Explicitly selected document, never populated by a downloaded playlist. */
+    val localVideo: LocalVideo? = null,
 )
 
 data class M3uParseResult(

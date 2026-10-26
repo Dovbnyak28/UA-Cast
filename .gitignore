@@ -11,6 +11,7 @@ local.properties
 *.hprof
 app/build/
 core/build/
+ffmpegdecoder/build/
 app/release/
 app/debug/
 baselineprofile/build/
@@ -39,3 +40,6 @@ __pycache__/
 
 # Local physical-phone captures are diagnostic evidence, not distributable source assets.
 /mi-a2-*.png
+
+# Local UI-test tools; their binaries are verified downloads, not source assets.
+/.tools/

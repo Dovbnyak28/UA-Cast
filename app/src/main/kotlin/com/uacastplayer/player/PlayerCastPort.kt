@@ -2,6 +2,7 @@ package com.uacastplayer.player
 
 import com.uacastplayer.core.cast.AudioCodec
 import com.uacastplayer.core.cast.VideoCodec
+import com.uacastplayer.media.LocalVideo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -35,6 +36,7 @@ data class PlayerCastChannel(
     val userAgent: String? = null,
     val referrer: String? = null,
     val logoUrl: String? = null,
+    val localVideo: LocalVideo? = null,
 )
 
 sealed interface PlayerCastSideEffect {

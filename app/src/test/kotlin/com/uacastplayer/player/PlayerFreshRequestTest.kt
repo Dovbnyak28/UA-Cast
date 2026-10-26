@@ -8,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.playlist.M3uChannel
+import com.uacastplayer.media.LocalVideo
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -27,6 +28,21 @@ class PlayerFreshRequestTest {
             MutableCreationExtras())[PlayerViewModel::class.java]
     }
     @After fun close() { store.clear(); PlaybackActivity.setActive(false) }
+
+    @Test fun `an old END callback cannot pause the replacement file while it is loading`() {
+        val vm = player()
+        val video = LocalVideo("content://media/video/1", "Movie.mp4", "video/mp4")
+        val request = PlayerRequest.forLocalVideo(video)
+        vm.start(request.channels, request.startIndex)
+        assertEquals(Player.STATE_BUFFERING, vm.player.playbackState)
+        val listener = PlayerViewModel::class.java.getDeclaredField("listener").let {
+            it.isAccessible = true
+            it.get(vm) as Player.Listener
+        }
+        listener.onPlaybackStateChanged(Player.STATE_ENDED)
+        assertTrue("Only the actual current file completion may clear playback intent", vm.player.playWhenReady)
+        assertEquals(Player.STATE_BUFFERING, vm.player.playbackState)
+    }
 
     @Test fun `fresh session does not inherit pause of closed session`() {
         val vm = player()

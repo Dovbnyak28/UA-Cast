@@ -59,12 +59,11 @@ internal class PlayerScreenTransientState(activity: Activity?, audioManager: Aud
     var showQualityDialog by mutableStateOf(false)
     var showGuideSheet by mutableStateOf(false)
     var showDlnaSheet by mutableStateOf(false)
-    var showDevicePicker by mutableStateOf(false)
     var showActionsSheet by mutableStateOf(false)
     var showChannelsSheet by mutableStateOf(false)
     var showLevelsSheet by mutableStateOf(false)
     val hasOpenSheet: Boolean get() = showSleepTimerDialog || showAudioDialog || showSubtitleDialog ||
-        showQualityDialog || showGuideSheet || showDlnaSheet || showDevicePicker || showActionsSheet ||
+        showQualityDialog || showGuideSheet || showDlnaSheet || showActionsSheet ||
         showChannelsSheet || showLevelsSheet
     var brightnessLevel by mutableFloatStateOf(
         activity?.let(::initialBrightnessLevel) ?: DEFAULT_BRIGHTNESS_LEVEL,

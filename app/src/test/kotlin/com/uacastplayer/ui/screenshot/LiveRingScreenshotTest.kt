@@ -72,7 +72,7 @@ class LiveRingScreenshotTest {
     @androidx.compose.runtime.Composable
     private fun CastPeerButton(active: Boolean) {
         SmallRoundIconButton(
-            icon = AppIcons.CastToTv,
+            icon = AppIcons.Tv,
             onClick = {},
             tint = if (active) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
             iconSize = CastPeerIconGlyphSize,

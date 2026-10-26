@@ -8,6 +8,13 @@ import com.uacastplayer.playlist.PlaylistSourcePolicy
 class BackupPreviewTest {
     private val empty = BackupData(emptyList(), emptyList(), BackupSettings())
 
+    @Test fun retiredPresetIdsAndInvalidGuideUrlsNeverPromiseAnAppliedSetting() {
+        for (url in listOf(null, "", "file:///private.xml", "not a URL")) {
+            val imported = empty.copy(settings = BackupSettings(epgSourceId = "epg_it999_pp", epgCustomUrl = url))
+            assertEquals(emptyList<String>(), BackupPreviewPolicy.create(imported, empty).changedSettings)
+        }
+    }
+
     @Test fun onlyKnownChangedSettingsAreCountedAndCustomGuideWins() {
         val imported = empty.copy(settings = BackupSettings(
             iconDisplayMode = "UNKNOWN", bufferSize = "LARGE", epgSourceId = "unknown",

@@ -3,7 +3,7 @@ package com.uacastplayer.backup
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.core.settings.BufferSize
-import com.uacastplayer.epg.EpgSource
+import com.uacastplayer.epg.EpgUrlPolicy
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceType
 import com.uacastplayer.favorites.FavoriteChannel
@@ -28,31 +28,31 @@ object BackupPreviewPolicy {
             FavoriteChannel(it.key, it.displayName, it.streamUrl, it.tvgId, it.groupTitle, it.addedAtMillis)
         }
         val merge = BackupMergePolicy.merge(existingSources, favorites, imported.sources, imported.favorites)
+        val mergedLocations = merge.sources.mapTo(HashSet()) { it.location }
         val changes = listOf(
             "iconDisplayMode" to (imported.settings.iconDisplayMode to current.settings.iconDisplayMode),
             "listDensity" to (imported.settings.listDensity to current.settings.listDensity),
             "bufferSize" to (imported.settings.bufferSize to current.settings.bufferSize),
-            "epgSourceId" to (imported.settings.epgSourceId to current.settings.epgSourceId),
             "epgCustomUrl" to (imported.settings.epgCustomUrl to current.settings.epgCustomUrl),
         ).filter { (key, values) ->
-            values.first != values.second && validSetting(key, values.first, imported.settings)
+            values.first != values.second && validSetting(key, values.first)
         }.map { it.first }
         return BackupPreview(
             merge.importedSourceCount,
             merge.importedFavoriteCount,
             imported.sources.count { source ->
-                source.playlistBase64 != null && merge.sources.any { it.location == source.location }
+                source.playlistBase64 != null && source.location in mergedLocations
             },
             changes,
             merge.sourceLimitExceededCount,
         )
     }
 
-    private fun validSetting(key: String, value: String?, settings: BackupSettings): Boolean = when (key) {
+    private fun validSetting(key: String, value: String?): Boolean = when (key) {
         "iconDisplayMode" -> IconDisplayMode.entries.any { it.name == value }
         "listDensity" -> ListDensity.entries.any { it.name == value }
         "bufferSize" -> BufferSize.entries.any { it.name == value }
-        "epgSourceId" -> settings.epgCustomUrl == null && EpgSource.entries.any { it.id == value }
+        "epgCustomUrl" -> value != null && EpgUrlPolicy.normalize(value) != null
         else -> value != null
     }
 }

@@ -103,32 +103,10 @@ internal fun PlayerDialogs(
     }
 
     if (showQualityDialog) {
-        AlertDialog(
-            onDismissRequest = onDismissQualityDialog,
-            title = {
-                Text(
-                    stringResource(R.string.player_quality),
-                    style = Title,
-                    color = UaTheme.palette.labelPrimary,
-                )
-            },
-            text = {
-                TvDialogInputRegistration()
-                QualityDetails(uiState.badges)
-            },
-            confirmButton = {
-                TextButton(onClick = onDismissQualityDialog) {
-                    Text(
-                        stringResource(R.string.common_close),
-                        style = ButtonLabel,
-                        color = UaTheme.palette.azure,
-                    )
-                }
-            },
-        )
+        QualityDetailsDialog(uiState.badges, onDismissQualityDialog)
     }
 
-    if (showGuideSheet && currentChannel != null) {
+    if (showGuideSheet && currentChannel != null && currentChannel.localVideo == null) {
         EpgGuideSheet(
             channel = currentChannel,
             epgData = epgState.data,
@@ -138,6 +116,25 @@ internal fun PlayerDialogs(
             onDismiss = onDismissGuideSheet,
         )
     }
+}
+
+@Composable
+internal fun QualityDetailsDialog(badges: PlaybackBadgesState, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.player_quality), style = Title, color = UaTheme.palette.labelPrimary)
+        },
+        text = {
+            TvDialogInputRegistration()
+            QualityDetails(badges)
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_close), style = ButtonLabel, color = UaTheme.palette.azure)
+            }
+        },
+    )
 }
 
 @Composable

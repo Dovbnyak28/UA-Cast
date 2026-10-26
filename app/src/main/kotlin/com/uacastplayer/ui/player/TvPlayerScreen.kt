@@ -135,14 +135,20 @@ private fun TvPlayerOverlay(state: PlayerUiState, viewModel: PlayerViewModel, on
                 .padding(32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(state.currentChannel?.displayName.orEmpty(), style = Title, color = UaTheme.palette.labelPrimary)
                 if (state.fatalError) {
+                    if (state.currentChannel?.localVideo != null) {
+                        Text(stringResource(R.string.local_video_playback_failed))
+                    }
                     PrimaryButton(stringResource(R.string.common_retry), viewModel::retryCurrentChannel)
                 }
                 TvPlayerControls(state, onExit, viewModel::togglePlayback, viewModel.navigation::requestPrevious,
                     viewModel.navigation::requestNext, controlsFocus)
+                if (state.currentChannel?.localVideo != null && state.canControlPlayback) {
+                    FilePlaybackSeekBar(viewModel, state)
+                }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(4.dp)) {
                     item { SecondaryButton(stringResource(R.string.tv_pair_phone), LocalOpenRemote.current) }
                     item {
-                        state.currentChannel?.let { channel ->
+                        state.currentChannel?.takeIf { it.localVideo == null }?.let { channel ->
                             val favoriteLabel = if (isFavorite(channel)) R.string.tv_remove_favorite
                                 else R.string.tv_add_favorite
                             SecondaryButton(stringResource(favoriteLabel), { onToggleFavorite(channel) })
@@ -154,7 +160,9 @@ private fun TvPlayerOverlay(state: PlayerUiState, viewModel: PlayerViewModel, on
                     }
                     items(TV_PLAYER_ACTIONS.size) { index ->
                         val label = TV_PLAYER_ACTIONS[index]
-                        SecondaryButton(stringResource(label), { onAction(label) })
+                        if (playerActionVisible(label, false, state.currentChannel?.localVideo != null)) {
+                            SecondaryButton(stringResource(label), { onAction(label) })
+                        }
                     }
                 }
             }
@@ -170,10 +178,14 @@ internal fun TvPlayerControls(
     focus: FocusRequester,
 ) {
     androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        SecondaryButton(stringResource(R.string.nav_channels), onExit, Modifier.focusRequester(focus))
-        SecondaryButton(stringResource(R.string.player_previous), onPrevious, enabled = state.canGoPrevious)
+        val isFile = state.currentChannel?.localVideo != null
+        SecondaryButton(stringResource(if (isFile) R.string.common_back else R.string.nav_channels),
+            onExit, Modifier.focusRequester(focus))
+        if (!isFile) {
+            SecondaryButton(stringResource(R.string.player_previous), onPrevious, enabled = state.canGoPrevious)
+        }
         PrimaryButton(playPauseLabel(state.wantsToPlay), onPlayPause, enabled = state.canControlPlayback)
-        SecondaryButton(stringResource(R.string.player_next), onNext, enabled = state.canGoNext)
+        if (!isFile) SecondaryButton(stringResource(R.string.player_next), onNext, enabled = state.canGoNext)
     }
 }
 

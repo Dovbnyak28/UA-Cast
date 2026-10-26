@@ -228,7 +228,7 @@ internal fun ScaffoldZone(
                 focusChannelsToken = focusChannelsToken,
                 onChannelSelected = onChannelSelected,
                 epgState = epgState,
-                onEpgSourceSelected = viewModel::selectEpgSource,
+                onEpgUrlChanged = viewModel::setEpgUrl,
                 onUseSuggestedEpgUrl = viewModel::useSuggestedEpgUrl,
                 iconPrefetchState = iconPrefetchState,
                 onIconWifiOnlyChanged = viewModel::setIconWifiOnly,

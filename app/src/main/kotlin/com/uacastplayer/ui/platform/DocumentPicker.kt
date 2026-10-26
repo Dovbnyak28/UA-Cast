@@ -49,6 +49,10 @@ fun <I> ActivityResultLauncher<I>.launchBackupPicker(input: I, what: String, con
  * Unknown/third-party handlers still launch normally; an absent resolver keeps the exception guard. */
 internal fun <I> ActivityResultLauncher<I>.launchBackupPickerIfSupported(
     input: I, what: String, context: Context,
+): Boolean = launchDocumentPickerIfSupported(input, what, context)
+
+internal fun <I> ActivityResultLauncher<I>.launchDocumentPickerIfSupported(
+    input: I, what: String, context: Context,
 ): Boolean {
     val handler = context.packageManager.resolveActivity(contract.createIntent(context, input),
         PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo

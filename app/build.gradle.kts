@@ -82,7 +82,7 @@ android {
         ndk {
             // 32-bit x86 is dropped outright rather than merely split off: no shipping Android
             // device uses it, and every current emulator image is x86_64. It was 6.2MB of the
-            // release APK's 22.6MB of native code (FFmpeg via nextlib, see libs.nextlib.media3ext)
+            // native software decoders are built in :ffmpegdecoder for these shipping ABIs.
             // for an audience of nobody.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
@@ -94,6 +94,10 @@ android {
     sourceSets {
         getByName("main") {
             assets.srcDir(rootProject.file("legal"))
+        }
+        // Only original synthetic decoder media, never provider playlists or third-party content.
+        getByName("androidTest") {
+            assets.srcDir(rootProject.file("ffmpegdecoder/src/androidTest/assets"))
         }
     }
 
@@ -178,6 +182,23 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
         }
+        // Local opt-in minified regression package: never replace the release/debug user's data.
+        // Disabled in normal builds so it cannot silently add a distribution variant.
+        if (providers.gradleProperty("uacast.minifiedRegression").orNull == "true") {
+            create("minifiedRegression") {
+                initWith(getByName("release"))
+                matchingFallbacks += listOf("release")
+                applicationIdSuffix = ".debug.minified"
+                signingConfig = signingConfigs.getByName("debug")
+                versionNameSuffix = "-minified-regression"
+                testProguardFiles("minified-regression-test-rules.pro")
+            }
+        }
+    }
+    if (providers.gradleProperty("uacast.minifiedRegression").orNull == "true") {
+        testBuildType = "minifiedRegression"
+        // SDK-only probe avoids AndroidJUnitRunner's shared classpath assumptions after R8.
+        defaultConfig.testInstrumentationRunner = "com.uacastplayer.player.MinifiedNativeProbeRunner"
     }
 
     compileOptions {
@@ -208,7 +229,6 @@ android {
                 "**/libandroidx.graphics.path.so",
                 "**/libavcodec.so",
                 "**/libavutil.so",
-                "**/libmedia3ext.so",
                 "**/libswresample.so",
                 "**/libswscale.so",
             )
@@ -335,7 +355,7 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.cast)
     implementation(libs.media3.datasource.okhttp)
-    implementation(libs.nextlib.media3ext)
+    implementation(project(":ffmpegdecoder"))
 
     implementation(libs.play.services.cast.framework)
 
