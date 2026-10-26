@@ -23,7 +23,8 @@ def marked_source(source):
     old = 'return &LICENSE_PREFIX FFMPEG_LICENSE[sizeof(LICENSE_PREFIX) - 1];'
     if source.count(old) != 1:
         raise ValueError('Unexpected FFmpeg licence-query source; refusing an ambiguous patch')
-    return source.replace(old, f'return &LICENSE_PREFIX FFMPEG_LICENSE "{MARKER}"[sizeof(LICENSE_PREFIX) - 1];')
+    notice = '// Modified by ROMAN DOVBNYAK, 2026-10-26: runtime marker for the recipient relink test.\n'
+    return notice + source.replace(old, f'return &LICENSE_PREFIX FFMPEG_LICENSE "{MARKER}"[sizeof(LICENSE_PREFIX) - 1];')
 
 
 def main():
@@ -46,7 +47,11 @@ def main():
     output = ROOT / 'build/software-decoder-relink-probe'
     output.mkdir(parents=True, exist_ok=True)
     try:
-        source.write_text(marked_source(original.decode('utf-8')), encoding='utf-8')
+        modified = marked_source(original.decode('utf-8'))
+        source.write_text(modified, encoding='utf-8')
+        modified_source = output / 'modified-source/libavcodec/version.c'
+        modified_source.parent.mkdir(parents=True, exist_ok=True)
+        modified_source.write_text(modified, encoding='utf-8')
         objects = run / 'ffmpeg/x86_64/objects'
         with (output / 'compile.log').open('w') as log:
             subprocess.run(['make', '-C', str(objects), '-j2', 'libavcodec/libavcodec.so'],

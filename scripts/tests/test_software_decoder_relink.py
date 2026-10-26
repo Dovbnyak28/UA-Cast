@@ -93,6 +93,7 @@ class RelinkTests(unittest.TestCase):
         patched = PROBE.marked_source(original)
         self.assertIn('FFMPEG_LICENSE', patched)
         self.assertIn(PROBE.MARKER, patched)
+        self.assertIn('Modified by ROMAN DOVBNYAK, 2026-10-26', patched)
         for invalid in ('other version', original + original, patched):
             with self.assertRaises(ValueError):
                 PROBE.marked_source(invalid)

@@ -94,6 +94,7 @@ def create_bundle(root, output):
         raise ValueError("Matching actual native build/configuration evidence missing")
     files = {name: root / name for name in NATIVE.INPUTS}
     files['scripts/relink-software-decoder-apk.py'] = root / 'scripts/relink-software-decoder-apk.py'
+    files['scripts/prepare-software-decoder-relink-probe.py'] = root / 'scripts/prepare-software-decoder-relink-probe.py'
     for path in (root / "ffmpegdecoder/src/main").rglob("*"):
         if path.is_file():
             files[str(path.relative_to(root)).replace("\\", "/")] = path
