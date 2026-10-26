@@ -1,5 +1,10 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+
 package com.uacastplayer.player
 
+import android.view.TextureView
+import android.view.View
+import android.view.ViewGroup
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
@@ -24,6 +29,8 @@ import com.uacastplayer.testsupport.waitForChannelsLoaded
 import com.uacastplayer.ui.UiTestTags
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -375,6 +382,75 @@ class PlayerLifecycleInstrumentedTest {
                 )
             }
         }
+    }
+
+    @Test fun fullscreenRetainsTheNativeTextureAndRealFilePlaybackResumes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val clip = java.io.File(context.cacheDir, "diagnostics/surface-${java.util.UUID.randomUUID()}.mp4")
+        check(clip.parentFile!!.isDirectory || clip.parentFile!!.mkdirs())
+        try {
+            SyntheticVideoEncoder.encode(clip)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.diagnostics", clip,
+            )
+            val video = kotlinx.coroutines.runBlocking {
+                com.uacastplayer.data.media.AndroidLocalVideoReader(context).read(uri.toString(), persist = false)
+            }
+            lateinit var model: PlayerViewModel
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                model.start(PlayerRequest.forLocalVideo(video).channels, 0)
+            }
+            composeTestRule.waitUntil(15_000) { model.uiState.value.isPlaying || model.uiState.value.fatalError }
+            assertTrue("The generated clip must actually decode before checking its surface", model.uiState.value.isPlaying)
+            composeTestRule.activityRule.scenario.onActivity {
+                model.player.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
+                model.togglePlayback()
+            }
+            composeTestRule.waitUntil(5_000) { !model.uiState.value.isPlaying }
+            composeTestRule.waitForIdle()
+            lateinit var original: androidx.media3.ui.PlayerView
+            lateinit var texture: android.graphics.SurfaceTexture
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                original = nativePlayerViews(activity.window.decorView).single()
+                texture = checkNotNull((original.videoSurfaceView as TextureView).surfaceTexture)
+            }
+            repeat(3) {
+                composeTestRule.onNodeWithContentDescription(
+                    composeTestRule.activity.getString(R.string.player_fullscreen),
+                ).performClick()
+                composeTestRule.waitForIdle()
+                composeTestRule.activityRule.scenario.onActivity { activity ->
+                    assertSame(original, nativePlayerViews(activity.window.decorView).single())
+                    assertSame(texture, (original.videoSurfaceView as TextureView).surfaceTexture)
+                    assertSame(model.player, original.player)
+                }
+                composeTestRule.onNodeWithContentDescription(
+                    composeTestRule.activity.getString(R.string.player_exit_fullscreen),
+                ).performClick()
+                composeTestRule.waitForIdle()
+                composeTestRule.activityRule.scenario.onActivity { activity ->
+                    assertSame(original, nativePlayerViews(activity.window.decorView).single())
+                    assertSame(texture, (original.videoSurfaceView as TextureView).surfaceTexture)
+                }
+            }
+            composeTestRule.activityRule.scenario.onActivity { model.togglePlayback() }
+            composeTestRule.waitUntil(5_000) { model.uiState.value.isPlaying }
+            closePlayerFromScreen()
+            composeTestRule.activityRule.scenario.onActivity {
+                assertNull(original.player)
+                assertTrue(!model.player.isPlaying)
+                assertEquals(0, model.player.mediaItemCount)
+            }
+        } finally {
+            clip.delete()
+        }
+    }
+
+    private fun nativePlayerViews(view: View): List<androidx.media3.ui.PlayerView> = when (view) {
+        is androidx.media3.ui.PlayerView -> listOf(view)
+        is ViewGroup -> (0 until view.childCount).flatMap { nativePlayerViews(view.getChildAt(it)) }
+        else -> emptyList()
     }
 
     /** Scenario 3: a configuration change (rotation) while playing must retain both the

@@ -2,7 +2,6 @@ package com.uacastplayer
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +24,6 @@ import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.player.PlayerEnrichmentState
 import com.uacastplayer.ui.player.PlayerFavoriteActions
 import com.uacastplayer.ui.player.PlayerHost
-import com.uacastplayer.ui.nav.AdaptiveRootLayout
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.navigationBarHeight
 import com.uacastplayer.ui.theme.GlassTabBarVerticalPadding
@@ -38,6 +36,7 @@ internal fun BoxScope.PlayerZone(
     viewModel: AppViewModel,
     playerRequest: PlayerRequest?,
     playerContainerState: PlayerContainerStateMachine.State,
+    usesNavigationRail: Boolean,
     onPlayerContainerStateChange: (PlayerContainerStateMachine.State) -> Unit,
     onClosePlayer: () -> Unit,
     backHandlerBlocked: Boolean,
@@ -72,47 +71,44 @@ internal fun BoxScope.PlayerZone(
     BackHandler(enabled = isPlayerCollapsed && !backHandlerBlocked) {
         onClosePlayer()
     }
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val usesNavigationRail = maxWidth >= AdaptiveRootLayout.MEDIUM_WIDTH_DP.dp
-        PlayerHost(
-            request = request,
-            collapsed = !isPlayerExpanded,
-            onExit = onClosePlayer,
-            onCollapse = {
-                onPlayerContainerStateChange(
-                    PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Back),
+    PlayerHost(
+        request = request,
+        collapsed = !isPlayerExpanded,
+        onExit = onClosePlayer,
+        onCollapse = {
+            onPlayerContainerStateChange(
+                PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Back),
+            )
+        },
+        onTapCollapsed = {
+            onPlayerContainerStateChange(
+                PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Tap),
+            )
+        },
+        resolveIcon = viewModel::resolveChannelIcon,
+        castArtworkUrl = viewModel::castArtworkUrlFor,
+        favoriteActions = PlayerFavoriteActions(
+            isFavorite = isFavorite,
+            onToggleFavorite = viewModel::toggleFavorite,
+        ),
+        enrichment = PlayerEnrichmentState(epgState = epgState, iconPrefetchState = iconPrefetchState),
+        onOpacityChanged = onOpacityChanged,
+        modifier = if (isPlayerExpanded) {
+            Modifier.fillMaxSize()
+        } else {
+            Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = ScreenHPadding)
+                // The rail does not consume bottom space. Keeping the old tab-bar offset on
+                // tablets made the mini player float unnecessarily high above the gesture bar.
+                .padding(
+                    bottom = if (usesNavigationRail) GapM else {
+                        navigationBarHeight(LocalDensity.current.fontScale) + GlassTabBarVerticalPadding * 2
+                    },
                 )
-            },
-            onTapCollapsed = {
-                onPlayerContainerStateChange(
-                    PlayerContainerStateMachine.reduce(playerContainerState, PlayerContainerStateMachine.Event.Tap),
-                )
-            },
-            resolveIcon = viewModel::resolveChannelIcon,
-            castArtworkUrl = viewModel::castArtworkUrlFor,
-            favoriteActions = PlayerFavoriteActions(
-                isFavorite = isFavorite,
-                onToggleFavorite = viewModel::toggleFavorite,
-            ),
-            enrichment = PlayerEnrichmentState(epgState = epgState, iconPrefetchState = iconPrefetchState),
-            onOpacityChanged = onOpacityChanged,
-            modifier = if (isPlayerExpanded) {
-                Modifier.fillMaxSize()
-            } else {
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = ScreenHPadding)
-                    // The rail does not consume bottom space. Keeping the old tab-bar offset on
-                    // tablets made the mini player float unnecessarily high above the gesture bar.
-                    .padding(
-                        bottom = if (usesNavigationRail) GapM else {
-                            navigationBarHeight(LocalDensity.current.fontScale) + GlassTabBarVerticalPadding * 2
-                        },
-                    )
-                    .fillMaxWidth()
-                    .widthIn(max = 720.dp)
-            },
-        )
-    }
+                .fillMaxWidth()
+                .widthIn(max = 720.dp)
+        },
+    )
 }

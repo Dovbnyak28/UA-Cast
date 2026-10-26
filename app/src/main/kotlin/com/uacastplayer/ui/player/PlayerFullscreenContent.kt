@@ -44,6 +44,9 @@ internal fun FullscreenPlayerContent(
     transientState: PlayerScreenTransientState,
     sleepTimer: SleepTimerState,
     modifier: Modifier = Modifier,
+    videoSurface: @Composable (Int, Modifier) -> Unit = { resizeMode, surfaceModifier ->
+        VideoSurface(actions.viewModel, resizeMode, surfaceModifier)
+    },
 ) {
     val uiState = content.uiState
     val viewModel = actions.viewModel
@@ -63,10 +66,9 @@ internal fun FullscreenPlayerContent(
             )
             .fullscreenGestureInput(actions, environment, transientState),
     ) {
-        VideoSurface(
-            viewModel = viewModel,
-            resizeMode = content.videoResizeMode,
-            modifier = Modifier
+        videoSurface(
+            content.videoResizeMode,
+            Modifier
                 .fillMaxSize()
                 .onGloballyPositioned {
                     transientState.videoBounds = it.boundsInWindow().toEnclosingRect()

@@ -8,10 +8,8 @@ import androidx.media3.ui.PlayerView
 import com.uacastplayer.R
 import com.uacastplayer.player.PlayerViewModel
 
-/** internal, not private - reused by [com.uacastplayer.ui.player.MiniPlayerBar], and called from
- * two different sites within [PlayerScreen] (inline and fullscreen) - each call site is a distinct
- * composition node, so switching between them (e.g. collapsing fullscreen into the mini-bar)
- * disposes one `PlayerView` and creates another. */
+/** Native video binding shared by the phone and TV layouts. The phone screen hoists movable
+ * content so inline/fullscreen reuse this view; actual removal still detaches its player. */
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
 internal fun VideoSurface(viewModel: PlayerViewModel, resizeMode: Int, modifier: Modifier = Modifier) {

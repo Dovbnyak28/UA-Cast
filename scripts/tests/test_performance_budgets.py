@@ -55,9 +55,26 @@ class PerformanceBudgetTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             GATE.evaluate([self.doc], self.budgets)
 
+    def test_wrong_or_missing_platform_cannot_be_accepted_under_another_budget(self):
+        self.budgets["apiLevel"] = 30
+        with self.assertRaises(ValueError):
+            GATE.evaluate([self.doc], self.budgets)
+        for sdk in (35, True, 30.0, "30"):
+            self.doc["context"] = {"build": {"version": {"sdk": sdk}}}
+            with self.assertRaises(ValueError):
+                GATE.evaluate([self.doc], self.budgets)
+        self.doc["context"]["build"]["version"]["sdk"] = 30
+        self.assertFalse(GATE.evaluate([self.doc], self.budgets)[1])
+
+    def test_one_empty_frame_iteration_is_not_hidden_by_other_frames(self):
+        self.budgets["cases"][0]["metrics"][0].update(name="frames", statistic="p95")
+        self.doc["benchmarks"][0]["sampledMetrics"] = {"frames": {"P95": 40, "runs": [[40], []]}}
+        with self.assertRaises(ValueError):
+            GATE.evaluate([self.doc], self.budgets)
+
     def test_all_eight_configured_journeys_require_real_metric_names(self):
         # Synthetic schema contract only: these are not measured device results.
-        config = MODULE.parent.parent / "config/performance/ci-api35.json"
+        config = MODULE.parent.parent / "config/performance/ci-api30.json"
         budgets = json.loads(config.read_text(encoding="utf-8"))
         rows = []
         for case in budgets["cases"]:
@@ -69,10 +86,12 @@ class PerformanceBudgetTest(unittest.TestCase):
                     row["metrics"][rule["name"]] = {"runs": [1] * case["minIterations"]}
             rows.append(row)
         self.assertEqual(8, len(rows))
-        self.assertFalse(GATE.evaluate([{"benchmarks": rows}], budgets)[1])
+        self.assertFalse(GATE.evaluate([{"context": {"build": {"version": {"sdk": budgets["apiLevel"]}}},
+                                          "benchmarks": rows}], budgets)[1])
         rows[-1]["metrics"].pop("UaCastEpgParseAndIndexSumMs")
         with self.assertRaises(ValueError):
-            GATE.evaluate([{"benchmarks": rows}], budgets)
+            GATE.evaluate([{"context": {"build": {"version": {"sdk": budgets["apiLevel"]}}},
+                                          "benchmarks": rows}], budgets)
 
 
 if __name__ == "__main__":

@@ -112,6 +112,37 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
   не отруює negative cache. Genuine header/body IOException зберігаються.
   Network/icon регресія: 143 Debug, 131 Release, 131 Play, нуль failures;
   cancellation-owner сценарій додатково повторюється 64 рази з ізоляцією fixtures.
+- Коміт app-коду `23b2a3bc0bc76c65e7f663843b648152cd2ff107` пройшов
+  [PR Android CI 40406555193](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40406555193)
+  і push CI 40406549536: core 133, Debug/screenshot 2811, Release 2364, Play 2364;
+  unit failures/skips — 0. API 24/30/36 app suites — 161/164/164, по 6
+  assumptions, 0 failures. Decoder/relink API30 знову успішні.
+- API35 run 40406555307 виявив завершені `DrawFrames` при FrameTimeline `dur=-1`.
+  P95 fullscreen у наявних samples — 73.23 ms, але порожні ітерації інших cases
+  роблять загальний run непридатним. Підтверджено офіційним source JAR AndroidX
+  1.4.1: API31+ потребує completed actual/expected slices; API30 використовує
+  стандартне basic UI/RenderThread matching. Первинні traces збережено.
+- Ізольований [API30 probe 40409419686](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40409419686)
+  виконав два незалежні повні eight-journey trials того самого app-коду. Дані
+  повні в обох, але limits не пройдені: player 163.48/88.71 ms і fullscreen
+  127.44/101.60 ms. Це не відкидається як випадково невдалий run. Основний gate
+  тепер використовує API30 для надійного збору стандартного frame CPU metric;
+  усі числові limits/iteration counts збігаються з попередніми. Validator також
+  перевіряє `context.build.version.sdk` і не приймає іншу API чи empty iteration.
+- Source/test analysis підтвердив зайву інфляцію PlayerView/TextureView при кожному
+  inline/fullscreen переході. Movable content тепер зберігає один native view
+  у межах phone screen. Тест реального PlayerScreen + PlayerViewModel перевірив
+  5 циклів, ідентичність view/texture/player, зміну geometry і detach при закритті;
+  до зміни тест падав. PiP і TV зберігають власні surface типи та ownership.
+- Спільні viewport constraints визначаються перед вимірюванням шарів: вкладений
+  PlayerZone constraints scope більше не відкладає opacity callback до моменту,
+  коли navigation уже виміряна. Збережено точний поріг navigation rail та єдиний
+  PlayerHost call site. UI/layout/motion/screenshots regression і detekt пройшли.
+- Додано native instrumentation регресію з власним MP4: фактичний decode,
+  pause, три fullscreen цикли зі збереженням SurfaceTexture, resume і cleanup.
+  Вона компілюється; її виконання на API24/30/36 має підтвердити CI кандидата.
+- CI artifacts тепер включають decoder unit та instrumentation reports разом
+  із app/core reports. Новий platform/evidence validator має 41 passing Python test.
 - Decoder buffer unit tests додані до Debug/Release CI та signed-release gate:
   локально 5/5 у кожній конфігурації, раніше CI запускав лише instrumentation
   цього модуля.

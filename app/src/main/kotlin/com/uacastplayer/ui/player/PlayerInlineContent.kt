@@ -63,6 +63,9 @@ internal fun InlinePlayerContent(
     actions: PlayerScreenActions,
     transientState: PlayerScreenTransientState,
     modifier: Modifier = Modifier,
+    videoSurface: @Composable (Int, Modifier) -> Unit = { resizeMode, surfaceModifier ->
+        VideoSurface(actions.viewModel, resizeMode, surfaceModifier)
+    },
 ) {
     val uiState = content.uiState
     val currentChannel = uiState.currentChannel
@@ -86,7 +89,7 @@ internal fun InlinePlayerContent(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
             )
         } else {
-            InlineVideoPanel(content, actions, transientState)
+            InlineVideoPanel(content, actions, transientState, videoSurface)
         }
         CastStatusBanner(uiState.castStatusMessage)
         // The terminal error card already owns Retry/Next/Back. Keeping the ordinary navigation
@@ -216,6 +219,7 @@ private fun InlineVideoPanel(
     content: PlayerScreenContent,
     actions: PlayerScreenActions,
     transientState: PlayerScreenTransientState,
+    videoSurface: @Composable (Int, Modifier) -> Unit,
 ) {
     val uiState = content.uiState
     Box(
@@ -233,11 +237,7 @@ private fun InlineVideoPanel(
                 onClick = { transientState.controlsVisible = !transientState.controlsVisible },
             ),
     ) {
-        VideoSurface(
-            viewModel = actions.viewModel,
-            resizeMode = content.videoResizeMode,
-            modifier = Modifier.fillMaxSize(),
-        )
+        videoSurface(content.videoResizeMode, Modifier.fillMaxSize())
         when {
             uiState.autoSkipRecovery != null -> AutoSkipRecoveryIndicator(
                 state = uiState.autoSkipRecovery,

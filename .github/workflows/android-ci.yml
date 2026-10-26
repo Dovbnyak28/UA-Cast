@@ -107,6 +107,7 @@ jobs:
           path: |
             app/build/reports
             core/build/reports
+            ffmpegdecoder/build/reports
           retention-days: 14
 
       - name: Upload screenshot diffs
@@ -387,5 +388,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: instrumented-test-reports-api-${{ matrix.api-level }}
-          path: app/build/reports/
+          path: |
+            app/build/reports/
+            ffmpegdecoder/build/reports/
           retention-days: 14

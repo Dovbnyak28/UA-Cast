@@ -1,6 +1,6 @@
 """Fail closed on incomplete/non-finite AndroidX Macrobenchmark output; stdlib only.
 
-Absolute budgets apply to the fixed API-35 CI emulator, not to every physical device.
+Absolute budgets apply to the fixed API-30 CI emulator, not to every physical device.
 Per-iteration peak memory is checked at its worst run, durations by median, frames by P95.
 """
 import argparse
@@ -21,7 +21,17 @@ def checked_number(value):
 
 def evaluate(documents, budgets):
     records = {}
+    expected_api = budgets.get("apiLevel")
+    if expected_api is not None and (type(expected_api) is not int or expected_api < 1):
+        raise ValueError("Invalid configured API level")
     for document in documents:
+        if expected_api is not None:
+            try:
+                actual_api = document["context"]["build"]["version"]["sdk"]
+            except (KeyError, TypeError):
+                raise ValueError("Benchmark evidence is missing its API level") from None
+            if type(actual_api) is not int or actual_api != expected_api:
+                raise ValueError(f"Benchmark API mismatch: expected {expected_api}, got {actual_api}")
         for row in document.get("benchmarks", []):
             identity = (row.get("className", "").split(".")[-1], row.get("name"))
             if identity in records:
@@ -68,7 +78,7 @@ def evaluate(documents, budgets):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("results", type=Path)
-    parser.add_argument("--budgets", type=Path, default=Path("config/performance/ci-api35.json"))
+    parser.add_argument("--budgets", type=Path, default=Path("config/performance/ci-api30.json"))
     args = parser.parse_args()
     try:
         paths = list(args.results.rglob("*-benchmarkData.json"))

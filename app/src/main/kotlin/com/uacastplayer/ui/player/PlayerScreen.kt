@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -129,6 +130,14 @@ fun PlayerScreen(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
     }
 
+    // Inline/fullscreen share one native view/texture. Recreating it on every transition
+    // inflates Media3 UI and detaches the decoder output while the window is also resizing.
+    val videoSurface = remember(viewModel) {
+        movableContentOf<Int, Modifier> { resizeMode, surfaceModifier ->
+            VideoSurface(viewModel, resizeMode, surfaceModifier)
+        }
+    }
+
     PlayerScreenEffects(environment, isFullscreen, uiState, transientState)
     if (isInPip) {
         PipPlayerSurface(viewModel, modifier)
@@ -142,9 +151,10 @@ fun PlayerScreen(
             transientState,
             sleepTimer,
             modifier,
+            videoSurface = videoSurface,
         )
     } else {
-        InlinePlayerContent(content, actions, transientState, modifier)
+        InlinePlayerContent(content, actions, transientState, modifier, videoSurface = videoSurface)
     }
 
     val isFile = uiState.currentChannel?.localVideo != null

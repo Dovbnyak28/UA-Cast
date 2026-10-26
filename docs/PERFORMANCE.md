@@ -2,55 +2,37 @@
 
 ## Scheduled measured regression gate
 
-The repository now includes `.github/workflows/performance-gate.yml`: manual runs and a weekly
-Monday 04:00 UTC run on a fresh API-35 x86_64 emulator (2 GiB RAM, 256 MiB heap). It will become
-active only after publication to the default branch. See
-`SECURE_BACKUP_ICON_CHECK_PERFORMANCE_2026-10-04.md` for implementation and verification status.
+`.github/workflows/performance-gate.yml` runs on relevant pull requests, by manual dispatch,
+and every Monday at 04:00 UTC after it reaches the default branch. It uses an owned API-30
+x86_64 emulator, explicit lavapipe graphics, 2 GiB RAM and a 256 MiB heap.
 
-Eight existing production journeys must all produce complete AndroidX Benchmark 1.4.1 JSON:
-cold/warm start, restoring/opening 40,000 channels, first player, fullscreen, EPG opening and
-350,000-programme parsing/indexing. `config/performance/ci-api35.json` defines the initial
-conservative absolute limits. The validator uses median startup/parse time, worst per-run managed
-heap and frame CPU P95 (`sampledMetrics.P95`), requiring every configured iteration. Missing,
-duplicate, zero, non-finite or interrupted results fail closed; a passing host test is not a device
-measurement. Emulator suppression is restricted to `EMULATOR`, not other benchmark errors.
+All eight journeys must produce complete AndroidX Benchmark 1.4.1 JSON: cold/warm startup,
+restoring/opening 40,000 channels, first player, fullscreen, opening EPG, and parsing/indexing
+350,000 programmes. `config/performance/ci-api30.json` specifies the limits: median startup/parse
+time, worst per-run managed heap and CPU frame P95. Every iteration is required. Wrong/missing
+API metadata, empty frame iterations, duplicate, zero, non-finite or interrupted evidence fails.
+Emulator suppression remains limited to `EMULATOR`; functional tests cannot replace measurements.
 
-```bash
-python3 -B -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
-python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
-```
-
-Measurements/traces/failure reports are retained for 30 days. Initial limits are not a calibrated
-physical-device baseline or a native/GPU memory guarantee; review the first successful CI traces
-and tighten budgets from evidence. Keep the existing host complexity/allocation budgets in the
-ordinary unit-test gate. Run the device gate before release; Mi TV API 28 does not replace the
-API-35 CI benchmark run.
-
-## Scheduled measured regression gate
-
-The repository now includes `.github/workflows/performance-gate.yml`: manual runs and a weekly
-Monday 04:00 UTC run on a fresh API-35 x86_64 emulator (2 GiB RAM, 256 MiB heap). It will become
-active only after publication to the default branch. See
-`SECURE_BACKUP_ICON_CHECK_PERFORMANCE_2026-10-04.md` for implementation and verification status.
-
-Eight existing production journeys must all produce complete AndroidX Benchmark 1.4.1 JSON:
-cold/warm start, restoring/opening 40,000 channels, first player, fullscreen, EPG opening and
-350,000-programme parsing/indexing. `config/performance/ci-api35.json` defines the initial
-conservative absolute limits. The validator uses median startup/parse time, worst per-run managed
-heap and frame CPU P95 (`sampledMetrics.P95`), requiring every configured iteration. Missing,
-duplicate, zero, non-finite or interrupted results fail closed; a passing host test is not a device
-measurement. Emulator suppression is restricted to `EMULATOR`, not other benchmark errors.
+The API-35 emulator produced completed UI/RenderThread slices but unfinished FrameTimeline
+slices (`dur=-1`). AndroidX's API31+ matching discarded those frames. Two isolated API30 runs
+returned complete evidence through the standard pre-31 CPU metric. They still exposed real
+budget overruns; no numeric limit was increased. The older API35 config is retained for historical
+diagnostics with its own explicit API identity. API/renderer migrations are not app speedups.
+See `RELEASE_COMPLETION_2026-10-26.md` for measured results and limitations.
 
 ```bash
 python3 -B -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
 python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
 ```
 
-Measurements/traces/failure reports are retained for 30 days. Initial limits are not a calibrated
-physical-device baseline or a native/GPU memory guarantee; review the first successful CI traces
-and tighten budgets from evidence. Keep the existing host complexity/allocation budgets in the
-ordinary unit-test gate. Run the device gate before release; Mi TV API 28 does not replace the
-API-35 CI benchmark run.
+CPU frame timing is supported before API31; `frameOverrunMs` is not available on API30.
+[Android metric documentation](https://developer.android.com/reference/androidx/benchmark/macro/FrameTimingMetric).
+The pinned 1.4.1 source confirms the separate basic and FrameTimeline matching paths.
+
+Measurements, traces and failures are retained for 30 days. These absolute shared-runner safety
+limits are not calibrated physical-device baselines or a native/GPU memory guarantee. Keep host
+complexity/allocation tests too; tighten budgets only from reviewed measurements. A Mi TV run
+cannot certify this fixed CI environment, and CI cannot certify a physical receiver's protocol.
 
 Motivated by a real complaint on a 2863-channel, 11-group playlist: the whole app froze for the
 duration of every playlist load. The root cause and the fixes below are collectively "Block 1-3" in

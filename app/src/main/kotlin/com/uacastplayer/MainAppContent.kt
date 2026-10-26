@@ -2,7 +2,7 @@ package com.uacastplayer
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,6 +31,7 @@ import com.uacastplayer.parentalcontrol.PlayerChannelAccess
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.guidedtour.GuidedTourHost
+import com.uacastplayer.ui.nav.AdaptiveRootLayout
 import com.uacastplayer.ui.tv.LocalTvMode
 import com.uacastplayer.ads.BannerAdAudience
 import com.uacastplayer.ui.ads.LocalBannerAdAudience
@@ -245,7 +247,9 @@ internal fun MainAppContent(
             LocalFeatureGate provides premiumUi.gate,
             LocalPremiumNotice provides premiumUi.notice,
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Resolve the shared viewport before either layer is measured. A nested constraints
+            // subcomposition in PlayerZone used to report opacity after navigation was measured.
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val surfaceRequest = playerRequest
                 // Keep only a small UI token after closure, never the previous channel list.
                 val surfaceToken = remember(surfaceRequest) { Any() }
@@ -309,6 +313,7 @@ internal fun MainAppContent(
                     viewModel = viewModel,
                     playerRequest = surfaceRequest,
                     playerContainerState = playerContainerState,
+                    usesNavigationRail = maxWidth >= AdaptiveRootLayout.MEDIUM_WIDTH_DP.dp,
                     onPlayerContainerStateChange = { playerContainerState = it },
                     onClosePlayer = closePlayer,
                     backHandlerBlocked = showHelp || showTerms || showPrivacyPolicy || showAddPlaylist,
