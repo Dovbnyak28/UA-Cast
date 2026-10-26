@@ -9,7 +9,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-DATE = "2026-10-25"
+DATE = "2026-10-26"
 LOCALES = {"en": "values", "uk": "values-uk", "ru": "values-ru", "es": "values-es"}
 STYLE = """body{font-family:system-ui,sans-serif;max-width:760px;margin:auto;padding:24px 20px 64px;
 line-height:1.65;color:#171717;background:#fff}h1{font-size:1.6rem}h2{font-size:1.15rem;margin-top:2em}

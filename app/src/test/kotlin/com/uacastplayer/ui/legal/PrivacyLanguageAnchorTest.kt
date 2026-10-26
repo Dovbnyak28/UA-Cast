@@ -6,7 +6,7 @@ import org.junit.Test
 
 class PrivacyLanguageAnchorTest {
     @Test fun onlyReviewedLanguagesInTheSameDocumentAreAllowed() {
-        for (language in listOf("en", "uk", "ru")) {
+        for (language in listOf("en", "uk", "ru", "es")) {
             assertTrue(isPrivacyLanguageAnchor("file:///android_asset/privacy-policy.html#$language"))
         }
     }

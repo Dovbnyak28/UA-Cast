@@ -118,7 +118,8 @@ private const val PRIVACY_DOCUMENT_URL = "file:///android_asset/privacy-policy.h
 internal fun isPrivacyLanguageAnchor(url: String): Boolean =
     url == "$PRIVACY_DOCUMENT_URL#en" ||
         url == "$PRIVACY_DOCUMENT_URL#uk" ||
-        url == "$PRIVACY_DOCUMENT_URL#ru"
+        url == "$PRIVACY_DOCUMENT_URL#ru" ||
+        url == "$PRIVACY_DOCUMENT_URL#es"
 
 /** These two flags are deprecated in newer WebView SDKs but remain the only explicit guard on
  * older WebViews, which this app still supports. Keep the suppression limited to this bridge. */
