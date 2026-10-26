@@ -8,14 +8,15 @@ permissions:
 
 jobs:
   native:
-    runs-on: ubuntu-latest
+    # Keep the SDK-equipped image stable while ubuntu-latest migrates to 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Validate fail-closed native build guards
         run: python3 -m unittest discover -s scripts/tests -p 'test_software_decoder_build.py'
       - name: Install pinned Android native toolchain
-        run: sdkmanager 'ndk;26.1.10909125' 'cmake;3.22.1'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ''ndk;26.1.10909125'' ''cmake;3.22.1'''
       - name: Build from hash-verified sources, not a decoder AAR
         run: |
           python3 scripts/prepare-software-decoder.py \

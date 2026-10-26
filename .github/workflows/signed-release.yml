@@ -25,7 +25,7 @@ jobs:
 
   instrumented:
     name: Instrumented tests (API ${{ matrix.api-level }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: native
     timeout-minutes: 45
     strategy:
@@ -84,7 +84,7 @@ jobs:
   signed-artifacts:
     name: Signed Play AAB and GitHub APK
     needs: [native, instrumented]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: production
     env:
