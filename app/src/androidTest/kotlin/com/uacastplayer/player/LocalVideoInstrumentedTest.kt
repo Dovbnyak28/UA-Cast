@@ -2,6 +2,7 @@ package com.uacastplayer.player
 
 import android.app.Application
 import android.os.Parcel
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
@@ -276,6 +277,9 @@ class LocalVideoInstrumentedTest {
     }
 
     private fun captureUi(name: String) {
+        // Compose's window screenshot uses a PixelCopy overload introduced in API 26.
+        // Screenshot evidence is optional; every playback/seek/UI assertion still runs on API 24/25.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val capture = File(app.cacheDir, "diagnostics/$name.png")
         capture.outputStream().use { rule.onRoot().captureToImage().asAndroidBitmap()
             .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }

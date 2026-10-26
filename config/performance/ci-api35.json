@@ -1,5 +1,5 @@
 {
-  "description": "Initial conservative absolute safety budgets on the fixed CI API-35 x86_64 emulator. Tighten only from reviewed device measurements, never to hide a failure. Memory units are KiB, time units ms.",
+  "description": "Absolute safety budgets on the CI API-35 x86_64 emulator with explicit swangle software graphics. Renderer migration must be reported separately from app speedups. Tighten only from reviewed device measurements, never to hide a failure. Memory units are KiB, time units ms.",
   "cases": [
     {"class":"StartupBenchmark","test":"coldStartup","minIterations":10,"metrics":[{"name":"timeToInitialDisplayMs","statistic":"median","limit":5000}]},
     {"class":"StartupBenchmark","test":"warmStartup","minIterations":10,"metrics":[{"name":"timeToInitialDisplayMs","statistic":"median","limit":2500}]},

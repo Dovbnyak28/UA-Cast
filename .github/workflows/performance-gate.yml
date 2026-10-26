@@ -73,6 +73,9 @@ jobs:
           ram-size: 2048M
           heap-size: 256M
           disable-animations: true
+          # The runner default swiftshader_indirect is deprecated by current emulators.
+          # Keep the software renderer explicit; budgets below are not relaxed.
+          emulator-options: -no-window -gpu swangle -no-snapshot -noaudio -no-boot-anim
           script: >-
             ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest
             -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark,com.uacastplayer.baselineprofile.CriticalJourneysBenchmark,com.uacastplayer.baselineprofile.EpgParseBenchmark,com.uacastplayer.baselineprofile.BenchmarkFixtureReadinessTest

@@ -91,6 +91,16 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
             "Timed out waiting for description '$description'"
         }
 
+    fun waitForRestoredPlaylist(name: String) {
+        // The always-visible source selector includes its action label. The old exact-title
+        // lookup waited for the separate dashboard card, which can be below the fold.
+        // This selector is composed only after hasChannels becomes true, so navigation chrome
+        // alone cannot satisfy the cold-restoration benchmark.
+        requireNotNull(device.wait(
+            Until.findObject(By.pkg(PACKAGE_NAME).textEndsWith(" · $name")), UI_TIMEOUT_MILLIS,
+        )) { "Timed out waiting for the restored benchmark playlist selector" }
+    }
+
     fun waitForEpgParseCompletion() {
         val status = waitForStatus(EPG_PARSE_STATUS_PATTERN, EPG_PARSE_TIMEOUT_MILLIS)
         check(status == EPG_PARSE_READY) { status }

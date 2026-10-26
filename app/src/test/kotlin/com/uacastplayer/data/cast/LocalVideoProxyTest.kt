@@ -7,6 +7,7 @@ import com.uacastplayer.media.LocalVideo
 import java.io.InputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.OkHttpClient
@@ -51,7 +52,7 @@ class LocalVideoProxyTest {
             assertEquals("no-store", it.header("Cache-Control"))
             assertArrayEquals(ByteArray(1024) { index -> index.toByte() }, it.body.bytes())
         }
-        assertEquals(1, source.closed.get())
+        assertClosed(1)
         assertEquals(1024, server.bytesServedToReceiver())
     }
 
@@ -61,9 +62,9 @@ class LocalVideoProxyTest {
             assertEquals("1024", it.header("Content-Length"))
             assertEquals(0, it.body.bytes().size)
         }
+        assertClosed(1)
         assertEquals(0, source.reads.get())
         assertEquals(0, source.seeks.get())
-        assertEquals(1, source.closed.get())
     }
 
     @Test fun rangesServeOnlyTheRequestedIntervalIncludingSuffix() {
@@ -74,7 +75,7 @@ class LocalVideoProxyTest {
                 assertArrayEquals(ByteArray(256) { index -> index.toByte() }, it.body.bytes())
             }
         }
-        assertEquals(2, source.closed.get())
+        assertClosed(2)
     }
 
     @Test fun invalidRangeReturns416WithoutReadingTheFile() {
@@ -83,8 +84,8 @@ class LocalVideoProxyTest {
             assertEquals("bytes */1024", it.header("Content-Range"))
             assertEquals(0, it.body.bytes().size)
         }
+        assertClosed(1)
         assertEquals(0, source.reads.get())
-        assertEquals(1, source.closed.get())
     }
 
     @Test fun tokenAndUnknownResourceAreRejectedBeforeOpeningAnyDocument() {
@@ -112,7 +113,7 @@ class LocalVideoProxyTest {
                 assertEquals(206, it.code)
                 assertArrayEquals(ByteArray(256) { index -> index.toByte() }, it.body.bytes())
             }
-        assertEquals(1, source.closed.get())
+        assertClosed(1)
     }
 
     @Test fun stopDuringProviderOpenCancelsTheOpenAndClosesAnyLateDescriptor() {
@@ -126,9 +127,7 @@ class LocalVideoProxyTest {
             server.stop()
             assertEquals(1, source.cancelled.get())
             future.get(3, TimeUnit.SECONDS)
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
-            while (source.closed.get() == 0 && System.nanoTime() < deadline) Thread.yield()
-            assertEquals(1, source.closed.get())
+            assertClosed(1)
         } finally {
             source.release.countDown()
             worker.shutdownNow()
@@ -142,7 +141,15 @@ class LocalVideoProxyTest {
             assertEquals(1024, it.body.bytes().size)
         }
         server.stop()
-        assertEquals(1, source.closed.get())
+        assertClosed(1)
+    }
+
+    private fun assertClosed(expected: Int) {
+        // Content-Length lets the client finish before the server worker reaches finally.
+        // Await actual descriptor closure; receiving the bytes is not a cleanup barrier.
+        assertTrue("File descriptors must close after their response",
+            source.closeEvents.tryAcquire(expected, 3, TimeUnit.SECONDS))
+        assertEquals(expected, source.closed.get())
     }
 }
 
@@ -152,6 +159,7 @@ private class SyntheticVideoSource : LocalVideoSource {
     var throwOnCancel = false
     val opened = AtomicInteger()
     val closed = AtomicInteger()
+    val closeEvents = Semaphore(0)
     val cancelled = AtomicInteger()
     val reads = AtomicInteger()
     val seeks = AtomicInteger()
@@ -178,7 +186,13 @@ private class SyntheticVideoSource : LocalVideoSource {
                 }
             }
             override fun seek(position: Long) { seeks.incrementAndGet(); this.position = position }
-            override fun close() { if (!disposed) { disposed = true; closed.incrementAndGet() } }
+            override fun close() {
+                if (!disposed) {
+                    disposed = true
+                    closed.incrementAndGet()
+                    closeEvents.release()
+                }
+            }
         }
     }
 }

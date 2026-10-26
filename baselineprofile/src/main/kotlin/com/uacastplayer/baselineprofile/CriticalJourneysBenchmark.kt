@@ -35,7 +35,7 @@ class CriticalJourneysBenchmark {
             setupBlock = { pressHome() },
         ) {
             startActivityAndWait()
-            driver.waitForText(PLAYLIST_NAME)
+            driver.waitForRestoredPlaylist(PLAYLIST_NAME)
         }
     }
 

@@ -17,6 +17,11 @@ Scope: only the Apache-2.0 wrapper, LGPL FFmpeg, BSD libyuv and their build inpu
 This bundle does not grant a GPL licence to the application's own code. All component
 licences/copyright notices are retained. No private keys or provider playlists are included.
 
+The publisher's original decoder build/relink scripts included here may be used,
+modified and redistributed under Apache-2.0 (full text: ffmpegdecoder/LICENSE).
+This permission is limited to those scripts; the Android application's own code
+is outside this source bundle. Upstream components retain their own licences.
+
 Rebuild on Linux/Windows with Python 3.12+, Bash/GNU make/patch, the Android NDK and
 Android SDK CMake revisions in ffmpegdecoder/native-sources.json. On Linux use paths
 without spaces for GNU make. On Windows the build
