@@ -70,19 +70,42 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
   має API guard. Локально 9/9 у Debug, Release і Play, instrumentation компілюється.
 - Cold-restore benchmark очікував точну назву картки, яка опинилась нижче fold.
   Тепер чекає видимий source selector, доступний лише після `hasChannels=true`.
-  Обидва benchmark variants компілюються. CI renderer змінено із deprecated
-  `swiftshader_indirect` на явний `swangle`; бюджети не збільшено. Вплив backend
-  не приписується оптимізації production-коду.
+  Обидва benchmark variants компілюються.
+- Коміт `0101fe839aadabed59a77b00ef36edf6bd23ac02`: push CI
+  [40392740945](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40392740945)
+  і PR CI [40392749775](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40392749775)
+  успішні: core 133, Debug/screenshot 2804, Release 2363, Play 2363 unit tests;
+  API 24/30/36 app suites — 161/164/164 tests (по 6 assumptions для спеціальних
+  сценаріїв), decoder — по 15, recipient-key relink на API 30 — 1 wiring + 15 decode.
+- Повний performance run із `swangle` виявив незавершені FrameTimeline slices,
+  тому не прийнятий як доказ продуктивності. Окремий контрольний run
+  [40396418355](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40396418355)
+  порівняв три renderers на незміненому app commit: `swiftshader`,
+  `swiftshader_indirect`, `lavapipe`. Усі три дали повні measurements;
+  deprecated indirect не повертається в основний gate. Обраний явний `lavapipe`.
+  Його P95: відкриття 40k — 22.69 ms, player — 104.06 ms, fullscreen — 114.82 ms,
+  EPG — 31.33 ms. Зміна emulator backend не є app speedup; ліміти не збільшені.
+- Під непрозорим expanded player головний scaffold тепер зберігає composition,
+  навігацію та Android views, але не виконує приховане малювання. Видимість
+  пов'язана з фактичним завершенням opening animation; при collapse/close
+  малювання відновлюється. Request token не утримує попередній список каналів.
+  Локальні тести перевіряють drawing, animation, native-view retention і перший
+  opaque frame при disabled motion; разом із player/layout/motion — 21 tests.
+  Detekt та compilation instrumentation успішні. Повний CI і вимірювання
+  останньої оптимізації мають підтвердити ефект на тому самому `lavapipe`.
+- Decoder buffer unit tests додані до Debug/Release CI та signed-release gate:
+  локально 5/5 у кожній конфігурації, раніше CI запускав лише instrumentation
+  цього модуля.
 - Остаточні CI results потрібно звіряти із SHA останнього коміту
   [гілки PR №4](https://github.com/Dovbnyak28/UA-Cast/pull/4/checks).
   Старі невдалі або скасовані прогони не підтверджують стан наступних комітів.
 
 ## Незакриті питання
 
-1. Підтвердити результат практичного install/decode relink на емуляторі та
-   всіх CI jobs. Раніше performance gate виміряв перевищення frame-бюджету;
-   ліміти не послаблювалися. Старий trace показує суттєві RenderThread/shader
-   та emulator graphics synchronization slices; потрібні нові вимірювання.
+1. Завершити повний CI та всі вісім performance measurements для останньої
+   underlay-оптимізації. Практичний recipient-key install/decode relink на
+   API 30 вже успішний. Бюджети не послаблювалися; результат зміни renderer
+   відокремлюється від ефекту production-коду.
 2. Для наступного application release виконати публічне matching-source
    постачання саме його збірки. Технічну готовність джерел/заміни бібліотеки
    підтверджено; наявність публічного source-only архіву не дозволяє підміняти

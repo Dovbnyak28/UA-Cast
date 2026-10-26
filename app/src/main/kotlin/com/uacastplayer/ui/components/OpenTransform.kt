@@ -4,9 +4,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -42,9 +45,14 @@ private const val OPEN_ORIGIN_Y = 0.28f
  * motion back on must not hide a surface that is already visible.
  */
 @Composable
-fun Modifier.openTransform(key: Any?): Modifier {
+fun Modifier.openTransform(key: Any?, onOpacityChanged: (Boolean) -> Unit = {}): Modifier {
     val enabled = animationsAllowed()
     var complete by remember(key) { mutableStateOf(!enabled) }
+    val notifyOpacity by rememberUpdatedState(onOpacityChanged)
+    // The navigation underlay may stop painting only after this actual transform is opaque.
+    // A separate wall-clock timer can finish before an animation's first delayed frame.
+    SideEffect { notifyOpacity(!enabled || complete) }
+    DisposableEffect(Unit) { onDispose { notifyOpacity(false) } }
     LaunchedEffect(key, enabled) {
         if (!enabled) complete = true
     }

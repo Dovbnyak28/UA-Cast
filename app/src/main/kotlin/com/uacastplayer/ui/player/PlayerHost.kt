@@ -69,6 +69,7 @@ fun PlayerHost(
     favoriteActions: PlayerFavoriteActions,
     enrichment: PlayerEnrichmentState,
     modifier: Modifier = Modifier,
+    onOpacityChanged: (Boolean) -> Unit = {},
 ) {
     val (isFavorite, onToggleFavorite) = favoriteActions
     val (epgState, iconPrefetchState) = enrichment
@@ -130,7 +131,7 @@ fun PlayerHost(
 
     // Keep entrance state in the host: the expanded child leaves composition when collapsed,
     // so remembering the same key inside that branch would still replay on every expansion.
-    val openingModifier = Modifier.openTransform(key = channels to startIndex)
+    val openingModifier = Modifier.openTransform(key = channels to startIndex, onOpacityChanged = onOpacityChanged)
     Box(modifier = modifier) {
         if (collapsed && !LocalTvMode.current) {
             val iconRefreshKey: Any = iconPrefetchState.refreshKey

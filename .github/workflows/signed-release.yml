@@ -166,6 +166,7 @@ jobs:
           ./gradlew
           :core:test
           :core:detekt
+          :ffmpegdecoder:testReleaseUnitTest
           :app:verifyRoborazziDebug
           :app:testPlayUnitTest
           :app:lintPlay

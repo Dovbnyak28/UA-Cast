@@ -60,7 +60,7 @@ jobs:
         run: bash scripts/check-legal-assets.sh app/build/outputs/apk/debug
 
       - name: Debug unit tests and screenshot verification
-        run: ./gradlew :core:test :app:verifyRoborazziDebug --stacktrace
+        run: ./gradlew :core:test :ffmpegdecoder:testDebugUnitTest :app:verifyRoborazziDebug --stacktrace
 
       - name: Validate measured performance gate
         run: python3 -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'
@@ -77,7 +77,7 @@ jobs:
         run: bash scripts/tests/run-instrumented-tests-test.sh
 
       - name: Release unit tests
-        run: ./gradlew :app:testReleaseUnitTest --stacktrace
+        run: ./gradlew :ffmpegdecoder:testReleaseUnitTest :app:testReleaseUnitTest --stacktrace
 
       - name: Play-distribution unit tests
         run: ./gradlew :app:testPlayUnitTest --stacktrace

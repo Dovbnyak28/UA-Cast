@@ -41,6 +41,7 @@ internal fun BoxScope.PlayerZone(
     onPlayerContainerStateChange: (PlayerContainerStateMachine.State) -> Unit,
     onClosePlayer: () -> Unit,
     backHandlerBlocked: Boolean,
+    onOpacityChanged: (Boolean) -> Unit,
 ) {
     val request = playerRequest ?: return
     val epgState by viewModel.epgState.collectAsStateWithLifecycle()
@@ -94,6 +95,7 @@ internal fun BoxScope.PlayerZone(
                 onToggleFavorite = viewModel::toggleFavorite,
             ),
             enrichment = PlayerEnrichmentState(epgState = epgState, iconPrefetchState = iconPrefetchState),
+            onOpacityChanged = onOpacityChanged,
             modifier = if (isPlayerExpanded) {
                 Modifier.fillMaxSize()
             } else {

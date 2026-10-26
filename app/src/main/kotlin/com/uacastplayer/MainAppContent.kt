@@ -34,6 +34,7 @@ import com.uacastplayer.ui.tv.LocalTvMode
 import com.uacastplayer.ads.BannerAdAudience
 import com.uacastplayer.ui.ads.LocalBannerAdAudience
 import com.uacastplayer.ui.components.UpdateOfferDialog
+import com.uacastplayer.ui.components.RetainedUnderlay
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.premium.LocalPremiumNotice
 import com.uacastplayer.ui.premium.rememberFeatureGate
@@ -69,6 +70,7 @@ internal fun MainAppContent(
     val requestOwner = androidx.lifecycle.viewmodel.compose.viewModel<PlayerRequestViewModel>()
     val playerRequest by requestOwner.request.collectAsStateWithLifecycle()
     var pendingOpen by remember { mutableStateOf<PlayerRequest?>(null) }
+    var opaquePlayerToken by remember { mutableStateOf<Any?>(null) }
     var playerContainerState by rememberSaveable {
         mutableStateOf(PlayerContainerStateMachine.State.CLOSED)
     }
@@ -244,48 +246,59 @@ internal fun MainAppContent(
             LocalPremiumNotice provides premiumUi.notice,
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                ScaffoldZone(
-                    viewModel = viewModel,
-                    miniPlayerVisible = PlayerContainerStateMachine.isMiniPlayerVisible(
-                        playerContainerState, hasRequest = playerRequest != null,
-                    ),
-                    playlistState = playlistState,
-                    guidedTourDestination = guidedTourState.currentStep?.destination,
-                    currentLanguage = currentLanguage,
-                    currentAppTheme = currentAppTheme,
-                    onExitApp = onFinish,
-                    showHelp = showHelp,
-                    showTerms = showTerms,
-                    showPrivacyPolicy = showPrivacyPolicy,
-                    showAddPlaylist = showAddPlaylist,
-                    focusChannelsToken = focusChannelsToken,
-                    onOpenHelp = { showHelp = true },
-                    onOpenTerms = { showTerms = true },
-                    onOpenPrivacyPolicy = { showPrivacyPolicy = true },
-                    onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport,
-                    onOpenAddPlaylist = { showAddPlaylist = true },
-                    onCloseHelp = { showHelp = false },
-                    onCloseTerms = { showTerms = false },
-                    onClosePrivacyPolicy = { showPrivacyPolicy = false },
-                    onCloseAddPlaylist = { showAddPlaylist = false },
-                    onChannelSelected = openPlayer,
-                    onPlaylistLoaded = {
-                        showAddPlaylist = false
-                        focusChannelsToken++
+                val surfaceRequest = playerRequest
+                // Keep only a small UI token after closure, never the previous channel list.
+                val surfaceToken = remember(surfaceRequest) { Any() }
+                RetainedUnderlay(
+                    covered = {
+                        surfaceRequest != null && playerContainerState == PlayerContainerStateMachine.State.EXPANDED &&
+                            opaquePlayerToken === surfaceToken
                     },
-                    // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
-                    // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
-                    pickPlaylistFile = {
-                        pickPlaylistFile.launchOrLogAbsence(
-                            arrayOf("audio/x-mpegurl", "*/*"),
-                            "pick a playlist",
-                        )
-                    },
-                    exportBackupFile = backupDocuments.export,
-                    importBackupFile = backupDocuments.restore,
-                    requireParentalControlUnlock = requireParentalControlUnlock,
-                    premiumSection = premiumSection,
-                )
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    ScaffoldZone(
+                        viewModel = viewModel,
+                        miniPlayerVisible = PlayerContainerStateMachine.isMiniPlayerVisible(
+                            playerContainerState, hasRequest = playerRequest != null,
+                        ),
+                        playlistState = playlistState,
+                        guidedTourDestination = guidedTourState.currentStep?.destination,
+                        currentLanguage = currentLanguage,
+                        currentAppTheme = currentAppTheme,
+                        onExitApp = onFinish,
+                        showHelp = showHelp,
+                        showTerms = showTerms,
+                        showPrivacyPolicy = showPrivacyPolicy,
+                        showAddPlaylist = showAddPlaylist,
+                        focusChannelsToken = focusChannelsToken,
+                        onOpenHelp = { showHelp = true },
+                        onOpenTerms = { showTerms = true },
+                        onOpenPrivacyPolicy = { showPrivacyPolicy = true },
+                        onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport,
+                        onOpenAddPlaylist = { showAddPlaylist = true },
+                        onCloseHelp = { showHelp = false },
+                        onCloseTerms = { showTerms = false },
+                        onClosePrivacyPolicy = { showPrivacyPolicy = false },
+                        onCloseAddPlaylist = { showAddPlaylist = false },
+                        onChannelSelected = openPlayer,
+                        onPlaylistLoaded = {
+                            showAddPlaylist = false
+                            focusChannelsToken++
+                        },
+                        // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
+                        // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
+                        pickPlaylistFile = {
+                            pickPlaylistFile.launchOrLogAbsence(
+                                arrayOf("audio/x-mpegurl", "*/*"),
+                                "pick a playlist",
+                            )
+                        },
+                        exportBackupFile = backupDocuments.export,
+                        importBackupFile = backupDocuments.restore,
+                        requireParentalControlUnlock = requireParentalControlUnlock,
+                        premiumSection = premiumSection,
+                    )
+                }
 
                 // A single stable PlayerHost call site, always composed whenever a channel is loaded
                 // regardless of layout, drawn as a later sibling so it overlays whatever ScaffoldZone is
@@ -294,11 +307,15 @@ internal fun MainAppContent(
                 // would mean a second, independent instance of all three.
                 PlayerZone(
                     viewModel = viewModel,
-                    playerRequest = playerRequest,
+                    playerRequest = surfaceRequest,
                     playerContainerState = playerContainerState,
                     onPlayerContainerStateChange = { playerContainerState = it },
                     onClosePlayer = closePlayer,
                     backHandlerBlocked = showHelp || showTerms || showPrivacyPolicy || showAddPlaylist,
+                    onOpacityChanged = { opaque ->
+                        if (opaque) opaquePlayerToken = surfaceToken
+                        else if (opaquePlayerToken === surfaceToken) opaquePlayerToken = null
+                    },
                 )
 
                 BatteryHintZone(viewModel = viewModel)
