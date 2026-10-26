@@ -6,8 +6,8 @@
       "evidence": "docs/SOFTWARE_DECODER_MIGRATION_2026-10-12.md: independent Apache/LGPL extensions wired; no NextLib runtime/DEX/GPL wrapper .so; Mi A2 main 28/28, codec 15/15, R8 JNI probe 1/1; Debug 2743, Release/Play 2335 each and local release/Play gate passed."
     },
     "native_corresponding_source": {
-      "approved": false,
-      "evidence": "2026-10-25: all three ABIs rebuilt and native/source ZIP hashes verified; signed-release workflow requires the matching source bundle in APK/AAB artifacts. Still pending public distribution with the matching new APK and practical modified-library install/relink validation. CI artifact retention alone is not public source distribution."
+      "approved": true,
+      "evidence": "2026-10-26: all three local ABIs and final APK/AAB ELF sections match the verified native build. Its full corresponding-source ZIP is publicly downloadable without authentication at https://github.com/Dovbnyak28/UA-Cast/releases/tag/decoder-source-2026-10-26; SHA256 3da9ed32c534af3daeaa115a061fb6f7d1804d0733448e02b399af13935570bb, HTTP 200 and bytes verified. Recipient-key repack/sign validated locally; CI job 121801087090 passed app wiring (1) and real software decoding (15) after replacing the LGPL library and resigning with a different key. Original decoder scripts have explicit Apache-2.0 permission; application code is outside the bundle. Signed workflow verifies and retains each build's own matching source bundle. A subsequent distribution must publish that matching bundle too; this approval is not a licence clearance for old NextLib APKs. Evidence: docs/RELEASE_COMPLETION_2026-10-26.md and build/legal-audit/public-source-verification-2026-10-26.json."
     },
     "raster_asset_rights": {
       "approved": true,

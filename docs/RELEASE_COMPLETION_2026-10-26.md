@@ -40,10 +40,14 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
 
 - Privacy SHA256 `814c837ac62848b168b35e75aaf1af194a960c5cfde51f7e229f9248bd776645`.
 - Terms SHA256 `4f513031e804355522c58165e6409166f2448a1a4bb78507981d35c12b9e39ae`.
-- Локальний source ZIP після додавання relink-утиліти: 11 450 147 байтів,
-  SHA256 `53dbb194596c0626139bdbdb4003d10321b8a5bb3650b5b23edee6c2a86bc5d6`.
+- Локальний source ZIP після додавання relink-утиліт і дозволу на build scripts:
+  11 451 989 байтів, SHA256
+  `3da9ed32c534af3daeaa115a061fb6f7d1804d0733448e02b399af13935570bb`.
   CI генерує власний matching bundle для власної native-збірки; цей хеш не
-  підміняє його. Source ZIP ще не опубліковано поруч із новим application APK.
+  підміняє його. Комплект публічно опубліковано окремим source-only prerelease:
+  https://github.com/Dovbnyak28/UA-Cast/releases/tag/decoder-source-2026-10-26.
+  Анонімне завантаження — HTTP 200, checksum збігається. У наступному app release
+  необхідно також опублікувати саме відповідний його збірці комплект.
 - Фінальний Debug APK — 40 454 381 байтів; Play AAB — 19 156 410 байтів.
   15 native-бібліотек у кожному перевірені за завантажуваними ELF-секціями,
   6 ліцензійних assets і юридичні HTML відповідають джерелам.
@@ -57,8 +61,21 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
 - Play lint — **0 errors, 0 warnings, 9 informational hints** в останньому
   offline-прогоні; попередній online-прогін мав 27 informational hints.
 - Play distribution guard і legal-assets перевірка — успішні.
-- Остаточний CI: результат доповнюється після завершення jobs для
-  `652f7f00ea4fea0dbe41f9eabc78b114c1303baa`.
+- CI job `121801087090`: Android 11/API 30 виконав app suite (`OK (164 tests)`;
+  LAN/спеціальні device-only сценарії мають власні assumptions), базові decoder
+  тести 15/15, потім recipient-signed relink app wiring 1/1 і decoder 15/15.
+- CI на `652f7f0` знайшов race в unit-тесті закриття file descriptor та
+  API-26-only screenshot helper на API 24. Це виправлено без зміни production
+  proxy cleanup: тест чекає на сигнал закриття; необов'язковий PixelCopy capture
+  має API guard. Локально 9/9 у Debug, Release і Play, instrumentation компілюється.
+- Cold-restore benchmark очікував точну назву картки, яка опинилась нижче fold.
+  Тепер чекає видимий source selector, доступний лише після `hasChannels=true`.
+  Обидва benchmark variants компілюються. CI renderer змінено із deprecated
+  `swiftshader_indirect` на явний `swangle`; бюджети не збільшено. Вплив backend
+  не приписується оптимізації production-коду.
+- Остаточні CI results потрібно звіряти із SHA останнього коміту
+  [гілки PR №4](https://github.com/Dovbnyak28/UA-Cast/pull/4/checks).
+  Старі невдалі або скасовані прогони не підтверджують стан наступних комітів.
 
 ## Незакриті питання
 
@@ -66,8 +83,10 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
    всіх CI jobs. Раніше performance gate виміряв перевищення frame-бюджету;
    ліміти не послаблювалися. Старий trace показує суттєві RenderThread/shader
    та emulator graphics synchronization slices; потрібні нові вимірювання.
-2. Виконати публічне matching-source постачання саме з відповідним новим APK.
-   CI artifact retention або source від іншої збірки не підміняють цю дію.
+2. Для наступного application release виконати публічне matching-source
+   постачання саме його збірки. Технічну готовність джерел/заміни бібліотеки
+   підтверджено; наявність публічного source-only архіву не дозволяє підміняти
+   відповідний комплект іншої native-збірки.
 3. Отримати й виконати рішення щодо раніше розповсюджених NextLib/GPL artifacts.
    Їхні releases не видалялися, дозвіл правовласника не вигадувався, власний код
    не перелiцензовувався. Це потребує окремого ліцензійного погодження.
@@ -76,5 +95,7 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
    Документи підготовлені, але реєстраційні дії та юридичні рішення тестами
    не підтверджуються. Фізичний Hisense VIDAA залишається неперевіреним.
 
-Фінальний application release gate зберігає непогоджені legal checks.
+Технічний `native_corresponding_source` readiness підтверджено публічним комплектом
+для перевіреного локального кандидата та фактичним relink/decode. Фінальний
+application release gate зберігає непогоджений `historical_gpl_distribution`.
 Гарантії відсутності всіх можливих багів чи претензій цей звіт не дає.
