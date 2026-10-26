@@ -9,7 +9,8 @@ import java.io.File
 
 /** Test-only, offline AVC/MP4 fixture. Encoding has an explicit deadline and releases native objects. */
 internal object SyntheticVideoEncoder {
-    fun encode(file: File) {
+    fun encode(file: File, luma: Int = 16) {
+        require(luma in 16..235)
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         val muxer = MediaMuxer(file.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         var muxerStarted = false
@@ -33,7 +34,7 @@ internal object SyntheticVideoEncoder {
             }
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             codec.start()
-            val frame = ByteArray(WIDTH * HEIGHT * 3 / 2) { index -> if (index < WIDTH * HEIGHT) 16 else 128.toByte() }
+            val frame = ByteArray(WIDTH * HEIGHT * 3 / 2) { index -> if (index < WIDTH * HEIGHT) luma.toByte() else 128.toByte() }
             val info = MediaCodec.BufferInfo()
             var frameIndex = 0
             var track = -1

@@ -170,12 +170,17 @@ private class HeldIconOrigin(private val firstCode: String = "200 OK",
                 val headers = "HTTP/1.1 $code\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
                 socket.getOutputStream().apply { write(headers.toByteArray()); write(body); flush() }
             }
-        } catch (_: IOException) { /* owner cancellation deliberately closes a held socket */ }
+        } catch (_: IOException) { /* owner cancellation deliberately closes a held socket */
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            check(listener.isClosed) { "An active icon fixture was interrupted: $error" }
+        }
     }
 
     override fun close() {
         releaseFirst.countDown()
         listener.close()
         workers.shutdownNow()
+        check(workers.awaitTermination(5, TimeUnit.SECONDS)) { "Icon fixture workers did not terminate" }
     }
 }

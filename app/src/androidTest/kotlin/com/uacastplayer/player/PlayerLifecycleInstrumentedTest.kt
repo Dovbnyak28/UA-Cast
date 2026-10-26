@@ -384,12 +384,18 @@ class PlayerLifecycleInstrumentedTest {
         }
     }
 
-    @Test fun fullscreenRetainsTheNativeTextureAndRealFilePlaybackResumes() {
+    @Test fun fullscreenKeepsNativeViewsAndRendersAfterSurfaceRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val clip = java.io.File(context.cacheDir, "diagnostics/surface-${java.util.UUID.randomUUID()}.mp4")
         check(clip.parentFile!!.isDirectory || clip.parentFile!!.mkdirs())
+        val frames = java.util.concurrent.atomic.AtomicInteger()
+        val frameListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { _, _, _, _ ->
+            frames.incrementAndGet()
+        }
+        var renderingPlayer: androidx.media3.exoplayer.ExoPlayer? = null
         try {
-            SyntheticVideoEncoder.encode(clip)
+            // A gray frame distinguishes actual decoded pixels from a black/cleared surface.
+            SyntheticVideoEncoder.encode(clip, luma = 96)
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 context, "${context.packageName}.diagnostics", clip,
             )
@@ -399,10 +405,13 @@ class PlayerLifecycleInstrumentedTest {
             lateinit var model: PlayerViewModel
             composeTestRule.activityRule.scenario.onActivity { activity ->
                 model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                renderingPlayer = (model.player as androidx.media3.exoplayer.ExoPlayer).also {
+                    it.setVideoFrameMetadataListener(frameListener)
+                }
                 model.start(PlayerRequest.forLocalVideo(video).channels, 0)
             }
-            composeTestRule.waitUntil(15_000) { model.uiState.value.isPlaying || model.uiState.value.fatalError }
-            assertTrue("The generated clip must actually decode before checking its surface", model.uiState.value.isPlaying)
+            composeTestRule.waitUntil(15_000) { frames.get() > 0 || model.uiState.value.fatalError }
+            assertTrue("The generated clip must produce real video frames", frames.get() > 0)
             composeTestRule.activityRule.scenario.onActivity {
                 model.player.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
                 model.togglePlayback()
@@ -410,10 +419,10 @@ class PlayerLifecycleInstrumentedTest {
             composeTestRule.waitUntil(5_000) { !model.uiState.value.isPlaying }
             composeTestRule.waitForIdle()
             lateinit var original: androidx.media3.ui.PlayerView
-            lateinit var texture: android.graphics.SurfaceTexture
+            lateinit var textureView: TextureView
             composeTestRule.activityRule.scenario.onActivity { activity ->
                 original = nativePlayerViews(activity.window.decorView).single()
-                texture = checkNotNull((original.videoSurfaceView as TextureView).surfaceTexture)
+                textureView = original.videoSurfaceView as TextureView
             }
             repeat(3) {
                 composeTestRule.onNodeWithContentDescription(
@@ -422,7 +431,7 @@ class PlayerLifecycleInstrumentedTest {
                 composeTestRule.waitForIdle()
                 composeTestRule.activityRule.scenario.onActivity { activity ->
                     assertSame(original, nativePlayerViews(activity.window.decorView).single())
-                    assertSame(texture, (original.videoSurfaceView as TextureView).surfaceTexture)
+                    assertSame(textureView, original.videoSurfaceView)
                     assertSame(model.player, original.player)
                 }
                 composeTestRule.onNodeWithContentDescription(
@@ -431,11 +440,26 @@ class PlayerLifecycleInstrumentedTest {
                 composeTestRule.waitForIdle()
                 composeTestRule.activityRule.scenario.onActivity { activity ->
                     assertSame(original, nativePlayerViews(activity.window.decorView).single())
-                    assertSame(texture, (original.videoSurfaceView as TextureView).surfaceTexture)
+                    assertSame(textureView, original.videoSurfaceView)
                 }
             }
+            // Android can replace SurfaceTexture when a retained native view is detached/moved.
+            // The contract is continued rendering, not identity of that platform-owned resource.
+            val beforeResume = frames.get()
             composeTestRule.activityRule.scenario.onActivity { model.togglePlayback() }
-            composeTestRule.waitUntil(5_000) { model.uiState.value.isPlaying }
+            composeTestRule.waitUntil(5_000) { frames.get() >= beforeResume + 2 && model.uiState.value.isPlaying }
+            composeTestRule.waitUntil(5_000) {
+                var decodedPixels = false
+                composeTestRule.activityRule.scenario.onActivity {
+                    val bitmap = textureView.getBitmap(16, 16)
+                    try {
+                        val pixel = bitmap?.getPixel(8, 8) ?: 0
+                        decodedPixels = android.graphics.Color.red(pixel) > 24 &&
+                            android.graphics.Color.green(pixel) > 24 && android.graphics.Color.blue(pixel) > 24
+                    } finally { bitmap?.recycle() }
+                }
+                decodedPixels
+            }
             closePlayerFromScreen()
             composeTestRule.activityRule.scenario.onActivity {
                 assertNull(original.player)
@@ -443,6 +467,9 @@ class PlayerLifecycleInstrumentedTest {
                 assertEquals(0, model.player.mediaItemCount)
             }
         } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                renderingPlayer?.clearVideoFrameMetadataListener(frameListener)
+            }
             clip.delete()
         }
     }

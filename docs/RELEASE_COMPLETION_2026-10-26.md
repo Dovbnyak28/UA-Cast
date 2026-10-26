@@ -139,7 +139,9 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
   коли navigation уже виміряна. Збережено точний поріг navigation rail та єдиний
   PlayerHost call site. UI/layout/motion/screenshots regression і detekt пройшли.
 - Додано native instrumentation регресію з власним MP4: фактичний decode,
-  pause, три fullscreen цикли зі збереженням SurfaceTexture, resume і cleanup.
+  pause, три fullscreen цикли зі збереженням PlayerView/TextureView, resume і cleanup.
+  Внутрішній SurfaceTexture належить Android і може перестворюватися при detach;
+  native regression перевіряє нові video frames та декодовані пікселі після resume.
   Вона компілюється; її виконання на API24/30/36 має підтвердити CI кандидата.
 - CI artifacts тепер включають decoder unit та instrumentation reports разом
   із app/core reports. Новий platform/evidence validator має 41 passing Python test.
@@ -162,6 +164,26 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
 - Остаточні CI results потрібно звіряти із SHA останнього коміту
   [гілки PR №4](https://github.com/Dovbnyak28/UA-Cast/pull/4/checks).
   Старі невдалі або скасовані прогони не підтверджують стан наступних комітів.
+
+## Контрольна стабілізація 27 жовтня
+
+- Повний CI для `e3d4692` виявив надто сильну вимогу native тесту щодо identity
+  SurfaceTexture на API 24/30/36 та забруднення спільного filesDir у п'яти Release
+  snapshot-тестах стороннім `last_crash.txt`. Це не підтверджує production data loss.
+  Snapshot fixtures тепер використовують ізольований Context/filesDir; додатковий
+  тест перевіряє збереження сторонньої діагностики. Локальні Debug/Release/Play
+  регресії успішні. Тестовий socket worker завершується перед наступним тестом.
+- CastButton використовував синхронне завантаження SDK-модуля на Main. Тепер
+  офіційний overload отримує application context і спільний IO executor;
+  MediaRouteButton зберігає themed UI context. Тест падає до зміни і проходить
+  після неї, перевіряючи actual executor thread та обидва типи context.
+  Помилка async setup логуються без URL/облікових даних та захоплення Activity.
+- Performance run [40414333582](https://github.com/Dovbnyak28/UA-Cast/actions/runs/40414333582)
+  містить усі вісім вимірів, але не пройшов бюджет: player P95 126.460 ms,
+  fullscreen P95 100.484 ms при ліміті 100 ms. Startup/playlist/EPG/memory пройшли.
+  Це залишається невдалим результатом; вплив async Cast setup потребує нового CI.
+- Останні зміни проходять новий повний Android CI і performance gate у PR №4;
+  результат попереднього SHA не переноситься на наступний. Пристрої не використано.
 
 ## Незакриті питання
 
