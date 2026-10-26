@@ -167,11 +167,12 @@ internal fun GestureLevelIndicator(kind: GestureIndicatorKind, level: Float, mod
 
 internal object FullscreenController {
     fun apply(activity: Activity, enabled: Boolean) {
-        activity.requestedOrientation = if (enabled) {
+        val orientation = if (enabled) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+        if (activity.requestedOrientation != orientation) activity.requestedOrientation = orientation
         val windowInsetsController = androidx.core.view.WindowCompat.getInsetsController(
             activity.window,
             activity.window.decorView,

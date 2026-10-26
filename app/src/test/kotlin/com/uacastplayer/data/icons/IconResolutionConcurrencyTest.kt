@@ -51,14 +51,21 @@ class IconResolutionConcurrencyTest {
     }
 
     @Test fun cancelledOwnerLetsAnActiveWaiterRetryWithoutANegativeCacheEntry() = runBlocking {
-        HeldIconOrigin(holdDuplicates = false).use { origin ->
-            val repository = repository(origin)
-            val owner = async(start = CoroutineStart.UNDISPATCHED) { repository.resolveIconFile("shared") }
-            assertTrue(origin.firstStarted.await(5, TimeUnit.SECONDS))
-            val waiter = async(start = CoroutineStart.UNDISPATCHED) { repository.resolveIconFile("shared") }
-            owner.cancelAndJoin()
-            assertNotNull(waiter.await())
-            assertEquals(2, origin.requests.get())
+        repeat(64) { attempt ->
+            resetFixture()
+            val channelId = "cancel-owner-$attempt"
+            HeldIconOrigin(holdDuplicates = false).use { origin ->
+                val repository = repository(origin)
+                val owner = async(start = CoroutineStart.UNDISPATCHED) { repository.resolveIconFile(channelId) }
+                assertTrue(origin.firstStarted.await(5, TimeUnit.SECONDS))
+                val waiter = async(start = CoroutineStart.UNDISPATCHED) { repository.resolveIconFile(channelId) }
+                owner.cancelAndJoin()
+                assertNotNull(
+                    "cancelled owner must not cache a failure; attempt=$attempt, requests=${origin.requests.get()}",
+                    waiter.await(),
+                )
+                assertEquals(2, origin.requests.get())
+            }
         }
     }
 

@@ -48,7 +48,7 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
   https://github.com/Dovbnyak28/UA-Cast/releases/tag/decoder-source-2026-10-26.
   Анонімне завантаження — HTTP 200, checksum збігається. У наступному app release
   необхідно також опублікувати саме відповідний його збірці комплект.
-- Фінальний Debug APK — 40 454 381 байтів; Play AAB — 19 156 410 байтів.
+- Фінальний Debug APK — 40 454 381 байтів; Play AAB — 19 157 480 байтів.
   15 native-бібліотек у кожному перевірені за завантажуваними ELF-секціями,
   6 ліцензійних assets і юридичні HTML відповідають джерелам.
 
@@ -57,7 +57,7 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
 - Python scripts: **39/39**; у тому числі source/native/relink і legal guards.
 - Kotlin/Java instrumentation після змін relink — компілюються.
 - Privacy anchors і licence reader/UI — локальна регресія пройшла.
-- Фінальна збірка Debug APK/Play AAB — **BUILD SUCCESSFUL**, 4m 37s.
+- Фінальна збірка Debug APK/Play AAB — **BUILD SUCCESSFUL**, 4m 03s після underlay-оптимізації.
 - Play lint — **0 errors, 0 warnings, 9 informational hints** в останньому
   offline-прогоні; попередній online-прогін мав 27 informational hints.
 - Play distribution guard і legal-assets перевірка — успішні.
@@ -83,19 +83,51 @@ Pages commit `f041239c703dda70d34d05bd239932107d019cd7` розгорнутий; 
   порівняв три renderers на незміненому app commit: `swiftshader`,
   `swiftshader_indirect`, `lavapipe`. Усі три дали повні measurements;
   deprecated indirect не повертається в основний gate. Обраний явний `lavapipe`.
-  Його P95: відкриття 40k — 22.69 ms, player — 104.06 ms, fullscreen — 114.82 ms,
+  Контрольні P95: відкриття 40k — 22.69 ms, player — 104.06 ms, fullscreen — 114.82 ms,
   EPG — 31.33 ms. Зміна emulator backend не є app speedup; ліміти не збільшені.
 - Під непрозорим expanded player головний scaffold тепер зберігає composition,
   навігацію та Android views, але не виконує приховане малювання. Видимість
   пов'язана з фактичним завершенням opening animation; при collapse/close
   малювання відновлюється. Request token не утримує попередній список каналів.
   Локальні тести перевіряють drawing, animation, native-view retention і перший
-  opaque frame при disabled motion; разом із player/layout/motion — 21 tests.
-  Detekt та compilation instrumentation успішні. Повний CI і вимірювання
-  останньої оптимізації мають підтвердити ефект на тому самому `lavapipe`.
+  opaque frame при disabled motion. Проміжний run 40402261527 дав повні вісім
+  measurements, але player/fullscreen P95 133.91/191.11 ms перевищили 100 ms.
+  Це не позначено як успіх або доведений frame-time speedup.
+- Traces також показали повторний layout прихованої навігації, а тест довів,
+  що її semantics усе ще позначалися видимими. Тепер covered subtree не
+  вимірюється/не розміщується; composition, стан і native views зберігаються.
+  Тест перевіряє невидимість semantics, нуль повторних child measures при
+  зміні ширини та правильне відновлення layout після reveal. Фінальна цільова
+  регресія: 39 Debug tests, 0 failures; detekt успішний.
+- Fullscreen effect при зміні режиму виконував cleanup старого режиму перед
+  застосуванням нового: тест отримав `[-1, 6]` замість `[6]` orientation requests.
+  Cleanup тепер належить lifetime player/Activity; зміна режиму застосовує тільки
+  цільове значення. Controller не надсилає повторну ту саму орієнтацію.
+  Тест також перевіряє background recomposition, вихід із fullscreen і disposal.
+- PR run 40402261539 впав на cancellation icon test, тоді як незалежний push
+  run 40402252366 на тому самому SHA пройшов усі jobs. Це не відкинуто як flake:
+  новий детермінований тест довів, що `Call.cancel()` може синхронно віддати
+  header `IOException: Canceled` до continuation cancellation. Спільний HTTP
+  helper тепер перевіряє owner cancellation і для header failure; скасування
+  не отруює negative cache. Genuine header/body IOException зберігаються.
+  Network/icon регресія: 143 Debug, 131 Release, 131 Play, нуль failures;
+  cancellation-owner сценарій додатково повторюється 64 рази з ізоляцією fixtures.
 - Decoder buffer unit tests додані до Debug/Release CI та signed-release gate:
   локально 5/5 у кожній конфігурації, раніше CI запускав лише instrumentation
   цього модуля.
+- GitHub показав фактичне Node20 deprecation warning. Перевірені офіційні
+  signed commits `checkout` v7.0.1, `upload-artifact` v7.0.2 і
+  `download-artifact` v8.0.2, `setup-java` v6.1.0 і Gradle Actions v6.4.0
+  використовують Node24. Android/native/performance/
+  signed workflows оновлені зі збереженням повного SHA pinning; YAML-моделі
+  до/після відрізняються лише `uses` refs. Перевірка delivery має пройти CI.
+  [Checkout release](https://github.com/actions/checkout/releases/tag/v7.0.1),
+  [upload](https://github.com/actions/upload-artifact/releases/tag/v7.0.2),
+  [download](https://github.com/actions/download-artifact/releases/tag/v8.0.2),
+  [Java](https://github.com/actions/setup-java/releases/tag/v6.1.0),
+  [Gradle](https://github.com/gradle/actions/releases/tag/v6.4.0).
+- Локальний R8 повідомляє, що AGP class-file provider не підтримує async
+  parsing. Це tooling warning; збірка завершена. Його не приховано suppression.
 - Остаточні CI results потрібно звіряти із SHA останнього коміту
   [гілки PR №4](https://github.com/Dovbnyak28/UA-Cast/pull/4/checks).
   Старі невдалі або скасовані прогони не підтверджують стан наступних комітів.

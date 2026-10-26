@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
       - name: Validate fail-closed native build guards
         run: python3 -m unittest discover -s scripts/tests -p 'test_software_decoder_build.py'
       - name: Install pinned Android native toolchain
@@ -27,14 +27,14 @@ jobs:
           python3 scripts/package-software-decoder-source.py
           python3 scripts/verify-software-decoder-bundle.py
       - name: Upload verified native inputs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: software-decoder-native
           path: ffmpegdecoder/build/native-libraries/
           if-no-files-found: error
           retention-days: 14
       - name: Upload native build evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: software-decoder-corresponding-source
           path: build/software-decoder-dist/
@@ -43,7 +43,7 @@ jobs:
       - name: Build isolated modified-library relink probe
         run: python3 scripts/prepare-software-decoder-relink-probe.py
       - name: Upload test-only replacement library
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: software-decoder-relink-probe-test-only
           path: build/software-decoder-relink-probe/
@@ -51,7 +51,7 @@ jobs:
           retention-days: 14
       - name: Upload native compiler logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: software-decoder-native-evidence
           path: ffmpegdecoder/build/native-bootstrap/**/*.log

@@ -108,15 +108,14 @@ internal fun PlayerScreenEffects(
             PipController.syncParams(it, uiState.videoSize, transientState.videoBounds, autoEnterPip)
         }
     }
-    DisposableEffect(environment.activity, isFullscreen) {
+    LaunchedEffect(environment.activity, isFullscreen) {
         environment.activity?.let { FullscreenController.apply(it, isFullscreen) }
-        onDispose {
-            environment.activity?.let { FullscreenController.apply(it, enabled = false) }
-        }
     }
     DisposableEffect(environment.activity) {
         onDispose {
             environment.activity?.let {
+                // Restore only when the player leaves this Activity, not before every mode switch.
+                FullscreenController.apply(it, enabled = false)
                 restoreWindowBrightness(it)
                 // The Activity survives when the player collapses into the mini bar.
                 PipController.disableAutoEnter(it)

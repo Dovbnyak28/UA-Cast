@@ -6,15 +6,24 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.provider.Settings
 import android.view.View
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.core.app.ApplicationProvider
@@ -143,6 +152,34 @@ class RetainedUnderlayTest {
         }
         drawFrame()
         rule.runOnIdle { assertTrue(opaque.value); assertEquals(0, draws) }
+    }
+
+    @Test fun coveredNavigationIsNotMeasuredOrExposedAsVisibleAccessibilityContent() {
+        val covered = mutableStateOf(false)
+        val width = mutableStateOf(64.dp)
+        var measures = 0
+        rule.setContent {
+            Box(Modifier.size(width.value, 64.dp)) {
+                RetainedUnderlay(covered = { covered.value }, modifier = Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize().testTag("underlay").layout { measurable, constraints ->
+                        measures++
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+                    }) { BasicText("Background destination") }
+                }
+            }
+        }
+        rule.onNodeWithText("Background destination").assertIsDisplayed()
+        var before = 0
+        rule.runOnIdle { before = measures; covered.value = true }
+        rule.onNodeWithText("Background destination").assertIsNotDisplayed()
+        rule.runOnIdle { width.value = 96.dp }
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals("Hidden navigation must not remeasure on rotation", before, measures) }
+        rule.runOnIdle { covered.value = false }
+        rule.onNodeWithText("Background destination").assertIsDisplayed()
+        rule.onNodeWithTag("underlay").assertWidthIsEqualTo(96.dp)
+        rule.runOnIdle { assertTrue(measures > before) }
     }
 
     private fun drawFrame() {

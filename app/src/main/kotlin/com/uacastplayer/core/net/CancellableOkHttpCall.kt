@@ -36,17 +36,15 @@ internal suspend fun <T> Call.executeCancellable(readResponse: (Response) -> T):
         try {
             awaitResponse().use { response ->
                 owner.ensureActive()
-                val result = try {
-                    readResponse(response)
-                } catch (error: IOException) {
-                    // Call.cancel can surface as a socket IOException while reading. The retired
-                    // owner must still observe cancellation, not retry it as a network failure.
-                    owner.ensureActive()
-                    throw error
-                }
+                val result = readResponse(response)
                 owner.ensureActive()
                 result
             }
+        } catch (error: IOException) {
+            // Call.cancel may report failed headers before the continuation's own cancellation
+            // handler runs, or interrupt body IO. Neither may poison a retry/negative cache.
+            owner.ensureActive()
+            throw error
         } finally {
             cancelOnCompletion.dispose()
         }

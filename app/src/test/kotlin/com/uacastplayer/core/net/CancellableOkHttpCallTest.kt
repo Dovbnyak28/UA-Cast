@@ -132,6 +132,23 @@ class CancellableOkHttpCallTest {
         assertEquals(0, reads.get())
     }
 
+    @Test fun aHeaderFailureFromCancelRemainsCancellationBeforeTheContinuationIsCancelled() = runBlocking {
+        // Real OkHttp may report socket failure immediately from Call.cancel, before the
+        // continuation's own cancellation handler runs. Force that ordering synchronously.
+        val call = ManualCall(failOnCancel = true)
+        var actual: Throwable? = null
+        val job = launch(Dispatchers.IO) {
+            actual = runCatching { call.executeCancellable { error("no response expected") } }.exceptionOrNull()
+        }
+        assertTrue(call.enqueued.await(5, TimeUnit.SECONDS))
+        job.cancel()
+        withTimeout(5_000) { job.join() }
+        assertTrue(
+            "cancelled headers must not become a cacheable IOException: $actual",
+            actual is CancellationException,
+        )
+    }
+
     @Test fun blockingResponseReadingDoesNotRunOnTheCallerThread() = runBlocking {
         val caller = Thread.currentThread()
         val client = OkHttpClient.Builder().addInterceptor { chain ->
@@ -215,6 +232,7 @@ class CancellableOkHttpCallTest {
 
     private class ManualCall(
         delegate: Call = OkHttpClient().newCall(Request.Builder().url("https://example.test/stream").build()),
+        private val failOnCancel: Boolean = false,
     ) : Call by delegate {
         val enqueued = CountDownLatch(1)
         val cancelled = AtomicBoolean(false)
@@ -234,7 +252,9 @@ class CancellableOkHttpCallTest {
             callback = responseCallback
             enqueued.countDown()
         }
-        override fun cancel() { cancelled.set(true) }
+        override fun cancel() {
+            if (cancelled.compareAndSet(false, true) && failOnCancel) fail(IOException("Canceled"))
+        }
         override fun isCanceled(): Boolean = cancelled.get()
         override fun isExecuted(): Boolean = enqueued.count == 0L
         override fun timeout(): Timeout = Timeout.NONE

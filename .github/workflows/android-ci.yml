@@ -30,22 +30,22 @@ jobs:
     needs: native
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
 
       - name: Set up JDK 21
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0, Node 24
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Assemble debug
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
           path: ffmpegdecoder/build/native-libraries
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: unit-test-reports
           path: |
@@ -111,7 +111,7 @@ jobs:
 
       - name: Upload screenshot diffs
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: roborazzi-screenshot-diffs
           path: app/build/outputs/roborazzi
@@ -124,22 +124,22 @@ jobs:
     needs: native
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
 
       - name: Set up JDK 21
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0, Node 24
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Android lint
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
           path: ffmpegdecoder/build/native-libraries
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload quality reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: quality-reports
           path: |
@@ -206,22 +206,22 @@ jobs:
     needs: native
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
 
       - name: Set up JDK 21
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0, Node 24
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Assemble release
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
           path: ffmpegdecoder/build/native-libraries
@@ -288,21 +288,21 @@ jobs:
           } > app/build/reports/release-diagnostics/size-diff.txt
 
       - name: Upload unsigned sideload APK diagnostics
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: diagnostic-sideload-apks-unsigned
           path: app/build/outputs/apk/release/*.apk
           retention-days: 14
 
       - name: Upload unsigned sideload bundle diagnostic
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: diagnostic-sideload-bundle-unsigned
           path: app/build/outputs/bundle/release/*.aab
           retention-days: 14
 
       - name: Upload unsigned Play bundle diagnostic
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: diagnostic-play-bundle-unsigned-do-not-publish
           path: app/build/outputs/bundle/play/*.aab
@@ -310,7 +310,7 @@ jobs:
 
       - name: Upload release diagnostics
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: release-diagnostics
           path: |
@@ -332,22 +332,22 @@ jobs:
       matrix:
         api-level: [24, 30, 36]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
 
       - name: Set up JDK 21
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0, Node 24
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
 
       - name: Enable KVM
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
           path: ffmpegdecoder/build/native-libraries
@@ -363,7 +363,7 @@ jobs:
 
       - name: Download isolated relink probe
         if: matrix.api-level == 30
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-relink-probe-test-only
           path: build/software-decoder-relink-probe
@@ -384,7 +384,7 @@ jobs:
 
       - name: Upload instrumentation reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
           name: instrumented-test-reports-api-${{ matrix.api-level }}
           path: app/build/reports/
