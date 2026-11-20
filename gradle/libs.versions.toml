@@ -8,16 +8,9 @@ coreKtx = "1.18.0"
 splashscreen = "1.2.0"
 activityCompose = "1.13.0"
 composeBom = "2026.06.01"
-# media3 and nextlib move together - do not bump one alone.
-#
-# nextlib publishes as <media3 version>-<its own version>, so 1.10.1-0.13.0 is built against
-# media3 1.10.1 and nothing else. media3 1.11.0 exists; the matching nextlib does not (checked
-# against its maven-metadata: 1.10.1-0.13.0 is the newest there is). Taking 1.11.0 alone means
-# dropping nextlib, and nextlib is what supplies FfmpegVideoRenderer - the software decoder that
-# plays the codecs a given phone has no hardware for. On a Mi A2 it is visibly loaded at every
-# playback start. Losing it does not fail the build; it fails a channel, on someone else's device.
+# The independently built software wrapper is verified against this Media3 API.
+# :ffmpegdecoder checks its source lock before packaging; upgrade and native regressions together.
 media3 = "1.10.1"
-nextlibMedia3ext = "1.10.1-0.13.0"
 castFramework = "22.3.1"
 # 5.5.0's okhttp-android AAR requires compileSdk 37. Keep 5.4.0 until the coordinated AGP 9/API 37
 # migration; ECH is opt-in, so pinning here does not remove a feature currently used by the app.
@@ -70,10 +63,6 @@ media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "medi
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "media3" }
 media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "media3" }
-# Published to Maven Central under the io.github.anilbeesetti group (verified via
-# ./gradlew :app:dependencies --configuration debugRuntimeClasspath); resolves with the
-# repo's existing google()+mavenCentral() setup, no JitPack repository needed.
-nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlibMedia3ext" }
 
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "castFramework" }
 

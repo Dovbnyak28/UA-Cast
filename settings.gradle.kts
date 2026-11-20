@@ -34,3 +34,5 @@ rootProject.name = "UA Cast Player"
 include(":app")
 include(":core")
 include(":baselineprofile")
+// Staged Apache-2 decoder wrapper; runtime wiring follows native regression verification.
+include(":ffmpegdecoder")

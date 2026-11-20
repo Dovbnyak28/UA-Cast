@@ -1,0 +1,19 @@
+--- a/ffbuild/library.mak
++++ b/ffbuild/library.mak
+@@ -69,6 +69,6 @@
+ $(SUBDIR)$(SLIBNAME_WITH_MAJOR): $(OBJS) $(SHLIBOBJS) $(SLIBOBJS) $(SUBDIR)lib$(NAME).ver
+ 	$(SLIB_CREATE_DEF_CMD)
+-	$$(LD) $(SHFLAGS) $(LDFLAGS) $(LDSOFLAGS) $$(LD_O) $$(filter %.o,$$^) $(FFEXTRALIBS)
++	$$(LD) $$(file >$$@.rsp,$(SHFLAGS) $(LDFLAGS) $(LDSOFLAGS) $$(LD_O) $$(filter %.o,$$^) $(FFEXTRALIBS)) @$$@.rsp
+ 	$(SLIB_EXTRA_CMD)
+ 
+ ifdef SUBDIR
+@@ -96,6 +96,7 @@
+ install-lib$(NAME)-headers: $(addprefix $(SUBDIR),$(HEADERS) $(BUILT_HEADERS))
+ 	$(Q)mkdir -p "$(INCINSTDIR)"
+-	$$(INSTALL) -m 644 $$^ "$(INCINSTDIR)"
++	$$(file >$(SUBDIR)install-headers.list,$$^)
++	$(Q)headers=$$$$(tr -d '\r' < $(SUBDIR)install-headers.list); for header in $$$$headers; do $$(INSTALL) -m 644 "$$$$header" "$(INCINSTDIR)"; done
+ 
+ install-lib$(NAME)-pkgconfig: $(SUBDIR)lib$(FULLNAME).pc
+ 	$(Q)mkdir -p "$(PKGCONFIGDIR)"
