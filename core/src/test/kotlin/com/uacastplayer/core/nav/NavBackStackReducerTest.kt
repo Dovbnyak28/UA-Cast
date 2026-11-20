@@ -6,64 +6,53 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NavBackStackReducerTest {
-
-    @Test
-    fun `initial state starts at home`() {
-        val state = BottomNavState()
-        assertEquals(BottomDestination.HOME, state.current)
+    @Test fun `initial state starts at home`() {
+        assertEquals(BottomDestination.HOME, BottomNavState().current)
     }
 
-    @Test
-    fun `selecting the current tab is a no-op`() {
+    @Test fun `selecting the current tab is a no-op`() {
         val state = BottomNavState(listOf(BottomDestination.HOME))
         val result = NavBackStackReducer.reduce(state, BottomNavEvent.Select(BottomDestination.HOME))
         assertEquals(state, result.state)
         assertFalse(result.shouldExitApp)
     }
 
-    @Test
-    fun `selecting a new tab pushes it on top`() {
-        val state = BottomNavState(listOf(BottomDestination.HOME))
-        val result = NavBackStackReducer.reduce(state, BottomNavEvent.Select(BottomDestination.CHANNELS))
-        assertEquals(listOf(BottomDestination.HOME, BottomDestination.CHANNELS), result.state.stack)
-        assertEquals(BottomDestination.CHANNELS, result.state.current)
+    @Test fun `tabs replace each other instead of accumulating history`() {
+        var state = BottomNavState()
+        repeat(30) { index ->
+            val destination = BottomDestination.entries[index % BottomDestination.entries.size]
+            state = NavBackStackReducer.reduce(state, BottomNavEvent.Select(destination)).state
+            assertEquals(destination, state.current)
+            assertEquals(BottomDestination.HOME, state.stack.first())
+            assertTrue(state.stack.size <= 2)
+        }
     }
 
-    @Test
-    fun `reselecting a previously visited tab moves it to top without duplicating`() {
-        val state = BottomNavState(
-            listOf(BottomDestination.HOME, BottomDestination.CHANNELS, BottomDestination.FAVORITES)
-        )
+    @Test fun `selecting home discards prior tab visits`() {
+        val state = BottomNavState(listOf(BottomDestination.HOME, BottomDestination.CHANNELS,
+            BottomDestination.FAVORITES, BottomDestination.SETTINGS))
         val result = NavBackStackReducer.reduce(state, BottomNavEvent.Select(BottomDestination.HOME))
-        assertEquals(
-            listOf(BottomDestination.CHANNELS, BottomDestination.FAVORITES, BottomDestination.HOME),
-            result.state.stack
-        )
+        assertEquals(BottomNavState(), result.state)
     }
 
-    @Test
-    fun `back pops to the previously selected tab`() {
-        val state = BottomNavState(listOf(BottomDestination.HOME, BottomDestination.CHANNELS))
-        val result = NavBackStackReducer.reduce(state, BottomNavEvent.Back)
-        assertEquals(listOf(BottomDestination.HOME), result.state.stack)
+    @Test fun `back from any sibling tab returns directly home`() {
+        BottomDestination.entries.filter { it != BottomDestination.HOME }.forEach { destination ->
+            val state = BottomNavState(listOf(BottomDestination.HOME, BottomDestination.CHANNELS, destination))
+            val result = NavBackStackReducer.reduce(state, BottomNavEvent.Back)
+            assertEquals(BottomNavState(), result.state)
+            assertFalse(result.shouldExitApp)
+        }
+    }
+
+    @Test fun `restored single non-home tab cannot exit the app on first back`() {
+        val result = NavBackStackReducer.reduce(BottomNavState(listOf(BottomDestination.SETTINGS)),
+            BottomNavEvent.Back)
         assertFalse(result.shouldExitApp)
+        assertEquals(BottomNavState(), result.state)
     }
 
-    @Test
-    fun `back with only one tab in history requests app exit`() {
-        val state = BottomNavState(listOf(BottomDestination.SETTINGS))
-        val result = NavBackStackReducer.reduce(state, BottomNavEvent.Back)
-        assertTrue(result.shouldExitApp)
-        assertEquals(state, result.state)
-    }
-
-    @Test
-    fun `back does not request exit while history has multiple entries`() {
-        val state = BottomNavState(
-            listOf(BottomDestination.HOME, BottomDestination.CHANNELS, BottomDestination.SETTINGS)
-        )
-        val result = NavBackStackReducer.reduce(state, BottomNavEvent.Back)
-        assertFalse(result.shouldExitApp)
-        assertEquals(BottomDestination.CHANNELS, result.state.current)
+    @Test fun `back on home exits even if an older version saved tab history`() {
+        val state = BottomNavState(listOf(BottomDestination.CHANNELS, BottomDestination.HOME))
+        assertTrue(NavBackStackReducer.reduce(state, BottomNavEvent.Back).shouldExitApp)
     }
 }

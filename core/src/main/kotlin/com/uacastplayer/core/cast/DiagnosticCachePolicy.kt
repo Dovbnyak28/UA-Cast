@@ -10,16 +10,15 @@ data class CachedDiagnostic(
 
 /**
  * Governs `data/cast/DiagnosticResultCache.kt` (an LRU cache of [MAX_ENTRIES] entries keyed by
- * stream URL) - see `cast/CastSessionRepository`'s diagnostic warm-up and watchdog-race wiring.
- * Probing a stream is a real HTTP fetch, so a channel that's cast (or warmed up while just
- * browsing) more than once shouldn't pay for it every time - but an [CastCompatibilityVerdict.Unknown]
+ * stream URL) - see `cast/CastSessionRepository`'s explicit Cast diagnostic wiring.
+ * Probing a stream is a real HTTP fetch, so a channel that's cast
+ * more than once shouldn't pay for it every time - but an [CastCompatibilityVerdict.Unknown]
  * verdict (PAT/PMT not found in the probe window) might just have caught the origin at a bad moment
  * (mid-ad-break, a transient encoder hiccup), so it's only trusted for a short [UNKNOWN_TTL_MILLIS]
  * rather than the rest of the process's lifetime like every other verdict.
  */
 object DiagnosticCachePolicy {
     const val MAX_ENTRIES = 32
-    const val DEBOUNCE_MILLIS = 1_500L
     const val UNKNOWN_TTL_MILLIS = 10 * 60_000L
 
     fun isValid(entry: CachedDiagnostic, nowMillis: Long): Boolean =
