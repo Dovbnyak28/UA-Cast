@@ -13,7 +13,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** Owns ordered durable writes and post-commit cleanup, using the controller's existing scope.
- * Pending deletions survive a failed write. A superseding re-add retains its snapshot. */
+ * Pending deletions survive a failed write. A superseding re-add retains its snapshot.
+ *
+ * Source-list writes can overlap because [PlaylistRepository.saveSources] moves to IO. A user
+ * removing several sources quickly used to launch one save per tap, and whichever IO task
+ * happened to finish last won on disk - even when it represented an older list. The mutex
+ * keeps the physical writes exclusive, while the generation lets superseded waiters skip
+ * their stale write. A write already in progress may finish, but the newest generation always
+ * follows it and becomes the final durable state. */
 class PlaylistSourcePersistence internal constructor(
     private val scope: CoroutineScope,
     private val repository: PlaylistRepository,

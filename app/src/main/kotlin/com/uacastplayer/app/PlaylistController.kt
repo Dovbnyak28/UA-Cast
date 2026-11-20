@@ -2,7 +2,6 @@ package com.uacastplayer.app
 
 import android.net.Uri
 import androidx.core.net.toUri
-import com.uacastplayer.core.security.Fingerprint
 import com.uacastplayer.data.playlist.PlaylistOutcome
 import com.uacastplayer.data.playlist.PlaylistOutcomeReducer
 import com.uacastplayer.data.playlist.PlaylistRepository
@@ -13,7 +12,6 @@ import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistSourceAddResult
-import com.uacastplayer.playlist.PlaylistSourceLabel
 import com.uacastplayer.playlist.PlaylistSourcePolicy
 import com.uacastplayer.playlist.PlaylistSourceRemovalResult
 import com.uacastplayer.playlist.PlaylistSourceType
@@ -71,9 +69,7 @@ class PlaylistController(
 
     val sourceInitialization = PlaylistSourceInitialization(preferences, playlistRepository, scope) { sources ->
         _playlistSources.value = sources
-        val activeId = preferences.activePlaylistSourceId
-            ?.takeIf { id -> sources.any { it.id == id } }
-            ?: sources.firstOrNull()?.id
+        val activeId = PlaylistSourceTransitions.resolveActiveId(preferences.activePlaylistSourceId, sources)
         setActivePlaylistSourceId(activeId)
     }
 
@@ -96,14 +92,7 @@ class PlaylistController(
     private var loadJob: Job? = null
     private val loadGeneration = AtomicLong()
 
-    /**
-     * Source-list writes can overlap because [PlaylistRepository.saveSources] moves to IO. A user
-     * removing several sources quickly used to launch one save per tap, and whichever IO task
-     * happened to finish last won on disk - even when it represented an older list. The mutex
-     * keeps the physical writes exclusive, while the generation lets superseded waiters skip
-     * their stale write. A write already in progress may finish, but the newest generation always
-     * follows it and becomes the final durable state.
-     */
+    /** Ordered source-list writes - see [PlaylistSourcePersistence] for why they need a mutex. */
     val sourcePersistence = PlaylistSourcePersistence(
         scope, playlistRepository, { _playlistSources.value }, ::publishSourceSave,
     )
@@ -184,14 +173,7 @@ class PlaylistController(
     fun setPlaylistDisplayName(name: String) {
         val pending = pendingNewSource ?: run { sourcePersistence.retry(); return }
         if (!_playlistState.value.sourceReadyToSave) return
-        // What the user typed, else what the source already knows about itself (a picked file
-        // carries its own name - see loadPlaylistFromFile), else one derived from where it came
-        // from. The last step used to be an Xtream-only special case; PlaylistSourceLabel answers
-        // for every type, which is what stops a URL playlist falling through to its own SHA-256.
-        val effectiveName = name.ifBlank { null }
-            ?: pending.displayName
-            ?: PlaylistSourceLabel.forLocation(pending.type, pending.location)
-        val newSource = pending.copy(displayName = effectiveName)
+        val newSource = pending.copy(displayName = PlaylistSourceTransitions.effectiveDisplayName(name, pending))
         val acceptedNotification = pendingLoadedNotification
         when (val result = PlaylistSourcePolicy.add(_playlistSources.value, newSource)) {
             is PlaylistSourceAddResult.Added -> {
@@ -219,7 +201,7 @@ class PlaylistController(
     fun loadPlaylistFromUrl(url: String) {
         if (url.isBlank()) return
         val trimmed = url.trim()
-        if (!beginSourceAdd(newPendingSource(PlaylistSourceType.URL, trimmed))) return
+        if (!beginSourceAdd(PlaylistSourceTransitions.newPendingSource(PlaylistSourceType.URL, trimmed))) return
         startUrlLoad(trimmed)
     }
 
@@ -233,7 +215,7 @@ class PlaylistController(
         if (server.isBlank() || username.isBlank() || password.isBlank()) return
         val playlistUrl = XtreamUrlBuilder.playlistUrl(server, username, password)
         val epgUrl = XtreamUrlBuilder.epgUrl(server, username, password)
-        if (!beginSourceAdd(newPendingSource(PlaylistSourceType.XTREAM, playlistUrl))) return
+        if (!beginSourceAdd(PlaylistSourceTransitions.newPendingSource(PlaylistSourceType.XTREAM, playlistUrl))) return
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
         launchLoad("xtream") { generation ->
             applyPlaylistOutcome(
@@ -247,7 +229,7 @@ class PlaylistController(
         // Asked while the grant from the picker is still current - a saved source outlives it, and
         // the provider will not answer later. Without this the only label a file playlist ever had
         // was its own SHA-256 (see PlaylistSourceLabel).
-        val pending = newPendingSource(PlaylistSourceType.FILE, uri.toString())
+        val pending = PlaylistSourceTransitions.newPendingSource(PlaylistSourceType.FILE, uri.toString())
         if (!beginSourceAdd(pending)) return
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
         launchLoad("file") { generation ->
@@ -301,7 +283,8 @@ class PlaylistController(
      * Otherwise a no-op for file imports or before a source has loaded. Deliberately doesn't touch
      * [pendingNewSource]: this reloads the *existing* active source, it doesn't add a new one.
      *
-     * Falls back to the saved source's own location for the same reason as [withKnownSourceUrl] -
+     * Falls back to the saved source's own location for the same reason as
+     * [PlaylistSourceTransitions.withKnownSourceUrl] -
      * so a playlist restored from an old cache snapshot is still refreshable. */
     fun refreshPlaylist() {
         if (playlistState.value.error == PlaylistError.Storage) {
@@ -326,14 +309,8 @@ class PlaylistController(
         pendingLoadedNotification = null
         setActivePlaylistSourceId(source.id)
         channelCount = 0
-        // Keeping the previous source's channels here would label A as B if loading B fails.
-        // Refresh uses startUrlLoad and deliberately retains the same source's usable channels.
-        _playlistState.value = PlaylistUiState(
-            isLoading = true,
-            displayName = source.displayName,
-            sourceUrl = source.location.takeIf { source.type != PlaylistSourceType.FILE },
-            sourceSaveState = _playlistState.value.sourceSaveState,
-        )
+        val saveState = _playlistState.value.sourceSaveState
+        _playlistState.value = PlaylistSourceTransitions.selectedSourceState(source, saveState)
     }
 
     private suspend fun loadSavedSource(source: PlaylistSource, generation: Long) {
@@ -449,14 +426,6 @@ class PlaylistController(
         return false
     }
 
-    private fun newPendingSource(type: PlaylistSourceType, location: String): PlaylistSource = PlaylistSource(
-        id = Fingerprint.of(location),
-        type = type,
-        location = location,
-        displayName = null,
-        addedAtEpochMillis = System.currentTimeMillis(),
-    )
-
     private fun startUrlLoad(url: String) {
         _playlistState.value = _playlistState.value.copy(isLoading = true, error = null)
         launchLoad("url") { generation ->
@@ -464,29 +433,8 @@ class PlaylistController(
         }
     }
 
-    /**
-     * Restores [PlaylistOutcome.Loaded.sourceUrl] from the saved [PlaylistSource] when the outcome
-     * itself doesn't carry one.
-     *
-     * A snapshot written by the pre-`sourceUrl` cache format restores with null (see
-     * `PlaylistSnapshotCodec.decodeV1`), and that left the playlist with no way to be refreshed at
-     * all: Home hides its refresh button when there is no url, and [refreshPlaylist] had nothing to
-     * re-fetch from - so the only way back to a live copy was deleting the source and pasting the
-     * url in again. The url was in the saved source the whole time; this just consults it.
-     *
-     * A FILE source keeps its null, which is the one case where the field genuinely means "there is
-     * nothing to re-fetch" rather than "we forgot".
-     */
-    private fun PlaylistOutcome.withKnownSourceUrl(): PlaylistOutcome =
-        if (this !is PlaylistOutcome.Loaded || sourceUrl != null) {
-            this
-        } else {
-            copy(sourceUrl = activeUrlSourceLocation())
-        }
-
-    private fun activeUrlSourceLocation(): String? = _playlistSources.value
-        .firstOrNull { it.id == _activePlaylistSourceId.value && it.type != PlaylistSourceType.FILE }
-        ?.location
+    private fun activeUrlSourceLocation(): String? =
+        PlaylistSourceTransitions.activeUrlSourceLocation(_playlistSources.value, _activePlaylistSourceId.value)
 
     private suspend fun applyPlaylistOutcome(
         rawOutcome: PlaylistOutcome,
@@ -494,7 +442,7 @@ class PlaylistController(
         loadGeneration: Long? = null,
     ) {
         if (!isCurrentGeneration(loadGeneration)) return
-        val outcome = rawOutcome.withKnownSourceUrl()
+        val outcome = PlaylistSourceTransitions.withKnownSourceUrl(rawOutcome, ::activeUrlSourceLocation)
         val loadedChannels = if (outcome is PlaylistOutcome.Loaded) {
             // Off the main thread: `scope` is the ViewModel's (Dispatchers.Main.immediate), and
             // this flattens every group of a playlist that routinely runs to tens of thousands of
@@ -518,16 +466,7 @@ class PlaylistController(
         fromCache: Boolean,
         loadedChannels: List<M3uChannel>?,
     ) {
-        // Looked up by source id rather than a single flat preference, since there can now be
-        // several saved sources each with their own name (see PlaylistSource). A brand-new source
-        // (added via loadPlaylistFromUrl/loadFromFile/loadXtreamPlaylist) isn't in the list yet at
-        // this point - setPlaylistDisplayName patches displayName in directly once it's known,
-        // same as it always has.
-        val displayName = (outcome as? PlaylistOutcome.Loaded)?.sourceFingerprint
-            ?.let { id -> _playlistSources.value.firstOrNull { it.id == id } }
-            // The name the user gave it, or one derived from where it came from. Never the id: that
-            // is a SHA-256, and the screens used to print its first eight characters as the title.
-            ?.let { source -> source.displayName ?: PlaylistSourceLabel.forLocation(source.type, source.location) }
+        val displayName = PlaylistSourceTransitions.displayNameFor(outcome, _playlistSources.value)
         val nextState = PlaylistOutcomeReducer.reduce(
             current = _playlistState.value,
             outcome = outcome,
