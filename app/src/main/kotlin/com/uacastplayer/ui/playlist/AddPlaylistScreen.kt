@@ -1,7 +1,6 @@
 package com.uacastplayer.ui.playlist
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.appBackground
-
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,11 +16,9 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import com.uacastplayer.ui.tv.tvTextFieldNavigation
 import com.uacastplayer.ui.tv.tvFocus
 import com.uacastplayer.ui.tv.TvDialogInputRegistration
 import androidx.compose.runtime.getValue
@@ -33,26 +30,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
 import com.uacastplayer.R
-import kotlinx.coroutines.launch
 import com.uacastplayer.playlist.CleartextCredentialPolicy
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.playlist.XtreamUrlBuilder
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.components.SegmentedControl
-import com.uacastplayer.ui.components.PrimaryButton
-import com.uacastplayer.ui.components.SecondaryButton
-import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.CardPadding
 import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.CaptionSemibold
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.GapS
@@ -60,10 +49,6 @@ import com.uacastplayer.ui.theme.RadiusCard
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.SectionLabel
 import com.uacastplayer.ui.theme.Title
-
-/** Which kind of source [AddPlaylistScreen] is currently configured for - just UI state, not
- * persisted anywhere: once a source loads, all three converge on the same URL/file pipeline. */
-private enum class PlaylistSourceType { URL, FILE, XTREAM }
 
 /** A one-shot HTTP confirmation. HTTP playlist support remains available for providers that have
  * no TLS endpoint, but it must be an explicit user decision instead of an accidental credential
@@ -341,197 +326,6 @@ private fun dispatchCleartextLoad(
 private fun effectiveDisplayName(name: String, sourceType: PlaylistSourceType, xtreamServer: String): String =
     if (name.isBlank() && sourceType == PlaylistSourceType.XTREAM) XtreamUrlBuilder.serverHost(xtreamServer) else name
 
-/**
- * [isLoading] disables the button for the duration of a load, and that is not cosmetic. Every tap
- * used to start another independent load: six taps during one slow request produced six concurrent
- * downloads, six parses of up to `MAX_PLAYLIST_BYTES` each, and a final state decided by whichever
- * response happened to land last. A user has every reason to tap again - a hung server leaves the
- * status on "Loading…" for about a minute and a half while the loader retries, with nothing on
- * screen to say a request is still in flight.
- *
- * `RefreshPlaylistButton` on Home has always guarded its own load this way; this is the same guard
- * on the screen where the load actually starts.
- */
-@Composable
-private fun SourceActionButton(
-    sourceType: PlaylistSourceType,
-    url: String,
-    xtreamServer: String,
-    xtreamUsername: String,
-    xtreamPassword: String,
-    isLoading: Boolean,
-    onLoadUrl: (String) -> Unit,
-    onLoadXtream: (server: String, username: String, password: String) -> Unit,
-    onPickFile: () -> Unit,
-) {
-    if (sourceType == PlaylistSourceType.FILE) {
-        SecondaryButton(
-            text = stringResource(R.string.add_playlist_file_button),
-            onClick = onPickFile,
-            enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().padding(top = GapL),
-            leadingIcon = AppIcons.Upload,
-        )
-    } else {
-        val isInputValid = when (sourceType) {
-            PlaylistSourceType.URL -> PlaylistSourceInputValidator.isValidHttpUrl(url)
-            PlaylistSourceType.XTREAM -> PlaylistSourceInputValidator.isValidXtream(
-                xtreamServer,
-                xtreamUsername,
-                xtreamPassword,
-            )
-            PlaylistSourceType.FILE -> true
-        }
-        PrimaryButton(
-            text = stringResource(R.string.add_playlist_save_button),
-            onClick = {
-                if (sourceType == PlaylistSourceType.URL) {
-                    onLoadUrl(url.trim())
-                } else {
-                    onLoadXtream(xtreamServer.trim(), xtreamUsername.trim(), xtreamPassword)
-                }
-            },
-            enabled = isInputValid && !isLoading,
-            modifier = Modifier.fillMaxWidth().padding(top = GapL),
-        )
-    }
-}
-
-@Composable
-private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
-    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val currentUrl by androidx.compose.runtime.rememberUpdatedState(url)
-    var editGeneration by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
-    val onEdit = { value: String -> editGeneration++; onUrlChange(value) }
-    TextButton(onClick = {
-        val requestedFor = url
-        val requestedGeneration = ++editGeneration
-        scope.launch {
-            val text = readClipboardLink(clipboard)
-            if (text != null && editGeneration == requestedGeneration && currentUrl == requestedFor) {
-                onEdit(text.trim())
-            }
-        }
-    }, modifier = Modifier.padding(top = GapM).tvFocus()) {
-        Text(stringResource(R.string.add_playlist_paste_link))
-    }
-    val invalidUrl = url.isNotBlank() && !PlaylistSourceInputValidator.isValidHttpUrl(url)
-    OutlinedTextField(
-        value = url,
-        onValueChange = onEdit,
-        label = { Text(stringResource(R.string.add_playlist_url_hint)) },
-        singleLine = true,
-        isError = invalidUrl,
-        supportingText = if (invalidUrl) {
-            { Text(stringResource(R.string.add_playlist_url_error)) }
-        } else {
-            null
-        },
-        trailingIcon = if (url.isNotBlank()) {
-            {
-                IconButton(onClick = { onEdit("") }) {
-                    Icon(
-                        AppIcons.Close,
-                        contentDescription = stringResource(R.string.add_playlist_clear_url),
-                        tint = UaTheme.palette.labelSecondary,
-                    )
-                }
-            }
-        } else {
-            null
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
-    )
-    Text(
-        text = stringResource(R.string.add_playlist_helper),
-        style = Caption,
-        color = UaTheme.palette.labelSecondary,
-        modifier = Modifier.padding(top = 8.dp),
-    )
-    if (CleartextCredentialPolicy.isCleartextPlaylistUrl(url)) {
-        Text(
-            text = stringResource(R.string.add_playlist_url_cleartext_warning),
-            style = Caption,
-            color = UaTheme.palette.routeRed,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-    }
-}
-
-@Composable
-private fun XtreamSourceFields(
-    server: String,
-    username: String,
-    password: String,
-    passwordVisible: Boolean,
-    onServerChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onPasswordVisibilityChanged: (Boolean) -> Unit,
-) {
-    val invalidServer = server.isNotBlank() && !PlaylistSourceInputValidator.isValidXtreamServer(server)
-    OutlinedTextField(
-        value = server,
-        onValueChange = onServerChange,
-        label = { Text(stringResource(R.string.add_playlist_xtream_server_hint)) },
-        singleLine = true,
-        isError = invalidServer,
-        supportingText = if (invalidServer) {
-            { Text(stringResource(R.string.add_playlist_server_error)) }
-        } else {
-            null
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
-    )
-    if (CleartextCredentialPolicy.exposesCredentials(server)) {
-        Text(
-            text = stringResource(R.string.add_playlist_xtream_cleartext_warning),
-            style = Caption,
-            color = UaTheme.palette.routeRed,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-    }
-    OutlinedTextField(
-        value = username,
-        onValueChange = onUsernameChange,
-        label = { Text(stringResource(R.string.add_playlist_xtream_username_hint)) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-        colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
-    )
-    OutlinedTextField(
-        value = password,
-        onValueChange = onPasswordChange,
-        label = { Text(stringResource(R.string.add_playlist_xtream_password_hint)) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        visualTransformation = if (passwordVisible) {
-            VisualTransformation.None
-        } else {
-            androidx.compose.ui.text.input.PasswordVisualTransformation()
-        },
-        trailingIcon = {
-            TextButton(onClick = { onPasswordVisibilityChanged(!passwordVisible) }) {
-                Text(
-                    text = stringResource(
-                        if (passwordVisible) R.string.add_playlist_password_hide
-                        else R.string.add_playlist_password_show,
-                    ),
-                    style = CaptionSemibold,
-                    color = UaTheme.palette.accentText,
-                )
-            }
-        },
-        colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
-    )
-}
 
 private fun hasLoadFeedback(playlistState: PlaylistUiState): Boolean =
     playlistState.isLoading ||
@@ -551,10 +345,4 @@ private fun loadFeedbackMessage(playlistState: PlaylistUiState): String = when {
     playlistState.activePlaylistId != null && !playlistState.hasChannels ->
         stringResource(R.string.add_playlist_status_no_channels)
     else -> ""
-}
-
-/** Text only: never dereference a clipboard URI or load its provider/network content. */
-private suspend fun readClipboardLink(clipboard: androidx.compose.ui.platform.Clipboard): String? {
-    val clip = clipboard.getClipEntry()?.clipData ?: return null
-    return if (clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
 }
