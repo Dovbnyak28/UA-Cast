@@ -70,7 +70,7 @@ Record і verify — різні завершені запуски. У табли
 
 ## Universal debug APK
 
-[Завантажити UA-Cast-0.9.7-Cinema-V2-stage4-universal-debug.apk](../build/cinema-v2-stage4-2026-11-14/artifacts/UA-Cast-0.9.7-Cinema-V2-stage4-universal-debug.apk).
+[Завантажити UA-Cast-0.9.7-Cinema-V2-stage4-universal-debug.apk](../../build/cinema-v2-stage4-2026-11-14/artifacts/UA-Cast-0.9.7-Cinema-V2-stage4-universal-debug.apk).
 
 - applicationId `com.uacastplayer.debug`, versionName `0.9.7`, universal versionCode `164`.
 - ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`; розмір 39,657,567 байтів.
@@ -111,12 +111,12 @@ Record і verify — різні завершені запуски. У табли
 
 ## Реальні Android-скриншоти
 
-[Огляд Player та EPG](design/cinema-v2-stage4/android-overview.png), [до/після на однаковому 640 × 320dp](design/cinema-v2-stage4/before-after-controls.png).
+[Огляд Player та EPG](../design/cinema-v2-stage4/android-overview.png), [до/після на однаковому 640 × 320dp](../design/cinema-v2-stage4/before-after-controls.png).
 
-- Player: [landscape](design/cinema-v2-stage4/actual-player-landscape.png), [320dp](design/cinema-v2-stage4/actual-player-320.png), [320dp/200%](design/cinema-v2-stage4/actual-player-200.png), [активний таймер/200%](design/cinema-v2-stage4/actual-player-timer-200.png).
-- EPG: [320dp](design/cinema-v2-stage4/actual-epg-320.png), [200%](design/cinema-v2-stage4/actual-epg-200.png), [короткий landscape/200%](design/cinema-v2-stage4/actual-epg-landscape-200.png), [наступний день](design/cinema-v2-stage4/actual-epg-next-day-200.png), [повернення до player](design/cinema-v2-stage4/actual-player-after-epg.png).
-- Теми: Cinema показана в основних кадрах; також збережені [Azure](design/cinema-v2-stage4/actual-player-azure.png), [Midnight](design/cinema-v2-stage4/actual-player-midnight.png), [Daylight](design/cinema-v2-stage4/actual-player-daylight.png), [System](design/cinema-v2-stage4/actual-player-system.png).
-- [Локальний відеофайл у player](design/cinema-v2-stage4/actual-local-video.png): скриншот із чинного LocalVideoInstrumentedTest після seek у паузі, без меню каналів. На цьому кадрі видно проміжний buffering-стан; сам PNG не доводить декодування відеокадру. Успішне відтворення синтетичного файлу чинним engine перевіряють окремі assertions цього native-набору.
+- Player: [landscape](../design/cinema-v2-stage4/actual-player-landscape.png), [320dp](../design/cinema-v2-stage4/actual-player-320.png), [320dp/200%](../design/cinema-v2-stage4/actual-player-200.png), [активний таймер/200%](../design/cinema-v2-stage4/actual-player-timer-200.png).
+- EPG: [320dp](../design/cinema-v2-stage4/actual-epg-320.png), [200%](../design/cinema-v2-stage4/actual-epg-200.png), [короткий landscape/200%](../design/cinema-v2-stage4/actual-epg-landscape-200.png), [наступний день](../design/cinema-v2-stage4/actual-epg-next-day-200.png), [повернення до player](../design/cinema-v2-stage4/actual-player-after-epg.png).
+- Теми: Cinema показана в основних кадрах; також збережені [Azure](../design/cinema-v2-stage4/actual-player-azure.png), [Midnight](../design/cinema-v2-stage4/actual-player-midnight.png), [Daylight](../design/cinema-v2-stage4/actual-player-daylight.png), [System](../design/cinema-v2-stage4/actual-player-system.png).
+- [Локальний відеофайл у player](../design/cinema-v2-stage4/actual-local-video.png): скриншот із чинного LocalVideoInstrumentedTest після seek у паузі, без меню каналів. На цьому кадрі видно проміжний buffering-стан; сам PNG не доводить декодування відеокадру. Успішне відтворення синтетичного файлу чинним engine перевіряють окремі assertions цього native-набору.
 
 18 оригінальних Android PNG не перемальовано. Два оглядові зображення лише компонують їх із підписами. Before/after використовує незмінений PlayerControlsAuditInstrumentedTest на однаковому viewport, а не різні розміри телефона. Нові Roborazzi-еталони перевіряють production-компоненти окремо від цих native-скриншотів.
 

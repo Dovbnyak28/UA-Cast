@@ -16,7 +16,7 @@ The existing universal release artifact is version **0.9.7**, versionCode **164*
 was not bumped and nothing was published to GitHub during this implementation. Physical TV
 acceptance is still outstanding; this is not a production-TV-certification claim.
 
-Setup and limitations: [TV_SUPPORT.md](TV_SUPPORT.md).
+Setup and limitations: [TV_SUPPORT.md](../TV_SUPPORT.md).
 
 ## Implementation
 

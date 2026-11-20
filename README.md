@@ -68,6 +68,10 @@ with unit tests, under `app/src/main/kotlin/com/uacastplayer/`:
   the pure logic above from real I/O.
 - `ui/*` — Compose screens; they render state, they don't decide it.
 
+Current release state - what is verified, what is still open, and what comes next - lives in
+[`docs/STATUS.md`](docs/STATUS.md). Dated verification reports are kept in
+[`docs/archive/`](docs/archive/).
+
 See `docs/` for the design rules behind the trickier subsystems:
 
 - [`PROXY_RULES.md`](docs/PROXY_RULES.md) — the local HLS relay used for Cast fallback.

@@ -33,7 +33,7 @@
 
 **Universal debug APK**
 
-- Файл: [UA-Cast-0.9.7-Cinema-V2-stage3-universal-debug.apk](../build/cinema-v2-stage3-2026-11-13/artifacts/UA-Cast-0.9.7-Cinema-V2-stage3-universal-debug.apk).
+- Файл: [UA-Cast-0.9.7-Cinema-V2-stage3-universal-debug.apk](../../build/cinema-v2-stage3-2026-11-13/artifacts/UA-Cast-0.9.7-Cinema-V2-stage3-universal-debug.apk).
 - applicationId: `com.uacastplayer.debug`; versionName: `0.9.7`; universal versionCode: `164`.
 - ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`. Розмір: 39 657 079 байтів.
 - SHA-256: `50023E0A0F4ACA4D72C04C1583C3C73540647EDE23001FC5AA1C0E482259C53C`.
@@ -85,9 +85,9 @@ Native-сценарії використовують справжні маршр
 | 200% | Текст переноситься або коректно скорочується, другорядні дії переносяться на окремий рядок. Великі картки доступні прокручуванням. |
 | Реальні дані | У макетах є умовні логотипи та EPG. Native origin навмисно не підвантажує сторонні бренди чи телепрограму; відповідні стани з EPG показано й перевірено на Compose-прев’ю. |
 
-[Огляд реальних Android-екранів](design/cinema-v2-stage3/android-overview.png), [головна 320dp](design/cinema-v2-stage3/actual-home-320.png), [каталог 320dp](design/cinema-v2-stage3/actual-channels-320.png), [останній канал, 200%](design/cinema-v2-stage3/actual-channels-font200.png), [головна 411dp](design/cinema-v2-stage3/actual-home-411.png).
+[Огляд реальних Android-екранів](../design/cinema-v2-stage3/android-overview.png), [головна 320dp](../design/cinema-v2-stage3/actual-home-320.png), [каталог 320dp](../design/cinema-v2-stage3/actual-channels-320.png), [останній канал, 200%](../design/cinema-v2-stage3/actual-channels-font200.png), [головна 411dp](../design/cinema-v2-stage3/actual-home-411.png).
 
-Теми: [Cinema](design/cinema-v2-stage3/actual-theme-cinema.png), [Azure](design/cinema-v2-stage3/actual-theme-azure.png), [Midnight](design/cinema-v2-stage3/actual-theme-midnight.png), [Daylight](design/cinema-v2-stage3/actual-theme-daylight.png), [System](design/cinema-v2-stage3/actual-theme-system.png).
+Теми: [Cinema](../design/cinema-v2-stage3/actual-theme-cinema.png), [Azure](../design/cinema-v2-stage3/actual-theme-azure.png), [Midnight](../design/cinema-v2-stage3/actual-theme-midnight.png), [Daylight](../design/cinema-v2-stage3/actual-theme-daylight.png), [System](../design/cinema-v2-stage3/actual-theme-system.png).
 
 **Збереження стану проєкту**
 

@@ -18,7 +18,7 @@ slices (`dur=-1`). AndroidX's API31+ matching discarded those frames. Two isolat
 returned complete evidence through the standard pre-31 CPU metric. They still exposed real
 budget overruns; no numeric limit was increased. The older API35 config is retained for historical
 diagnostics with its own explicit API identity. API/renderer migrations are not app speedups.
-See `RELEASE_COMPLETION_2026-10-26.md` for measured results and limitations.
+See `archive/RELEASE_COMPLETION_2026-10-26.md` for measured results and limitations.
 
 ```bash
 python3 -B -m unittest discover -s scripts/tests -p 'test_performance_budgets.py'

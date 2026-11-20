@@ -2,7 +2,7 @@
 
 ## Результат і межі
 
-Етап 2 завершено: семантична Material 3 дизайн-система, типографіка, spacing, кнопки, картки, рядки, TV-фокус, reduced motion та адаптивні сегменти. Детальні правила й API: [CINEMA_V2_DESIGN_SYSTEM.md](CINEMA_V2_DESIGN_SYSTEM.md).
+Етап 2 завершено: семантична Material 3 дизайн-система, типографіка, spacing, кнопки, картки, рядки, TV-фокус, reduced motion та адаптивні сегменти. Детальні правила й API: [CINEMA_V2_DESIGN_SYSTEM.md](../CINEMA_V2_DESIGN_SYSTEM.md).
 
 Структура екранів, маршрути, player state machine, Media3, Cast/DLNA, джерела каналів, Lite/Premium та решта бізнес-логіки не змінені. `UaCard`/`UaListItem` є спільними foundation-компонентами для подальших погоджених етапів; весь каталог не є новим production-екраном. Етап 3 не починався.
 

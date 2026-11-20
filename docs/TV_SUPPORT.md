@@ -7,10 +7,10 @@ and Android TV. Install it on both devices; the TV uses its own saved playlists.
 The TV launcher has a dedicated 16:9 filtered HD bitmap banner, generated from editable
 vector artwork, with a large UA CAST name and unified TV/play/cast mark. Phone icons remain
 unchanged. HD rendering/native checks are recorded in
-[TV_BANNER_HD_VERIFICATION_2026-09-30.md](TV_BANNER_HD_VERIFICATION_2026-09-30.md).
+[TV_BANNER_HD_VERIFICATION_2026-09-30.md](archive/TV_BANNER_HD_VERIFICATION_2026-09-30.md).
 Initial design, banner renders, automated
 checks and actual Xiaomi OEM-launcher acceptance are recorded in
-[TV_LAUNCHER_BANNER_VERIFICATION_2026-09-30.md](TV_LAUNCHER_BANNER_VERIFICATION_2026-09-30.md).
+[TV_LAUNCHER_BANNER_VERIFICATION_2026-09-30.md](archive/TV_LAUNCHER_BANNER_VERIFICATION_2026-09-30.md).
 
 ## Connect a phone
 
@@ -38,7 +38,7 @@ retryable pairing state. A single owned idle reader does not send heartbeats or 
 five-minute TV idle timer alive. A silent network black hole without TCP EOF/RST is different:
 the next command's acknowledgement deadline detects it; immediate idle detection of every
 Wi-Fi/power loss is not claimed. See
-[REMOTE_EOF_STABILIZATION_2026-09-30.md](REMOTE_EOF_STABILIZATION_2026-09-30.md).
+[REMOTE_EOF_STABILIZATION_2026-09-30.md](archive/REMOTE_EOF_STABILIZATION_2026-09-30.md).
 
 ## Controls
 
@@ -98,16 +98,16 @@ five native crypto/lifecycle tests on Xiaomi, including receiver EOF without a b
 and the moving-video/lifecycle/30-switch/Back-exit acceptance passed again. The new banner was
 observed on the actual launcher in normal and focused states after refreshing its stale cache
 without clearing data. This pass did not repeat separate phone-to-TV LAN control; exact current
-artifact/evidence: [XIAOMI_DIRECT_WIFI_VERIFICATION_2026-09-30.md](XIAOMI_DIRECT_WIFI_VERIFICATION_2026-09-30.md).
+artifact/evidence: [XIAOMI_DIRECT_WIFI_VERIFICATION_2026-09-30.md](archive/XIAOMI_DIRECT_WIFI_VERIFICATION_2026-09-30.md).
 
 **Still required before claiming production TV certification:** finish codec/audio and provider
 stream acceptance, physical OEM-remote usability, clean-install language/Terms, TV keyboard/
 permission/install windows, Ethernet/Wi-Fi reconnection and prolonged playback. Manual UI
 observations and loopback tests are not substitutes for these checks. Current physical-device
-results and limitations are recorded in [XIAOMI_TV_VERIFICATION_2026-09-30.md](XIAOMI_TV_VERIFICATION_2026-09-30.md).
+results and limitations are recorded in [XIAOMI_TV_VERIFICATION_2026-09-30.md](archive/XIAOMI_TV_VERIFICATION_2026-09-30.md).
 
 On 2026-10-02, Mi A2 Android 11 additionally passed 20 isolated native tests: artwork refresh,
 all confirmation/PIN and empty-modal routes, remote lifecycle and platform crypto. The full
 host regression and signed APK build also passed. This is phone-side/native-window acceptance,
 not a new physical Xiaomi TV or LAN control run. See
-[STABILIZATION_AUDIT_2026-10-02.md](STABILIZATION_AUDIT_2026-10-02.md).
+[STABILIZATION_AUDIT_2026-10-02.md](archive/STABILIZATION_AUDIT_2026-10-02.md).

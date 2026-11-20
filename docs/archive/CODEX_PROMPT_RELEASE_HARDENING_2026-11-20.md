@@ -87,3 +87,35 @@ Roborazzi-знімки для КОЖНОГО екрана та стану: по�
 3. Android TV / Mi TV: навігація D-pad усіма екранами, введення PIN, document picker.
 4. PiP і повороти на Mi A2 / бюджетному Xiaomi.
 5. Встановлення підписаного релізу поверх попереднього на реальному телефоні.
+
+---
+
+## Маркери виконання (Claude Code, 2026-11-20)
+
+Базова точка до змін (HEAD `209cad3`, запушено в `origin/codex/release-0.9.6`):
+`testDebugUnitTest` 3149/0, `testReleaseUnitTest` 2476/0, `testPlayUnitTest` 2476/0, `:core:test` 133/0,
+`verifyRoborazziDebug` 115 еталонів OK, `lintDebug`/`lintRelease`/`detekt` OK, `check-architecture-boundaries` OK,
+`check-doc-references` OK, `check-max-file-lines` — 13 файлів > 500.
+Примітка до середовища: Gradle wrapper не качав дистрибутив через перехоплення TLS на хості; усі прогони
+виконано з `JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStoreType=Windows-ROOT` (без змін у репозиторії).
+
+<!-- PHASE-A BLOCKED: 10 з 13 файлів розбито (кожен — окремий коміт `refactor: split <File> (no behaviour change)`
+з повними зеленими gates: 3149/2476/2476/133, Roborazzi 115, lint/detekt OK; кількість тестів не змінилась).
+AppIcons 1177→72, DesignSystemControls 630→421, GuidedTourOverlay 531→284, AddPlaylistScreen 560→348,
+RootScaffold 567→429, HlsFlattenedStream 517→452, ProxyHttpServer 580→475, PlaylistController 557→496,
+DlnaSessionRepository 609→491, AppViewModel 709→471.
+BLOCKED: CastSessionRepository 823, PlayerViewModel 813, ProxyServer 783 — stateless-логіки в них < 60 рядків;
+решта — оркестрація з lifecycle-станом (liveInstances, session id, producerLock/flattenedStreams/upstreamCalls,
+прапорці foreground/cast). Довести до 500 можна лише розривом lifecycle-ownership, що план забороняє; потрібне
+рішення власника щодо окремого дизайн-етапу. Через це `check-max-file-lines.sh` → exit 1 (3 файли) і НЕ доданий
+у android-ci.yml (інакше CI був би червоний).
+Флейки під навантаженням (емулятор паралельно з 3 тест-JVM): ProxyManifestLeaseTest, ProxyHttpServerTest,
+ProxyRendererProfileTest, IconResolutionConcurrencyTest — ізольовано 3/3 зелені; повний прогін на «тихій»
+машині зелений. -->
+
+<!-- PHASE-B DONE: створено docs/STATUS.md (версія, що перевірено, відкриті ризики з етапу 5 + флейки, наступні
+кроки); 106 датованих звітів docs/*_20XX-XX-XX.md перенесено в docs/archive/ через git mv (rename у git),
+відносні посилання перераховано скриптом (8 перенесених файлів змінено; у docs/DESIGN_SYSTEM.md, TV_SUPPORT.md,
+PERFORMANCE.md, CINEMA_V2_DESIGN_SYSTEM.md посилання ведуть в archive/). README посилається на docs/STATUS.md.
+check-doc-references OK; `ls docs/*_20*.md` → порожньо; перевірка всіх відносних markdown-посилань у docs/ і
+README: 0 зламаних (до переносу теж 0). Цей файл тепер лежить у docs/archive/. -->

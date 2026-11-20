@@ -62,6 +62,6 @@ TV-фокус малюється 3dp обводкою поверх 6dp розд�
 
 Контракти перевіряють чотири палітри, 320dp та 100/130/150/200% тексту, реальні межі натискання й рядків тексту, вибір, disabled, DPAD, observer disposal та збереження native child. `hasVisualOverflow` не використовується як єдина перевірка auto-width Text: paragraph може бути ширшим за tight layout без обрізаних літер. Перевіряються фактичні line bounds, висота, відсутність ellipsis та пропущених рядків.
 
-Реальні native Compose PNG: `app/src/test/screenshots/cinema_v2_components*.png` і `cinema_v2_tv_focus.png`. Каталог доступний також через Android Studio `@Preview`. Звіт про фактично виконані gates зберігається окремо у `CINEMA_V2_STAGE2_VERIFICATION_2026-11-13.md`.
+Реальні native Compose PNG: `app/src/test/screenshots/cinema_v2_components*.png` і `cinema_v2_tv_focus.png`. Каталог доступний також через Android Studio `@Preview`. Звіт про фактично виконані gates зберігається окремо у `archive/CINEMA_V2_STAGE2_VERIFICATION_2026-11-13.md`.
 
 Довідка: [Material 3 ColorScheme](https://developer.android.com/reference/kotlin/androidx/compose/material3/ColorScheme), [Compose MotionDurationScale](https://developer.android.com/reference/kotlin/androidx/compose/ui/MotionDurationScale). API звірено також із зафіксованим Material3 1.4.0 у локальному кеші; залежності не оновлювалися.

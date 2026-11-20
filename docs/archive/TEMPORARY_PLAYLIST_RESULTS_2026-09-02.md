@@ -98,4 +98,4 @@ SHA-256: `5E0048F4B31586BD8DF6984C4A9808CFE528FDAB3143D7741440D4952E37DE92`.
 в ігнорованому `app/build/` та приватному сховищі debug-застосунку.
 
 Відтворення тесту й видалення тимчасового джерела описані в
-[TEMPORARY_PLAYLIST_TESTING.md](TEMPORARY_PLAYLIST_TESTING.md).
+[TEMPORARY_PLAYLIST_TESTING.md](../TEMPORARY_PLAYLIST_TESTING.md).

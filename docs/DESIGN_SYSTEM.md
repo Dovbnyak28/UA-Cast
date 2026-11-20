@@ -384,7 +384,7 @@ Premium prevents renderer mounting, rather than hiding a view that already reque
 states. Only a ready renderer uses `BannerAdFrame`: localized advertising label, existing
 semantic typography/colors, centered content capped at 640dp. Do not substitute shimmer,
 placeholder cards or a permanent blank footer for an unavailable ad. Follow the adapter
-lifecycle/privacy contract in `docs/LITE_ADVERTISING_FOUNDATION_2026-10-03.md`.
+lifecycle/privacy contract in `docs/archive/LITE_ADVERTISING_FOUNDATION_2026-10-03.md`.
 
 ### Reduced visual effects
 
@@ -401,4 +401,4 @@ Use the shared rounded Material shapes for fields and dialogs. Titles, body copy
 have separate weights and line heights. Home exposes library counters without expanding diagnostics;
 favorites use a leading media shelf. Recovery states use compact cards with reachable actions in short
 windows. Guided-tour actions stay outside the scrolling description, including at 200% font scale.
-See `docs/VISUAL_REFRESH_2026-11-10.md` for verification and preview references.
+See `docs/archive/VISUAL_REFRESH_2026-11-10.md` for verification and preview references.
