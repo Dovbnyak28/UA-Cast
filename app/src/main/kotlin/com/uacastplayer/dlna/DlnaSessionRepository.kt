@@ -1,16 +1,9 @@
 package com.uacastplayer.dlna
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.LinkProperties
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import android.os.Build
 import com.uacastplayer.cast.CastProxyService
 import com.uacastplayer.cast.CastProxyTarget
 import com.uacastplayer.core.concurrent.AppDispatchers
-import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
@@ -19,9 +12,7 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.data.media.AndroidLocalVideoSource
 import com.uacastplayer.media.LocalVideo
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -37,58 +28,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 
 private const val TAG = "DlnaSessionRepository"
-private const val SOAP_TIMEOUT_SECONDS = 4L
-
-/**
- * `SetAVTransportURI` gets its own, much longer budget than [SOAP_TIMEOUT_SECONDS].
- *
- * Play and Stop are pure state changes and a renderer that cannot answer them in a few seconds is
- * not going to. SetAVTransportURI is not like that: renderers commonly *fetch the url inside the
- * action* to validate it before replying - a Samsung UE40KU6000 answers 716 "Resource not found"
- * for a dead url, which it can only know by having tried. So this action's reply is gated on the
- * proxy's first upstream round trip to the origin, and sharing the short timeout meant a slow
- * origin surfaced as a socket timeout and a failed connect on a TV that was working fine.
- */
-private const val SET_URI_TIMEOUT_SECONDS = 20L
-
-private const val DEVICE_DESCRIPTION_TIMEOUT_SECONDS = 4L
-
-// Deliberately NOT the discovery client's few seconds - see [DlnaSessionRepository.proxyHttpClient].
-// Same budget cast/CastSessionRepository gives its own ProxyServer, because it is the same job.
-private const val PROXY_CONNECT_TIMEOUT_SECONDS = 10L
-private const val PROXY_READ_TIMEOUT_SECONDS = 15L
-
-/** The callback must observe the same Wi-Fi network that supplies the proxy address, even when
- * it is local-only and has no INTERNET capability. No cellular/VPN event can change that address. */
-internal fun dlnaSessionNetworkRequest(): NetworkRequest = NetworkRequest.Builder().apply {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        clearCapabilities()
-    } else {
-        // clearCapabilities was added in API 30. Remove the builder's default filters on older
-        // devices so a local-only/restricted Wi-Fi does not disappear from this callback.
-        removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-        removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
-        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-    }
-    addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-}.build()
-
-private data class PreparedDlnaProxy(val token: String, val localUrl: String)
-private data class DlnaConnectRequest(
-    val device: DlnaDevice,
-    val media: DlnaMedia,
-    val isRepoint: Boolean,
-    /** Renderers that could still be active when this attempt was requested. */
-    val previousDevices: List<DlnaDevice>,
-    val generation: Long,
-)
-
-private data class DlnaMedia(
-    val url: String, val title: String, val userAgent: String?, val referrer: String?,
-    val localVideo: LocalVideo? = null,
-)
-
 /**
  * App-wide singleton (same lifetime rationale as [com.uacastplayer.cast.CastSessionRepository]:
  * a cast connection must survive navigating away from and back to the player) for DLNA/UPnP
@@ -113,44 +52,18 @@ class DlnaSessionRepository internal constructor(
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val localAddress: (Context) -> String? = LocalNetworkAddress::currentIpv4Address,
-    private val soapHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .writeTimeout(SOAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build(),
-    private val proxyHttpClient: OkHttpClient = AppHttp.client(
-        connectTimeoutSeconds = PROXY_CONNECT_TIMEOUT_SECONDS,
-        readTimeoutSeconds = PROXY_READ_TIMEOUT_SECONDS,
-    ),
+    private val soapHttpClient: OkHttpClient = DlnaHttpClients.soap(),
+    /** The proxy's own long-timeout client - see [DlnaHttpClients.proxy]. */
+    private val proxyHttpClient: OkHttpClient = DlnaHttpClients.proxy(),
 ) {
 
     private val appContext = context.applicationContext
 
-    private val discoveryHttpClient = OkHttpClient.Builder()
-        .connectTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .callTimeout(DEVICE_DESCRIPTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .followRedirects(false)
-        .followSslRedirects(false)
-        .build()
+    private val discoveryHttpClient = DlnaHttpClients.discovery()
 
-    /**
-     * The proxy's own client, NOT [discoveryHttpClient]. The discovery client's 4s read timeout is
-     * sized for fetching one small device-description XML; this one is what [ProxyServer] reads an
-     * *endless live stream* through, and OkHttp applies the read timeout to every read() on the
-     * response body. Four seconds without a byte - routine on a congested link or through a VPN -
-     * would surface as a lost connection, sending
-     * [com.uacastplayer.data.cast.RawTsRemuxSession]'s reader into a backoff reconnect and a
-     * discontinuity, i.e. exactly the stall-and-rebuffer symptom the proxy exists to avoid.
-     */
     private val proxyServer = ProxyServer(proxyHttpClient, localVideoSource = AndroidLocalVideoSource(appContext))
-    private val setUriHttpClient = soapHttpClient.newBuilder()
-        .readTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .callTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    private val setUriHttpClient = DlnaHttpClients.setUri(soapHttpClient)
 
-    // Shares the connection pool and dispatcher with soapHttpClient (newBuilder does), so the
-    // second client costs nothing beyond its own timeout settings.
     private val avTransportClient = AvTransportClient(soapHttpClient, setUriHttpClient)
     // Shares soapHttpClient's connection pool and timeouts: volume is a small, fast action against
     // the same host the transport actions already talk to.
@@ -226,27 +139,9 @@ class DlnaSessionRepository internal constructor(
      */
     private fun watchForNetworkChange(generation: Long) {
         networkWatch?.close()
-        val connectivityManager =
-            appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = checkSessionStillServable(generation)
-            override fun onLost(network: Network) = checkSessionStillServable(generation)
-            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
-                checkSessionStillServable(generation)
-            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) =
-                checkSessionStillServable(generation)
-        }
-        val request = dlnaSessionNetworkRequest()
-        runCatchingNonFatal { connectivityManager.registerNetworkCallback(request, callback) }
-            .onSuccess {
-                networkWatch = AutoCloseable {
-                    runCatchingNonFatal { connectivityManager.unregisterNetworkCallback(callback) }
-                        .onFailure { e ->
-                            AppLog.w(TAG) { "Cannot stop the DLNA network watch: ${e.javaClass.simpleName}" }
-                        }
-                }
-            }
-            .onFailure { e -> AppLog.w(TAG) { "Cannot watch the network for this session: ${e.javaClass.simpleName}" } }
+        // On failure the closed handle stays, exactly as before: closing it again only logs.
+        DlnaNetworkWatch.register(appContext) { checkSessionStillServable(generation) }
+            ?.let { networkWatch = it }
     }
 
     private fun checkSessionStillServable(generation: Long) {
@@ -262,21 +157,8 @@ class DlnaSessionRepository internal constructor(
         }
     }
 
-    /** A last-resort net under [SsdpDiscovery]'s own per-stage catches - discovery failing must
-     * leave the sheet with an empty list, never propagate. Cancellation is NOT a failure and is
-     * rethrown (the sheet cancels this the moment it's dismissed), which is exactly what a
-     * Kotlin's `runCatching` here would have swallowed once [SsdpDiscovery.discover] became suspending. */
-    @Suppress("TooGenericExceptionCaught")
-    suspend fun discoverDevices(): List<DlnaDevice> = withContext(ioDispatcher) {
-        try {
-            ssdpDiscovery.discover()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            AppLog.w(TAG) { "Discovery failed: ${e.javaClass.simpleName}" }
-            emptyList()
-        }
-    }
+    /** Never throws except for cancellation - see [discoverOrEmpty]. */
+    suspend fun discoverDevices(): List<DlnaDevice> = ssdpDiscovery.discoverOrEmpty(ioDispatcher)
 
     /** Starts the proxy for [streamUrl] and points [device] at the resulting local url. */
     fun connect(
