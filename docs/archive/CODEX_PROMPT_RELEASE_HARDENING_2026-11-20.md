@@ -119,3 +119,13 @@ ProxyRendererProfileTest, IconResolutionConcurrencyTest — ізольовано
 PERFORMANCE.md, CINEMA_V2_DESIGN_SYSTEM.md посилання ведуть в archive/). README посилається на docs/STATUS.md.
 check-doc-references OK; `ls docs/*_20*.md` → порожньо; перевірка всіх відносних markdown-посилань у docs/ і
 README: 0 зламаних (до переносу теж 0). Цей файл тепер лежить у docs/archive/. -->
+
+<!-- PHASE-C BLOCKED (частково виконано): звіт docs/archive/RELEASE_UPGRADE_VERIFICATION_2026-11-20.md (у коміті
+фази B) + scripts/verify-release-upgrade.sh. Сертифікат c040badc…602e однаковий для 0.9.2, 0.9.3 і 0.9.7-preliminary;
+SHA-256 APK: 0.9.3 1360179f…4377, 0.9.7 6974a1b1…2ad1. Оновлення 0.9.3 → 0.9.7 (vc 124 → 164) на емуляторі API 36:
+2 плейлисти, улюблені, EPG, PIN + заблокований канал, тема «Кіно», розкладка «Сітка» — усе збережено, PIN працює,
+FATAL немає; скрипт → OK. Підписаного 0.9.6 не існує (база — останній опублікований 0.9.3).
+BLOCKED: (1) підписаний реліз з HEAD — потрібні UACAST_STORE_* (паролі лише у власника);
+(2) API 30 — немає образу (sdkmanager "system-images;android-30;google_apis;x86_64");
+(3) in-app updater — TLS до GitHub з емулятора перехоплюється на хості.
+РИЗИК: v0.9.7 уже опубліковано на GitHub (24.09); поточна збірка теж 0.9.7/16 — підняти до 0.9.8/17 перед релізом. -->
