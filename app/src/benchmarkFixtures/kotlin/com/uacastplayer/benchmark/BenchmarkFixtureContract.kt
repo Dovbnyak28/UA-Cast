@@ -5,6 +5,7 @@ internal object BenchmarkFixtureContract {
     const val EXTRA_MODE = "com.uacastplayer.benchmark.MODE"
     const val MODE_PROFILE = "profile"
     const val MODE_UI_STRESS = "ui-stress"
+    const val MODE_UI_MEDIUM = "ui-medium"
     const val MODE_EPG_PARSE = "epg-parse"
     const val FIXTURE_READY = "benchmark-fixture-ready"
     const val EPG_PARSE_READY = "benchmark-epg-parse-ready"

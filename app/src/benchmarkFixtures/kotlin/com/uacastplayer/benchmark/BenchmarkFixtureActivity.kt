@@ -30,6 +30,8 @@ class BenchmarkFixtureActivity : ComponentActivity() {
                             BenchmarkFixtureInstaller.prepareEpgParseDocument(this@BenchmarkFixtureActivity)
                         BenchmarkFixtureContract.MODE_UI_STRESS ->
                             BenchmarkFixtureInstaller.installUiState(this@BenchmarkFixtureActivity, stress = true)
+                        BenchmarkFixtureContract.MODE_UI_MEDIUM ->
+                            BenchmarkFixtureInstaller.installMediumUiState(this@BenchmarkFixtureActivity)
                         BenchmarkFixtureContract.MODE_PROFILE ->
                             BenchmarkFixtureInstaller.installUiState(this@BenchmarkFixtureActivity, stress = false)
                         else -> error("Unknown benchmark fixture mode")

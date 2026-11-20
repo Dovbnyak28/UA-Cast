@@ -72,7 +72,7 @@ class PerformanceBudgetTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             GATE.evaluate([self.doc], self.budgets)
 
-    def test_all_eleven_configured_journeys_require_real_metric_names(self):
+    def test_all_fourteen_configured_journeys_require_real_metric_names(self):
         # Synthetic schema contract only: these are not measured device results.
         config = MODULE.parent.parent / "config/performance/ci-api30.json"
         budgets = json.loads(config.read_text(encoding="utf-8"))
@@ -85,7 +85,7 @@ class PerformanceBudgetTest(unittest.TestCase):
                 else:
                     row["metrics"][rule["name"]] = {"runs": [1] * case["minIterations"]}
             rows.append(row)
-        self.assertEqual(11, len(rows))
+        self.assertEqual(14, len(rows))
         self.assertFalse(GATE.evaluate([{"context": {"build": {"version": {"sdk": budgets["apiLevel"]}}},
                                           "benchmarks": rows}], budgets)[1])
         next(row for row in rows if row["name"] == "parseAndBuildIndex")["metrics"].pop("UaCastEpgParseAndIndexSumMs")

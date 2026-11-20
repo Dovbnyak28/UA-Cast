@@ -129,3 +129,12 @@ BLOCKED: (1) підписаний реліз з HEAD — потрібні UACAST
 (2) API 30 — немає образу (sdkmanager "system-images;android-30;google_apis;x86_64");
 (3) in-app updater — TLS до GitHub з емулятора перехоплюється на хості.
 РИЗИК: v0.9.7 уже опубліковано на GitHub (24.09); поточна збірка теж 0.9.7/16 — підняти до 0.9.8/17 перед релізом. -->
+
+<!-- PHASE-D DONE: звіт docs/archive/PERFORMANCE_BASELINE_2026-11-20.md. AVD medium_phone API 36 x86_64 2 ГБ RAM.
+COLD startup медіана 1495 мс, WARM 927 мс (n=10); cold restore 40k 1523 мс / 10k 1179 мс; відкриття каталогу
+P95 кадрів 40k 134.3 мс / 10k 105.9 мс; перший результат пошуку P95 40k 30.1 мс / 10k 26.1 мс; скрол P95 49.4 мс;
+fullscreen (контроли) P95 100.6 мс; перший відеокадр 639 мс, перемикання 255 мс; пік Java heap ≤ 49 МБ
+(40k cold restore 27.3 МБ). Ітерацій: startup 10, решта 5 (план просив ≥30 для FrameTimingMetric — не досягнуто,
+обмеження часу прогону). Додано MediumCatalogBenchmark (10k) + фікстура ui-medium; бюджети:
+config/performance/local-api36-2gb.json (новий, перевірка → passed) і ci-api30.json (+3 випадки, gate-workflow
+оновлено, test_performance_budgets 10/10 OK). EpgParseBenchmark у прогін не входив. -->

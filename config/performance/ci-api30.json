@@ -188,6 +188,57 @@
           "limit": 262144
         }
       ]
+    },
+    {
+      "class": "MediumCatalogBenchmark",
+      "test": "coldRestoreOfTenThousandChannels",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "timeToInitialDisplayMs",
+          "statistic": "median",
+          "limit": 10000
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 262144
+        }
+      ]
+    },
+    {
+      "class": "MediumCatalogBenchmark",
+      "test": "openTenThousandChannelPlaylist",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 100
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 262144
+        }
+      ]
+    },
+    {
+      "class": "MediumCatalogBenchmark",
+      "test": "searchTenThousandChannels",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 100
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 262144
+        }
+      ]
     }
   ]
 }

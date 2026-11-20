@@ -83,7 +83,7 @@ jobs:
             memory_pid=$!
             trap 'kill -TERM "$memory_pid" 2>/dev/null || true; wait "$memory_pid" || true' EXIT
             ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark,com.uacastplayer.baselineprofile.CriticalJourneysBenchmark,com.uacastplayer.baselineprofile.EpgParseBenchmark,com.uacastplayer.baselineprofile.BenchmarkFixtureReadinessTest \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark,com.uacastplayer.baselineprofile.CriticalJourneysBenchmark,com.uacastplayer.baselineprofile.MediumCatalogBenchmark,com.uacastplayer.baselineprofile.EpgParseBenchmark,com.uacastplayer.baselineprofile.BenchmarkFixtureReadinessTest \
               -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
               --stacktrace
             kill -TERM "$memory_pid"

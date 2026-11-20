@@ -36,6 +36,7 @@ internal object BenchmarkFixtureInstaller {
     private const val EPG_URL = "https://benchmark.invalid/guide.xml"
     private const val PROFILE_CHANNELS = 400
     private const val STRESS_CHANNELS = 40_000
+    private const val MEDIUM_CHANNELS = 10_000
     private const val PROFILE_GROUP_SIZE = 100
     private const val STRESS_GROUP_SIZE = 1_000
     private const val EPG_CHANNELS = 1_000
@@ -44,10 +45,18 @@ internal object BenchmarkFixtureInstaller {
     private const val XML_CHANNELS = 1_000
     private const val MINUTES_PER_PROGRAMME = 10L
 
-    fun installUiState(context: Context, stress: Boolean) {
+    fun installUiState(context: Context, stress: Boolean) = installUiState(
+        context,
+        channelCount = if (stress) STRESS_CHANNELS else PROFILE_CHANNELS,
+        groupSize = if (stress) STRESS_GROUP_SIZE else PROFILE_GROUP_SIZE,
+    )
+
+    /** A 10,000-channel catalog: the mid-size budget point between the profile and stress fixtures. */
+    fun installMediumUiState(context: Context) =
+        installUiState(context, channelCount = MEDIUM_CHANNELS, groupSize = STRESS_GROUP_SIZE)
+
+    private fun installUiState(context: Context, channelCount: Int, groupSize: Int) {
         val nowMillis = System.currentTimeMillis()
-        val channelCount = if (stress) STRESS_CHANNELS else PROFILE_CHANNELS
-        val groupSize = if (stress) STRESS_GROUP_SIZE else PROFILE_GROUP_SIZE
         val channels = List(channelCount) { index -> playlistChannel(index, groupSize) }
         val source = PlaylistSource(
             id = SOURCE_ID,

@@ -72,12 +72,16 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         waitForVideoFrame()
     }
 
-    fun searchFortyThousandChannels() {
+    fun searchFortyThousandChannels() = searchChannel("Benchmark Channel 39999")
+
+    fun searchTenThousandChannels() = searchChannel("Benchmark Channel 09999")
+
+    private fun searchChannel(name: String) {
         val input = requireNotNull(device.wait(
             Until.findObject(By.clazz("android.widget.EditText")), UI_TIMEOUT_MILLIS,
         )) { "Global channel search field was not found" }
-        input.text = "Benchmark Channel 39999"
-        waitForText("Benchmark Channel 39999")
+        input.text = name
+        waitForText(name)
     }
 
     fun scrollChannelGroup() {
@@ -155,6 +159,7 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val PACKAGE_NAME = "com.uacastplayer"
         const val MODE_PROFILE = "profile"
         const val MODE_UI_STRESS = "ui-stress"
+        const val MODE_UI_MEDIUM = "ui-medium"
         const val MODE_EPG_PARSE = "epg-parse"
         const val EPG_PARSE_COMPONENT = "$PACKAGE_NAME/.benchmark.EpgParseBenchmarkActivity"
         const val EPG_PARSE_READY = "benchmark-epg-parse-ready"
