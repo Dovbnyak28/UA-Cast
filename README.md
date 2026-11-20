@@ -79,9 +79,10 @@ See `docs/` for the design rules behind the trickier subsystems:
 
 ## Known limitations
 
-- The five `epg.it999.ru` guide source variants (`EpgSource.kt`) are configured in source;
-  they supply programme listings, not channel logos. Logo packs must be added by the user.
-  Availability of chosen guide/pack services should be included in release smoke testing.
+- No EPG provider is bundled any more: the guide comes from the playlist's own `#EXTM3U`
+  header / Xtream source (`EpgSourceAutoDetect.kt`) or a URL the user enters. Guides supply
+  programme listings, not channel logos; logo packs must be added by the user. Availability of
+  the chosen guide/pack services should be included in release smoke testing.
 - Built and verified via `gradlew` command-line builds, plus manual on-device testing (language
   picker, all four tabs, EPG source download for both the gzip and plain-XML variants) on a Xiaomi
   Mi A2 (Android 11). Proxy/DLNA control paths have also been exercised on a ZTE Blade A34, but a
