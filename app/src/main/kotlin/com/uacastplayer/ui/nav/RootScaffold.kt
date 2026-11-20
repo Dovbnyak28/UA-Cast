@@ -1,39 +1,15 @@
 package com.uacastplayer.ui.nav
-import com.uacastplayer.ui.theme.UaTheme
-
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import com.uacastplayer.ui.remote.LocalOpenRemote
-import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.tv.tvFocus
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.uacastplayer.R
@@ -65,7 +40,6 @@ import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
-import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.guidedtour.GuidedTourSectionState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel
@@ -73,10 +47,7 @@ import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.SettingsUiState
-import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.channels.ChannelsScreen
-import com.uacastplayer.ui.components.DownloadStatusBanner
-import com.uacastplayer.ui.components.UpdateBanner
 import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.update.UpdateSectionState
@@ -91,13 +62,10 @@ import com.uacastplayer.ui.settings.SettingsScreen
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.tv.LocalTvMode
 import com.uacastplayer.ui.tv.TvBrowseScreen
-import com.uacastplayer.ui.theme.DisplayTitle
-import com.uacastplayer.ui.theme.DUR_NAV
-import com.uacastplayer.ui.theme.EaseSpring
-import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.appBackground
 import com.uacastplayer.ui.theme.miniPlayerContentPadding
 import java.io.File
+
 
 private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
     save = { state -> state.stack.map(BottomDestination::name) },
@@ -459,109 +427,3 @@ private fun Modifier.tvOverscanPadding(television: Boolean): Modifier =
 
 private fun rootContentWidth(expanded: Boolean, destination: BottomDestination) =
     if (expanded && destination == BottomDestination.CHANNELS) 1_200.dp else 840.dp
-
-/**
- * The screen title and background-download/update banners.
- *
- * The banner belongs *here*, as part of the measured top bar, and not in an overlay Box stacked on
- * top of the whole scaffold, which is where it used to live. As an overlay it was simply drawn over
- * whatever was underneath: while a playlist was loading it cut the screen title in half ("UA Cast
- * Player" on Home, the first section header in Settings), which is the exact moment the app most
- * needs to look like it is working rather than broken. As part of the top bar the Scaffold measures
- * it and hands the content the remaining height, so it pushes instead of covering.
- *
- * The status-bar inset is applied once, by the outer Column, and Compose *consumes* it for the
- * subtree - so [DownloadStatusBanner]'s own `statusBarsPadding()` and the title Row (which used to
- * carry the inset itself) both resolve to zero here rather than stacking into a double gap. The
- * background is applied before the inset padding, so it still fills the status bar area.
- *
- * Extracted from the `topBar` lambda so the no-overlap property can be asserted directly; composing
- * the whole of [RootScaffold] in a test would mean supplying sixty-odd parameters. Cast controls
- * intentionally live in the player overlay, where a video stream is active, rather than in this
- * global navigation chrome.
- */
-private const val REMOTE_LABEL_MIN_WIDTH_DP = 360
-private const val REMOTE_LABEL_MAX_FONT_SCALE = 1.5f
-
-private fun homeRemoteLabelVisible(home: Boolean, widthDp: Int, fontScale: Float): Boolean =
-    home && widthDp >= REMOTE_LABEL_MIN_WIDTH_DP && fontScale < REMOTE_LABEL_MAX_FONT_SCALE
-
-@Composable
-internal fun RootTopBar(
-    title: String,
-    iconPrefetchState: IconPrefetchUiState,
-    epgState: EpgUiState,
-    showDownloadStatus: Boolean,
-    updateSection: UpdateSectionState,
-    modifier: Modifier = Modifier,
-    showTitle: Boolean = true,
-    labelRemote: Boolean = false,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(UaTheme.palette.void)
-            .windowInsetsPadding(WindowInsets.statusBars),
-    ) {
-        if (showDownloadStatus) {
-            DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState, compact = true)
-        }
-        UpdateBanner(
-            release = updateSection.state.availableRelease,
-            installState = updateSection.installState,
-            onInstall = updateSection.onDownloadAndInstall,
-            onGrantInstallPermission = updateSection.onGrantInstallPermission,
-            onOpen = updateSection.onOpenRelease,
-            onDismiss = updateSection.onDismissBanner,
-        )
-        if (showTitle) com.uacastplayer.ui.components.ScreenHeader(title, labelRemote = labelRemote)
-    }
-}
-
-private fun BottomDestination.labelRes(): Int = when (this) {
-    BottomDestination.HOME -> R.string.nav_home
-    BottomDestination.CHANNELS -> R.string.nav_channels
-    BottomDestination.FAVORITES -> R.string.nav_favorites
-    BottomDestination.SETTINGS -> R.string.nav_settings
-}
-
-/** Two tabs are tour targets; the other steps point at things inside a screen rather than at the
- * tab that reaches it. Null elsewhere rather than a key nothing uses. */
-private fun BottomDestination.tourKey(): String? = when (this) {
-    BottomDestination.FAVORITES -> GuidedTourKeys.FAVORITE_BUTTON
-    BottomDestination.SETTINGS -> GuidedTourKeys.SETTINGS_BUTTON
-    else -> null
-}
-
-private fun BottomDestination.icon() = when (this) {
-    BottomDestination.HOME -> com.uacastplayer.ui.theme.AppIcons.Home
-    BottomDestination.CHANNELS -> com.uacastplayer.ui.theme.AppIcons.Channels
-    BottomDestination.FAVORITES -> com.uacastplayer.ui.theme.AppIcons.Favorites
-    BottomDestination.SETTINGS -> com.uacastplayer.ui.theme.AppIcons.Settings
-}
-
-private fun AnimatedContentTransitionScope<BottomDestination>.navigationTransition(
-    animationsAllowed: Boolean,
-): ContentTransform {
-    if (!animationsAllowed) return EnterTransition.None togetherWith ExitTransition.None
-
-    val movingForward = targetState.ordinal > initialState.ordinal
-    val enterOffset = if (movingForward) {
-        { width: Int -> width / 10 }
-    } else {
-        { width: Int -> -width / 10 }
-    }
-    val exitOffset = if (movingForward) {
-        { width: Int -> -width / 10 }
-    } else {
-        { width: Int -> width / 10 }
-    }
-    return (slideInHorizontally(
-        initialOffsetX = enterOffset,
-        animationSpec = tween(DUR_NAV, easing = EaseSpring),
-    ) + fadeIn(tween(DUR_NAV, easing = EaseSpring))) togetherWith
-        (slideOutHorizontally(
-            targetOffsetX = exitOffset,
-            animationSpec = tween(DUR_NAV, easing = EaseSpring),
-        ) + fadeOut(tween(DUR_NAV, easing = EaseSpring)))
-}
