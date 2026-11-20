@@ -47,7 +47,7 @@ plain top-level constants.
 All styles are tabular-figure `TextStyle`s (no `MaterialTheme.typography.*`):
 `LargeTitle`/`Title` (screen/section headers), `CardTitle` (card headings), `BodyText` (semibold
 body), `BodyRegular` (regular body/labels), `Caption`/`CaptionSemibold` (secondary text),
-`Micro`/`SectionLabel`/`PillText`/`LiveText`/`RingValue`/`TabLabel` (small-scale specialty labels -
+`Micro`/`SectionLabel`/`PillText`/`LiveText`/`TabLabel` (small-scale specialty labels -
 pill text, tab bar labels, health-ring numerals). Pick the closest semantic match rather than
 reaching for `MaterialTheme.typography.bodyMedium` etc.
 

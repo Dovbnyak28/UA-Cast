@@ -29,10 +29,6 @@ data class GuidedTourState(
     val currentStep: GuidedTourStep?
         get() = if (phase == GuidedTourPhase.STEPS) steps.getOrNull(stepIndex) else null
 
-    /** Only from the second step on - there is nothing behind the first one but the welcome card,
-     * which Back does return to. */
-    val canGoBack: Boolean get() = phase == GuidedTourPhase.STEPS
-
     /** 1-based, for "3 / 7". Meaningless outside [GuidedTourPhase.STEPS], where the indicator is
      * not drawn at all. */
     val stepNumber: Int get() = stepIndex + 1

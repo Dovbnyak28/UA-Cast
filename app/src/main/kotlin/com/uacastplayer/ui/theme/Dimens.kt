@@ -13,7 +13,6 @@ val GapL = 20.dp
 // Radii
 val RadiusList = 20.dp
 val RadiusCard = 24.dp
-val RadiusRoute = 20.dp
 val RadiusField = 14.dp
 val RadiusItem = 16.dp
 val RadiusSeg = 12.dp
@@ -59,22 +58,10 @@ val MiniPlayerBarHeight = 64.dp
 val GlassTabBarHeight = 64.dp
 val GlassTabBarVerticalPadding = 0.dp
 val NpLogoSize = 54.dp
-val NpLogoRadius = 16.dp
 val ProgressHeightThin = 3.dp
 val ProgressHeightBold = 5.dp
-val SliderKnobSize = 13.dp
 val StatusDotSize = 7.dp
 val HairlineInsetChannels = 66.dp
-val HairlineInsetEpg = 60.dp
-
-// Route
-val RouteNodeIcon = 34.dp
-val RouteWireHeight = 2.dp
-val RouteGlowDot = 7.dp
-
-// Health ring
-val RingSize = 96.dp
-val RingStroke = 9.dp
 
 // Entry motion (see ui/components/EntryStagger.kt)
 val EntryLift = 12.dp

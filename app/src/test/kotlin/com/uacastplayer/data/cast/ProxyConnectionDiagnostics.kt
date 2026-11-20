@@ -14,7 +14,7 @@ internal object ProxyConnectionDiagnostics {
             val http = field.get(owner) as ProxyHttpServer
             "activeClients=${http.activeClientCountForTesting()}, metrics=${http.metricsSnapshot()}"
         }.getOrDefault("Server snapshot unavailable") }.orEmpty()
-        val tcp = if (System.getProperty("os.name").startsWith("Windows")) windowsTcp(local, peer) else ""
+        val tcp = if (System.getProperty("os.name").orEmpty().startsWith("Windows")) windowsTcp(local, peer) else ""
         return "$state\nclosed=${socket.isClosed}, connected=${socket.isConnected}\n$tcp"
     }
 

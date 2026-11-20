@@ -61,10 +61,6 @@ val LiveText = TextStyle(
     fontSize = 11.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.em,
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
-val RingValue = TextStyle(
-    fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.02).em,
-    fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
-)
 val TabLabel = TextStyle(
     fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.em,
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
