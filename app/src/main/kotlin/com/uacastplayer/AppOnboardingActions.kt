@@ -1,5 +1,7 @@
 package com.uacastplayer
 
+import android.app.Application
+import android.os.PowerManager
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.appTheme
@@ -32,4 +34,14 @@ internal fun AppViewModel.selectAppTheme(theme: AppTheme) {
 internal fun AppViewModel.acceptTerms() {
     preferences.hasAcceptedTerms = true
     uiStateMutable.value = uiStateMutable.value.copy(needsTermsAcceptance = false)
+}
+
+/** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]);
+ * manufacturer battery managers can otherwise kill the cast proxy in the background. */
+internal fun AppViewModel.maybeOfferBatteryOptimizationHint() {
+    val application = getApplication<Application>()
+    val powerManager = application.getSystemService(PowerManager::class.java)
+    val shouldOffer = !preferences.hasSeenBatteryOptimizationHint &&
+        powerManager?.isIgnoringBatteryOptimizations(application.packageName) == false
+    if (shouldOffer) showBatteryOptimizationHintMutable.value = true
 }

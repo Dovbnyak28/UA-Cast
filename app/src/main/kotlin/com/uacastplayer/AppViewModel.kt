@@ -2,14 +2,8 @@ package com.uacastplayer
 
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
-
 import android.app.Application
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.Uri
-import android.os.Build
-import android.os.PowerManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.uacastplayer.app.BackupController
@@ -41,20 +35,12 @@ import com.uacastplayer.update.UpdateInstallState
 import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupExportResult
-import com.uacastplayer.backup.BackupFavorite
 import com.uacastplayer.backup.BackupImportSummary
-import com.uacastplayer.backup.BackupPlaylistSource
-import com.uacastplayer.backup.BackupSettings
-import com.uacastplayer.backup.BackupEpgPolicy
 import com.uacastplayer.cast.CastPlaybackState
 import com.uacastplayer.cast.CastSessionRepository
 import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.concurrent.LatestResultGuard
-import com.uacastplayer.core.i18n.AppLanguage
-import com.uacastplayer.core.concurrent.runCatchingNonFatal
-import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.appTheme
-import com.uacastplayer.data.cache.CachePaths
 import com.uacastplayer.data.cache.CacheSizeUtils
 import com.uacastplayer.data.epg.EpgRepository
 import com.uacastplayer.data.favorites.FavoritesRepository
@@ -64,26 +50,19 @@ import com.uacastplayer.data.parentalcontrol.ParentalControlStore
 import com.uacastplayer.data.playlist.GroupVisibilityStore
 import com.uacastplayer.data.playlist.PlaylistRepository
 import com.uacastplayer.data.prefs.AppPreferences
-import com.uacastplayer.core.settings.BufferSize
 import com.uacastplayer.data.prefs.DeviceSpecsProvider
-import com.uacastplayer.core.settings.IconDisplayMode
-import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.DiagnosticsReportBuilder
-import com.uacastplayer.diagnostics.DiagnosticsSnapshot
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.epg.EpgWorkloadPolicy
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.icons.IconPrefetchUiState
-import com.uacastplayer.log.CrashLog
-import com.uacastplayer.log.LogBuffer
 import com.uacastplayer.performance.DevicePerformanceClassifier
 import com.uacastplayer.performance.DeviceTier
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistSource
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.settings.CacheKind
-import com.uacastplayer.settings.CacheSizes
 import com.uacastplayer.settings.SettingsUiState
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -96,12 +75,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-data class AppUiState(
-    val language: AppLanguage = AppLanguage.DEFAULT,
-    val appTheme: AppTheme = AppTheme.DEFAULT,
-    val needsLanguagePicker: Boolean = true,
-    val needsTermsAcceptance: Boolean = true,
-)
 
 /**
  * Root view model for app-wide, cross-screen state (language, playlist/channels, EPG, icons,
@@ -242,7 +215,7 @@ class AppViewModel @JvmOverloads constructor(
         preferences = preferences,
         epgRepository = epgRepository,
         scope = viewModelScope,
-        isUnmeteredNetwork = ::isUnmeteredNetwork,
+        isUnmeteredNetwork = { AppNetworkInfo.isUnmetered(getApplication<Application>()) },
         onLoaded = {
             recomputeDeviceTierDefaults(loadedPlaylistChannels())
             refreshCacheSizes()
@@ -342,87 +315,26 @@ class AppViewModel @JvmOverloads constructor(
         refreshCacheSizes()
     }
 
-    /** Shown at most once automatically (see [AppPreferences.hasSeenBatteryOptimizationHint]);
-     * manufacturer battery managers can otherwise kill the cast proxy in the background. */
-    private fun maybeOfferBatteryOptimizationHint() {
-        val application = getApplication<Application>()
-        val powerManager = application.getSystemService(PowerManager::class.java)
-        val shouldOffer = !preferences.hasSeenBatteryOptimizationHint &&
-            powerManager?.isIgnoringBatteryOptimizations(application.packageName) == false
-        if (shouldOffer) showBatteryOptimizationHintMutable.value = true
-    }
-
     /** Re-reads what the store offers. Called when a premium surface opens rather than at startup:
      * an app that never shows the premium screen should not talk to a store at all. */
     fun refreshPremiumProducts() {
         viewModelScope.launch { _premiumProducts.value = premiumRepository.products() }
     }
 
-    private val _lastPurchaseOutcome = MutableStateFlow<PurchaseResult?>(null)
+    private val storeAttempts = PremiumStoreAttempts(viewModelScope)
 
-    /**
-     * How the last purchase or restore ended, until a screen has shown it.
-     *
-     * Kept rather than discarded because there is nowhere else for it to go: a purchase is answered
-     * by Play through a client-wide listener, long after the tap, and possibly after the sheet that
-     * started it has been dismissed. Without this, a declined card and a successful one are the same
-     * event from the user's side - nothing happens - and the only move left is to tap buy again.
-     *
-     * [PurchaseResult.Success] is deliberately not held: the entitlement flow has already changed by
-     * then, so the screen redraws itself as unlocked, which says it better than a message would.
-     */
-    val lastPurchaseOutcome: StateFlow<PurchaseResult?> = _lastPurchaseOutcome.asStateFlow()
+    /** How the last purchase or restore ended, until a screen has shown it - see
+     * [PremiumStoreAttempts.lastPurchaseOutcome]. */
+    val lastPurchaseOutcome: StateFlow<PurchaseResult?> = storeAttempts.lastPurchaseOutcome
 
-    private val _isPurchasing = MutableStateFlow(false)
+    /** Whether an attempt is with the store right now - see [PremiumStoreAttempts.isPurchasing]. */
+    val isPurchasing: StateFlow<Boolean> = storeAttempts.isPurchasing
 
-    /**
-     * Whether an attempt is with the store right now, so the buy controls can be disabled.
-     *
-     * A guard rather than a spinner, and it guards something real: Play answers a purchase through
-     * a client-wide listener rather than through the call that started it, so a second attempt
-     * launched before the first is answered leaves the first waiting for a reply now addressed to
-     * the second. It also covers the seconds while Play's own sheet is opening, which on a slow
-     * phone is long enough to press again and which the screen has nothing to say about otherwise.
-     */
-    val isPurchasing: StateFlow<Boolean> = _isPurchasing.asStateFlow()
-
-    fun purchasePremium(product: BillingProduct, launchContext: Any?) = startStoreAttempt {
+    fun purchasePremium(product: BillingProduct, launchContext: Any?) = storeAttempts.startStoreAttempt {
         premiumRepository.purchase(product.id, launchContext)
     }
 
-    fun restorePremiumPurchases() = startStoreAttempt { premiumRepository.restore() }
-
-    /**
-     * One attempt at a time, and the flag is cleared in a `finally`: a store call that throws would
-     * otherwise leave every buy button disabled for the rest of the session, which is a worse
-     * outcome than the double tap this prevents.
-     */
-    private fun startStoreAttempt(attempt: suspend () -> PurchaseResult) {
-        if (_isPurchasing.value) return
-        _lastPurchaseOutcome.value = null
-        _isPurchasing.value = true
-        viewModelScope.launch {
-            try {
-                report(attempt())
-            } finally {
-                _isPurchasing.value = false
-            }
-        }
-    }
-
-    /**
-     * Two outcomes are deliberately not reported.
-     *
-     * Cancelling is a decision: the user closed Play's sheet and knows exactly what happened, and an
-     * app that answers that with a message is scolding them for not buying. Success needs no message
-     * either - the entitlement flow has already moved, so every lock on screen has just opened,
-     * which is a better answer than a line of text saying it did.
-     */
-    private fun report(result: PurchaseResult) {
-        _lastPurchaseOutcome.value = result.takeUnless {
-            it is PurchaseResult.Cancelled || it is PurchaseResult.Success
-        }
-    }
+    fun restorePremiumPurchases() = storeAttempts.startStoreAttempt { premiumRepository.restore() }
 
     /** License states the developer menu can force this build into - empty in a release build, where
      * the code that fills [DeveloperMode] is not compiled at all. */
@@ -443,93 +355,10 @@ class AppViewModel @JvmOverloads constructor(
 
     /** Taken once, at construction, so the report can say how long the app had been running - which
      * is what tells a reader whether the log below could contain the moment being reported. */
-    private val processStartedAtMillis = android.os.SystemClock.elapsedRealtime()
+    internal val processStartedAtMillis = android.os.SystemClock.elapsedRealtime()
 
-    /**
-     * Whether the active network is one the app may spend a guide download on - see
-     * [com.uacastplayer.epg.EpgRefreshPolicy]. Unknown counts as metered: guessing wrong in the
-     * other direction spends somebody's mobile data on 50MB they did not ask for.
-     */
-    private fun isUnmeteredNetwork(): Boolean {
-        val manager = getApplication<Application>()
-            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        val capabilities = manager?.activeNetwork?.let(manager::getNetworkCapabilities)
-        return capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
-    }
-
-    /**
-     * Wi-Fi, mobile or nothing, and whether the system calls it metered.
-     *
-     * Buffering reports are unanswerable without it and it needs no permission beyond the
-     * ACCESS_NETWORK_STATE this app already holds. Deliberately only the *kind* of network - no
-     * SSID, no carrier, no address, none of which would help and all of which identify a place.
-     */
-    private fun describeNetwork(): String {
-        val manager = getApplication<Application>()
-            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        val capabilities = manager?.activeNetwork?.let(manager::getNetworkCapabilities)
-            ?: return if (manager == null) "?" else "none"
-        val kind = when {
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-            else -> "other"
-        }
-        val metered = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-        val validated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        return "$kind${if (metered) ", metered" else ""}${if (validated) "" else ", not validated"}"
-    }
-
-    /**
-     * Builds the "Send diagnostics" report text (see HelpScreen) from whatever is already known
-     * synchronously - current settings, device tier, and [LogBuffer]'s recent entries - without
-     * touching anything that isn't already read elsewhere in this ViewModel.
-     *
-     * On the UsableSpace suppression. Lint suggests `StorageManager.getAllocatableBytes`, which
-     * counts space the system *could* free by clearing other apps' caches. That is the right number
-     * when deciding whether a write will fit; it is the wrong one here. This line exists to answer
-     * "why did my playlist not save", and the honest answer is how much the app can write right
-     * now - a figure that includes reclaimable cache would report plenty of room on a phone that
-     * has none.
-     */
-    @Suppress("UsableSpace")
-    fun buildDiagnosticsReport(): String {
-        val runtime = Runtime.getRuntime()
-        return DiagnosticsReportBuilder.build(
-            DiagnosticsSnapshot(
-                appVersionName = BuildConfig.VERSION_NAME,
-                deviceModel = Build.MODEL,
-                androidApiLevel = Build.VERSION.SDK_INT,
-                deviceTier = settingsState.value.deviceTier,
-                bufferSize = settingsState.value.bufferSize,
-                iconDisplayMode = settingsState.value.iconDisplayMode,
-                // Read from preferences rather than from PlayerViewModel's ui state, and it has to
-                // be: this report is most often made from Settings or Help, with no player open at
-                // all, and the setting is global and persisted precisely so it outlives one.
-                playerResizeMode = preferences.playerResizeMode,
-                appThemeId = uiState.value.appTheme.name,
-                usedMemoryBytes = runtime.totalMemory() - runtime.freeMemory(),
-                totalMemoryBytes = runtime.totalMemory(),
-                maxMemoryBytes = runtime.maxMemory(),
-                logEntries = LogBuffer.snapshot(),
-                remuxEffectiveness = remuxEffectivenessStore.snapshot(),
-                lastCrash = CrashLog.read(),
-                generatedAtMillis = System.currentTimeMillis(),
-                uptimeMillis = android.os.SystemClock.elapsedRealtime() - processStartedAtMillis,
-                language = uiState.value.language.code,
-                channelCount = playlistState.value.groups.sumOf { it.channels.size },
-                groupCount = playlistState.value.groups.size,
-                epgChannelCount = epgState.value.data?.index?.channels?.size,
-                epgProgrammeCount = epgState.value.data?.programmesByChannelId?.values?.sumOf { it.size },
-                epgTruncated = epgState.value.data?.truncation?.any == true,
-                epgSource = if (epgState.value.customUrl != null) "custom" else "none",
-                epgFailure = epgState.value.lastFailure,
-                network = describeNetwork(),
-                freeStorageBytes = getApplication<Application>().filesDir.usableSpace,
-                casting = castState.value.isSessionConnected,
-            ),
-        )
-    }
+    /** Builds the "Send diagnostics" report text (see HelpScreen) - see [diagnosticsSnapshot]. */
+    fun buildDiagnosticsReport(): String = DiagnosticsReportBuilder.build(diagnosticsSnapshot())
 
     /** Builds the "what's worth prefetching" context (see [IconController.PrefetchContext]) from
      * whatever's already known synchronously - [firstGroupChannels] is passed in rather than read
@@ -579,72 +408,12 @@ class AppViewModel @JvmOverloads constructor(
         )
     }
 
-    private fun buildBackupData(): BackupData {
-        val sources = playlistSources.value.map {
-            BackupPlaylistSource(it.id, it.type.name, it.location, it.displayName, it.addedAtEpochMillis)
-        }
-        val favoritesBackup = favorites.value.map {
-            BackupFavorite(
-                it.key, it.displayName, it.streamUrl, it.tvgId, it.groupTitle, it.addedAtMillis,
-                it.tvgName, it.tvgLogo, it.userAgent, it.referrer,
-            )
-        }
-        val settings = BackupSettings(
-            // Only what the user actually chose - the same rule the EPG fields below already
-            // follow. These two are exactly the settings DeviceTierDefaults computes per device, so
-            // settingsState carries a value for them whether anybody picked one or not, and
-            // exporting that shipped one phone's tier default to another as a decision. The
-            // receiving end could not undo it either: applyImportedSettings goes through
-            // setIconDisplayMode/setListDensity, which write the preference and so make
-            // hasChosen... true forever - so a backup taken on a flagship pinned full icon
-            // rendering on a low-end phone the tier logic exists to keep light, and a backup taken
-            // on a low-end phone pinned placeholders on a flagship.
-            //
-            // bufferSize joined them: it used to be the same for every device and so was exported
-            // unconditionally, and it is now computed from this app's own heap limit (see
-            // HeapBudget). Left unconditional it would do the identical damage in the identical
-            // way - a backup from a phone with room pinning a 16MB media buffer on the 128MB device
-            // whose crash is the reason that default exists.
-            iconDisplayMode = settingsState.value.iconDisplayMode.name
-                .takeIf { preferences.hasChosenIconDisplayMode },
-            listDensity = settingsState.value.listDensity.name
-                .takeIf { preferences.hasChosenListDensity },
-            bufferSize = settingsState.value.bufferSize.name
-                .takeIf { preferences.hasChosenBufferSize },
-            epgCustomUrl = if (preferences.hasChosenEpgSource) preferences.customEpgUrl else null,
-            epgDisabled = preferences.hasChosenEpgSource && preferences.customEpgUrl.isNullOrBlank(),
-        )
-        return BackupData(sources, favoritesBackup, settings)
-    }
-
-    /** Reuses the same setters a manual change in Settings would call, so importing settings can't
-     * drift from what those paths already do (persisting to [preferences], updating state, and for
-     * EPG, actually reloading). */
-    private fun applyImportedSettings(settings: BackupSettings) {
-        settings.iconDisplayMode
-            ?.let { name -> runCatchingNonFatal { IconDisplayMode.valueOf(name) }.getOrNull() }
-            ?.let(::setIconDisplayMode)
-        settings.listDensity
-            ?.let { name -> runCatchingNonFatal { ListDensity.valueOf(name) }.getOrNull() }
-            ?.let(::setListDensity)
-        settings.bufferSize
-            ?.let { name -> runCatchingNonFatal { BufferSize.valueOf(name) }.getOrNull() }
-            ?.let(::setBufferSize)
-        // Legacy built-in EPG IDs never reactivate a publisher-provided feed.
-        BackupEpgPolicy.urlToApply(settings)?.let(epgController::setUserEpgUrl)
-    }
+    private fun buildBackupData(): BackupData =
+        AppBackupMapping.backupData(playlistSources.value, favorites.value, settingsState.value, preferences)
 
     fun clearCache(kind: CacheKind) {
         val filesDir = getApplication<Application>().filesDir
-        // A list, because the playlist cache is not one file: there is a snapshot per saved source
-        // (see CachePaths.playlistSnapshots). Reading only the pre-multi-playlist name meant this
-        // button deleted nothing on every install created since.
-        val files = when (kind) {
-            CacheKind.PLAYLIST -> CachePaths.playlistSnapshots(filesDir)
-            CacheKind.EPG -> CachePaths.epgSnapshots(filesDir)
-            CacheKind.ICONS -> listOf(File(filesDir, CachePaths.ICON_CACHE_DIR))
-            CacheKind.COIL -> listOf(File(filesDir, CachePaths.COIL_CACHE_DIR))
-        }
+        val files = AppCacheFiles.filesFor(kind, filesDir)
         // A size walk started before this delete describes a filesystem state that is no longer
         // relevant. Cancel it for efficiency and invalidate it independently because File.walk is
         // not cooperatively cancellable while it is traversing a large directory.
@@ -685,14 +454,7 @@ class AppViewModel @JvmOverloads constructor(
         cacheSizeRefreshJob?.cancel()
         cacheSizeRefreshJob = viewModelScope.launch {
             val filesDir = getApplication<Application>().filesDir
-            val sizes = withContext(ioDispatcher) {
-                CacheSizes(
-                    playlistBytes = CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(filesDir)),
-                    epgBytes = CacheSizeUtils.sizeOf(CachePaths.epgSnapshots(filesDir)),
-                    iconCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.ICON_CACHE_DIR)),
-                    coilCacheBytes = CacheSizeUtils.sizeOf(File(filesDir, CachePaths.COIL_CACHE_DIR)),
-                )
-            }
+            val sizes = withContext(ioDispatcher) { AppCacheFiles.measure(filesDir) }
             // Cache writes/clears can request another measurement while this non-cancellable file
             // walk is still unwinding. Never let that older snapshot overwrite the newer result.
             if (cacheSizeRefreshGeneration.isCurrent(generation)) {
