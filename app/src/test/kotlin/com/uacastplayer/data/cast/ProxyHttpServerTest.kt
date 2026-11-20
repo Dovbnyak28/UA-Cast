@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -142,7 +143,8 @@ class ProxyHttpServerTest {
             assertTrue("per-IP rejection was not observed", await {
                 server.metricsSnapshot().rejectedPerIp == 1L
             })
-            assertTrue(server.activeClientCountForTesting() <= 8)
+            // The rejection metric is published before closeClient removes the accepted socket.
+            assertTrue("rejected client remained tracked", await { server.activeClientCountForTesting() <= 8 })
         } finally {
             clients.forEach(Socket::close)
             server.stop()
@@ -200,44 +202,58 @@ class ProxyHttpServerTest {
     fun `handler from stopped generation cannot release new generation IP slot`() {
         val oldHandlerEntered = CountDownLatch(1)
         val releaseOldHandler = CountDownLatch(1)
-        val oldHandlerExited = CountDownLatch(1)
+        val oldHandlerThread = AtomicReference<Thread>()
+        val newHandlersEntered = CountDownLatch(8)
+        val releaseNewHandlers = CountDownLatch(1)
         val server = ProxyHttpServer { request, _ ->
             if (request.path == "/old") {
+                oldHandlerThread.set(Thread.currentThread())
                 oldHandlerEntered.countDown()
-                try {
-                    awaitIgnoringInterrupt(releaseOldHandler)
-                } finally {
-                    oldHandlerExited.countDown()
-                }
+                awaitIgnoringInterrupt(releaseOldHandler)
+            } else {
+                newHandlersEntered.countDown()
+                awaitIgnoringInterrupt(releaseNewHandlers)
             }
         }
         val oldPort = server.start()
         val oldClient = Socket("127.0.0.1", oldPort)
         val newClients = mutableListOf<Socket>()
         try {
-            oldClient.getOutputStream().apply {
-                write("GET /old HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
-                flush()
-            }
+            writeRequest(oldClient, "/old")
             assertTrue("old handler did not start", oldHandlerEntered.await(2, TimeUnit.SECONDS))
 
             server.stop()
             val newPort = server.start()
-            repeat(8) { newClients += Socket("127.0.0.1", newPort) }
-            assertTrue("new generation did not acquire eight slots", await {
-                server.activeClientCountForTesting() == 8
-            })
+            repeat(8) {
+                val client = Socket("127.0.0.1", newPort).also(newClients::add)
+                writeRequest(client, "/new")
+            }
+            // A tracked socket precedes IP admission. Entered response handlers prove the leases.
+            assertTrue("new generation did not acquire eight slots", newHandlersEntered.await(2, TimeUnit.SECONDS))
 
             releaseOldHandler.countDown()
-            assertTrue("old handler did not finish", oldHandlerExited.await(2, TimeUnit.SECONDS))
-            newClients += Socket("127.0.0.1", newPort)
+            // onRequest returning is too early: releaseIpSlot runs in the surrounding finally.
+            // stop() shut down this worker's pool, so thread exit proves cleanup has completed.
+            val oldWorker = checkNotNull(oldHandlerThread.get())
+            oldWorker.join(2_000)
+            assertFalse("old response cleanup did not finish", oldWorker.isAlive)
+            val ninth = Socket("127.0.0.1", newPort).also(newClients::add)
 
             assertTrue("ninth new-generation client bypassed the per-IP limit", await {
                 server.metricsSnapshot().rejectedPerIp == 1L
             })
-            assertTrue(server.activeClientCountForTesting() <= 8)
+            ninth.soTimeout = 2_000
+            val read = runCatching { ninth.getInputStream().read() }
+            assertTrue(
+                "rejection must close the peer",
+                read.getOrNull() == -1 || read.exceptionOrNull() is SocketException,
+            )
+            assertTrue("the eight admitted clients must remain tracked", await {
+                server.activeClientCountForTesting() == 8
+            })
         } finally {
             releaseOldHandler.countDown()
+            releaseNewHandlers.countDown()
             oldClient.close()
             newClients.forEach(Socket::close)
             server.stop()
@@ -286,6 +302,13 @@ class ProxyHttpServerTest {
             releaseOldAuthorization.countDown()
             oldRequest.join(2_000)
             server.stop()
+        }
+    }
+
+    private fun writeRequest(client: Socket, path: String) {
+        client.getOutputStream().apply {
+            write("GET $path HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+            flush()
         }
     }
 

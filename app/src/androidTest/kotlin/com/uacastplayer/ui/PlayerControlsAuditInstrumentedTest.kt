@@ -44,7 +44,11 @@ class PlayerControlsAuditInstrumentedTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
     @Before fun fullscreen() {
-        rule.activityRule.scenario.onActivity { FullscreenController.apply(it, true) }
+        // Fix this measurement fixture's geometry without waiting for the emulator's sensor.
+        // Real player tests separately exercise the production SENSOR_LANDSCAPE transitions.
+        rule.activityRule.scenario.onActivity {
+            it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
         rule.waitUntil(10_000) {
             rule.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         }

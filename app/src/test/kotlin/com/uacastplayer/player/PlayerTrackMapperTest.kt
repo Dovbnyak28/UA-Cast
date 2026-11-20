@@ -7,6 +7,7 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,6 +62,17 @@ class PlayerTrackMapperTest {
         val snapshot = mapper.map(Tracks(listOf(audio)))
 
         assertEquals("Unknown 1", snapshot.audioTracks.single().label)
+    }
+
+    @Test
+    fun `invalid channel counts do not invent a measured audio layout`() {
+        for (count in listOf(-2, -1, 0)) {
+            val audio = group(Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC)
+                .setChannelCount(count).build(), selected = true)
+            val snapshot = mapper.map(Tracks(listOf(audio)))
+            assertNull(snapshot.badges.channelLayout)
+            assertNull(snapshot.audioTracks.single().channelLayout)
+        }
     }
 
     private fun group(format: Format, selected: Boolean): Tracks.Group = Tracks.Group(

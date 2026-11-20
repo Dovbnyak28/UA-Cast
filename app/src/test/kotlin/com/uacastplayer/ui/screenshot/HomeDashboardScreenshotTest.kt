@@ -5,6 +5,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import com.uacastplayer.R
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.uacastplayer.epg.EpgUiState
@@ -112,11 +117,18 @@ class HomeDashboardScreenshotTest {
             }
         }
         composeRule.onRoot().captureRoboImage("src/test/screenshots/$name.png")
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.home_more_details)).performClick()
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/${name}_details.png")
     }
 
     @Test
     @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
     fun homeDashboard_ukrainian() = capture("home_dashboard_uk")
+
+    @Test
+    @Config(qualifiers = "uk-w320dp-h891dp-xhdpi")
+    fun homeDashboard_daylight() = capture("home_dashboard_daylight", AppTheme.DAYLIGHT)
 
     @Test
     @Config(qualifiers = "en-w411dp-h891dp-xhdpi")

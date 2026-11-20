@@ -71,6 +71,27 @@ class BackupControllerExportTest {
     }
 
     @Test
+    fun `failed source initialization does not export an empty substitute backup`() = runTest {
+        val written = ByteArrayOutputStream()
+        shadowOf(application.contentResolver).registerOutputStream(uri, written)
+        var captured = 0
+        val controller = BackupController(
+            application,
+            FavoritesRepository(application, backgroundScope),
+            this,
+            UnconfinedTestDispatcher(testScheduler),
+            awaitSourcesLoaded = { false },
+        )
+
+        controller.exportCurrentTo(uri) { captured++; backup }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(BackupExportResult.FAILURE, controller.backupExportResult.value)
+        assertEquals(0, captured)
+        assertEquals(0, written.size())
+    }
+
+    @Test
     fun `a provider write failure publishes failure`() = runTest {
         shadowOf(application.contentResolver).registerOutputStreamSupplier(uri) {
             object : OutputStream() {

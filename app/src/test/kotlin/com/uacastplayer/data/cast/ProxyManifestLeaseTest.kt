@@ -33,12 +33,16 @@ class ProxyManifestLeaseTest {
         try {
             server.start("lease-test", "127.0.0.1", remuxEnabled = false)
             val rootUrl = server.buildLocalUrl(server.registerPlaylist("https://x/vod.m3u8"))
-            val firstResponse = fetch(rootUrl)
+            val firstResponse = fetch(rootUrl, server)
             assertTrue(firstResponse.startsWith("HTTP/1.1 200"))
             val urls = firstResponse.lineSequence().filter { it.startsWith("http://") }.toList()
             assertEquals(firstResponse.take(500), 1_000, urls.size)
-            urls.forEach { assertTrue("unfetchable $it", fetch(it).startsWith("HTTP/1.1 200")) }
-            assertTrue(fetch(rootUrl).startsWith("HTTP/1.1 200"))
+            urls.forEach { url ->
+                val response = fetch(url, server)
+                assertTrue("unfetchable $url", response.startsWith("HTTP/1.1 200"))
+                assertEquals("body for $url", "segment", response.substringAfter("\r\n\r\n"))
+            }
+            assertTrue(fetch(rootUrl, server).startsWith("HTTP/1.1 200"))
         } finally {
             server.stop()
             client.connectionPool.evictAll()
@@ -94,7 +98,7 @@ class ProxyManifestLeaseTest {
         assertNotNull(leases.rewrite("#EXTM3U", parent.originalUrl, parent) { it })
     }
 
-    private fun fetch(url: String): String {
+    private fun fetch(url: String, server: ProxyServer): String {
         val uri = URI(url)
         return Socket(uri.host, uri.port).use { socket ->
             socket.soTimeout = 5_000
@@ -114,7 +118,8 @@ class ProxyManifestLeaseTest {
                 }
                 throw AssertionError(
                     "Timed out fetching ${uri.rawPath}, ${socket.localPort}->${socket.port}\n" +
-                        "received=${received.size()} bytes\n$servingThreads",
+                        "received=${received.size()} bytes\n${ProxyConnectionDiagnostics.capture(socket, server)}\n" +
+                        servingThreads,
                     timeout,
                 )
             }

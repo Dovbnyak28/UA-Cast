@@ -7,6 +7,15 @@ import org.junit.Test
 
 class RenderingControlSoapTest {
 
+    @Test fun qualifiedAttributedAndCdataVolumeFieldsRemainReadable() {
+        val responses = listOf(
+            "<CurrentVolume vendor='ignored'>17</CurrentVolume>",
+            "<r:CurrentVolume xmlns:r='urn:renderer'><![CDATA[17]]></r:CurrentVolume>",
+            "<CurrentVolume>&#49;7</CurrentVolume>",
+        )
+        responses.forEach { assertEquals(it, 17, VolumeResponseParser.parse(it)) }
+    }
+
     /**
      * The header is the whole reason RenderingControl needs its own builder. Sent under the
      * AVTransport namespace a renderer answers with a fault, and the volume silently never moves -

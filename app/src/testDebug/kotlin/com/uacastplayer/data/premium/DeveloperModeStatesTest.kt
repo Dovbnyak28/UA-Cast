@@ -18,7 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The seven states the developer menu offers, checked through the real repository rather than by
+ * The five states the developer menu offers, checked through the real repository rather than by
  * reading the provider's fields - what matters is the entitlement a tester ends up looking at, not
  * what the stub reports on the way there.
  *
@@ -32,7 +32,6 @@ class DeveloperModeStatesTest {
 
     private class FakeStorage(
         override var storedLicense: License? = null,
-        override var storeHasEverOfferedProducts: Boolean = false,
         override var clockHighWaterMark: Long = 0L,
     ) : LicenseStorage
 
@@ -54,14 +53,14 @@ class DeveloperModeStatesTest {
     @Test
     fun everyOfferedStateIsRecognised() {
         assertEquals(
-            listOf("FREE", "TRIAL", "PREMIUM", "LIFETIME", "EXPIRED", "REFUND", "OFFLINE"),
+            listOf("LITE", "PREMIUM", "REFUND", "OFFLINE", "EXPIRED"),
             DeveloperModeBillingProvider.STATES,
         )
     }
 
     @Test
-    fun freeLocksThePaidFeaturesAndKeepsTheFreeOnes() = runTest {
-        val (entitlements, _) = entitlementsFor("FREE")
+    fun liteLocksThePaidFeaturesAndKeepsTheFreeOnes() = runTest {
+        val (entitlements, _) = entitlementsFor("LITE")
 
         assertEquals(LicenseTier.FREE, entitlements.license.tier)
         assertFalse(entitlements.unlocked.contains(Feature.DLNA))
@@ -69,41 +68,39 @@ class DeveloperModeStatesTest {
     }
 
     @Test
-    fun trialUnlocksEverythingAndIsCountingDown() = runTest {
-        val (entitlements, _) = entitlementsFor("TRIAL")
-
-        assertEquals(LicenseTier.TRIAL, entitlements.license.tier)
-        assertTrue(entitlements.unlocked.containsAll(Feature.entries))
-        assertFalse(entitlements.hasLapsed)
-        assertTrue(entitlements.license.expiresAtMillis != null)
+    fun retiredDeveloperStatesCannotGrantPremium() = runTest {
+        for (state in listOf("FREE", "TRIAL", "LIFETIME")) {
+            val (entitlements, _) = entitlementsFor(state)
+            assertEquals(state, Entitlements.FREE, entitlements)
+        }
     }
 
     @Test
-    fun premiumIsARunningSubscription() = runTest {
+    fun premiumUnlocksEveryFeatureWithOneNonExpiringPurchase() = runTest {
         val (entitlements, _) = entitlementsFor("PREMIUM")
-
-        assertEquals(LicenseTier.MONTHLY, entitlements.license.tier)
-        assertTrue(entitlements.unlocked.contains(Feature.DLNA))
-        assertFalse(entitlements.hasLapsed)
-    }
-
-    @Test
-    fun lifetimeNeverExpires() = runTest {
-        val (entitlements, _) = entitlementsFor("LIFETIME")
 
         assertEquals(LicenseTier.LIFETIME, entitlements.license.tier)
         assertEquals(null, entitlements.license.expiresAtMillis)
-        assertTrue(entitlements.unlocked.contains(Feature.DLNA))
+        assertEquals(Feature.entries.toSet(), entitlements.unlocked)
+        assertFalse(entitlements.hasLapsed)
+    }
+
+    @Test
+    fun developerCatalogueOffersOnlyThePremiumOneTimePurchase() = runTest {
+        val provider = DeveloperModeBillingProvider()
+        val product = provider.products().single()
+        assertEquals(com.uacastplayer.premium.billing.PremiumProducts.LIFETIME, product.id)
+        assertEquals(LicenseTier.LIFETIME, product.tier)
     }
 
     /** The state a boolean would lose: access is gone, but the app still knows this person paid
      * once and can say "ended" rather than showing them the same screen as someone who never did. */
     @Test
-    fun expiredLocksAccessWhileStillRememberingItWasASubscription() = runTest {
+    fun expiredLegacyAccessLocksFeaturesWithoutLosingItsHistory() = runTest {
         val (entitlements, _) = entitlementsFor("EXPIRED")
 
         assertTrue(entitlements.hasLapsed)
-        assertEquals(LicenseTier.MONTHLY, entitlements.license.tier)
+        assertEquals(LicenseTier.LIFETIME, entitlements.license.tier)
         assertEquals(LicenseTier.FREE, entitlements.effectiveTier)
         assertFalse(entitlements.unlocked.contains(Feature.DLNA))
     }

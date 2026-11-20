@@ -128,6 +128,28 @@ class PlayerCastHandbackTest {
     }
 
     @Test
+    fun `switching a channel while Chromecast owns playback does not claim local buffering`() {
+        val player = player()
+        player.setRemoteCastingForLifecycleTest(chromecast = true, dlna = false)
+
+        player.start(listOf(M3uChannel(displayName = "Live", streamUrl = "http://127.0.0.1:1/live")), 0)
+        settle()
+
+        assertFalse("the stopped local player cannot finish buffering", player.uiState.value.isBuffering)
+    }
+
+    @Test
+    fun `switching a channel while DLNA owns playback does not claim local buffering`() {
+        val player = player()
+        player.setRemoteCastingForLifecycleTest(chromecast = false, dlna = true)
+
+        player.start(listOf(M3uChannel(displayName = "Live", streamUrl = "http://127.0.0.1:1/live")), 0)
+        settle()
+
+        assertFalse("the stopped local player cannot finish buffering", player.uiState.value.isBuffering)
+    }
+
+    @Test
     fun `a cast handed back while the app is off screen does not start playing`() {
         CountingOrigin().use { origin ->
             val player = playerWatching(origin)

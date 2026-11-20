@@ -54,19 +54,20 @@ class IconCacheGenerationTest {
             }
         }
         val repository = IconRepository(app)
-        val url = "http://127.0.0.1:${listener.localPort}/audit-${System.nanoTime()}.png"
-        val old = async(Dispatchers.Default) { repository.resolveIconFile(url, null, null) }
+        repository.addCustomIconSource("http://127.0.0.1:${listener.localPort}")
+        val channelId = "audit-${System.nanoTime()}"
+        val old = async(Dispatchers.Default) { repository.resolveIconFile(channelId) }
         try {
             assertTrue("old request must already be in flight", firstStarted.await(5, TimeUnit.SECONDS))
             repository.retryTransientFailures()
-            val new = repository.resolveIconFile(url, null, null)
+            val new = repository.resolveIconFile(channelId)
             assertNotNull("control: newer HTTP 200 published an icon", new)
             releaseFirst.countDown()
             assertNull("older HTTP 503 resolves as a miss", old.await())
             assertTrue("the successfully downloaded icon is still on disk", checkNotNull(new).isFile)
-            val afterOldCompleted = repository.resolveIconFile(url, null, null)
+            val afterOldCompleted = repository.resolveIconFile(channelId)
             repository.invalidateMemoryCache()
-            val afterAnotherInvalidation = repository.resolveIconFile(url, null, null)
+            val afterAnotherInvalidation = repository.resolveIconFile(channelId)
             assertNotNull("control: an extra eviction reveals the valid disk icon", afterAnotherInvalidation)
             println("AUDIT icon memoryHit=$afterOldCompleted diskFileExists=${new.isFile}")
             assertNotNull("A stale failed request must not hide a newer successfully cached logo", afterOldCompleted)

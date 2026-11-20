@@ -60,4 +60,22 @@ class DlnaConnectionUiTest {
         rule.onNodeWithText("Search again").performScrollTo().performClick()
         assertEquals(1, searches)
     }
+
+    @Test fun `unverified playback is labelled honestly and can still be stopped`() {
+        var stopped = 0
+        rule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                DlnaDeviceSheetContent(
+                    DlnaConnectionState(connectedDevice = tv, playbackStatusUnverified = true),
+                    listOf(tv), false,
+                    onDeviceSelected = { error("No duplicate connect") },
+                    onStopCasting = { stopped++ }, onVolumeChange = {},
+                )
+            }
+        }
+        rule.onNodeWithText("Playback status unavailable").assertIsDisplayed()
+        rule.onNodeWithText("Casting").assertDoesNotExist()
+        rule.onNodeWithText("Stop").performClick()
+        assertEquals(1, stopped)
+    }
 }

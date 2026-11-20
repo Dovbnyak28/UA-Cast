@@ -90,6 +90,7 @@ class PaletteContrastTest {
         "azure" to AzureUaPalette,
         "cinema" to CinemaUaPalette,
         "midnight" to MidnightUaPalette,
+        "daylight" to DaylightUaPalette,
     )
 }
 

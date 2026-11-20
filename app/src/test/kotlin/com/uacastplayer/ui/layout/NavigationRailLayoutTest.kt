@@ -1,16 +1,20 @@
 package com.uacastplayer.ui.layout
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.components.GlassNavigationRail
@@ -18,6 +22,7 @@ import com.uacastplayer.ui.components.TabBarItem
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -63,6 +68,32 @@ class NavigationRailLayoutTest(private val fontScale: Float) {
                 bounds.left >= root.left && bounds.top >= root.top &&
                     bounds.right <= root.right && bounds.bottom <= root.bottom,
             )
+        }
+    }
+
+    @Test
+    fun shortRailKeepsEveryDestinationVisibleWithoutScrolling() {
+        composeRule.setContent {
+            Box(Modifier.height(205.dp)) { ScaledRail(fontScale) }
+        }
+        listOf("Головна", "Канали", "Улюблені", "Налаштування").forEach { description ->
+            composeRule.onNodeWithContentDescription(description).assertIsDisplayed()
+        }
+        val actions = composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes()
+        assertEquals(4, actions.size)
+        actions.forEach { action ->
+            assertTrue("Navigation target is shorter than 48dp", action.boundsInRoot.height >=
+                48f * composeRule.density.density - 1f)
+        }
+    }
+
+    @Test
+    fun mediumShortRailKeepsDestinationsVisibleWithoutScrolling() {
+        composeRule.setContent {
+            Box(Modifier.height(300.dp)) { ScaledRail(fontScale) }
+        }
+        listOf("Головна", "Канали", "Улюблені", "Налаштування").forEach { description ->
+            composeRule.onNodeWithContentDescription(description).assertIsDisplayed()
         }
     }
 

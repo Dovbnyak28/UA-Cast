@@ -84,4 +84,19 @@ class SsdpResponseParserTest {
         assertNull(UpnpHttpEndpoint.discoveryLocation("http://127.0.0.1:8080/private", sender))
         assertNull(UpnpHttpEndpoint.discoveryLocation("http://192.168.1.51:9197/device.xml", sender))
     }
+
+    @Test
+    fun `UDP admission rejects spoofed numeric locations without resolving hostnames`() {
+        val sender = InetAddress.getByName("192.168.1.50")
+        assertEquals(
+            "http://192.168.1.50:9197/device.xml",
+            UpnpHttpEndpoint.discoveryCandidate("http://192.168.1.50:9197/device.xml", sender),
+        )
+        assertNull(UpnpHttpEndpoint.discoveryCandidate("http://192.168.1.51/device.xml", sender))
+        assertNull(UpnpHttpEndpoint.discoveryCandidate("http://999.168.1.50/device.xml", sender))
+        assertEquals(
+            "http://tv.local/device.xml",
+            UpnpHttpEndpoint.discoveryCandidate("http://tv.local/device.xml", sender),
+        )
+    }
 }

@@ -1,0 +1,78 @@
+package com.uacastplayer.ui.remote
+
+import android.app.Application
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.lifecycle.ViewModelStore
+import androidx.test.core.app.ApplicationProvider
+import com.uacastplayer.R
+import com.uacastplayer.data.remote.TvRemoteServer
+import com.uacastplayer.remote.PhoneRemoteViewModel
+import com.uacastplayer.remote.TvRemoteReceiverViewModel
+import com.uacastplayer.testing.RequiresComposeTestManifest
+import com.uacastplayer.ui.components.ScreenHeader
+import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.UaCastTheme
+import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.experimental.categories.Category
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "en-w411dp-h891dp-xhdpi")
+@Category(RequiresComposeTestManifest::class)
+class RemoteHeaderFlowTest {
+    @get:Rule val rule = createComposeRule()
+    private val app get() = ApplicationProvider.getApplicationContext<Application>()
+    private val store = ViewModelStore()
+    private var server: TvRemoteServer? = null
+
+    @After fun cleanup() { store.clear(); server?.close() }
+
+    @Test fun minimizeKeepsTheAuthenticatedConnectionAndReopenDoesNotPairAgain() {
+        val receiver = TvRemoteServer("127.0.0.1", { _, _ -> true }, { _, _ -> })
+        server = receiver
+        val phone = PhoneRemoteViewModel()
+        val tv = TvRemoteReceiverViewModel(app)
+        store.put("phone", phone); store.put("tv", tv)
+        rule.setContent { UaCastTheme(AppTheme.DAYLIGHT) {
+            RemoteControlHost(false, phone, tv) { ScreenHeader("Home", labelRemote = true) }
+        } }
+        rule.onNodeWithText(app.getString(R.string.remote_short_title)).assertIsDisplayed()
+        rule.onNodeWithContentDescription(app.getString(R.string.remote_title)).performClick()
+        rule.onNode(hasText(app.getString(R.string.remote_mode_buttons)) and hasAnyAncestor(isDialog())).performClick()
+        rule.onNodeWithTag("remote_address").performTextInput(receiver.endpoint.toString())
+        rule.onNodeWithTag("remote_code").performTextInput(receiver.pairingCode)
+        rule.onNodeWithText(app.getString(R.string.remote_connect)).performScrollTo().performClick()
+        rule.waitUntil(15_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            phone.state.value.connected || phone.state.value.failed
+        }
+        assertTrue("Pairing state: ${phone.state.value}", phone.state.value.connected)
+        rule.onNodeWithText(app.getString(R.string.remote_minimize)).performScrollTo().performClick()
+        rule.onNodeWithTag("phone_remote_dialog").assertDoesNotExist()
+        assertTrue(phone.state.value.connected)
+        rule.onNodeWithText("127.0.0.1").assertIsDisplayed()
+        rule.onRoot().captureRoboImage("src/test/screenshots/remote_header_connected.png")
+        rule.onNodeWithContentDescription(app.getString(R.string.remote_title)).performClick()
+        rule.onNodeWithTag("phone_remote_dialog").assertIsDisplayed()
+        rule.onNodeWithText(app.getString(R.string.remote_disconnect)).performScrollTo().performClick()
+        assertFalse(phone.state.value.connected)
+    }
+}

@@ -43,15 +43,16 @@ class PremiumPurchaseGuardTest {
 
     private val application: Application get() = ApplicationProvider.getApplicationContext()
 
-    private val monthly = BillingProduct(
-        id = "premium_monthly",
-        tier = LicenseTier.MONTHLY,
-        title = "Monthly",
+    private val premium = BillingProduct(
+        id = "premium_lifetime",
+        tier = LicenseTier.LIFETIME,
+        title = "Premium",
         formattedPrice = "49,00 ₴",
     )
 
     private var purchases = mutableListOf<BillingProduct>()
     private var restores = 0
+    private val buyText get() = application.getString(R.string.premium_buy, premium.formattedPrice)
 
     private fun show(isPurchasing: Boolean) {
         composeRule.setContent {
@@ -59,13 +60,12 @@ class PremiumPurchaseGuardTest {
                 PremiumContent(
                     section = PremiumSectionState(
                         entitlements = Entitlements.FREE,
-                        products = listOf(monthly),
+                        products = listOf(premium),
                         onPurchase = { purchases += it },
                         onRestore = { restores++ },
                         isPurchasing = isPurchasing,
                         connection = BillingConnectionState.CONNECTED,
                     ),
-                    nowMillis = 0L,
                 )
             }
         }
@@ -76,8 +76,8 @@ class PremiumPurchaseGuardTest {
     fun `the buy button is dead while an attempt is with the store`() {
         show(isPurchasing = true)
 
-        composeRule.onNodeWithText(monthly.formattedPrice).assertIsNotEnabled()
-        composeRule.onNodeWithText(monthly.formattedPrice).performClick()
+        composeRule.onNodeWithText(buyText).assertIsNotEnabled()
+        composeRule.onNodeWithText(buyText).performClick()
 
         assertEquals("a disabled button must not report a purchase", emptyList<BillingProduct>(), purchases)
     }
@@ -99,12 +99,12 @@ class PremiumPurchaseGuardTest {
     fun `both are live again once nothing is in flight`() {
         show(isPurchasing = false)
 
-        composeRule.onNodeWithText(monthly.formattedPrice).assertIsEnabled()
-        composeRule.onNodeWithText(monthly.formattedPrice).performClick()
+        composeRule.onNodeWithText(buyText).assertIsEnabled()
+        composeRule.onNodeWithText(buyText).performClick()
         composeRule.onNodeWithText(application.getString(R.string.premium_restore)).assertIsEnabled()
         composeRule.onNodeWithText(application.getString(R.string.premium_restore)).performClick()
 
-        assertEquals(listOf(monthly), purchases)
+        assertEquals(listOf(premium), purchases)
         assertEquals(1, restores)
     }
 }

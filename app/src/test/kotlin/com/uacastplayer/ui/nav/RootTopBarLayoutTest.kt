@@ -2,12 +2,10 @@ package com.uacastplayer.ui.nav
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.unit.dp
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.playlist.M3uChannel

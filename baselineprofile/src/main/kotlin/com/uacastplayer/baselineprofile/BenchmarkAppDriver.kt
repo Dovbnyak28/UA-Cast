@@ -21,15 +21,22 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
      * destructive choice visible at every call site.
      */
     fun prepareFixture(mode: String, clearPackage: Boolean = false) {
+        // Fixture preparation precedes measureRepeated, so Macrobenchmark's own wake-up is too late.
+        // Dismiss only a non-secure keyguard; this does not unlock a device protected by a PIN.
+        device.wakeUp()
+        device.executeShellCommand("wm dismiss-keyguard")
         if (clearPackage) {
             val clearResult = device.executeShellCommand("pm clear $PACKAGE_NAME")
             check(clearResult.contains("Success")) { "Could not clear benchmark package" }
         } else {
             device.executeShellCommand("am force-stop $PACKAGE_NAME")
         }
-        device.executeShellCommand(
+        val launchResult = device.executeShellCommand(
             "am start -W -n $FIXTURE_COMPONENT --es $FIXTURE_MODE_EXTRA $mode",
         )
+        check(launchResult.lineSequence().none { it.startsWith("Error:") || it.startsWith("Error type ") }) {
+            "Could not start benchmark fixture: $launchResult"
+        }
         val status = waitForStatus(FIXTURE_STATUS_PATTERN, FIXTURE_TIMEOUT_MILLIS)
         check(status == FIXTURE_READY) { status }
         device.executeShellCommand("am force-stop $PACKAGE_NAME")
@@ -37,7 +44,9 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     fun startMain(scope: MacrobenchmarkScope) {
         scope.startActivityAndWait()
-        waitForText(HOME_LABEL)
+        // Home now displays "Overview" and the app-name heading. Its accessibility description
+        // remains "Home", matching the Channels selector; visible wording is not a ready signal.
+        waitForDescription(HOME_LABEL)
     }
 
     fun openChannels() {
@@ -53,6 +62,33 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
     fun openFirstPlayer() {
         clickText(FIRST_CHANNEL)
         waitForDescription(FULLSCREEN_DESCRIPTION)
+    }
+
+    fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
+
+    fun switchChannel() {
+        clickText("Next channel")
+        waitForDescription("Now playing: Benchmark Channel 00002")
+        waitForVideoFrame()
+    }
+
+    fun searchFortyThousandChannels() {
+        val input = requireNotNull(device.wait(
+            Until.findObject(By.clazz("android.widget.EditText")), UI_TIMEOUT_MILLIS,
+        )) { "Global channel search field was not found" }
+        input.text = "Benchmark Channel 39999"
+        waitForText("Benchmark Channel 39999")
+    }
+
+    fun scrollChannelGroup() {
+        val list = requireNotNull(device.findObjects(By.scrollable(true))
+            .filter { it.className != "android.widget.EditText" }
+            .maxByOrNull { it.visibleBounds.height() }) { "Channel list was not scrollable" }
+        list.fling(androidx.test.uiautomator.Direction.DOWN)
+        check(device.wait(Until.gone(By.text(FIRST_CHANNEL)), UI_TIMEOUT_MILLIS)) {
+            "Fling did not move the first channel out of view"
+        }
+        device.waitForIdle()
     }
 
     fun openFirstChannelActions() {
@@ -82,14 +118,35 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
             "Timed out waiting for description '$description'"
         }
 
+    fun waitForRestoredPlaylist(name: String) {
+        // The compact source card is above the primary action and only mounts after hasChannels.
+        // Navigation chrome or a hidden channel preview cannot satisfy playlist restoration.
+        requireNotNull(device.wait(
+            Until.findObject(By.pkg(PACKAGE_NAME).text(name)), UI_TIMEOUT_MILLIS,
+        )) { "Timed out waiting for the restored benchmark playlist card" }
+    }
+
     fun waitForEpgParseCompletion() {
         val status = waitForStatus(EPG_PARSE_STATUS_PATTERN, EPG_PARSE_TIMEOUT_MILLIS)
         check(status == EPG_PARSE_READY) { status }
     }
 
+    fun waitForGuideProgramme() {
+        // The guide selects today and scrolls to the current programme. Slot 000 belongs to
+        // midnight, so requiring it to be visible makes this journey fail later in the day.
+        requireNotNull(device.wait(
+            Until.findObject(By.pkg(PACKAGE_NAME).text(GUIDE_PROGRAMME_PATTERN)), UI_TIMEOUT_MILLIS,
+        )) { "Timed out waiting for a visible benchmark guide programme" }
+    }
+
     private fun waitForStatus(pattern: Pattern, timeoutMillis: Long): String {
         val node = requireNotNull(device.wait(Until.findObject(By.text(pattern)), timeoutMillis)) {
-            "Timed out waiting for benchmark status"
+            // Report only lifecycle/setup state and our fixed synthetic status tokens, not a
+            // whole window hierarchy (a physical benchmark device can contain private content).
+            val visibleStatus = device.findObjects(By.text(VISIBLE_STATUS_PATTERN))
+                .map { it.text.orEmpty() }
+            "Timed out waiting for benchmark status: screenOn=${device.isScreenOn}, " +
+                "foreground=${device.currentPackageName}, visibleStatus=$visibleStatus"
         }
         return node.text.orEmpty()
     }
@@ -106,7 +163,6 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val CHANNELS_LABEL = "Channels"
         const val FIRST_GROUP = "Benchmark Group 01"
         const val FIRST_CHANNEL = "Benchmark Channel 00001"
-        const val FIRST_PROGRAMME = "Benchmark Programme 000"
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
@@ -120,5 +176,8 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         private const val FIXTURE_TIMEOUT_MILLIS = 180_000L
         private val FIXTURE_STATUS_PATTERN = Pattern.compile("benchmark-fixture-(ready|failed:.*)")
         private val EPG_PARSE_STATUS_PATTERN = Pattern.compile("benchmark-epg-parse-(ready|failed:.*)")
+        private val VISIBLE_STATUS_PATTERN =
+            Pattern.compile("benchmark-(fixture|epg-parse)-(preparing|ready|failed:.*)")
+        private val GUIDE_PROGRAMME_PATTERN = Pattern.compile("Benchmark Programme [0-9]{3}")
     }
 }

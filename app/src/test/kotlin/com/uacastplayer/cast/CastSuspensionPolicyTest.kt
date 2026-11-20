@@ -6,6 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CastSuspensionPolicyTest {
+    @Test fun `a matching completed file stays finished when the same session resumes`() {
+        val video = com.uacastplayer.media.LocalVideo("content://media/video/1", "Movie.mp4", "video/mp4")
+        val channel = CastChannel(0, video.uri, video.displayName, localVideo = video)
+        val completed = bufferedVideoFinished(channel, ReceiverStatus.IDLE, IdleReason.FINISHED)
+        assertTrue(completed)
+        assertTrue(CastSuspensionPolicy.canKeepMedia(true, "file-load-a", "file-load-a", ReceiverStatus.IDLE,
+            completedBufferedItem = completed))
+    }
+
+    @Test fun `completion cannot retain a switched missing or different load`() {
+        assertFalse(CastSuspensionPolicy.canKeepMedia(false, "a", "a", ReceiverStatus.IDLE, true))
+        assertFalse(CastSuspensionPolicy.canKeepMedia(true, "a", "b", ReceiverStatus.IDLE, true))
+        assertFalse(CastSuspensionPolicy.canKeepMedia(true, null, null, ReceiverStatus.IDLE, true))
+        assertFalse(CastSuspensionPolicy.canKeepMedia(true, "a", "a", ReceiverStatus.IDLE, false))
+    }
+
     @Test fun `suspension retains ownership and route without falsely showing playing`() {
         val state = CastSuspensionPolicy.suspend(CastPlaybackState(
             isSessionConnected = true, receiverStatus = ReceiverStatus.PLAYING,

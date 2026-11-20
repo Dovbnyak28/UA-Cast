@@ -55,6 +55,21 @@ class SettingsOverviewTest {
     }
 
     @Test
+    fun parentalSearchDoesNotShowTheSameDestinationTwice() {
+        var selected: SettingsSearchEntry? = null
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                SettingsOverview({}, {}, {}, {}, {}, searchQuery = "parental", onOpenSetting = { selected = it })
+            }
+        }
+        composeRule.onAllNodesWithText("Parental control").assertCountEquals(1)
+        // A single merged card can still render its title twice as title and subtitle.
+        composeRule.onAllNodesWithText("Parental control", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onNodeWithText("Parental control").performClick()
+        assertEquals(SettingsPage.PARENTAL, selected?.page)
+    }
+
+    @Test
     fun epgSearchResolvesToThePlaylistPage() {
         var selected: SettingsSearchEntry? = null
         composeRule.setContent {

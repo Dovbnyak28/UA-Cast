@@ -3,6 +3,9 @@ package com.uacastplayer.ui.screenshot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -81,31 +84,41 @@ class DesignSystemScreenshotTest {
     @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
     fun selectedNavigation_midnight() = captureNavigation(AppTheme.MIDNIGHT, "navigation_midnight")
 
-    private fun captureNavigation(theme: AppTheme, name: String) {
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun selectedNavigation_daylight() = captureNavigation(AppTheme.DAYLIGHT, "navigation_daylight")
+
+    @Test
+    @Config(qualifiers = "uk-w320dp-h640dp-xhdpi")
+    fun selectedNavigation_largeText() = captureNavigation(AppTheme.DAYLIGHT, "navigation_large_text_uk", 2f)
+
+    private fun captureNavigation(theme: AppTheme, name: String, fontScale: Float = 1f) {
         composeRule.setContent {
-            UaCastTheme(theme) {
-                Box(
-                    Modifier
-                        .size(width = 411.dp, height = 120.dp)
-                        .background(UaTheme.palette.void),
-                ) {
-                    GlassTabBar(
-                        items = BottomDestination.entries.map { destination ->
-                            val label = stringResource(destination.tabLabelRes())
-                            TabBarItem(
-                                label = label,
-                                largeTextLabel = stringResource(destination.largeTextLabelRes()),
-                                icon = when (destination) {
-                                    BottomDestination.HOME -> AppIcons.Home
-                                    BottomDestination.CHANNELS -> AppIcons.Channels
-                                    BottomDestination.FAVORITES -> AppIcons.Favorites
-                                    BottomDestination.SETTINGS -> AppIcons.Settings
-                                },
-                                selected = destination == BottomDestination.HOME,
-                                onClick = {},
-                            )
-                        },
-                    )
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
+                UaCastTheme(theme) {
+                    Box(
+                        Modifier
+                            .size(width = if (fontScale >= 1.5f) 320.dp else 411.dp, height = 120.dp)
+                            .background(UaTheme.palette.void),
+                    ) {
+                        GlassTabBar(
+                            items = BottomDestination.entries.map { destination ->
+                                val label = stringResource(destination.tabLabelRes())
+                                TabBarItem(
+                                    label = label,
+                                    largeTextLabel = stringResource(destination.largeTextLabelRes()),
+                                    icon = when (destination) {
+                                        BottomDestination.HOME -> AppIcons.Home
+                                        BottomDestination.CHANNELS -> AppIcons.Channels
+                                        BottomDestination.FAVORITES -> AppIcons.Favorites
+                                        BottomDestination.SETTINGS -> AppIcons.Settings
+                                    },
+                                    selected = destination == BottomDestination.HOME,
+                                    onClick = {},
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

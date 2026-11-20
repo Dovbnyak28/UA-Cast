@@ -1,14 +1,22 @@
 package com.uacastplayer.ui.diagnostics
 
 import android.content.Intent
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import androidx.core.content.IntentCompat
+import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.diagnostics.DiagnosticsEmail
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.rules.TemporaryFolder
 import org.robolectric.RobolectricTestRunner
 
 /**
@@ -21,7 +29,27 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class DiagnosticsSendTest {
 
+    @get:Rule val temporaryFolder = TemporaryFolder()
+
     private val report = "UA Cast diagnostics report\nApp version: 0.9.0\n[DEBUG] Player: started"
+
+    @Test
+    fun deniedMailAppFallsBackToShareSheet() = runBlocking {
+        val invalidCacheDirectory: File = temporaryFolder.newFile("not-a-directory")
+        val actions = mutableListOf<String?>()
+        val context = object : ContextWrapper(ApplicationProvider.getApplicationContext<Context>()) {
+            override fun getCacheDir(): File = invalidCacheDirectory
+
+            override fun startActivity(intent: Intent) {
+                actions += intent.action
+                if (intent.action == Intent.ACTION_SENDTO) throw SecurityException("mail app denied launch")
+            }
+        }
+
+        sendDiagnostics(context, report, "Share diagnostics", Dispatchers.Unconfined)
+
+        assertEquals(listOf(Intent.ACTION_SENDTO, Intent.ACTION_CHOOSER), actions)
+    }
 
     @Test
     fun theReportIsAddressedToTheDeveloper() {

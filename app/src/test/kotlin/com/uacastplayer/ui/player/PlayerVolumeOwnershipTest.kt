@@ -6,6 +6,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.theme.AppTheme
@@ -60,6 +63,17 @@ class PlayerVolumeOwnershipTest {
                 assertEquals(expected, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
                 assertEquals(audio.currentVolumeFraction(), displayed, 0.001f)
             }
+        }
+    }
+
+    @Test fun sliderUsesTheRequestedLevelAndReadsBackHardwareQuantization() {
+        val state = PlayerScreenTransientState(null, audio)
+        show(state)
+        rule.onNodeWithTag("player_volume_slider").performSemanticsAction(SemanticsActions.SetProgress) { it(0.53f) }
+        rule.runOnIdle {
+            val expected = (audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * 0.53f).toInt()
+            assertEquals(expected, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+            assertEquals(audio.currentVolumeFraction(), state.volumeLevel, 0.001f)
         }
     }
 

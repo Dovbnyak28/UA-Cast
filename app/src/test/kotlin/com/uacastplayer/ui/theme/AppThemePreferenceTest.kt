@@ -34,4 +34,9 @@ class AppThemePreferenceTest {
         assertEquals(AppTheme.MIDNIGHT.name, preferences.appThemeId)
         assertEquals(AppTheme.MIDNIGHT, AppPreferences(context).appTheme)
     }
+    @Test fun `system appearance round trips without persisting the currently resolved palette`() {
+        preferences.appTheme = AppTheme.SYSTEM
+        assertEquals("SYSTEM", preferences.appThemeId)
+        assertEquals(AppTheme.SYSTEM, AppPreferences(context).appTheme)
+    }
 }

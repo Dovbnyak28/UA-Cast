@@ -10,6 +10,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.media3.common.Format
 import androidx.media3.common.TrackGroup
 import com.uacastplayer.player.SelectableTrack
+import com.uacastplayer.player.AudioChannelLayout
+import com.uacastplayer.player.PlaybackBadgesState
 import com.uacastplayer.testing.RequiresComposeTestManifest
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -26,6 +28,16 @@ import org.robolectric.annotation.Config
 @Category(RequiresComposeTestManifest::class)
 class TrackPickerDialogTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun `unusual multichannel layouts are not described as stereo`() {
+        rule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                BadgesRow(PlaybackBadgesState(channelLayout = AudioChannelLayout.OTHER))
+            }
+        }
+        rule.onNodeWithText("Multichannel").assertIsDisplayed()
+        rule.onNodeWithText("Stereo").assertDoesNotExist()
+    }
 
     @Test fun `empty audio is explained rather than a blank dialog`() {
         rule.setContent {

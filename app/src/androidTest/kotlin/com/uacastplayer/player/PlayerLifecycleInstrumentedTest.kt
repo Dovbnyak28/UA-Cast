@@ -1,5 +1,10 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+
 package com.uacastplayer.player
 
+import android.view.TextureView
+import android.view.View
+import android.view.ViewGroup
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
@@ -24,6 +29,8 @@ import com.uacastplayer.testsupport.waitForChannelsLoaded
 import com.uacastplayer.ui.UiTestTags
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -43,6 +50,40 @@ import kotlin.time.Duration.Companion.seconds
  */
 @RunWith(AndroidJUnit4::class)
 class PlayerLifecycleInstrumentedTest {
+    @Test fun liveWindowRecoveryHonorsBackgroundAndExplicitPause() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            val listener = PlayerViewModel::class.java.getDeclaredField("listener").let {
+                it.isAccessible = true
+                it.get(model) as androidx.media3.common.Player.Listener
+            }
+            val failure = androidx.media3.common.PlaybackException(
+                "Controlled live-window failure", null,
+                androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+            )
+            model.start(listOf(checkNotNull(model.uiState.value.currentChannel)), 0)
+            model.onEnterBackground(false)
+            // Stop models Media3's idle error state before the real callback handler runs.
+            model.player.stop()
+            listener.onPlayerError(failure)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertTrue(!model.player.playWhenReady)
+
+            model.onReturnToForeground()
+            assertEquals(androidx.media3.common.Player.STATE_BUFFERING, model.player.playbackState)
+            assertTrue(model.player.playWhenReady)
+
+            model.togglePlayback()
+            model.player.stop()
+            listener.onPlayerError(failure)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertTrue(!model.player.playWhenReady)
+            model.togglePlayback()
+            assertEquals(androidx.media3.common.Player.STATE_BUFFERING, model.player.playbackState)
+            assertTrue(model.player.playWhenReady)
+        }
+    }
+
     @Test fun sleepExpiryCancelsDeferredForegroundResumeUntilExplicitPlay() {
         composeTestRule.activityRule.scenario.onActivity { activity ->
             val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
@@ -168,6 +209,10 @@ class PlayerLifecycleInstrumentedTest {
         composeTestRule.onNodeWithContentDescription(
             composeTestRule.activity.getString(R.string.player_mini_close),
         ).performClick()
+        // A click schedules composition; PlayerHost releases playback from its disposal effect.
+        // Wait for actual removal before asserting engine cleanup on the Activity thread.
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertDoesNotExist()
+        composeTestRule.waitForIdle()
     }
 
     @Test
@@ -341,6 +386,131 @@ class PlayerLifecycleInstrumentedTest {
                 )
             }
         }
+    }
+
+    @Test fun fullscreenKeepsNativeViewsAndRendersAfterSurfaceRecreation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val clip = java.io.File(context.cacheDir, "diagnostics/surface-${java.util.UUID.randomUUID()}.mp4")
+        check(clip.parentFile!!.isDirectory || clip.parentFile!!.mkdirs())
+        val frames = java.util.concurrent.atomic.AtomicInteger()
+        val frameListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { _, _, _, _ ->
+            frames.incrementAndGet()
+        }
+        var renderingPlayer: androidx.media3.exoplayer.ExoPlayer? = null
+        try {
+            // A gray frame distinguishes actual decoded pixels from a black/cleared surface.
+            SyntheticVideoEncoder.encode(clip, luma = 96)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.diagnostics", clip,
+            )
+            val video = kotlinx.coroutines.runBlocking {
+                com.uacastplayer.data.media.AndroidLocalVideoReader(context).read(uri.toString(), persist = false)
+            }
+            lateinit var model: PlayerViewModel
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                renderingPlayer = (model.player as androidx.media3.exoplayer.ExoPlayer).also {
+                    it.setVideoFrameMetadataListener(frameListener)
+                }
+                model.start(PlayerRequest.forLocalVideo(video).channels, 0)
+            }
+            composeTestRule.waitUntil(15_000) { frames.get() > 0 || model.uiState.value.fatalError }
+            assertTrue("The generated clip must produce real video frames", frames.get() > 0)
+            composeTestRule.activityRule.scenario.onActivity {
+                model.player.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
+                model.togglePlayback()
+            }
+            composeTestRule.waitUntil(5_000) { !model.uiState.value.isPlaying }
+            composeTestRule.waitForIdle()
+            lateinit var original: androidx.media3.ui.PlayerView
+            lateinit var textureView: TextureView
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                original = nativePlayerViews(activity.window.decorView).single()
+                textureView = original.videoSurfaceView as TextureView
+            }
+            repeat(3) { round ->
+                println("fullscreen-repro: round=$round entering")
+                composeTestRule.onNodeWithContentDescription(
+                    composeTestRule.activity.getString(R.string.player_fullscreen),
+                ).performClick()
+                composeTestRule.waitForIdle()
+                println("fullscreen-repro: round=$round entered")
+                composeTestRule.activityRule.scenario.onActivity { activity ->
+                    assertSame(original, nativePlayerViews(activity.window.decorView).single())
+                    assertSame(textureView, original.videoSurfaceView)
+                    assertSame(model.player, original.player)
+                }
+                try {
+                    composeTestRule.onNodeWithContentDescription(
+                        composeTestRule.activity.getString(R.string.player_exit_fullscreen),
+                    ).performClick()
+                    println("fullscreen-repro: round=$round exited")
+                } catch (failure: AssertionError) {
+                    runCatching {
+                        composeTestRule.activityRule.scenario.onActivity { activity ->
+                            val state = model.uiState.value
+                            println("fullscreen-repro: playing=${state.isPlaying} wantsPlay=${state.wantsToPlay} " +
+                                "fatal=${state.fatalError} buffering=${state.isBuffering} " +
+                                "localFile=${state.currentChannel?.localVideo != null} " +
+                                "playerState=${model.player.playbackState} " +
+                                "requestedOrientation=${activity.requestedOrientation}")
+                        }
+                        val instrumentation = InstrumentationRegistry.getInstrumentation()
+                        val directory = java.io.File(context.cacheDir, "diagnostics/fullscreen-repro")
+                        directory.mkdirs()
+                        instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                            try {
+                                java.io.File(directory, "failure.png").outputStream().use {
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                                }
+                            } finally { bitmap.recycle() }
+                        }
+                        androidx.test.uiautomator.UiDevice.getInstance(instrumentation)
+                            .dumpWindowHierarchy(java.io.File(directory, "failure.xml"))
+                    }.onFailure { println("fullscreen-repro: diagnostics unavailable: ${it.javaClass.simpleName}") }
+                    throw failure
+                }
+                composeTestRule.waitForIdle()
+                composeTestRule.activityRule.scenario.onActivity { activity ->
+                    assertSame(original, nativePlayerViews(activity.window.decorView).single())
+                    assertSame(textureView, original.videoSurfaceView)
+                }
+            }
+            // Android can replace SurfaceTexture when a retained native view is detached/moved.
+            // The contract is continued rendering, not identity of that platform-owned resource.
+            val beforeResume = frames.get()
+            composeTestRule.activityRule.scenario.onActivity { model.togglePlayback() }
+            composeTestRule.waitUntil(5_000) { frames.get() >= beforeResume + 2 && model.uiState.value.isPlaying }
+            composeTestRule.waitUntil(5_000) {
+                var decodedPixels = false
+                composeTestRule.activityRule.scenario.onActivity {
+                    val bitmap = textureView.getBitmap(16, 16)
+                    try {
+                        val pixel = bitmap?.getPixel(8, 8) ?: 0
+                        decodedPixels = android.graphics.Color.red(pixel) > 24 &&
+                            android.graphics.Color.green(pixel) > 24 && android.graphics.Color.blue(pixel) > 24
+                    } finally { bitmap?.recycle() }
+                }
+                decodedPixels
+            }
+            closePlayerFromScreen()
+            composeTestRule.activityRule.scenario.onActivity {
+                assertNull(original.player)
+                assertTrue(!model.player.isPlaying)
+                assertEquals(0, model.player.mediaItemCount)
+            }
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                renderingPlayer?.clearVideoFrameMetadataListener(frameListener)
+            }
+            clip.delete()
+        }
+    }
+
+    private fun nativePlayerViews(view: View): List<androidx.media3.ui.PlayerView> = when (view) {
+        is androidx.media3.ui.PlayerView -> listOf(view)
+        is ViewGroup -> (0 until view.childCount).flatMap { nativePlayerViews(view.getChildAt(it)) }
+        else -> emptyList()
     }
 
     /** Scenario 3: a configuration change (rotation) while playing must retain both the

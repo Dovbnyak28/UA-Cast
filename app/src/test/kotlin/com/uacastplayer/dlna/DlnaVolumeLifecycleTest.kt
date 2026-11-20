@@ -57,12 +57,14 @@ class DlnaVolumeLifecycleTest {
         }.build()
         val repo = DlnaSessionRepository(ApplicationProvider.getApplicationContext<Context>(),
             scope = scope, localAddress = { "127.0.0.1" }, soapHttpClient = client)
-        suspend fun connect() {
-            repo.connect(DlnaDevice("TV", "https://renderer.example/av", "https://renderer.example/volume"),
-                "https://origin.example/live.ts", "Fixture")
-            withTimeout(5_000) { repo.state.first { it.connectedDevice != null && !it.isConnecting } }
+        suspend fun connect(
+            device: DlnaDevice = DlnaDevice("TV", "https://renderer.example/av", "https://renderer.example/volume"),
+        ) {
+            repo.connect(device, "https://origin.example/live.ts", "Fixture")
+            withTimeout(5_000) { repo.state.first { it.connectedDevice == device && !it.isConnecting } }
             assertEquals(20, repo.state.value.volume)
         }
+        fun setVolume(volume: Int) = repo.setVolume(checkNotNull(repo.state.value.connectedDevice), volume)
         suspend fun awaitCorrection(requested: Int): Int? = withTimeout(5_000) {
             repo.state.first { it.volume != requested }.volume
         }
@@ -89,9 +91,9 @@ class DlnaVolumeLifecycleTest {
             }
             try {
                 fixture.connect()
-                fixture.repo.setVolume(40)
+                fixture.setVolume(40)
                 assertTrue(started.await(5, TimeUnit.SECONDS))
-                fixture.repo.setVolume(80)
+                fixture.setVolume(80)
                 release.countDown()
                 assertEquals(if (firstAccepted) 40 else 20, fixture.awaitCorrection(80))
                 assertEquals(2, fixture.setCalls.get())
@@ -103,7 +105,7 @@ class DlnaVolumeLifecycleTest {
         Fixture().use { fixture ->
             fixture.set = { fixture.actual.set(it.coerceAtMost(50)); 200 }
             fixture.connect()
-            fixture.repo.setVolume(80)
+            fixture.setVolume(80)
             assertEquals(50, fixture.awaitCorrection(80))
         }
     }
@@ -112,7 +114,7 @@ class DlnaVolumeLifecycleTest {
         Fixture().use { fixture ->
             fixture.set = { fixture.actual.set(75); throw IOException("reply lost after apply") }
             fixture.connect()
-            fixture.repo.setVolume(80)
+            fixture.setVolume(80)
             assertEquals(75, fixture.awaitCorrection(80))
         }
     }
@@ -121,7 +123,7 @@ class DlnaVolumeLifecycleTest {
         Fixture().use { fixture ->
             fixture.connect()
             fixture.get = { null }
-            fixture.repo.setVolume(80)
+            fixture.setVolume(80)
             assertNull(fixture.awaitCorrection(80))
         }
     }
@@ -139,13 +141,27 @@ class DlnaVolumeLifecycleTest {
                 70
             }
             try {
-                fixture.repo.setVolume(80)
+                fixture.setVolume(80)
                 assertTrue(started.await(5, TimeUnit.SECONDS))
                 fixture.repo.stop()
                 release.countDown()
                 assertTrue(finished.await(5, TimeUnit.SECONDS))
                 assertEquals(DlnaConnectionState(), fixture.repo.state.value)
             } finally { release.countDown() }
+        }
+    }
+
+    @Test fun `old UI callback cannot change the new renderer before recomposition`() = runBlocking {
+        Fixture().use { fixture ->
+            fixture.connect()
+            val displayedDevice = checkNotNull(fixture.repo.state.value.connectedDevice)
+            val oldUiCallback = { volume: Int -> fixture.repo.setVolume(displayedDevice, volume) }
+            fixture.connect(DlnaDevice("Other TV", "https://other.example/av", "https://other.example/volume"))
+
+            oldUiCallback(80)
+
+            assertEquals("No optimistic volume may leak to the new TV", 20, fixture.repo.state.value.volume)
+            assertEquals("No SetVolume command may be sent to the new TV", 0, fixture.setCalls.get())
         }
     }
 }

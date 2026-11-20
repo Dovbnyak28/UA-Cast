@@ -1,6 +1,8 @@
 package com.uacastplayer.data.playlist
 
 import android.app.Application
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.core.util.AtomicFile
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.data.cache.CachePaths
@@ -12,6 +14,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -38,9 +42,9 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class AtomicSnapshotDeletionTest {
 
-    private val application: Application get() = ApplicationProvider.getApplicationContext()
-
-    private val filesDir: File get() = application.filesDir
+    @get:Rule val temporaryFiles = TemporaryFolder()
+    private lateinit var context: Context
+    private val filesDir: File get() = context.filesDir
 
     private val snapshot = PlaylistSnapshot(
         sourceFingerprint = "f".repeat(64),
@@ -52,7 +56,11 @@ class AtomicSnapshotDeletionTest {
 
     @Before
     fun setUp() {
-        filesDir.listFiles()?.forEach { it.deleteRecursively() }
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        context = object : ContextWrapper(application) {
+            override fun getApplicationContext(): Context = this
+            override fun getFilesDir(): File = temporaryFiles.root
+        }
     }
 
     private fun snapshotFile(sourceId: String) = File(filesDir, "playlist_snapshot_$sourceId.bin")
@@ -71,7 +79,7 @@ class AtomicSnapshotDeletionTest {
      * extra file, and its name is the base name plus what [CachePaths.ATOMIC_WRITE_SUFFIX] says. */
     @Test
     fun `an unfinished write leaves exactly the file CachePaths expects`() {
-        runBlocking { PlaylistSnapshotStore(application, "abc").save(snapshot) }
+        runBlocking { PlaylistSnapshotStore(context, "abc").save(snapshot) }
 
         abandonWriteFor("abc")
 
@@ -84,10 +92,10 @@ class AtomicSnapshotDeletionTest {
     /** The bug. */
     @Test
     fun `removing a source leaves nothing of its snapshot behind`() {
-        runBlocking { PlaylistSnapshotStore(application, "abc").save(snapshot) }
+        runBlocking { PlaylistSnapshotStore(context, "abc").save(snapshot) }
         abandonWriteFor("abc")
 
-        runBlocking { PlaylistRepository(application).deleteSnapshot("abc") }
+        runBlocking { PlaylistRepository(context).deleteSnapshot("abc") }
 
         assertEquals(emptyList<String>(), namesInFilesDir())
     }
@@ -99,10 +107,10 @@ class AtomicSnapshotDeletionTest {
      */
     @Test
     fun `the snapshot itself is still what gets deleted`() {
-        runBlocking { PlaylistSnapshotStore(application, "abc").save(snapshot) }
+        runBlocking { PlaylistSnapshotStore(context, "abc").save(snapshot) }
         assertTrue(snapshotFile("abc").isFile)
 
-        runBlocking { PlaylistRepository(application).deleteSnapshot("abc") }
+        runBlocking { PlaylistRepository(context).deleteSnapshot("abc") }
 
         assertFalse(snapshotFile("abc").exists())
     }
@@ -111,12 +119,12 @@ class AtomicSnapshotDeletionTest {
     @Test
     fun `another source's files are left alone`() {
         runBlocking {
-            PlaylistSnapshotStore(application, "abc").save(snapshot)
-            PlaylistSnapshotStore(application, "def").save(snapshot)
+            PlaylistSnapshotStore(context, "abc").save(snapshot)
+            PlaylistSnapshotStore(context, "def").save(snapshot)
         }
         abandonWriteFor("def")
 
-        runBlocking { PlaylistRepository(application).deleteSnapshot("abc") }
+        runBlocking { PlaylistRepository(context).deleteSnapshot("abc") }
 
         assertEquals(
             listOf("playlist_snapshot_def.bin", "playlist_snapshot_def.bin" + CachePaths.ATOMIC_WRITE_SUFFIX),
@@ -137,7 +145,7 @@ class AtomicSnapshotDeletionTest {
         legacy.writeBytes(ByteArray(512))
         assertEquals(2, namesInFilesDir().size)
 
-        runBlocking { LegacyPlaylistSnapshotFile.delete(application) }
+        runBlocking { LegacyPlaylistSnapshotFile.delete(context) }
 
         assertEquals(emptyList<String>(), namesInFilesDir())
     }
@@ -146,8 +154,17 @@ class AtomicSnapshotDeletionTest {
      * calls this for every removal, including one whose load never got as far as a snapshot. */
     @Test
     fun `deleting a snapshot that is not there does nothing`() {
-        runBlocking { PlaylistRepository(application).deleteSnapshot("never-saved") }
+        runBlocking { PlaylistRepository(context).deleteSnapshot("never-saved") }
 
         assertEquals(emptyList<String>(), namesInFilesDir())
     }
+    @Test fun `snapshot removal preserves unrelated diagnostics`() {
+        val diagnostics = File(filesDir, "last_crash.txt").apply { writeText("unrelated diagnostics") }
+        runBlocking { PlaylistSnapshotStore(context, "abc").save(snapshot) }
+        abandonWriteFor("abc")
+        runBlocking { PlaylistRepository(context).deleteSnapshot("abc") }
+        assertEquals(listOf(diagnostics.name), namesInFilesDir())
+        assertEquals("unrelated diagnostics", diagnostics.readText())
+    }
+
 }

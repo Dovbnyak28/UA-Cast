@@ -2,12 +2,14 @@ package com.uacastplayer.data.icons
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import com.uacastplayer.icons.IconFailurePolicy
 import java.io.File
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -65,6 +67,7 @@ class IconFetchFailureTest {
         private val socket = ServerSocket(0)
         private val worker = Executors.newCachedThreadPool()
         val requests = AtomicInteger(0)
+        @Volatile var statusCode = 200
 
         fun urlFor(path: String) = "http://127.0.0.1:${socket.localPort}$path"
 
@@ -87,7 +90,7 @@ class IconFetchFailureTest {
                 requests.incrementAndGet()
                 val out = it.getOutputStream()
                 out.write(
-                    ("HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\n" +
+                    ("HTTP/1.1 $statusCode Response\r\nContent-Type: $contentType\r\n" +
                         "Content-Length: ${body.size}\r\n\r\n").toByteArray(),
                 )
                 out.write(body)
@@ -105,32 +108,81 @@ class IconFetchFailureTest {
     private fun pngBytes(): ByteArray =
         byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(64)
 
+    @Test fun `a transient miss retries after expiry without an explicit cache invalidation`() = runBlocking {
+        val now = AtomicLong(1_000_000L)
+        val origin = Origin("image/png", pngBytes()).also { this@IconFetchFailureTest.origin = it }
+        origin.statusCode = 503
+        val repository = IconRepository(application, nowMillis = now::get)
+        repository.addCustomIconSource(origin.urlFor("/"))
+        assertNull(repository.resolveIconFile("logo"))
+        origin.statusCode = 200
+        now.addAndGet(IconFailurePolicy.TRANSIENT_TTL_MILLIS)
+        assertNull("The existing backoff must still protect the server", repository.resolveIconFile("logo"))
+        assertEquals(1, origin.requests.get())
+        now.incrementAndGet()
+        assertNotNull("A cached null must not outlive the failure backoff", repository.resolveIconFile("logo"))
+        assertEquals(2, origin.requests.get())
+        assertNotNull(repository.resolveIconFile("logo"))
+        assertEquals("Success remains cached", 2, origin.requests.get())
+    }
+
+    @Test fun `a permanent miss respects its longer backoff but eventually recovers`() = runBlocking {
+        val now = AtomicLong(1_000_000L)
+        val origin = Origin("image/png", pngBytes()).also { this@IconFetchFailureTest.origin = it }
+        origin.statusCode = 404
+        val repository = IconRepository(application, nowMillis = now::get)
+        repository.addCustomIconSource(origin.urlFor("/"))
+        assertNull(repository.resolveIconFile("logo"))
+        origin.statusCode = 200
+        now.addAndGet(IconFailurePolicy.TRANSIENT_TTL_MILLIS + 1)
+        assertNull(repository.resolveIconFile("logo"))
+        assertEquals("An expired memory miss must not bypass a permanent record", 1, origin.requests.get())
+        now.addAndGet(IconFailurePolicy.PERMANENT_TTL_MILLIS)
+        assertNotNull(repository.resolveIconFile("logo"))
+        assertEquals(2, origin.requests.get())
+    }
+
+    @Test fun `clock rollback does not keep a cached miss from the future`() = runBlocking {
+        val now = AtomicLong(1_000_000L)
+        val origin = Origin("image/png", pngBytes()).also { this@IconFetchFailureTest.origin = it }
+        origin.statusCode = 503
+        val repository = IconRepository(application, nowMillis = now::get)
+        repository.addCustomIconSource(origin.urlFor("/"))
+        assertNull(repository.resolveIconFile("logo"))
+        origin.statusCode = 200
+        now.decrementAndGet()
+        assertNotNull(repository.resolveIconFile("logo"))
+        assertEquals(2, origin.requests.get())
+    }
+
     private fun resolveTwice(origin: Origin): Pair<java.io.File?, java.io.File?> {
         val repository = IconRepository(application)
-        val url = origin.urlFor("/logo.png")
-        val first = runBlocking { repository.resolveIconFile(tvgLogo = url, epgIconUrl = null, tvgId = null) }
+        repository.addCustomIconSource(origin.urlFor("/"))
+        val first = runBlocking { repository.resolveIconFile("logo") }
         // The in-memory cache would answer the second call on its own, which is not what is under
         // test - the question is whether the *failure store* learned anything.
         repository.invalidateMemoryCache()
-        val second = runBlocking { repository.resolveIconFile(tvgLogo = url, epgIconUrl = null, tvgId = null) }
+        val second = runBlocking { repository.resolveIconFile("logo") }
         return first to second
     }
 
     @Test
-    fun `malformed provider icon URL degrades to a cached miss instead of throwing`() {
+    fun `malformed pack URL is rejected before any resolution`() {
         val repository = IconRepository(application)
         val malformed = "not a valid http url"
+        repository.addCustomIconSource(malformed)
 
         val first = runBlocking {
-            repository.resolveIconFile(tvgLogo = malformed, epgIconUrl = null, tvgId = null)
+            repository.resolveIconFile("logo")
         }
         repository.invalidateMemoryCache()
         val second = runBlocking {
-            repository.resolveIconFile(tvgLogo = malformed, epgIconUrl = null, tvgId = null)
+            repository.resolveIconFile("logo")
         }
 
         assertNull(first)
         assertNull(second)
+        assertTrue(repository.customIconSources().isEmpty())
     }
 
     /** The bug: hotlink protection answering 200 with a page instead of a picture. */
@@ -182,14 +234,14 @@ class IconFetchFailureTest {
         // Use a local origin that returns a valid HTTP response with HTML: this records a
         // transient invalid-image failure without depending on the public network.
         val origin = Origin("text/html", "temporary outage".toByteArray()).also { this.origin = it }
-        val transientUrl = origin.urlFor("/logo.png")
-        assertNull(runBlocking { repository.resolveIconFile(transientUrl, null, null) })
+        repository.addCustomIconSource(origin.urlFor("/"))
+        assertNull(runBlocking { repository.resolveIconFile("logo") })
         repository.retryTransientFailures()
 
         // A retry is allowed to contact the origin again; the response is still invalid, so it is
         // recorded anew rather than being served from the negative memory cache.
         repository.invalidateMemoryCache()
-        assertNull(runBlocking { repository.resolveIconFile(transientUrl, null, null) })
+        assertNull(runBlocking { repository.resolveIconFile("logo") })
         assertEquals("clearing a transient failure must permit a new request", 2, origin.requests.get())
     }
 
@@ -198,13 +250,13 @@ class IconFetchFailureTest {
         val origin = Origin("image/png", pngBytes()).also { this.origin = it }
         val repository = IconRepository(application)
 
-        // With only the built-in CDN fallback, the channel has no disk icon and must resolve to a
+        // With no selected pack, the channel has no authorized icon and must resolve to a
         // negative memory-cache entry. Adding a user source must make the same key try that source
         // immediately; otherwise this channel would remain blank until the next process launch.
-        assertNull(runBlocking { repository.resolveIconFile(null, null, "channel-1") })
+        assertNull(runBlocking { repository.resolveIconFile("channel-1") })
         repository.addCustomIconSource(origin.urlFor("/logos"))
 
-        val resolved = runBlocking { repository.resolveIconFile(null, null, "channel-1") }
+        val resolved = runBlocking { repository.resolveIconFile("channel-1") }
 
         assertNotNull("a newly added source must be consulted after a cached miss", resolved)
         assertEquals(1, origin.requests.get())
@@ -214,13 +266,13 @@ class IconFetchFailureTest {
     fun `trimming invalidates memory entries whose files disappeared`() {
         val origin = Origin("image/png", pngBytes()).also { this.origin = it }
         val repository = IconRepository(application)
-        val url = origin.urlFor("/logo.png")
+        repository.addCustomIconSource(origin.urlFor("/"))
 
-        assertNotNull(runBlocking { repository.resolveIconFile(url, null, null) })
+        assertNotNull(runBlocking { repository.resolveIconFile("logo") })
         java.io.File(application.filesDir, "icon_cache").listFiles()?.forEach { it.delete() }
 
         runBlocking { repository.trimCache() }
-        val resolvedAgain = runBlocking { repository.resolveIconFile(url, null, null) }
+        val resolvedAgain = runBlocking { repository.resolveIconFile("logo") }
 
         assertNotNull("trim must not leave a stale in-memory file reference", resolvedAgain)
         assertEquals("the missing file must be fetched again", 2, origin.requests.get())
@@ -230,16 +282,17 @@ class IconFetchFailureTest {
     fun `lazy icon downloads eventually trim stale cache files without prefetch`() {
         val origin = Origin("image/png", pngBytes()).also { this.origin = it }
         val repository = IconRepository(application, trimAfterWrites = 2, trimAfterBytes = Long.MAX_VALUE)
+        repository.addCustomIconSource(origin.urlFor("/"))
         val stale = File(application.filesDir, "icon_cache/abandoned.tmp").apply {
             writeBytes(byteArrayOf(1))
             setLastModified(System.currentTimeMillis() - IconDiskCache.STALE_TEMP_AGE_MILLIS - 60_000)
         }
 
-        val first = runBlocking { repository.resolveIconFile(origin.urlFor("/first.png"), null, null) }
+        val first = runBlocking { repository.resolveIconFile("first") }
         assertNotNull(first)
         assertTrue("maintenance is deferred until the write budget is reached", stale.exists())
 
-        val second = runBlocking { repository.resolveIconFile(origin.urlFor("/second.png"), null, null) }
+        val second = runBlocking { repository.resolveIconFile("second") }
         assertNotNull(second)
         assertFalse("lazy resolution must enforce cache maintenance too", stale.exists())
         assertTrue(checkNotNull(second).isFile)

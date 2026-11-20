@@ -32,14 +32,18 @@ class ProxyLargeResponseTest {
                     Socket().use { socket ->
                         socket.receiveBufferSize = 8 * 1024
                         socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 5_000)
-                        socket.soTimeout = 5_000
+                        // The proxy gives each socket write up to 15 seconds before aborting a
+                        // stalled receiver. A 5-second client read timeout made this test fail
+                        // under a busy Gradle host while the last TCP window was still in flight;
+                        // it was shorter than the server's own valid delivery budget.
+                        socket.soTimeout = 20_000
                         socket.getOutputStream().write("GET /large HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray())
                         assertTrue(started.await(5, TimeUnit.SECONDS))
                         readResponse(socket, payload, server, finished)
                     }
                 }
             }
-            results.forEach { it.get(20, TimeUnit.SECONDS) }
+            results.forEach { it.get(30, TimeUnit.SECONDS) }
             assertEquals(3, finished.get())
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
             while (server.activeClientCountForTesting() != 0 && System.nanoTime() < deadline) Thread.yield()

@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityOptionsCompat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,11 +21,15 @@ import org.junit.Test
  */
 class DocumentPickerTest {
 
-    private class FakeLauncher(private val throwOnLaunch: Boolean) : ActivityResultLauncher<Array<String>>() {
+    private class FakeLauncher(
+        private val throwOnLaunch: Boolean,
+        private val throwSecurity: Boolean = false,
+    ) : ActivityResultLauncher<Array<String>>() {
         var launchedWith: Array<String>? = null
 
         override fun launch(input: Array<String>, options: ActivityOptionsCompat?) {
             if (throwOnLaunch) throw ActivityNotFoundException("no activity handles ACTION_OPEN_DOCUMENT")
+            if (throwSecurity) throw SecurityException("document picker is not exported")
             launchedWith = input
         }
 
@@ -37,7 +42,14 @@ class DocumentPickerTest {
     fun `a device with no picker gets a log line rather than a crash`() {
         val launcher = FakeLauncher(throwOnLaunch = true)
 
-        launcher.launchOrLogAbsence(arrayOf("application/json"), "import a backup")
+        assertFalse(launcher.launchOrLogAbsence(arrayOf("application/json"), "import a backup"))
+    }
+
+    @Test
+    fun `a device that denies the picker does not crash the tap handler`() {
+        val launcher = FakeLauncher(throwOnLaunch = false, throwSecurity = true)
+
+        assertFalse(launcher.launchOrLogAbsence(arrayOf("application/json"), "import a backup"))
     }
 
     /** The control: where a picker does exist, the request still goes through it unchanged. */
@@ -45,7 +57,7 @@ class DocumentPickerTest {
     fun `a device with a picker is asked for exactly what was requested`() {
         val launcher = FakeLauncher(throwOnLaunch = false)
 
-        launcher.launchOrLogAbsence(arrayOf("audio/x-mpegurl", "*/*"), "pick a playlist")
+        assertTrue(launcher.launchOrLogAbsence(arrayOf("audio/x-mpegurl", "*/*"), "pick a playlist"))
 
         val requested = launcher.launchedWith
         assertTrue("the launcher was never asked for anything", requested != null)

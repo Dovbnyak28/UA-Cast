@@ -74,6 +74,36 @@ class FavoritesRepositoryTest {
         assertEquals(emptyList<FavoriteChannel>(), storage.saved)
     }
 
+    @Test fun `undo writes the restored record and ordering to durable storage`() = runTest {
+        val a = favorite("a", "https://example.test/a")
+        val b = favorite("b", "https://example.test/b").copy(userAgent = "Agent", referrer = "Referrer")
+        val storage = FakeFavoritesStorage(listOf(a, b), CompletableDeferred(Unit))
+        val repository = FavoritesRepository(storage, backgroundScope)
+        testScheduler.runCurrent()
+        repository.removalUndo.removeWithUndo("b")
+        val token = checkNotNull(repository.removalUndo.notice.value).token
+        testScheduler.runCurrent()
+        assertEquals(listOf(a), storage.saved)
+        repository.removalUndo.undo(token)
+        testScheduler.runCurrent()
+        assertEquals(listOf(a, b), repository.favorites.value)
+        assertEquals(listOf(a, b), storage.saved)
+    }
+
+    @Test fun `replacing favorites invalidates an earlier undo`() = runTest {
+        val a = favorite("a", "https://example.test/a")
+        val replacement = favorite("new", "https://example.test/new")
+        val storage = FakeFavoritesStorage(listOf(a), CompletableDeferred(Unit))
+        val repository = FavoritesRepository(storage, backgroundScope)
+        testScheduler.runCurrent()
+        repository.removalUndo.removeWithUndo("a")
+        val token = checkNotNull(repository.removalUndo.notice.value).token
+        repository.reorder(listOf(replacement))
+        repository.removalUndo.undo(token)
+        testScheduler.runCurrent()
+        assertEquals(listOf(replacement), storage.saved)
+    }
+
     private fun favorite(key: String, streamUrl: String) = FavoriteChannel(
         key = key,
         displayName = key,

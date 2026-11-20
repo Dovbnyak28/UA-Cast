@@ -160,7 +160,7 @@ internal object BenchmarkFixtureInstaller {
 
     private fun playlistChannel(index: Int, groupSize: Int) = M3uChannel(
         displayName = channelName(index),
-        streamUrl = "http://127.0.0.1:9/benchmark/$index.ts",
+        streamUrl = "asset:///benchmark/video.mp4?channel=$index",
         tvgId = epgId(index),
         tvgName = channelName(index),
         groupTitle = "Benchmark Group ${((index / groupSize) + 1).toString().padStart(2, '0')}",

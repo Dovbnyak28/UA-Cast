@@ -12,6 +12,19 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlayerCastMappingTest {
+
+    @Test fun receiverNameIsAvailableForStoppingAFailedConnectedSessionButClearsOnDisconnect() {
+        val connected = com.uacastplayer.cast.CastPlaybackState(
+            receiverName = "Living room", isSessionConnected = true,
+            loadPhase = com.uacastplayer.cast.CastLoadPhase.FAILED,
+        )
+        assertEquals("Living room", PlayerCastMapping.state(connected).receiverName)
+        val disconnected = com.uacastplayer.cast.CastReceiverStatusReducer.reduce(
+            connected, com.uacastplayer.cast.ReceiverStatus.DISCONNECTED,
+        ).state
+        assertNull(PlayerCastMapping.state(disconnected).receiverName)
+    }
+
     @Test
     fun `failed media in a connected SDK session does not retain remote playback ownership`() {
         val state = com.uacastplayer.cast.CastPlaybackState(

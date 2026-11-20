@@ -2,6 +2,7 @@ package com.uacastplayer
 
 import android.app.Application
 import android.net.Uri
+import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.backup.BackupCodec
 import com.uacastplayer.backup.BackupSettings
@@ -53,9 +54,11 @@ class BackupExportedSettingsTest {
 
         viewModel.exportBackupTo(uri)
 
-        // The write hops to Dispatchers.IO, so wait for the bytes rather than assume them.
+        // Startup reads resume on the ViewModel's Main scope before export reaches IO. Robolectric
+        // does not pump that queue while this test thread is sleeping.
         val deadline = System.currentTimeMillis() + WRITE_WAIT_MILLIS
         while (System.currentTimeMillis() < deadline && written.size() == 0) {
+            shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(POLL_INTERVAL_MILLIS)
         }
         val json = written.toString(Charsets.UTF_8.name())

@@ -8,6 +8,17 @@ import org.junit.Test
 
 class UpnpFaultTest {
 
+    @Test fun `qualified fault fields and xml text still identify a retryable transition`() {
+        val body = """<u:UPnPError xmlns:u="urn:schemas-upnp-org:control-1-0">
+            <u:errorCode data="ignored">&#55;01</u:errorCode>
+            <u:errorDescription><![CDATA[Transition not available]]></u:errorDescription>
+            </u:UPnPError>"""
+        val fault = UpnpFault.parse(body)
+        assertEquals("701", fault.code)
+        assertEquals("Transition not available", fault.description)
+        assertTrue(fault.isTransitionNotAvailable)
+    }
+
     /** Verbatim from a Samsung UE40KU6000 refusing Play during a channel switch - the response that
      * produced this class. */
     private val samsungTransitionFault = """

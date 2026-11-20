@@ -1,9 +1,11 @@
 package com.uacastplayer.baselineprofile
 
+import android.os.SystemClock
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MemoryUsageMetric
+import androidx.benchmark.macro.TraceSectionMetric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
@@ -34,7 +36,7 @@ class CriticalJourneysBenchmark {
             setupBlock = { pressHome() },
         ) {
             startActivityAndWait()
-            driver.waitForText(PLAYLIST_NAME)
+            driver.waitForRestoredPlaylist(PLAYLIST_NAME)
         }
     }
 
@@ -51,7 +53,30 @@ class CriticalJourneysBenchmark {
             driver.openChannels()
             driver.openFirstGroup()
         },
-        journey = BenchmarkAppDriver::openFirstPlayer,
+        journey = { driver -> driver.openFirstPlayer(); driver.waitForVideoFrame() },
+        firstFrame = true,
+    )
+
+    @Test
+    fun switchPlayingChannel() = measureUiJourney(
+        setup = { driver ->
+            driver.startMain(this); driver.openChannels(); driver.openFirstGroup()
+            driver.openFirstPlayer(); driver.waitForVideoFrame()
+        },
+        journey = BenchmarkAppDriver::switchChannel,
+        firstFrame = true,
+    )
+
+    @Test
+    fun searchFortyThousandChannels() = measureUiJourney(
+        setup = { driver -> driver.startMain(this); driver.openChannels() },
+        journey = BenchmarkAppDriver::searchFortyThousandChannels,
+    )
+
+    @Test
+    fun scrollLargeChannelGroup() = measureUiJourney(
+        setup = { driver -> driver.startMain(this); driver.openChannels(); driver.openFirstGroup() },
+        journey = BenchmarkAppDriver::scrollChannelGroup,
     )
 
     @Test
@@ -66,6 +91,7 @@ class CriticalJourneysBenchmark {
             driver.clickDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
             driver.waitForDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
         },
+        observeFullscreen = true,
     )
 
     @Test
@@ -78,18 +104,23 @@ class CriticalJourneysBenchmark {
         },
         journey = { driver ->
             driver.clickText(BenchmarkAppDriver.GUIDE_LABEL)
-            driver.waitForText(BenchmarkAppDriver.FIRST_PROGRAMME)
+            driver.waitForGuideProgramme()
         },
     )
 
     private fun measureUiJourney(
         setup: androidx.benchmark.macro.MacrobenchmarkScope.(BenchmarkAppDriver) -> Unit,
         journey: (BenchmarkAppDriver) -> Unit,
+        firstFrame: Boolean = false,
+        observeFullscreen: Boolean = false,
     ) {
         val driver = prepareStressFixture()
         benchmarkRule.measureRepeated(
             packageName = BenchmarkAppDriver.PACKAGE_NAME,
-            metrics = listOf(FrameTimingMetric(), maxMemoryMetric()),
+            metrics = buildList {
+                add(FrameTimingMetric()); add(maxMemoryMetric())
+                if (firstFrame) add(TraceSectionMetric("UaCastFirstVideoFrame", TraceSectionMetric.Mode.Sum))
+            },
             compilationMode = CompilationMode.Partial(),
             iterations = ITERATIONS,
             setupBlock = {
@@ -98,8 +129,21 @@ class CriticalJourneysBenchmark {
                 setup(driver)
             },
         ) {
+            val journeyStarted = SystemClock.elapsedRealtime()
             journey(driver)
             device.waitForIdle()
+            if (observeFullscreen) {
+                check(device.displayWidth > device.displayHeight) { "Fullscreen did not reach landscape" }
+                val elapsed = SystemClock.elapsedRealtime() - journeyStarted
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(
+                    2, android.os.Bundle().apply { putLong("fullscreenObservedJourneyMs", elapsed) },
+                )
+            }
+            // Accessibility idle is not a GPU fence. The API-35 trace ended with the only
+            // DrawFrames slice still open, so FrameTimingMetric had no completed frame to read.
+            // Keep a bounded capture tail on the instrumentation thread; idle time does not
+            // manufacture frame samples or change the P95/memory budget assertions.
+            SystemClock.sleep(FRAME_CAPTURE_TAIL_MILLIS)
         }
     }
 
@@ -113,6 +157,7 @@ class CriticalJourneysBenchmark {
 
     private companion object {
         const val ITERATIONS = 5
+        const val FRAME_CAPTURE_TAIL_MILLIS = 500L
         const val PLAYLIST_NAME = "Benchmark playlist"
     }
 }

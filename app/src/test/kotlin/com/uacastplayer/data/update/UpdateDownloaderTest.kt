@@ -235,6 +235,31 @@ class UpdateDownloaderTest {
     }
 
     @Test
+    fun `a cached hash match still rejects release metadata with the wrong size`() {
+        Origin(payload).use { origin ->
+            assertTrue(download(apk(origin)) is UpdateDownload.Ready)
+            val afterFirst = origin.requests.get()
+
+            val result = download(apk(origin, size = payload.size.toLong() + 1))
+
+            assertEquals(UpdateDownload.Corrupt, result)
+            assertEquals("the known bad metadata must not trigger another download", afterFirst, origin.requests.get())
+        }
+    }
+
+    @Test
+    fun `declared apk above the cap is rejected before using mobile data`() {
+        Origin(payload).use { origin ->
+            val small = UpdateDownloader(application, maxBytes = 1024L)
+
+            val result = runBlocking { small.download(apk(origin, size = 1025L)) }
+
+            assertEquals(UpdateDownload.TooLarge, result)
+            assertEquals(0, origin.requests.get())
+        }
+    }
+
+    @Test
     fun `concurrent requests on one downloader share one verified download`() = runBlocking {
         Origin(payload, responseDelayMillis = 200).use { origin ->
             val downloader = UpdateDownloader(application)
@@ -252,6 +277,26 @@ class UpdateDownloaderTest {
                 assertArrayEquals(payload, result.file.readBytes())
             }
             assertEquals("the second caller should reuse the verified APK", 1, origin.requests.get())
+        }
+    }
+
+    @Test
+    fun `independent owners reuse the same verified download`() = runBlocking {
+        Origin(payload, responseDelayMillis = 200).use { origin ->
+            val firstOwner = UpdateDownloader(application)
+            val secondOwner = UpdateDownloader(application)
+            val release = apk(origin)
+            val results = coroutineScope {
+                listOf(
+                    async(Dispatchers.IO) { firstOwner.download(release) },
+                    async(Dispatchers.IO) { secondOwner.download(release) },
+                ).awaitAll()
+            }
+            assertTrue(results.all { it is UpdateDownload.Ready })
+            results.filterIsInstance<UpdateDownload.Ready>().forEach { result ->
+                assertArrayEquals(payload, result.file.readBytes())
+            }
+            assertEquals("A new owner must reuse bytes verified by its predecessor", 1, origin.requests.get())
         }
     }
 

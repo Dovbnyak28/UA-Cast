@@ -8,11 +8,15 @@ import androidx.test.core.app.ApplicationProvider
 import com.uacastplayer.data.icons.IconPrefetcher
 import com.uacastplayer.data.icons.IconRepository
 import com.uacastplayer.data.prefs.AppPreferences
+import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.player.PlaybackActivity
 import com.uacastplayer.playlist.M3uChannel
 import java.io.IOException
 import java.net.ServerSocket
+import java.net.Socket
+import java.net.SocketTimeoutException
+import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -29,6 +33,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -57,6 +62,32 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
  */
 @RunWith(RobolectricTestRunner::class)
 class IconPrefetchInterruptionTest {
+    @Test fun `closing the held icon server closes its accepted clients`() {
+        HeldIconServer().use { server ->
+            Socket("127.0.0.1", URI(server.url).port).use { client ->
+                client.soTimeout = 1_000
+                client.getOutputStream().write(1)
+                client.getOutputStream().flush()
+                assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                server.close()
+                assertEquals("Closing the fixture must unblock its held connection", -1, client.getInputStream().read())
+            }
+        }
+    }
+
+    @Test fun `held icon connections remain open during garbage collection`() {
+        HeldIconServer().use { server ->
+            Socket("127.0.0.1", URI(server.url).port).use { client ->
+                client.soTimeout = 1_000
+                client.getOutputStream().write(1)
+                client.getOutputStream().flush()
+                assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                repeat(3) { System.gc(); System.runFinalization() }
+                assertThrows(SocketTimeoutException::class.java) { client.getInputStream().read() }
+            }
+        }
+    }
+
     @Test fun `production selection leaves the caller thread before visiting channels`() {
         val observed = java.util.concurrent.atomic.AtomicReference<Thread>()
         val visited = CountDownLatch(1)
@@ -89,12 +120,16 @@ class IconPrefetchInterruptionTest {
         // Process-wide singleton - leaving it set would follow this test into every other one.
         PlaybackActivity.setActive(false)
         scope.cancel()
+        application.getSharedPreferences("custom_icon_sources", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     /** Accepts icon requests forever and answers none of them, so every fetch stays in flight. */
     private class HeldIconServer : AutoCloseable {
         private val socket = ServerSocket(0)
         private val worker = Executors.newSingleThreadExecutor()
+        private val clientLock = Any()
+        private val heldClients = mutableListOf<Socket>()
+        private var closed = false
 
         /** Counts down once some icon request has actually arrived. */
         val requestReceived = CountDownLatch(1)
@@ -107,11 +142,21 @@ class IconPrefetchInterruptionTest {
                 try {
                     while (true) {
                         val client = socket.accept()
+                        val retained = synchronized(clientLock) {
+                            if (closed) false else {
+                                heldClients += client
+                                true
+                            }
+                        }
+                        if (!retained) {
+                            client.close()
+                            break
+                        }
                         client.getInputStream().read()
                         requestCount.incrementAndGet()
                         requestReceived.countDown()
-                        // Deliberately never answered and never closed: the client stays parked in
-                        // its read until this server is closed, which is the whole point.
+                        // Retain the socket so GC cannot end the client's held read. close() owns
+                        // all accepted connections, not only the listening ServerSocket.
                     }
                 } catch (_: IOException) {
                     // The socket being closed by close() below is how this thread ends.
@@ -120,8 +165,16 @@ class IconPrefetchInterruptionTest {
         }
 
         override fun close() {
-            worker.shutdownNow()
+            val clients = synchronized(clientLock) {
+                closed = true
+                heldClients.toList().also { heldClients.clear() }
+            }
             socket.close()
+            clients.forEach(Socket::close)
+            worker.shutdownNow()
+            check(worker.awaitTermination(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                "Held icon server worker did not stop"
+            }
         }
 
         fun awaitRequestCount(expected: Int): Boolean {
@@ -147,13 +200,15 @@ class IconPrefetchInterruptionTest {
         shadowOf(manager).setNetworkCapabilities(network, capabilities)
     }
 
-    private fun controller(): IconController {
+    private fun controller(logoUrl: String = "http://example.test/logo.png"): IconController {
         giveTheDeviceANetwork()
         val preferences = AppPreferences(application)
         // Metered is what the Robolectric default network is, so the prefetch has to be allowed to
         // run on one - the gate this test needs open is connectivity, not the wifi-only setting.
         preferences.iconWifiOnly = false
-        val iconRepository = IconRepository(application)
+        val iconRepository = IconRepository(application).apply {
+            addCustomIconSource(logoUrl.substringBeforeLast('/'))
+        }
         return IconController(
             preferences = preferences,
             iconRepository = iconRepository,
@@ -164,7 +219,7 @@ class IconPrefetchInterruptionTest {
     }
 
     private fun channelsPointingAt(logoUrl: String) = listOf(
-        M3uChannel(displayName = "One", streamUrl = "http://example.test/one.ts", tvgLogo = logoUrl),
+        M3uChannel(displayName = "One", streamUrl = "http://example.test/one.ts", tvgLogo = logoUrl, tvgId = "logo"),
     )
 
     private fun IconController.awaitRunning(running: Boolean): Boolean {
@@ -183,7 +238,7 @@ class IconPrefetchInterruptionTest {
             lastIconPrefetchAtMillis = null
         }
         var finishedCallbacks = 0
-        val repository = IconRepository(application)
+        val repository = IconRepository(application).apply { addCustomIconSource("http://example.test") }
         val controller = IconController(
             preferences = preferences,
             iconRepository = repository,
@@ -209,7 +264,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `a prefetch interrupted by playback stops claiming to be running`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             controller.triggerPrefetch(
                 channels = channels,
@@ -235,10 +290,67 @@ class IconPrefetchInterruptionTest {
         }
     }
 
+    @Test fun `enabling wifi-only cancels an active metered prefetch immediately`() {
+        HeldIconServer().use { server ->
+            val controller = controller(server.url)
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE,
+                IconController.PrefetchContext(firstGroupChannels = channels))
+            assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(controller.awaitRunning(true))
+
+            controller.setIconWifiOnly(true)
+
+            assertTrue("The active job must observe the new network policy", controller.awaitRunning(false))
+            assertEquals(0, controller.iconPrefetchState.value.completedRuns)
+        }
+    }
+
+    @Test fun `allowing metered traffic restarts a previously blocked prefetch`() {
+        HeldIconServer().use { server ->
+            val controller = controller(server.url)
+            controller.setIconWifiOnly(true)
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE,
+                IconController.PrefetchContext(firstGroupChannels = channels))
+            // Unconfined resumes the controller on the single selection worker. Drain that
+            // worker so the policy change happens after the initial pass was actually refused.
+            runBlocking { withPlaylistCpu {} }
+            assertTrue(controller.awaitRunning(false))
+            assertEquals(0, server.requestCount.get())
+
+            controller.setIconWifiOnly(false)
+
+            assertTrue("Changing policy must re-evaluate the remembered request", server.awaitRequestCount(1))
+            assertTrue(controller.awaitRunning(true))
+        }
+    }
+
+    @Test fun `setting the same network policy does not interrupt a running pass`() {
+        HeldIconServer().use { server ->
+            val controller = controller(server.url)
+            val channels = channelsPointingAt(server.url)
+            controller.triggerPrefetch(channels, IconDisplayMode.CACHE,
+                IconController.PrefetchContext(firstGroupChannels = channels))
+            assertTrue(server.requestReceived.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(controller.awaitRunning(true))
+            val observations = mutableListOf<Boolean>()
+            val observer = scope.launch {
+                controller.iconPrefetchState.collect { observations += it.isRunning }
+            }
+
+            controller.setIconWifiOnly(false)
+
+            assertEquals(listOf(true), observations)
+            assertEquals(1, server.requestCount.get())
+            observer.cancel()
+        }
+    }
+
     @Test
     fun `cache limited mode prefetches a bounded priority batch`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             controller.triggerPrefetch(
                 channels = channels,
@@ -262,7 +374,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `the prefetch comes back once playback stops`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             controller.triggerPrefetch(
                 channels = channels,
@@ -290,7 +402,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `an ineligible replacement clears the previous prefetch progress`() {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             val context = IconController.PrefetchContext(firstGroupChannels = channels)
             controller.triggerPrefetch(
@@ -322,7 +434,9 @@ class IconPrefetchInterruptionTest {
         HeldIconServer().use { server ->
             giveTheDeviceANetwork()
             val preferences = AppPreferences(application).apply { iconWifiOnly = false }
-            val repository = IconRepository(application)
+            val repository = IconRepository(application).apply {
+                addCustomIconSource(server.url.substringBeforeLast('/'))
+            }
             val callbacks = mutableListOf<() -> Unit>()
             val controller = IconController(
                 preferences = preferences,
@@ -361,7 +475,9 @@ class IconPrefetchInterruptionTest {
         HeldIconServer().use { server ->
             giveTheDeviceANetwork()
             val preferences = AppPreferences(application).apply { iconWifiOnly = false }
-            val repository = IconRepository(application)
+            val repository = IconRepository(application).apply {
+                addCustomIconSource(server.url.substringBeforeLast('/'))
+            }
             val channels = channelsPointingAt(server.url)
             val context = IconController.PrefetchContext(firstGroupChannels = channels)
             var registrations = 0
@@ -395,39 +511,12 @@ class IconPrefetchInterruptionTest {
     }
 
     @Test
-    fun `an unexpected prefetch callback failure clears progress instead of escaping`() {
-        val controller = controller()
-        val channels = channelsPointingAt("http://example.test/logo.png")
-        val callbackInvoked = CountDownLatch(1)
-
-        controller.triggerPrefetch(
-            channels = channels,
-            iconDisplayMode = IconDisplayMode.CACHE,
-            epgIconUrlFor = {
-                callbackInvoked.countDown()
-                throw IllegalStateException("EPG index unavailable")
-            },
-            context = IconController.PrefetchContext(firstGroupChannels = channels),
-        )
-
-        assertTrue(
-            "prefetch never reached the failing callback",
-            callbackInvoked.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS),
-        )
-        assertTrue(
-            "failure must clear the progress state after the asynchronous prefetch settles",
-            controller.awaitRunning(false),
-        )
-        assertEquals(0, controller.iconPrefetchState.value.completedRuns)
-    }
-
-    @Test
     fun `cache clear waits for row icon resolution and blocks new row writers`() = runBlocking {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channel = channelsPointingAt(server.url).single()
             val firstResolution = scope.launch {
-                controller.resolveChannelIcon(channel, IconDisplayMode.CACHE, epgIconUrl = null)
+                controller.resolveChannelIcon(channel, IconDisplayMode.CACHE)
             }
             assertTrue(
                 "the row resolver must be inside a real icon write path before clear begins",
@@ -448,7 +537,7 @@ class IconPrefetchInterruptionTest {
                 val requestsAfterFirstResolution = server.requestCount.get()
 
                 val blockedResolution = scope.launch {
-                    controller.resolveChannelIcon(channel, IconDisplayMode.CACHE, epgIconUrl = null)
+                    controller.resolveChannelIcon(channel, IconDisplayMode.CACHE)
                 }
                 Thread.sleep(RESTART_GUARD_MILLIS)
                 assertEquals(
@@ -473,7 +562,7 @@ class IconPrefetchInterruptionTest {
     @Test
     fun `overlapping cache clears block every prefetch restart until the last delete ends`() = runBlocking {
         HeldIconServer().use { server ->
-            val controller = controller()
+            val controller = controller(server.url)
             val channels = channelsPointingAt(server.url)
             val context = IconController.PrefetchContext(firstGroupChannels = channels)
             controller.triggerPrefetch(

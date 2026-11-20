@@ -148,6 +148,24 @@ class EpgControllerRaceTest {
         return epgState.value.hasError
     }
 
+    @Test
+    fun `clearing the guide during download cannot restore abandoned data`() {
+        XmlTvServer("abandoned", hold = true).use { slow ->
+            val controller = controller()
+            controller.applyCustomEpgUrl(slow.url, markChosen = true)
+            assertTrue(slow.requestReceived.await(HOLD_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            controller.setUserEpgUrl("")
+            slow.release()
+            Thread.sleep(ABSENCE_WAIT_MILLIS)
+            assertNull(controller.epgState.value.data)
+            assertNull(controller.epgState.value.customUrl)
+            assertNull(AppPreferences(application).customEpgUrl)
+            assertEquals(false, controller.epgState.value.isLoading)
+            assertEquals(false, controller.epgState.value.hasError)
+            assertEquals(1, applied.get()) // Only the explicit clear updates consumers.
+        }
+    }
+
     /**
      * The bug: a guide the user navigated away from arrives late and takes the screen back.
      *
