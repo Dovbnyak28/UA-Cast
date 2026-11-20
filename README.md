@@ -13,8 +13,8 @@ Chromecast/Google TV, and browse a channel guide (XMLTV/EPG) with logos.
   Picture-in-Picture, fullscreen, and a next-channels preview carousel.
 - **EPG** — XMLTV guide with a hardened SAX parser, channel-name matching (tvg-id → tvg-name →
   normalized display name), live "now playing" progress bars.
-- **Channel logos** — tvg-logo → EPG icon → CDN-by-tvg-id priority chain, magic-byte validated
-  disk cache, background Wi-Fi-gated prefetch.
+- **Channel logos** — only user-added icon-pack directory URLs (`tvg-id.png`), magic-byte
+  validated disk cache and Wi-Fi-gated prefetch. No default host, playlist-logo or EPG-logo fallback.
 - **Cast** — direct-to-receiver playback first; if the receiver can't play a stream directly
   (common with geo-restricted/VPN-only feeds or incompatible codecs), the app falls back to a
   local HLS relay running on the phone, automatically and silently.
@@ -79,9 +79,9 @@ See `docs/` for the design rules behind the trickier subsystems:
 
 ## Known limitations
 
-- The five `epg.it999.ru` EPG source variants (`EpgSource.kt`) and the built-in
-  `https://cdn.epg.one/logo/` icon fallback are configured in source. Availability still depends on
-  those third-party services and should be included in release smoke testing.
+- The five `epg.it999.ru` guide source variants (`EpgSource.kt`) are configured in source;
+  they supply programme listings, not channel logos. Logo packs must be added by the user.
+  Availability of chosen guide/pack services should be included in release smoke testing.
 - Built and verified via `gradlew` command-line builds, plus manual on-device testing (language
   picker, all four tabs, EPG source download for both the gzip and plain-XML variants) on a Xiaomi
   Mi A2 (Android 11). Proxy/DLNA control paths have also been exercised on a ZTE Blade A34, but a

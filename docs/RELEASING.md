@@ -318,6 +318,19 @@ scripts/run-instrumented-tests.sh
 That script is the whole route - build both APKs, install with `-r`, run through `am instrument` -
 and it is what CI's `instrumented` job runs too, so a local pass and a CI pass mean the same thing.
 
+The Bash helper requires GNU `timeout`. Device setup commands are bounded at 30 seconds,
+each APK installation at 180 seconds, and instrumentation at 900 seconds, with a five-second
+termination grace. `INSTRUMENTED_ADB_TIMEOUT_SECONDS`, `INSTRUMENTED_INSTALL_TIMEOUT_SECONDS`
+and `INSTRUMENTED_RUNNER_TIMEOUT_SECONDS` accept positive integer seconds up to 3600 for an
+explicitly slower disposable test device. CI's outer step/job deadlines still apply; increasing
+these values does not bypass failing assertions or grant a passing result.
+`app/build/reports/instrumented/setup.txt` records phase names before installation, and
+`runner.txt` streams per-method progress. The helper resets only its own generated reports at
+the start, so an early setup failure cannot retain a previous passing summary. A timeout fails the run. Failure diagnostics are
+bounded too, and crash buffers are captured only for positively identified disposable emulators,
+never physical handsets. For phones with real data, use `scripts/run-preserved-device-tests.ps1`;
+the Bash helper refuses fixture replacement on a physical device unless explicitly overridden.
+
 It also inspects the runner's output rather than its exit code, because **`am instrument` exits 0
 whether the tests passed or failed**: pointed at a class that does not exist it prints
 `FAILURES!!!` and still returns 0. A check that trusted the exit code would be green forever.
@@ -343,67 +356,47 @@ generator's own doc comment) - if a gate screen's layout order ever changes, the
 targets need to move with it. After the fixture is installed it explicitly selects English, so the
 player/EPG journey can use stable accessibility text without depending on the device locale.
 
-## Turning premium on
+## Measured performance before release
 
-The premium layer is complete in code and off by one constant. `PremiumAvailability.STORE_IS_LIVE`
-is `false`, so `AppViewModel` builds `FakeBillingProvider` instead of `PlayBillingProvider` and
-`FeatureManager` refuses to lock anything at all. Flipping it is one line, but the order matters,
-and doing it first is the way to ship an app that has taken features away and cannot sell them
-back.
+Before a release, also run **Measured performance gate** and review its complete eight-journey
+artifact. The scheduled/manual workflow and initial budgets are documented in `PERFORMANCE.md`.
+A compiled benchmark APK or an emulator-free host test is not a measured pass. Do not raise a
+budget to hide a regression; investigate the trace and validate on a low-end physical device.
 
-### 1. Create the products in Play Console, spelled exactly
+## Lite and one-time Premium
 
-`com.uacastplayer.premium.billing.PremiumProducts` is the whole catalogue, and Play has no concept
-of a typo here: an id the console does not know is simply **absent from an otherwise successful
-response**. Nothing is logged, nothing fails, the price never appears and the buy button does
-nothing.
+A fresh install starts in Lite. Premium unlocks every implemented feature with one non-expiring
+purchase. There are no new trials, subscriptions, add-on packages or recurring plans.
 
-| Id | Where in Console | Type |
+The current checkout flag `PremiumAvailability.STORE_IS_LIVE` remains `false`: the release
+provider cannot take payment yet. Settings still explains Lite/Premium, and an unavailable
+catalogue displays an explanation rather than an unpriced checkout button. A cached paid licence
+continues to work offline; an unavailable store never grants unpaid Premium access.
+
+### Configure the single product
+
+| Id | Type | Access |
 | --- | --- | --- |
-| `premium_monthly` | Monetise → Subscriptions | subscription, monthly base plan |
-| `premium_yearly` | Monetise → Subscriptions | subscription, yearly base plan |
-| `premium_lifetime` | Monetise → In-app products | one-time purchase |
+| `premium_lifetime` | one-time in-app product (`inapp`) | every feature, without expiry |
 
-`premium_lifetime` must **not** be created as a subscription. Subscriptions and one-time purchases
-are separate catalogues in Play, queried separately and owned separately, so it would be asked for
-in the wrong one and never found. `PremiumProductsTest` holds all of this still from the app's
-side; only the console can confirm the other half.
+Keep this existing ID exactly. Activate it and its price in Play Console, publish a compatible
+signed build on a testing track, and verify checkout/restore with a licence tester before enabling
+`STORE_IS_LIVE`. Prices are read from the store in the user's currency.
 
-Each subscription needs an active base plan with a price in at least one country, and each product
-needs to be **activated** - a draft product is not returned to the app.
+`premium_monthly` and `premium_yearly` are recognised only for ownership restoration. They are
+excluded from the sale catalogue and checkout rejects attempts to buy them. Do not rename or
+delete owned product IDs while migrating; stop offering their new sales in Console. Existing
+paid rights retain their original expiry/store ownership. The app does not cancel existing
+subscriptions or extend their paid term.
 
-### 2. Get a build onto a track
+### Verification before enabling payment
 
-Products are not queryable until a build containing the `com.android.vending.BILLING` permission
-has been published on some track (internal testing is enough) and processed. Testing purchases
-without being charged also requires the accounts to be added under **Setup → License testing**;
-licence testers see "(test)" prices and are not billed.
-
-### 3. Only then flip the constant
-
-```kotlin
-// app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt
-const val STORE_IS_LIVE = true
-```
-
-It is a `const val` deliberately: R8 folds the branch, so a build with it off carries no billing
-code path and a build with it on carries no fake. Verified by unzipping
-`app/build/outputs/apk/release/app-universal-release.apk` and reading `classes.dex` - with the flag
-off, `premium_monthly` is not in the APK at all; with it on, the product ids, the billing client
-and `ProxyBillingActivity` all survive minification, and `com.android.vending.BILLING` is in the
-merged release manifest.
-
-`FeatureManagerTest.aBuildWithNothingToSellUnlocksEverything` asserts the flag is still `false`, so
-flipping it turns that test red. That is the reminder to read it, not a failure - it describes the
-pre-store build and must be updated in the same commit.
-
-### What happens if step 1 or 2 was missed anyway
-
-Nothing locks. `PremiumRepository` asks the store for its catalogue once it connects - on its own,
-without waiting for anyone to open the premium screen - and if the answer is empty, `storeCanSell`
-stays false and `FeatureManager` keeps every gate open. The rule is `mayWithhold`: *only a build
-that can also grant is allowed to withhold*, and a store with an empty catalogue cannot grant.
-
-The flag latches once a real price has been seen, and is persisted
-(`LicenseStorage.storeHasEverOfferedProducts`). It has to be, or the first offline launch would
-hand the app out for free.
+- Lite keeps local playback, one playlist, EPG, favourites, themes, Chromecast/remux and PiP.
+- One Premium purchase unlocks all capabilities; no additional purchase is required.
+- Pending/cancelled/failed attempts do not grant Premium.
+- Purchase and restore controls reject concurrent attempts.
+- Refund/authoritative ownership removal returns to Lite; a failed query preserves cached access.
+- Restore remains reachable with an empty catalogue and reports an actionable outcome.
+- Legacy paid signed records retain their source and expiry. Legacy trial/tester records become Lite.
+- Real charge, acknowledgement and restore must be verified on a Play track; host/debug tests
+  exercise the app's state changes without taking payment.
