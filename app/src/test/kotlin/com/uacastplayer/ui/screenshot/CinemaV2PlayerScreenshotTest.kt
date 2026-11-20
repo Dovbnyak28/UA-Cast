@@ -31,6 +31,9 @@ import com.uacastplayer.ui.theme.UaPlayerTheme
 import com.uacastplayer.ui.theme.UaTheme
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.TimeZone
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.experimental.categories.Category
@@ -45,6 +48,14 @@ import org.robolectric.annotation.GraphicsMode
 @Category(RequiresComposeTestManifest::class)
 class CinemaV2PlayerScreenshotTest {
     @get:Rule val rule = createComposeRule()
+    private val previousZone = TimeZone.getDefault()
+
+    /** The overlay and the empty guide format programme times in the device zone, and the guide prints
+     * the zone id. The references were recorded in Europe/Paris; without pinning it, a UTC CI runner
+     * draws every hour one earlier and a different zone name, and all of these images differ. */
+    @Before fun pinRecordedZone() { TimeZone.setDefault(TimeZone.getTimeZone("Europe/Paris")) }
+
+    @After fun restoreDeviceZone() { TimeZone.setDefault(previousZone) }
     private val timer = mutableStateOf<Long?>(null)
     private val start = Instant.parse("2026-11-14T09:00:00Z").toEpochMilli()
     private val programme = EpgProgramme("cinema", start, start + 3_600_000, "Карпати: тиха подорож")

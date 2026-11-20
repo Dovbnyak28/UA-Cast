@@ -1,5 +1,6 @@
 package com.uacastplayer.ui
 
+import android.os.Build
 import android.graphics.Bitmap
 import android.content.Context
 import android.media.AudioManager
@@ -423,8 +424,10 @@ class UiPolishInstrumentedTest {
         val directory = checkNotNull(instrumentation.targetContext.getExternalFilesDir("ui-polish"))
         check(directory.isDirectory || directory.mkdirs())
         // PixelCopy waits for a committed Compose frame; semantics alone can precede the draw.
-        val fence = rule.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
-        fence.recycle()
+        // Its Window overload exists from API 26 only - below that, idle is the best fence there is.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            rule.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap().recycle()
+        }
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()

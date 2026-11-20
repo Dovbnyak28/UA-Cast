@@ -1,5 +1,6 @@
 package com.uacastplayer.ui
 
+import android.os.Build
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -161,8 +162,11 @@ class CinemaCatalogInstrumentedTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val directory = checkNotNull(instrumentation.targetContext.getExternalFilesDir("cinema-v2-stage3"))
         check(directory.isDirectory || directory.mkdirs())
-        val frame = rule.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
-        frame.recycle()
+        // PixelCopy waits for a committed Compose frame; semantics alone can precede the draw.
+        // Its Window overload exists from API 26 only - below that, idle is the best fence there is.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            rule.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap().recycle()
+        }
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
