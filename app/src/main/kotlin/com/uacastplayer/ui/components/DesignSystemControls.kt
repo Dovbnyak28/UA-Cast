@@ -5,24 +5,17 @@ import com.uacastplayer.ui.theme.darken
 import com.uacastplayer.ui.theme.pressedSurface
 import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.sunkenSurface
-
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -41,47 +34,28 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameter
-import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.AppTheme
-import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.ButtonLabel
-import com.uacastplayer.ui.theme.motionDuration
 import androidx.compose.material3.MaterialTheme
-import com.uacastplayer.ui.theme.DUR_PRESS
-import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.PillText
 import com.uacastplayer.ui.theme.PRESS_SCALE_ICON
 import com.uacastplayer.ui.theme.PRESS_SCALE_PLAY
 import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
 import com.uacastplayer.ui.theme.PlayButtonSize
 import com.uacastplayer.ui.theme.RadiusItem
-import com.uacastplayer.ui.theme.RadiusSeg
-import com.uacastplayer.ui.theme.RadiusSegInner
 import com.uacastplayer.ui.theme.RoundButtonSize
 import androidx.compose.ui.unit.Dp
 import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.SecondaryButtonStyle
 import com.uacastplayer.ui.theme.TabLabel
 import com.uacastplayer.ui.theme.TouchTargetMin
-import com.uacastplayer.ui.theme.UaCastTheme
+
 private const val GHOST_BUTTON_PRESSED_ALPHA = 0.12f
 private const val DISABLED_CONTROL_ALPHA = 0.38f
-private const val PILL_SHAPE_PERCENT = 50
-// The app is dark-only (see UaCastTheme's KDoc) - previews below use this instead of Studio's
-// default white canvas so raisedSurface/sunkenSurface depth cues are visible at a glance.
-private const val PREVIEW_BACKGROUND = 0xFF0B0B12L
+internal const val PILL_SHAPE_PERCENT = 50
 
 /** Full-strength app action, replacing theme-dependent Material Button chrome. */
 @Composable
@@ -335,97 +309,6 @@ fun GlowStatusDot(
     }
 }
 
-/**
- * §5.4 - equal-width segmented control with an animated sliding highlight. The container is a
- * [sunkenSurface] (it's a recessed track the highlight slides in); the selected segment is a
- * [raisedSurface] filled with [UaPalette.accentGradient] - see docs/DESIGN_SYSTEM.md "§D Depth".
- * Shape follows [UaPalette.pillButtons]: Cinema is a fully-rounded pill, Azure a rounded rect -
- * see docs/DESIGN_SYSTEM.md "Themes". Mechanics/behavior are otherwise unchanged.
- */
-@Composable
-internal fun HorizontalSegments(
-    options: List<String>,
-    selectedIndex: Int,
-    onSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val palette = UaTheme.palette
-    val containerShape = if (palette.pillButtons) {
-        RoundedCornerShape(PILL_SHAPE_PERCENT)
-    } else {
-        RoundedCornerShape(RadiusSeg)
-    }
-    val segmentShape = if (palette.pillButtons) {
-        RoundedCornerShape(PILL_SHAPE_PERCENT)
-    } else {
-        RoundedCornerShape(RadiusSegInner)
-    }
-
-    var containerSizePx by remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
-    val segmentWidthPx = if (options.isEmpty()) 0 else containerSizePx.width / options.size
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val offsetX by animateDpAsState(
-        targetValue = with(density) { (segmentWidthPx * selectedIndex).toDp() },
-        animationSpec = tween(motionDuration(DUR_PRESS), easing = EaseSpring),
-        label = "segmentOffset",
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // Without this, the highlight box below (fillMaxHeight) gets unbounded height
-            // constraints from this wrap-content Box inside a Column and collapses to zero height
-            // - a classic Compose gotcha. IntrinsicSize.Min forces this Box to first resolve its
-            // height from its non-fillMaxHeight children (the Row of labels), then hand that
-            // bounded height down, so fillMaxHeight actually has something to fill.
-            .height(IntrinsicSize.Min)
-            .sunkenSurface(containerShape, palette.surface1)
-            .padding(SegmentTrackPadding)
-            .onSizeChanged { containerSizePx = it }
-            .selectableGroup(),
-    ) {
-        if (containerSizePx.width > 0) {
-            Box(
-                modifier = Modifier
-                    // Lambda overload on purpose: offsetX is animated, and the value-taking
-                    // overload reads it during composition, so the whole segmented control
-                    // recomposed on every frame of the slide. Read inside the lambda it is a
-                    // layout-phase read - the animation moves the highlight without recomposing
-                    // anything.
-                    .offset { IntOffset(x = offsetX.roundToPx(), y = 0) }
-                    .width(with(density) { segmentWidthPx.toDp() })
-                    .fillMaxHeight()
-                    .raisedSurface(segmentShape, palette.accentGradient, shadow = true),
-            )
-        }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            options.forEachIndexed { index, label ->
-                val selected = index == selectedIndex
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .heightIn(min = TouchTargetMin)
-                        .tvFocus()
-                        .selectable(
-                            selected = selected,
-                            role = Role.RadioButton,
-                            onClick = { onSelected(index) },
-                        )
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = label,
-                        style = com.uacastplayer.ui.theme.CaptionSemibold,
-                        color = if (selected) palette.accentOnFill else palette.labelSecondary,
-                    )
-                }
-            }
-        }
-    }
-}
-
 /** §5.6 - thin non-interactive progress track used inside list rows, and a bold interactive variant for the player. */
 @Composable
 fun TrackProgress(progress: Float, modifier: Modifier = Modifier, bold: Boolean = false) {
@@ -535,96 +418,4 @@ fun TabBarLabel(text: String, selected: Boolean) {
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     )
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun GradientPlayButtonPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        GradientPlayButton(icon = AppIcons.Play, onClick = {})
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun RoundIconButtonPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            RoundIconButton(icon = AppIcons.SkipPrevious, onClick = {})
-            RoundIconButton(icon = AppIcons.SkipNext, onClick = {})
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun SmallRoundIconButtonPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        SmallRoundIconButton(icon = AppIcons.Settings, onClick = {})
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun StatusPillPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusPill(text = "Direct", variant = StatusPillVariant.Good)
-            StatusPill(text = "Proxy", variant = StatusPillVariant.Proxy)
-            StatusPill(text = "Failed", variant = StatusPillVariant.Bad)
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun GlowStatusDotPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            GlowStatusDot(variant = StatusPillVariant.Good)
-            GlowStatusDot(variant = StatusPillVariant.Proxy)
-            GlowStatusDot(variant = StatusPillVariant.Bad)
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND, widthDp = 300)
-@Composable
-private fun SegmentedControlPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        SegmentedControl(options = listOf("Small", "Medium", "Large"), selectedIndex = 1, onSelected = {})
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND, widthDp = 300)
-@Composable
-private fun TrackProgressPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TrackProgress(progress = 0.35f)
-            TrackProgress(progress = 0.7f, bold = true)
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun SecondaryButtonPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SecondaryButton(text = "Export", onClick = {})
-            SecondaryButton(text = "Disabled", onClick = {}, enabled = false)
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = PREVIEW_BACKGROUND)
-@Composable
-private fun TabBarLabelPreview(@PreviewParameter(AppThemePreviewParameter::class) theme: AppTheme) {
-    UaCastTheme(theme) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            TabBarLabel(text = "Channels", selected = true)
-            TabBarLabel(text = "Favorites", selected = false)
-        }
-    }
 }
