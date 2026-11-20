@@ -25,6 +25,21 @@ internal object UpnpHttpEndpoint {
         null
     }
 
+    /** Fast admission for the UDP loop. Numeric IPv4 locations can be checked without a resolver;
+     * hostname resolution is deferred to discoveryLocation on a description-fetch worker. */
+    fun discoveryCandidate(value: String, sender: InetAddress): String? = parse(value)
+        ?.takeIf(::isSupported)
+        ?.takeIf { uri -> uri.host?.let { candidateHostMatchesSender(it, sender) } == true }
+        ?.toString()
+
+    private fun candidateHostMatchesSender(host: String, sender: InetAddress): Boolean {
+        if (!host.all { it in '0'..'9' || it == '.' }) return true
+        val parts = host.split('.')
+        val octets = parts.mapNotNull { it.toIntOrNull()?.takeIf { value -> value in 0..IPV4_OCTET_MAX }?.toByte() }
+        return parts.size == IPV4_OCTET_COUNT && octets.size == IPV4_OCTET_COUNT &&
+            octets.toByteArray().contentEquals(sender.address)
+    }
+
     private fun parse(value: String): URI? = try {
         URI(value)
     } catch (_: URISyntaxException) {
@@ -40,4 +55,6 @@ internal object UpnpHttpEndpoint {
 
     private const val MIN_TCP_PORT = 1
     private const val MAX_TCP_PORT = 65_535
+    private const val IPV4_OCTET_COUNT = 4
+    private const val IPV4_OCTET_MAX = 255
 }

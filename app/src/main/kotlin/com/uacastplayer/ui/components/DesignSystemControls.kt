@@ -1,11 +1,11 @@
 package com.uacastplayer.ui.components
+import com.uacastplayer.ui.tv.tvFocus
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.darken
 import com.uacastplayer.ui.theme.pressedSurface
 import com.uacastplayer.ui.theme.raisedSurface
 import com.uacastplayer.ui.theme.sunkenSurface
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -38,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -57,7 +56,9 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
-import com.uacastplayer.ui.theme.BodyRegular
+import com.uacastplayer.ui.theme.ButtonLabel
+import com.uacastplayer.ui.theme.motionDuration
+import androidx.compose.material3.MaterialTheme
 import com.uacastplayer.ui.theme.DUR_PRESS
 import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.PillText
@@ -93,11 +94,6 @@ fun PrimaryButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) PRESS_SCALE_ROUND else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "primaryButtonScale",
-    )
     val shape = if (UaTheme.palette.pillButtons) {
         RoundedCornerShape(PILL_SHAPE_PERCENT)
     } else {
@@ -106,7 +102,7 @@ fun PrimaryButton(
     Row(
         modifier = modifier
             .heightIn(min = TouchTargetMin)
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_ROUND, enabled)
             .let { base ->
                 if (enabled) {
                     base.raisedSurface(shape, UaTheme.palette.accentGradient, shadow = false)
@@ -114,10 +110,11 @@ fun PrimaryButton(
                     base.raisedSurface(shape, UaTheme.palette.surface2, shadow = false)
                 }
             }
-            .clickable(
+            .tvFocus(shape, enabled).clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
+                role = Role.Button,
                 onClick = onClick,
             )
             .padding(horizontal = 18.dp, vertical = 10.dp),
@@ -130,7 +127,7 @@ fun PrimaryButton(
         }
         Text(
             text = text,
-            style = BodyRegular,
+            style = ButtonLabel,
             color = contentColor,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = if (leadingIcon != null) Modifier.padding(start = 8.dp) else Modifier,
@@ -154,8 +151,12 @@ fun uaTextFieldColors(): TextFieldColors {
         unfocusedContainerColor = container,
         disabledContainerColor = container,
         focusedBorderColor = palette.azure,
-        unfocusedBorderColor = palette.hairline,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
         cursorColor = palette.azure,
+        focusedTextColor = palette.labelPrimary,
+        unfocusedTextColor = palette.labelPrimary,
+        focusedLabelColor = palette.azure,
+        unfocusedLabelColor = palette.labelSecondary,
     )
 }
 
@@ -170,24 +171,21 @@ fun GradientPlayButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) PRESS_SCALE_PLAY else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "playButtonScale",
-    )
     Box(
         modifier = modifier
             .size(PlayButtonSize)
             .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_PLAY, enabled)
             // One of the three places in the app allowed to glow - see docs/DESIGN_SYSTEM.md "§D
             // Depth". The edge-highlight border below is the same raisedSurface(fill = Brush)
             // treatment used elsewhere, kept manual here since the glow shadow needs its own
             // spotColor that raisedSurface's shared shadowSoft tone doesn't provide.
-            .shadow(10.dp, CircleShape, spotColor = UaTheme.palette.azureGlow)
+            .then(if (com.uacastplayer.ui.theme.LocalReducedEffects.current) Modifier else
+                Modifier.shadow(10.dp, CircleShape, spotColor = UaTheme.palette.azureGlow))
             .clip(CircleShape)
             .background(UaTheme.palette.accentGradient)
             .border(1.dp, UaTheme.palette.edgeHighlightAccent, CircleShape)
+            .tvFocus(CircleShape, enabled)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
@@ -218,18 +216,14 @@ fun RoundIconButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) PRESS_SCALE_ROUND else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "roundButtonScale",
-    )
     Box(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .size(RoundButtonSize)
             .alpha(if (enabled) 1f else DISABLED_CONTROL_ALPHA)
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_ROUND, enabled)
             .raisedSurface(CircleShape, pressedSurface(UaTheme.palette.surface1, pressed), shadow = false)
+            .tvFocus(CircleShape, enabled)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
@@ -266,17 +260,13 @@ fun SmallRoundIconButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) PRESS_SCALE_ICON else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "smallIconButtonScale",
-    )
     Box(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .size(IconButtonSize)
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_ICON)
             .raisedSurface(CircleShape, pressedSurface(background, pressed), shadow = false)
+            .tvFocus(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -301,18 +291,19 @@ enum class StatusPillVariant { Good, Proxy, Bad }
 /** §5.3 - small rounded status label. */
 @Composable
 fun StatusPill(text: String, variant: StatusPillVariant, modifier: Modifier = Modifier) {
-    val color = when (variant) {
-        StatusPillVariant.Good -> UaTheme.palette.routeGreen
-        StatusPillVariant.Proxy -> UaTheme.palette.routeAmber
-        StatusPillVariant.Bad -> UaTheme.palette.routeRed
+    val colors = when (variant) {
+        StatusPillVariant.Good -> UaTheme.colors.success
+        StatusPillVariant.Proxy -> UaTheme.colors.warning
+        StatusPillVariant.Bad -> UaTheme.colors.danger
     }
     Text(
         text = text,
         style = PillText,
-        color = color,
+        color = colors.onContainer,
         modifier = modifier
             .clip(RoundedCornerShape(PILL_SHAPE_PERCENT))
-            .background(color.copy(alpha = 0.14f))
+            .background(colors.container)
+            .border(1.dp, colors.accent.copy(alpha = 0.5f), RoundedCornerShape(PILL_SHAPE_PERCENT))
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }
@@ -352,7 +343,7 @@ fun GlowStatusDot(
  * see docs/DESIGN_SYSTEM.md "Themes". Mechanics/behavior are otherwise unchanged.
  */
 @Composable
-fun SegmentedControl(
+internal fun HorizontalSegments(
     options: List<String>,
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
@@ -375,7 +366,7 @@ fun SegmentedControl(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val offsetX by animateDpAsState(
         targetValue = with(density) { (segmentWidthPx * selectedIndex).toDp() },
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
+        animationSpec = tween(motionDuration(DUR_PRESS), easing = EaseSpring),
         label = "segmentOffset",
     )
 
@@ -389,7 +380,7 @@ fun SegmentedControl(
             // bounded height down, so fillMaxHeight actually has something to fill.
             .height(IntrinsicSize.Min)
             .sunkenSurface(containerShape, palette.surface1)
-            .padding(3.dp)
+            .padding(SegmentTrackPadding)
             .onSizeChanged { containerSizePx = it }
             .selectableGroup(),
     ) {
@@ -413,11 +404,15 @@ fun SegmentedControl(
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .fillMaxHeight()
+                        .heightIn(min = TouchTargetMin)
+                        .tvFocus()
                         .selectable(
                             selected = selected,
+                            role = Role.RadioButton,
                             onClick = { onSelected(index) },
                         )
-                        .padding(vertical = 8.dp),
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -476,11 +471,6 @@ fun SecondaryButton(
     val palette = UaTheme.palette
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) PRESS_SCALE_ROUND else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "secondaryButtonScale",
-    )
     val shape = if (palette.pillButtons) {
         RoundedCornerShape(PILL_SHAPE_PERCENT)
     } else {
@@ -490,7 +480,7 @@ fun SecondaryButton(
     Box(
         modifier = modifier
             .heightIn(min = TouchTargetMin)
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_ROUND, enabled)
             .let { m ->
                 if (isGhost) {
                     val ghostBackground = if (pressed) {
@@ -503,10 +493,12 @@ fun SecondaryButton(
                     m.raisedSurface(shape, pressedSurface(palette.surface1, pressed), shadow = false)
                 }
             }
+            .tvFocus(shape, enabled)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
+                role = Role.Button,
                 onClick = onClick,
             )
             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -523,7 +515,7 @@ fun SecondaryButton(
             }
             Text(
                 text = text,
-                style = BodyRegular,
+                style = ButtonLabel,
                 color = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = if (leadingIcon != null) Modifier.padding(start = 8.dp) else Modifier,
@@ -532,16 +524,13 @@ fun SecondaryButton(
     }
 }
 
-/** §5.9 tab bar label chrome - shared by GlassTabBar items. [selected]'s pill background is now a
- * full-strength [UaPalette.accentGradient] (see GlassTabBar's TabBarButton) rather than a
- * translucent azure tint, so the label needs [UaPalette.accentOnFill]'s contrast rather than
- * [UaPalette.azure] on selected - the same content-on-filled-accent-surface rule the icon follows. */
+/** Labels sit on the dock; only the selected icon has a tonal indicator. */
 @Composable
 fun TabBarLabel(text: String, selected: Boolean) {
     Text(
         text = text,
         style = TabLabel,
-        color = if (selected) UaTheme.palette.accentOnFill else UaTheme.palette.labelSecondary,
+        color = if (selected) UaTheme.palette.labelPrimary else UaTheme.palette.labelSecondary,
         maxLines = 2,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

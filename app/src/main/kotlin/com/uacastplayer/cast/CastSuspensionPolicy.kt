@@ -16,6 +16,8 @@ internal object CastSuspensionPolicy {
         expectedContentId: String?,
         actualContentId: String?,
         status: ReceiverStatus,
+        completedBufferedItem: Boolean = false,
     ): Boolean = channelUnchanged && expectedContentId != null && expectedContentId == actualContentId &&
-        status in setOf(ReceiverStatus.PLAYING, ReceiverStatus.PAUSED)
+        (status == ReceiverStatus.PLAYING || status == ReceiverStatus.PAUSED ||
+            (status == ReceiverStatus.IDLE && completedBufferedItem))
 }

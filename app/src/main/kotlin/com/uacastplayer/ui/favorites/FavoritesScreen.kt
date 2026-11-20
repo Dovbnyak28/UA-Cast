@@ -15,15 +15,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,8 +39,8 @@ import com.uacastplayer.favorites.FavoritesSorter
 import com.uacastplayer.favorites.ReorderPolicy
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.components.ChannelIcon
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.EmptyState
-import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapM
@@ -63,6 +62,7 @@ fun FavoritesScreen(
     onOpenChannels: () -> Unit,
     resolveIcon: suspend (M3uChannel) -> File?,
     modifier: Modifier = Modifier,
+    iconRefreshKey: Any? = null,
 ) {
     if (favorites.isEmpty()) {
         EmptyState(
@@ -103,11 +103,15 @@ fun FavoritesScreen(
     val orderedFavorites = reorderState.ordered
     var editing by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    val visibleFavorites by remember(orderedFavorites, query) {
-        derivedStateOf { orderedFavorites.filter { it.displayName.contains(query.trim(), ignoreCase = true) } }
+    val searchQuery = query.trim()
+    val visibleFavorites by remember(orderedFavorites, searchQuery) {
+        derivedStateOf {
+            filteredFavorites(orderedFavorites.toList(), searchQuery)
+        }
     }
     val channels = remember(visibleFavorites) { visibleFavorites.map { it.toChannel() } }
     val canReorder = editing && query.isBlank() && sortOrder == FavoritesSortOrder.MANUAL
+    val animateItems = animationsAllowed()
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = ScreenHPadding, vertical = GapM)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -116,15 +120,17 @@ fun FavoritesScreen(
             }
             FavoritesSortMenu(selected = sortOrder, onSelect = onSortOrderSelected)
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text(stringResource(R.string.favorites_search)) },
-            singleLine = true,
-            colors = uaTextFieldColors(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (visibleFavorites.isEmpty()) Text(stringResource(R.string.player_channels_no_results))
+        FavoriteSearchField(query) { query = it }
+        if (visibleFavorites.isEmpty()) {
+            EmptyState(
+                icon = AppIcons.Search,
+                title = stringResource(R.string.player_channels_no_results),
+                primaryActionLabel = stringResource(R.string.channels_clear_search),
+                onPrimaryAction = { query = "" },
+                modifier = Modifier.weight(1f),
+            )
+            return@Column
+        }
         if (canReorder) {
             Text(
                 text = stringResource(R.string.favorites_manual_hint),
@@ -145,13 +151,17 @@ fun FavoritesScreen(
                         // produce a stutter. This is what makes rows smoothly slide out of the way
                         // as you drag one past them, and makes removing a favorite collapse the
                         // list instead of the rows below it just jumping up.
-                        .then(if (isDragging) Modifier else Modifier.animateItem())
+                        .then(
+                            if (favoritePlacementAllowed(animateItems, isDragging)) {
+                                Modifier.animateItem()
+                            } else Modifier,
+                        )
                         .favoriteDrag(reorderState, favorite.key, index, canReorder, onReorder)
                         .clickable(enabled = !editing) { onChannelSelected(channels, index) }
                         .padding(ItemPadding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ChannelIcon(channels[index], resolveIcon)
+                    ChannelIcon(channels[index], resolveIcon, refreshKey = iconRefreshKey)
                     Text(
                         text = favorite.displayName,
                         style = BodyText,
@@ -179,6 +189,9 @@ fun FavoritesScreen(
 }
 
 /** Toolbar control that switches the Favorites screen's [FavoritesSortOrder]. */
+private fun favoritePlacementAllowed(animationsEnabled: Boolean, dragging: Boolean): Boolean =
+    animationsEnabled && !dragging
+
 @Composable
 private fun FavoritesSortMenu(selected: FavoritesSortOrder, onSelect: (FavoritesSortOrder) -> Unit) {
     var expanded by remember { mutableStateOf(false) }

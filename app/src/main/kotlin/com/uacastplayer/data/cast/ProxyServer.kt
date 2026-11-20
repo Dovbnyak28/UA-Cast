@@ -5,6 +5,8 @@ import com.uacastplayer.core.cast.CastRouteKind
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.proxy.PlaylistUnwrapPolicy
 import com.uacastplayer.proxy.RemuxHandoffPolicy
+import com.uacastplayer.data.media.LocalVideoSource
+import com.uacastplayer.media.LocalVideo
 import java.io.IOException
 import java.io.OutputStream
 import okhttp3.Call
@@ -43,6 +45,9 @@ class ProxyServer(
      * the same seam [com.uacastplayer.app.UpdateController] uses. Declared before
      * [onRouteAttempted] so that stays the trailing parameter its call site passes as a lambda. */
     now: () -> Long = System::currentTimeMillis,
+    /** Observational only: consumers must recheck ownership after dispatching to another thread. */
+    private val onSourceObserved: (ProxySourceObservation) -> Unit = {},
+    localVideoSource: LocalVideoSource? = null,
     /** Fired once per top-level (channel) resource, the first time this server decides whether it
      * takes the raw-TS remux path or an ordinary rewritten-HLS passthrough - see
      * [fetchAndServeUpstreamResource]. Callers own de-duplication (see
@@ -57,6 +62,7 @@ class ProxyServer(
         isRequestAuthorized = ::isAuthorizedRequest,
     )
     private val responseServing = ProxyResponseServing(httpServer, now)
+    private val localVideoServing = LocalVideoResponseServing(localVideoSource, responseServing)
     // One ownership transaction for channel registration, flattened replay and ordinary Calls.
     // Separate locks would allow a stale Call to join after the channel's cancellation snapshot.
     private val producerLock = Any()
@@ -164,6 +170,7 @@ class ProxyServer(
 
     @Synchronized
     fun stop() {
+        localVideoServing.stop()
         val callsToCancel = synchronized(producerLock) {
             acceptingUpstreamCalls = false
             upstreamCalls.keys.toList().also { upstreamCalls.clear() }
@@ -199,9 +206,12 @@ class ProxyServer(
      * harmless no-op when nothing is draining. */
     fun confirmActiveSession() = resourceRegistry.confirmActiveSession()
 
-    fun registerPlaylist(url: String, userAgent: String? = null, referrer: String? = null): String =
+    fun registerPlaylist(
+        url: String, userAgent: String? = null, referrer: String? = null, localVideo: LocalVideo? = null,
+    ): String =
         synchronized(producerLock) {
-            val id = resourceRegistry.registerPlaylist(url, userAgent, referrer)
+            val id = resourceRegistry.registerPlaylist(url, userAgent, referrer, localVideo)
+            localVideoServing.select(localVideo)
             val owner = resourceRegistry.captureRemuxLease(id)
             cancelObsoleteUpstream(owner)
             // A renderer's SOAP Stop may fail or leave its old HTTP request alive. Retire the
@@ -280,6 +290,10 @@ class ProxyServer(
         if (resource == null) {
             AppLog.d(TAG) { "Unknown resource requested: $resourceId" }
             responseServing.writeError(output, HTTP_NOT_FOUND, "Not Found")
+            return
+        }
+        resource.localVideo?.let {
+            localVideoServing.serve(it, request, output)
             return
         }
         if (flattenHlsToStream && resource.type == RESOURCE_TYPE_PLAYLIST) {
@@ -398,6 +412,7 @@ class ProxyServer(
                 responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
                 return
             }
+            decision.diagnostic?.let { diagnostic -> observeSource(resourceId, diagnostic, remuxLease) }
             handedOff = true
             // Each branch owns `response` from here: the playlist and passthrough paths close it
             // through their own use {}, and the remux path passes it to the session's reader.
@@ -412,6 +427,17 @@ class ProxyServer(
         } finally {
             if (!handedOff) runCatchingNonFatal { response.close() }
         }
+    }
+
+    fun isSourceObservationCurrent(observation: ProxySourceObservation): Boolean =
+        isCurrentChannel(observation.resourceId, observation.lease)
+
+    private fun observeSource(resourceId: String, diagnostic: ProxySourceDiagnostic, lease: RemuxRequestLease?) {
+        // Sub-playlists do not establish the root channel's codec/source identity. In particular,
+        // a codec found in an arbitrary HLS variant must never block the selected variant.
+        if (lease == null || lease.rootId != resourceId || !isCurrentChannel(resourceId, lease)) return
+        runCatchingNonFatal { onSourceObserved(ProxySourceObservation(resourceId, diagnostic, lease)) }
+            .onFailure { error -> AppLog.e(TAG, error) { "Proxy source observer failed" } }
     }
 
     /** Only probes run here: no receiver headers/body have been committed yet. The caller owns
@@ -694,14 +720,22 @@ class ProxyServer(
         var handedOff = false
         try {
             val mediaResponse = upstream.response
-            val shouldRemux = probeUpstreamOrRespondError(resourceId, output) {
-                ProxyRouteSelector.shouldRemuxRaw(mediaResponse, remuxEnabled)
+            // Null means probing is disabled or the origin returned an HTTP error. Use a pair
+            // so the probe boundary's null continues to mean an actual failed socket read.
+            val result = probeUpstreamOrRespondError(resourceId, output) {
+                val diagnostic = ProxyRouteSelector.diagnoseRaw(mediaResponse, remuxEnabled)
+                (diagnostic?.let(ProxyRouteSelector::shouldRemux) == true) to diagnostic
             } ?: return
-            handedOff = true
-            if (shouldRemux) {
-                serveRemuxedUpstream(resourceId, mediaResponse, request.method, output, remuxLease)
+            if (isCurrentChannel(resourceId, remuxLease)) {
+                result.second?.let { diagnostic -> observeSource(resourceId, diagnostic, remuxLease) }
+                handedOff = true
+                if (result.first) {
+                    serveRemuxedUpstream(resourceId, mediaResponse, request.method, output, remuxLease)
+                } else {
+                    mediaResponse.use { responseServing.servePassthrough(resourceId, it, request.method, output) }
+                }
             } else {
-                mediaResponse.use { responseServing.servePassthrough(resourceId, it, request.method, output) }
+                responseServing.writeError(output, HTTP_SERVICE_UNAVAILABLE, "Service Unavailable")
             }
         } finally {
             if (!handedOff) runCatchingNonFatal { upstream.response.close() }

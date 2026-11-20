@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.player
+import com.uacastplayer.ui.tv.LocalTvMode
 
 import android.content.Context
 import android.media.AudioManager
@@ -22,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -63,10 +65,8 @@ import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.PrimaryButton
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.cast.CastButton
-import com.uacastplayer.ui.components.SmallRoundIconButton
 import com.uacastplayer.ui.components.liveRing
 import com.uacastplayer.ui.dlna.DlnaDeviceSheet
-import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.DUR_PRESS
@@ -90,6 +90,29 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
     channels: List<M3uChannel> = emptyList(),
 ) {
+    com.uacastplayer.ui.theme.UaPlayerTheme {
+        ThemedPlayerScreen(viewModel, onExit, isFavorite, onToggleFavorite, resolveIcon,
+            epgState, iconPrefetchState, modifier, channels)
+    }
+}
+
+@OptIn(markerClass = [UnstableApi::class])
+@Composable
+private fun ThemedPlayerScreen(
+    viewModel: PlayerViewModel,
+    onExit: () -> Unit,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    epgState: EpgUiState,
+    iconPrefetchState: IconPrefetchUiState,
+    modifier: Modifier = Modifier,
+    channels: List<M3uChannel> = emptyList(),
+) {
+    if (LocalTvMode.current) {
+        TvPlayerScreen(viewModel, onExit, isFavorite, onToggleFavorite, epgState, modifier)
+        return
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dlnaState by viewModel.dlnaState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -109,8 +132,9 @@ fun PlayerScreen(
     val content = PlayerScreenContent(
         uiState = uiState,
         dlnaState = dlnaState,
-        iconRefreshKey = epgState.data?.index to iconPrefetchState.completedRuns,
+        iconRefreshKey = iconPrefetchState.refreshKey,
         videoResizeMode = ResizeModeCycle.toMedia3ResizeMode(uiState.resizeMode),
+        epgState = epgState,
     )
     val actions = PlayerScreenActions(
         viewModel = viewModel,
@@ -126,6 +150,14 @@ fun PlayerScreen(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
     }
 
+    // Inline/fullscreen share one native view/texture. Recreating it on every transition
+    // inflates Media3 UI and detaches the decoder output while the window is also resizing.
+    val videoSurface = remember(viewModel) {
+        movableContentOf<Int, Modifier> { resizeMode, surfaceModifier ->
+            VideoSurface(viewModel, resizeMode, surfaceModifier)
+        }
+    }
+
     PlayerScreenEffects(environment, isFullscreen, uiState, transientState)
     if (isInPip) {
         PipPlayerSurface(viewModel, modifier)
@@ -139,36 +171,30 @@ fun PlayerScreen(
             transientState,
             sleepTimer,
             modifier,
+            videoSurface = videoSurface,
         )
     } else {
-        InlinePlayerContent(content, actions, transientState, modifier)
+        InlinePlayerContent(content, actions, transientState, modifier, videoSurface = videoSurface)
     }
 
-    if (transientState.showChannelsSheet) {
-        PlayerChannelSheet(channels, uiState.currentChannel, viewModel.navigation::requestSwitch) {
-            transientState.showChannelsSheet = false
-        }
-    }
+    val isFile = uiState.currentChannel?.localVideo != null
+    PlayerChannelPicker(channels, content, actions, transientState)
     val isRemote = remotePlaybackOwnsControls(uiState, dlnaState)
+    FilePlaybackDialogEffect(isFile, transientState)
     RemotePlaybackDialogEffect(isRemote, transientState)
     if (transientState.showActionsSheet) {
-        PlayerActionsSheet(transientState, actions, uiState.hasPreviousChannel, isRemote)
+        PlayerActionsSheet(transientState, actions, uiState.hasPreviousChannel, isRemote, isFile)
     }
     if (transientState.showLevelsSheet && !isRemote) PlayerLevelsSheet(transientState, environment)
-    if (transientState.showDevicePicker) {
-        PlayerDevicePicker(
-            onDlna = { transientState.showDlnaSheet = true },
-            onDismiss = { transientState.showDevicePicker = false },
-        )
-    }
     if (transientState.showDlnaSheet) {
+        val volumeDevice = dlnaState.connectedDevice
         DlnaDeviceSheet(
             connectionState = dlnaState,
             discoverDevices = viewModel.dlna::discoverDevices,
             onDismiss = { transientState.showDlnaSheet = false },
             onDeviceSelected = viewModel.dlna::connect,
             onStopCasting = viewModel.dlna::stop,
-            onVolumeChange = viewModel.dlna::setVolume,
+            onVolumeChange = { volume -> volumeDevice?.let { viewModel.dlna.setVolume(it, volume) } },
         )
     }
     PlayerDialogs(
@@ -195,7 +221,7 @@ fun PlayerScreen(
 private fun PipPlayerSurface(viewModel: PlayerViewModel, modifier: Modifier) {
     AndroidView(
         factory = { context ->
-            PlayerView(context).apply {
+            (android.view.LayoutInflater.from(context).inflate(R.layout.pip_player_view, null) as PlayerView).apply {
                 player = viewModel.player
                 useController = false
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -309,6 +335,7 @@ internal fun PlaybackFailureCard(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     canGoNext: Boolean = true,
+    localVideo: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -318,7 +345,9 @@ internal fun PlaybackFailureCard(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(R.string.player_fatal_error),
+            text = stringResource(
+                if (localVideo) R.string.local_video_playback_failed else R.string.player_fatal_error,
+            ),
             color = Color.White,
             style = BodyText,
             textAlign = TextAlign.Center,
@@ -328,14 +357,16 @@ internal fun PlaybackFailureCard(
             onClick = onRetry,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
-        SecondaryButton(
-            text = stringResource(R.string.player_next),
-            onClick = onNext,
-            enabled = canGoNext,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
+        if (!localVideo) {
+            SecondaryButton(
+                text = stringResource(R.string.player_next),
+                onClick = onNext,
+                enabled = canGoNext,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
         Text(
-            text = stringResource(R.string.player_back_to_channels),
+            text = stringResource(if (localVideo) R.string.common_back else R.string.player_back_to_channels),
             color = UaTheme.palette.azure,
             style = Caption,
             modifier = Modifier
@@ -343,7 +374,9 @@ internal fun PlaybackFailureCard(
                 .minimumInteractiveComponentSize()
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = stringResource(R.string.player_back_to_channels),
+                    onClickLabel = stringResource(
+                        if (localVideo) R.string.common_back else R.string.player_back_to_channels,
+                    ),
                     onClick = onExit,
                 )
                 .padding(horizontal = 8.dp),
@@ -419,5 +452,5 @@ internal fun AudioChannelLayout.labelRes(): Int = when (this) {
     AudioChannelLayout.STEREO -> R.string.audio_layout_stereo
     AudioChannelLayout.SURROUND_5_1 -> R.string.audio_layout_surround_5_1
     AudioChannelLayout.SURROUND_7_1 -> R.string.audio_layout_surround_7_1
-    AudioChannelLayout.OTHER -> R.string.audio_layout_stereo
+    AudioChannelLayout.OTHER -> R.string.audio_layout_other
 }

@@ -1,4 +1,5 @@
 package com.uacastplayer.ui.settings
+import com.uacastplayer.ui.tv.tvFocus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +42,7 @@ import com.uacastplayer.ui.theme.CardTitle
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.raisedSurface
+import com.uacastplayer.ui.theme.panelSurface
 import java.util.Locale
 
 private const val CHEVRON_ROTATION_DEGREES = -90f
@@ -94,7 +96,7 @@ internal fun PlaylistActionRow(
                 edgeColor = UaTheme.palette.hairline,
                 shadow = true,
             )
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .tvFocus().clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -126,20 +128,15 @@ internal fun SettingsNavigationRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .raisedSurface(
-                RoundedCornerShape(RadiusItem),
-                UaTheme.palette.surface1,
-                edgeColor = UaTheme.palette.hairline,
-                shadow = false,
-            )
-            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
-            .padding(16.dp),
+            .panelSurface(RoundedCornerShape(20.dp))
+            .tvFocus().clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(14.dp))
                 .background(UaTheme.palette.azure.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -153,14 +150,16 @@ internal fun SettingsNavigationRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                subtitle,
-                style = Caption,
-                color = UaTheme.palette.labelSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            if (subtitle.isNotBlank() && !subtitle.equals(title, ignoreCase = true)) {
+                Text(
+                    subtitle,
+                    style = Caption,
+                    color = UaTheme.palette.labelSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
         Icon(
             AppIcons.ChevronDown,
@@ -229,7 +228,7 @@ internal fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolea
             checked = checked,
             onCheckedChange = null,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = UaTheme.palette.labelPrimary,
+                checkedThumbColor = UaTheme.palette.accentOnFill,
                 checkedTrackColor = UaTheme.palette.azure,
                 checkedBorderColor = UaTheme.palette.azure,
                 uncheckedThumbColor = UaTheme.palette.labelSecondary,
@@ -281,6 +280,7 @@ internal fun SettingsChip(label: String, isSelected: Boolean, onClick: () -> Uni
         modifier = Modifier
             .clip(RoundedCornerShape(RadiusItem))
             .background(if (isSelected) UaTheme.palette.azure else UaTheme.palette.surface2)
+            .tvFocus()
             .selectable(selected = isSelected, onClick = onClick, role = Role.RadioButton)
             .heightIn(min = 48.dp)
             .padding(horizontal = 14.dp, vertical = 8.dp),

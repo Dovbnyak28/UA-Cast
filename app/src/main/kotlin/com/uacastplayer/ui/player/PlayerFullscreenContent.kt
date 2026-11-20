@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.player.PlayerGesturePolicy
 import com.uacastplayer.ui.theme.GapL
+import com.uacastplayer.ui.theme.ScreenHPadding
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -43,6 +44,9 @@ internal fun FullscreenPlayerContent(
     transientState: PlayerScreenTransientState,
     sleepTimer: SleepTimerState,
     modifier: Modifier = Modifier,
+    videoSurface: @Composable (Int, Modifier) -> Unit = { resizeMode, surfaceModifier ->
+        VideoSurface(actions.viewModel, resizeMode, surfaceModifier)
+    },
 ) {
     val uiState = content.uiState
     val viewModel = actions.viewModel
@@ -62,10 +66,9 @@ internal fun FullscreenPlayerContent(
             )
             .fullscreenGestureInput(actions, environment, transientState),
     ) {
-        VideoSurface(
-            viewModel = viewModel,
-            resizeMode = content.videoResizeMode,
-            modifier = Modifier
+        videoSurface(
+            content.videoResizeMode,
+            Modifier
                 .fillMaxSize()
                 .onGloballyPositioned {
                     transientState.videoBounds = it.boundsInWindow().toEnclosingRect()
@@ -91,6 +94,7 @@ private fun Modifier.fullscreenGestureInput(
             zone = PlayerGesturePolicy.zoneFor(offset.x / size.width.toFloat())
             horizontalTravel = 0f
             transientState.volumeLevel = environment.audioManager.currentVolumeFraction()
+            environment.activity?.let { transientState.brightnessLevel = initialBrightnessLevel(it) }
         },
         onDragCancel = { transientState.volumeLevel = environment.audioManager.currentVolumeFraction() },
         onDragEnd = {
@@ -161,6 +165,8 @@ private fun FullscreenControls(
     if (!transientState.controlsVisible) return
     val uiState = content.uiState
     val viewModel = actions.viewModel
+    val epg = content.epgState
+    val programme = rememberPlayerProgramme(uiState.currentChannel, epg)
     PlayerControlsOverlay(
         uiState = uiState,
         isFullscreen = true,
@@ -176,8 +182,17 @@ private fun FullscreenControls(
             }
         },
         onOpenSleepTimer = { transientState.showSleepTimerDialog = true },
+        programme = programme,
+        programmeNowMillis = epg?.nowMillis ?: 0L,
+        onOpenGuide = { transientState.showGuideSheet = true },
+        receiverControls = { ConnectedReceiverRow(content, actions) },
+        fileProgress = {
+            if (!remotePlaybackOwnsControls(uiState, content.dlnaState)) {
+                FilePlaybackSeekBar(viewModel, uiState, Modifier.padding(horizontal = ScreenHPadding))
+            }
+        },
         isDlnaCasting = content.dlnaState.connectedDevice != null,
-        onOpenDlnaSheet = { transientState.showDevicePicker = true },
+        onOpenDlnaSheet = { transientState.showDlnaSheet = true },
         onOpenActions = { transientState.showActionsSheet = true },
         onSelectPreview = { viewModel.navigation.requestSwitch(it.index) },
     )
@@ -206,6 +221,7 @@ private fun FullscreenPlaybackStatus(
     }
     if (uiState.fatalError) {
         PlaybackFailureCard(
+            localVideo = uiState.currentChannel?.localVideo != null,
             canGoNext = uiState.canGoNext,
             onRetry = actions.viewModel::retryCurrentChannel,
             onNext = actions.viewModel.navigation::requestNext,

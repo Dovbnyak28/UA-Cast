@@ -42,22 +42,4 @@ data class PremiumSectionState(
     val connection: BillingConnectionState = BillingConnectionState.DISCONNECTED,
     val developerStates: List<String> = emptyList(),
     val onDeveloperStateSelected: (String) -> Unit = {},
-) {
-
-    /**
-     * Whole days left before the current entitlement lapses, or null when nothing is counting down.
-     *
-     * Rounded up, because "0 days left" on a trial that still has hours in it is a lie in the
-     * direction that costs the user something.
-     */
-    fun daysRemaining(nowMillis: Long): Int? {
-        val expiry = entitlements.license.expiresAtMillis
-        if (expiry == null || entitlements.hasLapsed) return null
-        val remaining = expiry - nowMillis
-        return if (remaining <= 0) null else ((remaining + MILLIS_PER_DAY - 1) / MILLIS_PER_DAY).toInt()
-    }
-
-    private companion object {
-        const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
-    }
-}
+)

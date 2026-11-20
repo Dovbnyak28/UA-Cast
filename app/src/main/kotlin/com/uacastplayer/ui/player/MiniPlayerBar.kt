@@ -5,8 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +20,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import com.uacastplayer.ui.theme.miniPlayerHeight
+import com.uacastplayer.ui.theme.raisedSurface
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -41,11 +43,8 @@ import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
-import com.uacastplayer.ui.theme.MiniPlayerBarHeight
-import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
-private const val VIDEO_ASPECT_RATIO = 16f / 9f
 private val BufferingIndicatorSize = 20.dp
 private val BufferingIndicatorStrokeWidth = 2.dp
 
@@ -77,12 +76,15 @@ fun MiniPlayerBar(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val channel = uiState.currentChannel ?: return
+    val fontScale = LocalDensity.current.fontScale
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(MiniPlayerBarHeight)
-            .raisedSurface(RoundedCornerShape(16.dp), UaTheme.palette.surface1, shadow = true)
+            .height(miniPlayerHeight(fontScale))
+            .raisedSurface(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                UaTheme.colors.material.surfaceContainerHigh, edgeColor = UaTheme.colors.material.outlineVariant,
+                shadow = false)
             .clickable(
                 role = Role.Button,
                 onClickLabel = stringResource(R.string.player_fullscreen),
@@ -94,8 +96,7 @@ fun MiniPlayerBar(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .aspectRatio(VIDEO_ASPECT_RATIO)
+                .size(width = 64.dp, height = 42.dp)
                 .clip(RoundedCornerShape(ChannelLogoRadius)),
             contentAlignment = Alignment.Center,
         ) {
@@ -105,7 +106,7 @@ fun MiniPlayerBar(
                 VideoSurface(
                     viewModel = viewModel,
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-                    modifier = Modifier.fillMaxHeight().aspectRatio(VIDEO_ASPECT_RATIO),
+                    modifier = Modifier.matchParentSize(),
                 )
             }
             if (uiState.isBuffering && !uiState.isCasting) {
@@ -124,22 +125,19 @@ fun MiniPlayerBar(
                     style = BodyText,
                     color = UaTheme.palette.labelPrimary,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (uiState.isCasting) {
-                    Text(
-                        text = stringResource(R.string.player_mini_on_tv_badge),
-                        style = Caption,
-                        color = UaTheme.palette.accentText,
-                        modifier = Modifier.padding(start = 6.dp),
-                    )
-                }
             }
-            val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
+            val programme = remember(channel, epgState.data, epgState.nowMillis) {
                 epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
             }
-            programme?.current?.title?.let { title ->
-                Text(text = title, style = Caption, color = UaTheme.palette.labelSecondary, maxLines = 1)
+            val subtitle = miniPlayerSubtitle(
+                if (uiState.isCasting) stringResource(R.string.player_mini_on_tv_badge) else null,
+                programme?.current?.title)
+            subtitle?.let { title ->
+                Text(text = title, style = Caption, color = UaTheme.palette.labelSecondary, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
             }
         }
 
@@ -159,4 +157,10 @@ fun MiniPlayerBar(
             modifier = Modifier.padding(start = 4.dp),
         )
     }
+}
+
+internal fun miniPlayerSubtitle(onTvLabel: String?, programmeTitle: String?): String? = when {
+    onTvLabel == null -> programmeTitle
+    programmeTitle == null -> onTvLabel
+    else -> "$onTvLabel · $programmeTitle"
 }

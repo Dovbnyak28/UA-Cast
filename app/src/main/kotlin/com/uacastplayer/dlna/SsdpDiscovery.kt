@@ -52,6 +52,10 @@ private const val MAX_DEVICE_DESCRIPTION_BYTES = 256 * 1024
 private const val RECEIVE_BUFFER_BYTES = 4096
 private const val MULTICAST_LOCK_TAG = "UACastPlayer:dlnaDiscovery"
 
+/** Keep the packet sender until the description fetch; hostname validation can block in DNS and
+ * must not run inside the four-second UDP receive loop. */
+private data class PendingLocation(val url: String, val sender: InetAddress)
+
 /**
  * SSDP M-SEARCH discovery for `urn:schemas-upnp-org:service:AVTransport:1` renderers, plus the
  * follow-up device-description fetch that turns a LOCATION url into a [DlnaDevice]. This class is
@@ -104,8 +108,8 @@ class SsdpDiscovery(
      * no narrower type that covers all of that here - the same block spans socket setup, send, and
      * receive. */
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun collectLocations(): List<String> {
-        val locations = LinkedHashSet<String>()
+    private suspend fun collectLocations(): List<PendingLocation> {
+        val locations = LinkedHashSet<PendingLocation>()
         try {
             DatagramSocket().use { socket ->
                 socket.soTimeout = RECEIVE_POLL_TIMEOUT_MILLIS
@@ -170,7 +174,7 @@ class SsdpDiscovery(
     private suspend fun receiveResponsesUntilDeadline(
         socket: DatagramSocket,
         deadlineNanos: Long,
-        locations: MutableSet<String>,
+        locations: MutableSet<PendingLocation>,
     ) {
         val buffer = ByteArray(RECEIVE_BUFFER_BYTES)
         while (currentCoroutineContext().isActive && System.nanoTime() < deadlineNanos) {
@@ -197,19 +201,20 @@ class SsdpDiscovery(
      * hostile network can no longer grow the set without limit, and the parse is skipped along with
      * it. Receiving continues rather than breaking out, so the window still ends when it always did.
      */
-    private fun collectLocationFrom(packet: DatagramPacket, locations: MutableSet<String>) {
+    private fun collectLocationFrom(packet: DatagramPacket, locations: MutableSet<PendingLocation>) {
         if (locations.size >= MAX_LOCATIONS) return
         val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
         SsdpResponseParser.parse(text).location
-            ?.let { UpnpHttpEndpoint.discoveryLocation(it, packet.address) }
-            ?.let { locations += it }
+            ?.let { UpnpHttpEndpoint.discoveryCandidate(it, packet.address) }
+            ?.let { locations += PendingLocation(it, packet.address) }
     }
 
     /** One unreachable or misbehaving renderer must not lose the whole discovery result - a device
      * whose description cannot be fetched is simply dropped from the list (see the mapNotNull in
      * [discover]), which is why anything thrown here degrades to null rather than propagating. */
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun fetchDevice(location: String): DlnaDevice? {
+    private suspend fun fetchDevice(candidate: PendingLocation): DlnaDevice? {
+        val location = UpnpHttpEndpoint.discoveryLocation(candidate.url, candidate.sender) ?: return null
         return try {
             val request = Request.Builder().url(location).build()
             httpClient.newCall(request).executeCancellable { response ->

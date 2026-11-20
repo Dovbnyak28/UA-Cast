@@ -7,12 +7,12 @@ import android.os.CancellationSignal
 import android.provider.OpenableColumns
 import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.concurrent.runCatchingNonFatal
+import com.uacastplayer.data.cancelProviderSafely
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.core.io.BoundedByteReader
 import com.uacastplayer.core.io.BoundedBytesResult
 import com.uacastplayer.playlist.CharsetDetector
 import com.uacastplayer.playlist.PlaylistLoadResult
-import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -44,6 +44,7 @@ class PlaylistFileLoader(
      * the app exactly where it was before, reading from a grant that lasts as long as the task.
      */
     fun rememberAccess(uri: Uri) {
+        if (uri.scheme != "content") return // App-owned restored files need no SAF grant.
         runCatchingNonFatal {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }.onFailure { e ->
@@ -65,7 +66,7 @@ class PlaylistFileLoader(
     suspend fun documentName(uri: Uri): String? = withContext(ioDispatcher) {
         suspendCancellableCoroutine { continuation ->
             val signal = CancellationSignal()
-            continuation.invokeOnCancellation { signal.cancel() }
+            continuation.invokeOnCancellation { signal.cancelProviderSafely() }
             val name = runCatchingNonFatal {
                 context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null, signal)
                     ?.use { cursor ->

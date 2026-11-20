@@ -22,6 +22,7 @@ sealed interface CodecIncompatibility {
 }
 
 data class CastPlaybackState(
+    val receiverName: String? = null,
     val isSessionConnected: Boolean = false,
     val loadPhase: CastLoadPhase = CastLoadPhase.IDLE,
     val receiverStatus: ReceiverStatus = ReceiverStatus.DISCONNECTED,

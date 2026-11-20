@@ -4,8 +4,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import com.uacastplayer.core.media.StreamMimeClassifier
 import com.uacastplayer.core.media.StreamType
+import com.uacastplayer.playlist.M3uChannel
 
 object MediaItemFactory {
+
+    fun forChannel(channel: M3uChannel): MediaItem = channel.localVideo?.let { video ->
+        MediaItem.Builder().setUri(video.uri).setMimeType(video.mimeType).build()
+    } ?: forChannel(channel.streamUrl)
 
     fun forChannel(streamUrl: String, progressive: Boolean = false): MediaItem {
         val mimeType = if (progressive) null else when (StreamMimeClassifier.classify(streamUrl)) {

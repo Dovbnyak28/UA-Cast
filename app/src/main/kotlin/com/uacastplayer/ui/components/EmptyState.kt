@@ -3,13 +3,17 @@ package com.uacastplayer.ui.components
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,17 +24,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.BodyRegular
-import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.UaCastTheme
+import com.uacastplayer.ui.theme.Title
+import com.uacastplayer.ui.theme.CardTitle
+import com.uacastplayer.ui.theme.panelSurface
 
 private const val CONTENT_SIZE_ANIMATION_MILLIS = 220
 
-/** Full-screen centered icon/title/subtitle - for a screen (or tab) with no other content. */
+/** A top-aligned recovery card; bounded short windows scroll instead of clipping the action. */
 @Composable
 fun EmptyState(
     icon: ImageVector,
@@ -40,13 +47,17 @@ fun EmptyState(
     primaryActionLabel: String? = null,
     onPrimaryAction: (() -> Unit)? = null,
 ) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp),
+        contentAlignment = Alignment.TopCenter) {
+        val scroll = rememberScrollState()
         IconHeader(
             icon = icon,
             title = title,
             subtitle = subtitle,
             primaryActionLabel = primaryActionLabel,
             onPrimaryAction = onPrimaryAction,
+            compact = maxHeight < 300.dp,
+            modifier = if (constraints.hasBoundedHeight) Modifier.verticalScroll(scroll) else Modifier,
         )
     }
 }
@@ -61,35 +72,42 @@ fun IconHeader(
     subtitle: String? = null,
     primaryActionLabel: String? = null,
     onPrimaryAction: (() -> Unit)? = null,
+    compact: Boolean = false,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.animateContentSize(tween(CONTENT_SIZE_ANIMATION_MILLIS)).padding(32.dp),
+        modifier = modifier.widthIn(max = 440.dp).fillMaxWidth()
+            .then(if (animationsAllowed()) {
+                Modifier.animateContentSize(tween(CONTENT_SIZE_ANIMATION_MILLIS))
+            } else Modifier)
+            .panelSurface(RoundedCornerShape(24.dp), featured = true).padding(if (compact) 16.dp else 24.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(84.dp)
-                .clip(CircleShape)
-                .background(UaTheme.palette.surface1),
+                .size(if (compact) 44.dp else 64.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(UaTheme.palette.azure.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 icon,
                 contentDescription = null,
                 tint = UaTheme.palette.azure,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(30.dp),
             )
         }
         Text(
             text = title,
-            style = BodyText,
+            style = if (compact) CardTitle else Title,
+            textAlign = TextAlign.Center,
             color = UaTheme.palette.labelPrimary,
-            modifier = Modifier.padding(top = 20.dp),
+            modifier = Modifier.padding(top = if (compact) 12.dp else 20.dp),
         )
         if (subtitle != null) {
             Text(
                 text = subtitle,
                 style = BodyRegular,
+                textAlign = TextAlign.Center,
                 color = UaTheme.palette.labelSecondary,
                 modifier = Modifier.padding(top = 6.dp),
             )

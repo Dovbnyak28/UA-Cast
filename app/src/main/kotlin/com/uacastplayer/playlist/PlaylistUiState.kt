@@ -49,4 +49,6 @@ data class PlaylistUiState(
     val sourceReadyToSave: Boolean = false,
 ) {
     val hasChannels: Boolean get() = channels.isNotEmpty()
+    /** Refresh can retry startup storage failure even before an active source URL is available. */
+    val canRetryLoading: Boolean get() = sourceUrl != null || error == PlaylistError.Storage
 }

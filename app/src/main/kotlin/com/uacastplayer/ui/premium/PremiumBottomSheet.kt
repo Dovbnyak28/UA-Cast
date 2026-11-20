@@ -19,6 +19,7 @@ import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.GapL
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 
 /**
  * The short path to premium: what it costs and how to restore it, without leaving the screen the
@@ -33,7 +34,6 @@ import com.uacastplayer.ui.theme.UaTheme
 @Composable
 fun PremiumBottomSheet(
     section: PremiumSectionState,
-    nowMillis: Long,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -42,6 +42,8 @@ fun PremiumBottomSheet(
         sheetState = sheetState,
         containerColor = UaTheme.palette.surface1,
     ) {
+        // A missing store/product list must not remove the modal's phone-remote target.
+        TvDialogInputRegistration()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -55,7 +57,7 @@ fun PremiumBottomSheet(
                 color = UaTheme.palette.labelPrimary,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-            PremiumContent(section = section, nowMillis = nowMillis, showIntro = false)
+            PremiumContent(section = section, showIntro = false)
         }
     }
 }

@@ -68,13 +68,14 @@ fun Modifier.raisedSurface(
     shadow: Boolean = false,
 ): Modifier {
     val liftAmount = UaTheme.palette.surfaceLiftAmount
+    val reduced = LocalReducedEffects.current
     val shadowColor = UaTheme.palette.shadowSoft
     val brush = remember(base, liftAmount) {
         Brush.verticalGradient(listOf(lighten(base, liftAmount), base))
     }
     return this
         .let { modifier ->
-            if (shadow) {
+            if (shadow && !reduced) {
                 modifier.shadow(RaisedShadowElevation, shape, ambientColor = shadowColor, spotColor = shadowColor)
             } else {
                 modifier
@@ -99,10 +100,11 @@ fun Modifier.raisedSurface(
     edgeColor: Color = UaTheme.palette.edgeHighlightAccent,
     shadow: Boolean = false,
 ): Modifier {
+    val reduced = LocalReducedEffects.current
     val shadowColor = UaTheme.palette.shadowSoft
     return this
         .let { modifier ->
-            if (shadow) {
+            if (shadow && !reduced) {
                 modifier.shadow(RaisedShadowElevation, shape, ambientColor = shadowColor, spotColor = shadowColor)
             } else {
                 modifier

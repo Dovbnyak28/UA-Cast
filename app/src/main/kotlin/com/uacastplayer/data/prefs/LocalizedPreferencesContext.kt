@@ -31,7 +31,10 @@ fun Context.withAppLocale(): Context {
     // language-split hazard. This only mirrors the locale the user already selected; it never
     // chooses or downloads a locale on its own.
     val locale = Locale.forLanguageTag(currentAppLanguage().code)
-    val configuration = Configuration(resources.configuration)
+    // Override only the language. Copying the complete base Configuration also pins its
+    // font scale, density, window dimensions and uiMode, preventing the Activity from inheriting
+    // later system/window changes (including accessibility fonts and a resized TV/phone window).
+    val configuration = Configuration()
     configuration.setLocale(locale)
     return createConfigurationContext(configuration)
 }

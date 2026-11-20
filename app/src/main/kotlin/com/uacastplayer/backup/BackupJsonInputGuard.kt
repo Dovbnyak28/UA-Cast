@@ -12,7 +12,7 @@ internal object BackupJsonInputGuard {
     const val MAX_OBJECTS = 50_000
     private const val MAX_DEPTH = 64
     private const val MAX_COMMAS = 750_000
-    private const val MAX_PROPERTIES = 500_000
+    const val MAX_PROPERTIES = 500_000
 
     fun accepts(text: String): Boolean = Scanner().accepts(text)
 

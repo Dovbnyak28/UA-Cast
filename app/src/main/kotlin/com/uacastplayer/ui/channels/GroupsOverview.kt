@@ -1,8 +1,8 @@
 package com.uacastplayer.ui.channels
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.panelSurface
+import com.uacastplayer.ui.theme.CardTitle
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -44,7 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.playlist.withPlaylistCpu
+import com.uacastplayer.data.playlist.searchPlaylistChannels
 import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
@@ -55,15 +55,15 @@ import com.uacastplayer.playlist.GroupOrderPolicy
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.groupDisplayKey
+import com.uacastplayer.ui.components.controlFeedback
+import com.uacastplayer.ui.tv.tvFocus
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.rememberEntryStagger
 import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.DUR_PRESS
-import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.GroupTileMinWidth
 import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
@@ -71,7 +71,6 @@ import com.uacastplayer.ui.theme.RadiusField
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.Title
-import com.uacastplayer.ui.theme.raisedSurface
 import java.io.File
 
 /**
@@ -104,6 +103,8 @@ internal fun GroupsOverviewGrid(
     onPinGroup: (String) -> Unit,
     onHideGroup: (String) -> Unit,
     onClearGroupOverride: (String) -> Unit,
+    onGuide: (M3uChannel) -> Unit = {},
+    epgState: com.uacastplayer.epg.EpgUiState = com.uacastplayer.epg.EpgUiState(),
 ) {
     // Search (below) deliberately keeps searching every group, hidden ones included - hiding a
     // group only affects the overview grid; its channels stay reachable via global search.
@@ -114,10 +115,14 @@ internal fun GroupsOverviewGrid(
     // Keyed on the ordered list, so pinning or hiding a group replays the wave over the new order
     // rather than leaving the moved cards as the only static things on screen.
     val entryStagger = rememberEntryStagger(orderedGroups)
+    val animateItems = animationsAllowed()
     val totalChannels = remember(orderedGroups) { orderedGroups.sumOf { it.channels.size } }
     // LIST mode stays a literal single column (a list of group cards); GRID/LARGE_ICONS lets the
     // width fit as many ~GroupTileMinWidth tiles as the screen allows, unlike a fixed column count.
-    val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(GroupTileMinWidth)
+    val categoryWidth = if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= LARGE_CATALOG_FONT_SCALE) {
+        224.dp
+    } else 128.dp
+    val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(categoryWidth)
 
     var query by rememberSaveable { mutableStateOf("") }
     // Debounced so a burst of keystrokes costs one search rather than one per character - this
@@ -134,7 +139,7 @@ internal fun GroupsOverviewGrid(
             // Search belongs to the same bounded CPU lane as playlist parsing. Media3 recovery can
             // saturate Dispatchers.Default; making search wait behind it left the Channels screen
             // apparently empty even though the playlist itself had already loaded.
-            withPlaylistCpu { ChannelSearch.search(groups, trimmedQuery) }
+            searchPlaylistChannels(groups, trimmedQuery)
         }
     }
 
@@ -144,7 +149,7 @@ internal fun GroupsOverviewGrid(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = stringResource(R.string.channels_groups_title),
                     style = Title,
@@ -171,7 +176,7 @@ internal fun GroupsOverviewGrid(
             onValueChange = { query = it },
             placeholder = { Text(stringResource(R.string.channels_search_all_hint)) },
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
-            trailingIcon = if (query.isNotBlank()) {
+            trailingIcon = if (query.isNotEmpty()) {
                 {
                     IconButton(onClick = { query = "" }) {
                         Icon(
@@ -211,14 +216,14 @@ internal fun GroupsOverviewGrid(
                         onClick = { onGroupClick(grouped) },
                         onLongClick = { groupActionsFor = grouped },
                         modifier = Modifier
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = key, index = index),
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, key, index, animationsEnabled = animateItems),
                     )
                 }
             }
 
             is ChannelSearchOutcome.Matches -> if (outcome.results.isEmpty()) {
-                NoSearchResults(trimmedQuery)
+                NoSearchResults(trimmedQuery, onClearSearch = { query = "" })
             } else {
                 ChannelSearchResultsList(
                     results = outcome.results,
@@ -227,6 +232,8 @@ internal fun GroupsOverviewGrid(
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
                     onChannelClick = onChannelClick,
+                    onGuide = onGuide,
+                    epgState = epgState,
                 )
             }
 
@@ -244,6 +251,8 @@ internal fun GroupsOverviewGrid(
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
                     onChannelClick = onChannelClick,
+                    onGuide = onGuide,
+                    epgState = epgState,
                 )
             }
         }
@@ -310,19 +319,15 @@ private fun GroupCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) PRESS_SCALE_ROUND else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "groupCardScale",
-    )
+
     val shape = RoundedCornerShape(RadiusList)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_ROUND)
             // Inside a LazyVerticalGrid (GroupsOverviewGrid) - shadow = false, see
             // docs/DESIGN_SYSTEM.md "§D Depth".
-            .raisedSurface(shape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
+            .panelSurface(shape).tvFocus(shape)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -332,11 +337,12 @@ private fun GroupCard(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .heightIn(min = 92.dp)
-            .padding(14.dp),
+            .heightIn(min = 104.dp)
+            .padding(16.dp),
     ) {
         val label = groupLabel(grouped.group)
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -351,14 +357,6 @@ private fun GroupCard(
                     modifier = Modifier.size(19.dp),
                 )
             }
-            Text(
-                text = label,
-                style = BodyText.copy(fontFamily = UaTheme.palette.displayFontFamily),
-                color = UaTheme.palette.labelPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(start = 10.dp),
-            )
             val quality = groupQualityBadge(label)
             if (quality != null) {
                 Text(
@@ -374,6 +372,14 @@ private fun GroupCard(
                 )
             }
         }
+        Text(
+            text = label,
+            style = CardTitle,
+            color = UaTheme.palette.labelPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 10.dp),
+        )
         Text(
             text = pluralStringResource(R.plurals.channels_total_count, grouped.channels.size, grouped.channels.size),
             style = Caption,

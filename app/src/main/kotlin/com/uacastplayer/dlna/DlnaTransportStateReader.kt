@@ -9,7 +9,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 internal enum class DlnaTransportHealth { ACTIVE, INACTIVE, UNREACHABLE, UNSUPPORTED }
 
 /** A small, bounded status query; never opens the media URL or a second provider connection. */
-internal class DlnaTransportStateReader(private val client: OkHttpClient) {
+internal class DlnaTransportStateReader(client: OkHttpClient) {
+    private val client = client.forUpnpControl()
     suspend fun read(controlUrl: String): DlnaTransportHealth = runCatchingNonFatal {
         val request = Request.Builder().url(controlUrl)
             .header("SOAPACTION", AvTransportSoapBuilder.soapAction("GetTransportInfo"))
@@ -22,7 +23,6 @@ internal class DlnaTransportStateReader(private val client: OkHttpClient) {
 
     companion object {
         private val successCodes = 200..299
-        private val stateTag = Regex("<(?:[\\w-]+:)?CurrentTransportState[^>]*>([^<]*)</")
 
         internal fun parse(code: Int, body: String): DlnaTransportHealth = when {
             code !in successCodes -> if (UpnpFault.parse(body).code == "401") {
@@ -30,7 +30,9 @@ internal class DlnaTransportStateReader(private val client: OkHttpClient) {
             } else {
                 DlnaTransportHealth.UNREACHABLE
             }
-            else -> when (stateTag.find(body)?.groupValues?.get(1)?.trim()?.uppercase()) {
+            else -> when (
+                SoapResponseFields.read(body, "CurrentTransportState")["CurrentTransportState"]?.uppercase()
+            ) {
                 "PLAYING", "PAUSED_PLAYBACK", "RECORDING" -> DlnaTransportHealth.ACTIVE
                 "STOPPED", "NO_MEDIA_PRESENT", "TRANSITIONING" -> DlnaTransportHealth.INACTIVE
                 else -> DlnaTransportHealth.UNSUPPORTED

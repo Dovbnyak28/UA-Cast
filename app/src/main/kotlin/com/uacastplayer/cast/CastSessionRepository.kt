@@ -11,11 +11,11 @@ import com.uacastplayer.core.concurrent.AppDispatchers
 import com.uacastplayer.core.net.AppHttp
 import com.uacastplayer.data.cast.IncompatibilityMemoryStore
 import com.uacastplayer.data.cast.LocalNetworkAddress
-import com.uacastplayer.data.cast.TsFirstSegmentDiagnostic
 import com.uacastplayer.diagnostics.CastRouteOutcome
 import com.uacastplayer.diagnostics.CorrelationId
 import com.uacastplayer.diagnostics.RemuxEffectivenessStore
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.media.LocalVideo
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineDispatcher
@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private const val TAG = "CastSessionRepository"
 // The direct-mode watchdog only, now that the stall watchdog ticks on delivered bytes instead (see
@@ -56,11 +55,12 @@ data class CastChannel(
     val userAgent: String? = null,
     val referrer: String? = null,
     /** The channel's artwork URL, shown on the receiver - see [CastMediaLoader]. Resolved by the
-     * caller out of the full icon candidate chain, not just `tvg-logo`, so the TV shows the same
-     * logo the phone does - see [com.uacastplayer.icons.CastArtworkPolicy]. Not part of
+     * caller from an explicitly user-added icon pack, never playlist/EPG/default artwork.
+     * See [com.uacastplayer.icons.CastArtworkPolicy]. Not part of
      * [LoadRetryContext] because nothing about *retrying* depends on it: a wrong thumbnail on a
      * racing channel switch is cosmetic, where a wrong stream URL would not be. */
     val logoUrl: String? = null,
+    val localVideo: LocalVideo? = null,
 )
 
 /** What [CastSessionRepository.applyLoadResult] needs to retry on the proxy if a direct load fails. */
@@ -76,7 +76,7 @@ private data class LoadRetryContext(
  * back to the player) wrapping the real GMS Cast callbacks. Owns the full direct-then-proxy
  * delivery pipeline: direct-first playback per [CastDeliveryStrategy], a watchdog that falls back
  * to the local [CastProxySession] if the receiver isn't PLAYING within 4s (or immediately if
- * [TsFirstSegmentDiagnostic] already flagged the codec as unsupported), and [IncompatibilityMemoryStore]
+ * a previous proxy attempt already established the source/codec), and [IncompatibilityMemoryStore]
  * so a (stream, receiver) pair that failed once goes straight to proxy for the next 30 days.
  * [CastLoadResultReducer] / [CastReceiverStatusReducer] remain the pure source of truth for state
  * transitions; this class is the impure glue driving them from real callbacks and timers.
@@ -89,18 +89,14 @@ class CastSessionRepository private constructor(
     private val appContext = context.applicationContext
     private val httpClient = AppHttp.client(connectTimeoutSeconds = 10, readTimeoutSeconds = 15)
     private val remuxEffectivenessStore = RemuxEffectivenessStore.getInstance(appContext)
-    private val proxy = CastProxySession(appContext, httpClient)
+    private val proxy = CastProxySession(appContext, httpClient, ::onProxySourceObserved)
     private val incompatibilityStore = IncompatibilityMemoryStore(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var currentSession: CastSession? = null
     private var currentReceiverId: String? = null
     private var activeChannel: CastChannel? = null
-    private val diagnosticCoordinator = CastDiagnosticCoordinator(
-        scope = scope,
-        activeStreamUrl = { activeChannel?.streamUrl },
-        diagnose = { streamUrl -> TsFirstSegmentDiagnostic.diagnose(streamUrl, httpClient) },
-    )
+    private val diagnosticCoordinator = CastDiagnosticCoordinator()
     private var watchdogJob: Job? = null
     private var suspensionJob: Job? = null
     private var suspendedChannel: CastChannel? = null
@@ -268,6 +264,14 @@ class CastSessionRepository private constructor(
      * Anything else (Ignore, GiveUp, or a status this isn't even about) falls through to the
      * existing reducer unchanged. */
     private fun handleReceiverStatus(status: ReceiverStatus, idleReason: IdleReason, selfInitiated: Boolean) {
+        // FINISHED is normal for a file, but a recovery signal for an endless IPTV channel.
+        if (bufferedVideoFinished(activeChannel, status, idleReason)) {
+            watchdogJob?.cancel()
+            playbackWatchdogs.cancelAll()
+            recovery.cancel()
+            _state.update { it.withBufferedVideoFinished() }
+            return
+        }
         // Centralized here so synthetic watchdog IDLE events observe and close the same PLAYING
         // window as callbacks received from the Cast SDK.
         val stablePlayingMillis = trackPlayingWindow(status, android.os.SystemClock.elapsedRealtime())
@@ -355,9 +359,10 @@ class CastSessionRepository private constructor(
             if (!_state.value.isSessionSuspended) {
                 startPlayback(channel.streamUrl, channel.title, channel.userAgent, channel.referrer)
             }
-        } else {
-            diagnosticCoordinator.scheduleWarmup(channel.streamUrl)
         }
+        // Remember the channel without probing while it plays locally. A speculative second GET
+        // can displace Media3 on one-connection IPTV accounts, even with no Cast session at all.
+        // Uncached codec/source checks remain part of the explicit Cast attempt below.
     }
 
     private fun onSessionActive(session: CastSession, rawSessionId: String? = null) {
@@ -368,6 +373,7 @@ class CastSessionRepository private constructor(
             expectedContentId = expectedReceiverContentId,
             actualContentId = status?.mediaInfo?.contentId,
             status = status?.let { mapPlayerState(it.playerState) } ?: ReceiverStatus.IDLE,
+            completedBufferedItem = bufferedVideoFinished(activeChannel, status),
         )
         suspendedChannel = null
         _state.update { it.copy(isSessionSuspended = false, isRecovering = false) }
@@ -383,6 +389,7 @@ class CastSessionRepository private constructor(
             remoteMediaClientCallback = null
         }
         currentSession = session
+        _state.update { it.copy(receiverName = session.castDevice?.friendlyName) }
         currentReceiverId = session.castDevice?.deviceId
         // A resume callback carries the same CastSession instance. Keep the proxy token stable
         // across that lifecycle edge: changing it would restart the local server and invalidate a
@@ -475,7 +482,6 @@ class CastSessionRepository private constructor(
         proxy.beginPlaybackAttempt()
         watchdogJob?.cancel()
         recovery.cancel()
-        diagnosticCoordinator.cancelWarmup()
         playbackWatchdogs.cancelAll()
         recovery.reset()
         routeHistory.reset()
@@ -483,8 +489,14 @@ class CastSessionRepository private constructor(
         val receiverId = currentReceiverId.orEmpty()
         val record = incompatibilityStore.lookup(streamUrl, receiverId)
         val knownIncompatible = IncompatibilityMemoryPolicy.shouldGoStraightToProxy(record, System.currentTimeMillis())
-        val mode = CastDeliveryStrategy.initialMode(knownIncompatible)
-        lastKnownSourceKind = null
+        val cached = diagnosticCoordinator.cached(CastChannel(0, streamUrl, title, userAgent, referrer))
+        val cachedDecision = cached?.let { CastDeliveryStrategy.onDiagnosticResult(it.verdict, it.sourceKind) }
+        val mode = if (activeChannel?.localVideo != null || cachedDecision == CastRouteDecision.ProxyImmediately) {
+            CastDeliveryMode.Proxy
+        } else {
+            CastDeliveryStrategy.initialMode(knownIncompatible)
+        }
+        lastKnownSourceKind = cached?.sourceKind
         expectedReceiverContentId = null
         _state.update {
             it.copy(
@@ -494,7 +506,7 @@ class CastSessionRepository private constructor(
                 isRecovering = false,
                 recoveringWithoutPlayback = false,
                 proxyUnavailableIpv4Only = false,
-                likelyCompatibilityHint = null,
+                likelyCompatibilityHint = cached?.verdict as? CastCompatibilityVerdict.LikelyCompatible,
             )
         }
 
@@ -502,16 +514,17 @@ class CastSessionRepository private constructor(
             CastDeliveryMode.Direct -> loadDirectWithWatchdog(streamUrl, title, userAgent, referrer)
             CastDeliveryMode.Proxy -> startProxyAndLoad(streamUrl, title, userAgent, referrer)
         }
+        // Preserve receiver replacement even with a cached codec failure. Returning before
+        // load() leaves its previous media playing, while the UI already points at this channel.
+        if (cachedDecision is CastRouteDecision.Blocked) onRouteBlocked(streamUrl, cachedDecision.verdict)
     }
 
     private fun loadDirectWithWatchdog(streamUrl: String, title: String, userAgent: String?, referrer: String?) {
+        // A remux/flattened producer owns its origin even after the receiver stops fetching the
+        // proxy. Retire it before load() can open the direct stream on a single-slot provider.
+        // Proxy -> proxy keeps its listening port and resource grace period; only Direct stops it.
+        proxy.stop()
         remuxEffectivenessStore.record(CastRouteKind.DIRECT, CastRouteOutcome.ATTEMPTED)
-        // A channel already warm (see CastDiagnosticCoordinator) skips the probe entirely - no need
-        // to race the watchdog for an answer that's already known. Read BEFORE the first load so
-        // its sourceKind informs that load's Cast content-type too (see CastContentType.of) - the
-        // whole point of warming the cache - instead of only benefiting later reloads.
-        val cached = diagnosticCoordinator.cached(streamUrl)
-        if (cached != null) lastKnownSourceKind = cached.sourceKind
         loadOnReceiver(
             streamUrl,
             LoadRetryContext(streamUrl, title, userAgent, referrer),
@@ -523,24 +536,29 @@ class CastSessionRepository private constructor(
         ) return
         val directGeneration = loadGeneration.current
         watchdogJob = scope.launch {
-            launch {
-                val outcome = if (cached != null) {
-                    AppLog.d(TAG) { "cast route: using cached verdict=${cached.verdict} source=${cached.sourceKind}" }
-                    cached.verdict to cached.sourceKind
-                } else {
-                    diagnosticCoordinator.probe(streamUrl)
-                }
-                val (verdict, sourceKind) = outcome ?: return@launch
-                if (!loadGeneration.isCurrent(directGeneration) ||
-                    _state.value.deliveryMode != CastDeliveryMode.Direct
-                ) return@launch
-                lastKnownSourceKind = sourceKind
-                handleDiagnosticVerdict(LoadRetryContext(streamUrl, title, userAgent, referrer), verdict, sourceKind)
-            }
+            // The receiver owns the origin connection. A second GET from a diagnostic can
+            // displace it on single-slot IPTV accounts; inspect only existing proxy responses.
             delay(WATCHDOG_TIMEOUT_MILLIS)
+            if (!loadGeneration.isCurrent(directGeneration)) return@launch
             if (_state.value.receiverStatus != ReceiverStatus.PLAYING && _state.value.codecIncompatibility == null) {
                 fallBackToProxyIfStillDirect(streamUrl, title, userAgent, referrer, "watchdog_timeout")
             }
+        }
+    }
+
+    private fun onProxySourceObserved(observed: CastProxyDiagnostic) {
+        scope.launch {
+            if (currentSession == null || _state.value.deliveryMode != CastDeliveryMode.Proxy ||
+                !proxy.isDiagnosticCurrent(observed)
+            ) return@launch
+            val channel = activeChannel ?: return@launch
+            val diagnostic = observed.source.diagnostic
+            val verdict = diagnosticCoordinator.record(channel, diagnostic)
+            lastKnownSourceKind = diagnostic.sourceKind
+            handleDiagnosticVerdict(
+                LoadRetryContext(channel.streamUrl, channel.title, channel.userAgent, channel.referrer),
+                verdict, diagnostic.sourceKind,
+            )
         }
     }
 
@@ -571,11 +589,9 @@ class CastSessionRepository private constructor(
         }
     }
 
-    /** A confirmed-incompatible codec verdict: remuxing the container never fixes a codec problem
-     * (see [com.uacastplayer.proxy.RawTsRemuxActivation]'s own doc), so - unlike the generic
-     * watchdog-timeout fallback - this never proceeds to the proxy at all, and the (stream,
-     * receiver) pair is recorded as incompatible immediately rather than waiting for an actual
-     * receiver-side failure to do it. */
+    /** A confirmed codec problem does not justify another container/remux recovery attempt.
+     * The current response may already be on the proxy when its in-band metadata is observed.
+     * Record the (stream, receiver) pair and expose the codec, without a separate network probe. */
     private fun onRouteBlocked(streamUrl: String, verdict: CastCompatibilityVerdict.IncompatibleVideo) {
         if (!StaleChannelGuard.isCurrent(streamUrl, activeChannel?.streamUrl)) return
         currentReceiverId?.let { incompatibilityStore.record(streamUrl, it) }
@@ -634,6 +650,7 @@ class CastSessionRepository private constructor(
         }
         val prepared = proxy.prepare(
             host, streamUrl, title, userAgent, referrer, currentSession?.castDevice?.friendlyName,
+            activeChannel?.localVideo,
         ).getOrElse { error ->
             AppLog.w(TAG) { "Cast proxy preparation failed: ${error.javaClass.simpleName}" }
             routeHistory.clearAbandonedRoute()
@@ -652,7 +669,14 @@ class CastSessionRepository private constructor(
         val client = currentSession?.remoteMediaClient ?: return
         val generation = loadGeneration.next()
         selfInitiatedTransition = true
-        _state.update { it.copy(loadPhase = CastLoadPhase.LOADING) }
+        // Only a matching status callback can prove the new media is playing. Carrying the old
+        // channel's PLAYING across load() lets both watchdogs settle even if this load never starts.
+        // Clear the old idle reason too; this is pending media, not a terminal receiver event.
+        _state.update {
+            it.copy(
+                loadPhase = CastLoadPhase.LOADING, receiverStatus = ReceiverStatus.IDLE, idleReason = IdleReason.NONE,
+            )
+        }
         // Free the phone's own upstream connection BEFORE the receiver (or the proxy's remux
         // reader) needs one - waiting for the load-Success reducer to pause local playback is too
         // late for single-connection IPTV origins, where the still-open local stream blocks the
@@ -664,7 +688,7 @@ class CastSessionRepository private constructor(
         // channel that is active right now (the recovery reload guards that with StaleChannelGuard
         // before it gets this far), and the worst a race could produce is the wrong thumbnail.
         val logoUrl = activeChannel?.logoUrl
-        val request = CastMediaLoader.buildRequest(urlToLoad, context.title, lastKnownSourceKind, logoUrl)
+        val request = CastMediaLoader.forPlayback(urlToLoad, context.title, activeChannel, lastKnownSourceKind)
         // Whether artwork went out, never the url itself (it is a third-party host, and this line
         // ends up in a shared diagnostics report). Blank-vs-absent is not worth distinguishing here
         // - CastMediaLoader treats both the same - but "we sent none at all" vs "the receiver
@@ -674,7 +698,7 @@ class CastSessionRepository private constructor(
             // A malformed provider URL or an SDK-side request validation failure must become the
             // same recoverable load failure as a rejected PendingResult, never an exception on the
             // main thread from a channel tap or a delayed recovery callback.
-            expectedReceiverContentId = urlToLoad
+            expectedReceiverContentId = request.mediaInfo?.contentId ?: urlToLoad
             client.load(request)
         } catch (error: IllegalArgumentException) {
             handleSdkLoadException(error, generation, context)
@@ -786,21 +810,6 @@ class CastSessionRepository private constructor(
             lastLocalControlEffect = effect
         }
         _sideEffects.tryEmit(effect)
-    }
-
-    private fun mapPlayerState(playerState: Int): ReceiverStatus = when (playerState) {
-        MediaStatus.PLAYER_STATE_PLAYING -> ReceiverStatus.PLAYING
-        MediaStatus.PLAYER_STATE_PAUSED -> ReceiverStatus.PAUSED
-        MediaStatus.PLAYER_STATE_BUFFERING, MediaStatus.PLAYER_STATE_LOADING -> ReceiverStatus.BUFFERING
-        else -> ReceiverStatus.IDLE
-    }
-
-    private fun mapIdleReason(reason: Int): IdleReason = when (reason) {
-        MediaStatus.IDLE_REASON_FINISHED -> IdleReason.FINISHED
-        MediaStatus.IDLE_REASON_ERROR -> IdleReason.ERROR
-        MediaStatus.IDLE_REASON_CANCELED -> IdleReason.CANCELLED
-        MediaStatus.IDLE_REASON_INTERRUPTED -> IdleReason.INTERRUPTED
-        else -> IdleReason.NONE
     }
 
     companion object {

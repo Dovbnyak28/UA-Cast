@@ -8,10 +8,10 @@ import androidx.compose.ui.text.font.FontFamily
 
 /** Which visual style is active - see docs/DESIGN_SYSTEM.md "Themes". */
 enum class AppTheme {
-    AZURE, CINEMA, MIDNIGHT;
+    AZURE, CINEMA, MIDNIGHT, DAYLIGHT, SYSTEM;
 
     companion object {
-        // Cinema (warm charcoal + champagne-gold, radial vignette on every screen) is the default
+        // Cinema (ink-blue surfaces and champagne accents) is the default
         // look for new installs - see docs/DESIGN_SYSTEM.md "Themes" for the full palette.
         val DEFAULT = CINEMA
         fun fromId(id: String?): AppTheme = entries.firstOrNull { it.name == id } ?: DEFAULT
@@ -89,11 +89,12 @@ data class UaPalette(
     /** How much lighter [raisedSurface]'s top edge gets relative to its base color, as a
      * [lighten] fraction (0f..1f) - the actual "raised" look, independent of the border. */
     val surfaceLiftAmount: Float,
-    /** Radial "spotlight" background instead of the plain top-to-bottom gradient - see appBackground(). */
+    /** Center the ambient colour field instead of placing it at the trailing edge. */
     val vignette: Boolean,
     /**
-     * Whether the screen background paints the decorative wallpaper texture at all (see
-     * appBackground()). True for the themes that want the ambient glow; false for Midnight, where
+     * Whether dark screen backgrounds paint a decorative colour field (see appBackground()).
+     * The historical property name is retained; raster wallpaper is no longer loaded.
+     * True for themes that want ambient colour; false for Midnight, where
      * the whole point is that background pixels are *off* - a near-black texture would light every
      * one of them on an OLED panel and take the contrast down with it.
      */
@@ -101,6 +102,7 @@ data class UaPalette(
     /** Pill-shaped (fully rounded) primary/secondary buttons instead of RadiusItem corners. */
     val pillButtons: Boolean,
     val secondaryButtonStyle: SecondaryButtonStyle,
+    val isDark: Boolean = true,
 )
 
 /** The palette in effect before this theme system existed - values are unchanged from Color.kt. */
@@ -154,4 +156,7 @@ val LocalUaPalette = staticCompositionLocalOf { AzureUaPalette }
 object UaTheme {
     val palette: UaPalette
         @Composable get() = LocalUaPalette.current
+
+    val colors: UaSemanticColors
+        @Composable get() = LocalUaSemanticColors.current
 }

@@ -3,9 +3,9 @@ package com.uacastplayer.premium
 /**
  * What the user holds, and until when.
  *
- * The expiry is kept beside the tier rather than folded into it, because an expired [MONTHLY] is
+ * The expiry is kept beside the tier rather than folded into it, because an expired legacy purchase is
  * not the same thing as [LicenseTier.FREE] even though both unlock the same features: one of them
- * has a person behind it who paid once and should be told their subscription lapsed, not silently
+ * has a person behind it who paid once and should be told their previous access lapsed, not silently
  * shown fewer buttons.
  *
  * @param tier what was granted.
@@ -19,6 +19,14 @@ data class License(
     val expiresAtMillis: Long? = null,
     val source: String? = null,
 ) {
+
+    /** Preserve existing paid rights/expiry while retiring all unpaid promotional tiers. Raw tier
+     * names remain readable so migration happens after the original record's MAC is verified. */
+    fun currentModel(): License = when {
+        tier == LicenseTier.LIFETIME -> this
+        tier.isPaid -> copy(tier = LicenseTier.LIFETIME)
+        else -> FREE
+    }
 
     /**
      * Whether this license still applies at [nowMillis].
@@ -49,19 +57,5 @@ data class License(
         /** What a device holds before anything else has happened. */
         val FREE = License(LicenseTier.FREE)
 
-        /** Length of the automatic first-launch trial. */
-        const val TRIAL_DURATION_MILLIS: Long = 14L * 24 * 60 * 60 * 1000
-
-        /**
-         * The trial a fresh install is granted, ending [TRIAL_DURATION_MILLIS] after [nowMillis].
-         *
-         * Granted once and stored, rather than recomputed from an install date: a stored end date
-         * is a fact, while "installed 14 days ago" becomes wrong the moment the clock is touched.
-         */
-        fun trialStartingAt(nowMillis: Long): License = License(
-            tier = LicenseTier.TRIAL,
-            expiresAtMillis = nowMillis + TRIAL_DURATION_MILLIS,
-            source = "trial",
-        )
     }
 }

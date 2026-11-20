@@ -84,6 +84,7 @@ object CastReceiverStatusReducer {
 
         val newState = state.copy(
             isSessionConnected = false,
+            receiverName = null,
             isSessionSuspended = false,
             receiverStatus = ReceiverStatus.DISCONNECTED,
             loadPhase = CastLoadPhase.IDLE,

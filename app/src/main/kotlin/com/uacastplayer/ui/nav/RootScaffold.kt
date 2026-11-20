@@ -29,6 +29,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import com.uacastplayer.ui.remote.LocalOpenRemote
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.tv.tvFocus
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -57,7 +63,6 @@ import com.uacastplayer.favorites.FavoritesSortOrder
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.guidedtour.GuidedTourKeys
@@ -84,6 +89,8 @@ import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.settings.SettingsScreen
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.tv.LocalTvMode
+import com.uacastplayer.ui.tv.TvBrowseScreen
 import com.uacastplayer.ui.theme.DisplayTitle
 import com.uacastplayer.ui.theme.DUR_NAV
 import com.uacastplayer.ui.theme.EaseSpring
@@ -94,7 +101,11 @@ import java.io.File
 
 private val BottomNavStateSaver: Saver<BottomNavState, List<String>> = Saver(
     save = { state -> state.stack.map(BottomDestination::name) },
-    restore = { saved -> BottomNavState(saved.map(BottomDestination::valueOf)) },
+    restore = { saved ->
+        val destination = saved.lastOrNull()?.let { id -> BottomDestination.entries.firstOrNull { it.name == id } }
+            ?: BottomDestination.START
+        NavBackStackReducer.reduce(BottomNavState(), BottomNavEvent.Select(destination)).state
+    },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,7 +140,7 @@ fun RootScaffold(
     focusChannelsToken: Int,
     onChannelSelected: (channels: List<M3uChannel>, startIndex: Int) -> Unit,
     epgState: EpgUiState,
-    onEpgSourceSelected: (EpgSource) -> Unit,
+    onEpgUrlChanged: (String) -> Unit,
     onUseSuggestedEpgUrl: () -> Unit,
     iconPrefetchState: IconPrefetchUiState,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
@@ -173,6 +184,8 @@ fun RootScaffold(
     miniPlayerVisible: Boolean = false,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
+    var openEpgSettings by rememberSaveable { mutableStateOf(false) }
+    var requestedGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
     val stateHolder = rememberSaveableStateHolder()
 
     LaunchedEffect(focusChannelsToken) {
@@ -217,25 +230,35 @@ fun RootScaffold(
         modifier = modifier.fillMaxSize().appBackground(plain = navState.current == BottomDestination.SETTINGS),
     ) {
         val widthDp = maxWidth.value.toInt()
-        val navigationMode = AdaptiveRootLayout.navigationModeFor(widthDp)
+        val television = LocalTvMode.current
+        val navigationMode = rootNavigationMode(widthDp, television)
         val expanded = AdaptiveRootLayout.isExpanded(widthDp)
         val navAnimationsAllowed = animationsAllowed()
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().tvOverscanPadding(television),
             containerColor = Color.Transparent,
+            snackbarHost = {
+                com.uacastplayer.ui.favorites.FavoriteUndoSnackbar(
+                    Modifier.padding(bottom = miniPlayerContentPadding(miniPlayerVisible,
+                        LocalDensity.current.fontScale)),
+                )
+            },
             topBar = {
                 RootTopBar(
                     // Home already carries the product identity in its content. Keep one
                     // authoritative branded title in the global chrome instead of rendering a
                     // second, competing heading inside HomeScreen.
                     title = if (navState.current == BottomDestination.HOME) {
-                        stringResource(R.string.app_name)
+                        stringResource(R.string.app_brand_short)
                     } else {
                         stringResource(navState.current.labelRes())
                     },
                     iconPrefetchState = iconPrefetchState,
                     epgState = epgState,
                     showDownloadStatus = shouldShowDownloadStatus(playlistState),
+                    showTitle = navState.current != BottomDestination.SETTINGS,
+                    labelRemote = homeRemoteLabelVisible(navState.current == BottomDestination.HOME,
+                        widthDp, LocalDensity.current.fontScale),
                     updateSection = updateSection,
                 )
             },
@@ -247,7 +270,7 @@ fun RootScaffold(
         ) { innerPadding ->
             Row(
                 modifier = Modifier.fillMaxSize().padding(innerPadding)
-                    .padding(bottom = miniPlayerContentPadding(miniPlayerVisible)),
+                    .padding(bottom = miniPlayerContentPadding(miniPlayerVisible, LocalDensity.current.fontScale)),
             ) {
                 if (navigationMode == RootNavigationMode.NAVIGATION_RAIL) {
                     GlassNavigationRail(items = navigationItems)
@@ -262,15 +285,19 @@ fun RootScaffold(
                         label = "adaptiveNavContent",
                         modifier = Modifier.fillMaxSize(),
                     ) { destination ->
-                        val contentMaxWidth = if (expanded && destination == BottomDestination.CHANNELS) {
-                            1_200.dp
-                        } else {
-                            840.dp
-                        }
+                        val contentMaxWidth = rootContentWidth(expanded, destination)
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                             stateHolder.SaveableStateProvider(destination) {
                                 val content = Modifier.widthIn(max = contentMaxWidth).fillMaxSize()
-                                when (destination) {
+                                if (television && destination != BottomDestination.SETTINGS) {
+                                    TvBrowseScreen(destination, playlistState,
+                                        HomeSourceState(playlistSources, activePlaylistSourceId,
+                                            onSwitchPlaylistSource, onRemovePlaylistSource, onOpenAddPlaylist,
+                                            onRefreshPlaylist, onRetrySourceSave),
+                                        favorites, hiddenGroupKeys, resolveIcon, onChannelSelected, content,
+                                        iconPrefetchState.refreshKey,
+                                        settingsState.favoritesSortOrder)
+                                } else when (destination) {
                 BottomDestination.HOME -> HomeScreen(
                     content = HomeContentState(
                         playlistState = playlistState,
@@ -287,6 +314,13 @@ fun RootScaffold(
                         onRetrySourceSave = onRetrySourceSave,
                         onOpenAddPlaylist = onOpenAddPlaylist,
                         onRefreshPlaylist = onRefreshPlaylist,
+                        onRetryEpg = { epgState.customUrl?.let(onEpgUrlChanged) },
+                        onOpenEpgSettings = {
+                            openEpgSettings = true
+                            navState = NavBackStackReducer.reduce(
+                                navState, BottomNavEvent.Select(BottomDestination.SETTINGS),
+                            ).state
+                        },
                     ),
                     resolveIcon = resolveIcon,
                     onChannelSelected = onChannelSelected,
@@ -297,8 +331,20 @@ fun RootScaffold(
                         ).state
                     },
                     modifier = content,
+                    onOpenFavorites = {
+                        navState = NavBackStackReducer.reduce(navState,
+                            BottomNavEvent.Select(BottomDestination.FAVORITES)).state
+                    },
+                    onOpenCategory = { key ->
+                        requestedGroupKey = key
+                        navState = NavBackStackReducer.reduce(navState,
+                            BottomNavEvent.Select(BottomDestination.CHANNELS)).state
+                    },
+                    hiddenGroupKeys = hiddenGroupKeys,
                 )
                 BottomDestination.CHANNELS -> ChannelsScreen(
+                    requestedGroupKey = requestedGroupKey,
+                    onGroupRequestHandled = { requestedGroupKey = null },
                     playlistState = playlistState,
                     onChannelSelected = onChannelSelected,
                     epgState = epgState,
@@ -326,6 +372,7 @@ fun RootScaffold(
                 )
                 BottomDestination.FAVORITES -> FavoritesScreen(
                     favorites = favorites,
+                    iconRefreshKey = iconPrefetchState.refreshKey,
                     playlistChannels = playlistState.channels,
                     sortOrder = settingsState.favoritesSortOrder,
                     onSortOrderSelected = onFavoritesSortOrderSelected,
@@ -342,12 +389,14 @@ fun RootScaffold(
                     modifier = content,
                 )
                 BottomDestination.SETTINGS -> SettingsScreen(
+                    openEpgSettings = openEpgSettings,
+                    onEpgSettingsOpened = { openEpgSettings = false },
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
                     currentAppTheme = currentAppTheme,
                     onAppThemeSelected = onAppThemeSelected,
                     epgState = epgState,
-                    onEpgSourceSelected = onEpgSourceSelected,
+                    onEpgUrlChanged = onEpgUrlChanged,
                     onUseSuggestedEpgUrl = onUseSuggestedEpgUrl,
                     iconWifiOnly = iconPrefetchState.wifiOnly,
                     onIconWifiOnlyChanged = onIconWifiOnlyChanged,
@@ -402,6 +451,15 @@ fun RootScaffold(
 internal fun shouldShowDownloadStatus(playlistState: PlaylistUiState): Boolean =
     playlistState.hasChannels || playlistState.isLoading
 
+private fun rootNavigationMode(widthDp: Int, television: Boolean): RootNavigationMode =
+    if (television) RootNavigationMode.NAVIGATION_RAIL else AdaptiveRootLayout.navigationModeFor(widthDp)
+
+private fun Modifier.tvOverscanPadding(television: Boolean): Modifier =
+    if (television) padding(24.dp) else this
+
+private fun rootContentWidth(expanded: Boolean, destination: BottomDestination) =
+    if (expanded && destination == BottomDestination.CHANNELS) 1_200.dp else 840.dp
+
 /**
  * The screen title and background-download/update banners.
  *
@@ -422,6 +480,12 @@ internal fun shouldShowDownloadStatus(playlistState: PlaylistUiState): Boolean =
  * intentionally live in the player overlay, where a video stream is active, rather than in this
  * global navigation chrome.
  */
+private const val REMOTE_LABEL_MIN_WIDTH_DP = 360
+private const val REMOTE_LABEL_MAX_FONT_SCALE = 1.5f
+
+private fun homeRemoteLabelVisible(home: Boolean, widthDp: Int, fontScale: Float): Boolean =
+    home && widthDp >= REMOTE_LABEL_MIN_WIDTH_DP && fontScale < REMOTE_LABEL_MAX_FONT_SCALE
+
 @Composable
 internal fun RootTopBar(
     title: String,
@@ -430,6 +494,8 @@ internal fun RootTopBar(
     showDownloadStatus: Boolean,
     updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
+    labelRemote: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -448,21 +514,7 @@ internal fun RootTopBar(
             onOpen = updateSection.onOpenRelease,
             onDismiss = updateSection.onDismissBanner,
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = ScreenHPadding, vertical = 12.dp)
-                .testTag(UiTestTags.ROOT_TOP_BAR_TITLE),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = DisplayTitle,
-                    color = UaTheme.palette.labelPrimary,
-                )
-            }
-        }
+        if (showTitle) com.uacastplayer.ui.components.ScreenHeader(title, labelRemote = labelRemote)
     }
 }
 

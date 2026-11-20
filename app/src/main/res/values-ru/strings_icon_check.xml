@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="icon_pack_check_action">Проверить</string>
+    <string name="icon_pack_check_title">Проверка пакета логотипов</string>
+    <string name="icon_pack_check_summary">Найдено: %1$d из %2$d образцов\nКаналов без tvg-id: %3$d</string>
+    <string name="icon_pack_check_hint">Проверяем до шести уникальных ID, а не весь пакет. Файлы должны называться tvg-id.png. Ошибка 404 может означать другой ID или имя файла; без ID совпадение невозможно.</string>
+    <string name="icon_pack_check_no_channels">Сначала добавьте или выберите плейлист.</string>
+    <string name="icon_pack_check_found">Изображение получено</string>
+    <string name="icon_pack_check_missing">Соответствующего файла нет (404)</string>
+    <string name="icon_pack_check_network">Сервер или сеть недоступны</string>
+    <string name="icon_pack_check_invalid">Неподдерживаемое изображение</string>
+    <string name="icon_pack_check_large">Превышен лимит проверки 256 КиБ</string>
+</resources>

@@ -6,6 +6,7 @@ import com.uacastplayer.data.playlist.withPlaylistCpu
 import com.uacastplayer.favorites.FavoriteMetadata
 import com.uacastplayer.favorites.FavoriteChannel
 import com.uacastplayer.favorites.FavoriteKey
+import com.uacastplayer.favorites.FavoriteRemovalUndo
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.M3uChannel
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +47,15 @@ class FavoritesRepository internal constructor(
     // user-grown and unbounded. The list itself stays the source of truth: it carries the manual
     // sort order (see [reorder]), which a Set cannot.
     @Volatile private var favoriteKeys: Set<String> = emptySet()
+
+    val removalUndo = FavoriteRemovalUndo(
+        current = { _favorites.value },
+        remove = ::remove,
+        restore = { item, index ->
+            val updated = _favorites.value.toMutableList().apply { add(index.coerceIn(0, size), item) }
+            publishOverride(updated, item.key, item)
+        },
+    )
 
     private fun updateState(updated: List<FavoriteChannel>) {
         favoriteKeys = updated.mapTo(HashSet(updated.size)) { it.key }
@@ -98,6 +108,7 @@ class FavoritesRepository internal constructor(
 
     fun toggleFavorite(channel: M3uChannel) {
         val key = FavoriteKey.of(channel)
+        removalUndo.forgetIfKeyChanged(key)
         val current = _favorites.value
         val added: FavoriteChannel?
         val updated = if (key in favoriteKeys) {
@@ -122,12 +133,14 @@ class FavoritesRepository internal constructor(
     }
 
     fun remove(key: String) {
+        removalUndo.forgetIfKeyChanged(key)
         publishOverride(_favorites.value.filterNot { it.key == key }, key, null)
     }
 
     /** Persists a manually reordered favorites list (see MANUAL sort order / ReorderPolicy) - the
      * list order itself doubles as the stored order, so this just replaces it wholesale. */
     fun reorder(newOrder: List<FavoriteChannel>) {
+        removalUndo.dismiss()
         publishReplacement(newOrder)
     }
 

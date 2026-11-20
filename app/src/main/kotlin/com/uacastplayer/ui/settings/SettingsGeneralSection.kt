@@ -12,11 +12,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.core.i18n.AppLanguage
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.premium.Feature
 import com.uacastplayer.ui.components.SecondaryButton
-import com.uacastplayer.ui.components.SegmentedControl
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
@@ -31,14 +29,23 @@ internal fun GeneralSettingsSection(
     currentAppTheme: AppTheme,
     onAppThemeSelected: (AppTheme) -> Unit,
 ) {
+    val television = com.uacastplayer.ui.tv.LocalTvMode.current
+    val themes = com.uacastplayer.ui.theme.availableAppThemes(television)
+    val selectedTheme = com.uacastplayer.ui.theme.themeForScreen(currentAppTheme, television)
     Column {
-        SegmentedRow(stringResource(R.string.settings_theme_label), AppIcons.Image) {
-            SegmentedControl(
-                options = AppTheme.entries.map { stringResource(it.nameRes()) },
-                selectedIndex = AppTheme.entries.indexOf(currentAppTheme),
-                onSelected = { index -> onAppThemeSelected(AppTheme.entries[index]) },
+        SettingsChoiceRow(
+                label = stringResource(R.string.settings_theme_label), icon = AppIcons.Image,
+                options = themes.map { stringResource(it.nameRes()) },
+                selectedIndex = themes.indexOf(selectedTheme),
+                onSelected = { index -> onAppThemeSelected(themes[index]) },
             )
-        }
+        SwitchRow(
+            label = stringResource(R.string.settings_reduced_effects),
+            checked = com.uacastplayer.ui.theme.LocalReducedEffects.current,
+            onCheckedChange = com.uacastplayer.ui.theme.LocalReducedEffectsChange.current,
+        )
+        Text(stringResource(R.string.settings_reduced_effects_hint), style = Caption,
+            color = UaTheme.palette.labelSecondary, modifier = Modifier.padding(top = 4.dp))
         SettingsChoiceRow(
             label = stringResource(R.string.settings_language_label),
             icon = AppIcons.Globe,
@@ -52,22 +59,15 @@ internal fun GeneralSettingsSection(
 @Composable
 internal fun EpgSettingsSection(
     state: EpgUiState,
-    onEpgSourceSelected: (EpgSource) -> Unit,
+    onEpgUrlChanged: (String) -> Unit,
     onUseSuggestedEpgUrl: () -> Unit,
 ) {
     val gate = LocalFeatureGate.current
     SettingsSection(title = stringResource(R.string.home_epg_label), icon = AppIcons.Tv) {
-        SettingsChoiceRow(
-            label = stringResource(R.string.settings_epg_source_label),
-            icon = AppIcons.Tv,
-            options = EpgSource.entries.map { stringResource(it.labelRes()) },
-            selectedIndex = if (state.customUrl == null) EpgSource.entries.indexOf(state.selectedSource) else -1,
-            onSelected = { onEpgSourceSelected(EpgSource.entries[it]) },
-            selectedLabel = state.customUrl?.let { stringResource(R.string.settings_epg_custom_active) },
-        )
+        EpgSourceEditor(state.customUrl, state.hasError, onEpgUrlChanged)
         EpgSettingsStatus(state)
         Text(
-            stringResource(R.string.settings_epg_variants_hint),
+            stringResource(R.string.settings_epg_user_source_hint),
             style = Caption,
             color = UaTheme.palette.labelSecondary,
         )
@@ -94,6 +94,8 @@ internal fun AppTheme.nameRes(): Int = when (this) {
     AppTheme.AZURE -> R.string.theme_name_azure
     AppTheme.CINEMA -> R.string.theme_name_cinema
     AppTheme.MIDNIGHT -> R.string.theme_name_midnight
+    AppTheme.DAYLIGHT -> R.string.theme_name_daylight
+    AppTheme.SYSTEM -> R.string.theme_name_system
 }
 
 private fun AppLanguage.nativeNameRes(): Int = when (this) {
@@ -101,14 +103,6 @@ private fun AppLanguage.nativeNameRes(): Int = when (this) {
     AppLanguage.ENGLISH -> R.string.language_name_en
     AppLanguage.RUSSIAN -> R.string.language_name_ru
     AppLanguage.SPANISH -> R.string.language_name_es
-}
-
-private fun EpgSource.labelRes(): Int = when (this) {
-    EpgSource.RECT_TRANSPARENT -> R.string.epg_source_rect_transparent
-    EpgSource.SQUARE_DARK -> R.string.epg_source_square_dark
-    EpgSource.PERFECT_PLAYER -> R.string.epg_source_perfect_player
-    EpgSource.RECT_TRANSPARENT_SIMPLE -> R.string.epg_source_rect_transparent_simple
-    EpgSource.SQUARE_DARK_SIMPLE -> R.string.epg_source_square_dark_simple
 }
 
 @Composable

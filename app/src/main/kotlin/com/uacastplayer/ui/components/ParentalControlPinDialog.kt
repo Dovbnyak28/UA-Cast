@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.tvTextFieldNavigation
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,6 +69,7 @@ fun ParentalControlPinDialog(
         textContentColor = UaTheme.palette.labelSecondary,
         title = { Text(title) },
         text = {
+            TvDialogInputRegistration()
             Column {
                 OutlinedTextField(
                     value = pin,
@@ -76,7 +80,7 @@ fun ParentalControlPinDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     colors = uaTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tvTextFieldNavigation(),
                 )
                 if (isError) {
                     Text(
@@ -96,12 +100,15 @@ fun ParentalControlPinDialog(
                     onSubmit(guess)
                 },
                 enabled = ParentalControlPinPolicy.isValidFormat(pin),
+                modifier = Modifier.tvFocus(enabled = ParentalControlPinPolicy.isValidFormat(pin)),
             ) {
                 Text(stringResource(R.string.common_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.common_cancel))
+            }
         },
     )
 }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalView
 import com.uacastplayer.dlna.DlnaConnectionState
+import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.player.PlayerUiState
 import com.uacastplayer.player.PlayerViewModel
 import com.uacastplayer.playlist.M3uChannel
@@ -30,6 +31,7 @@ internal data class PlayerScreenContent(
     val dlnaState: DlnaConnectionState,
     val iconRefreshKey: Any,
     val videoResizeMode: Int,
+    val epgState: EpgUiState? = null,
 )
 
 internal data class PlayerScreenActions(
@@ -59,12 +61,11 @@ internal class PlayerScreenTransientState(activity: Activity?, audioManager: Aud
     var showQualityDialog by mutableStateOf(false)
     var showGuideSheet by mutableStateOf(false)
     var showDlnaSheet by mutableStateOf(false)
-    var showDevicePicker by mutableStateOf(false)
     var showActionsSheet by mutableStateOf(false)
     var showChannelsSheet by mutableStateOf(false)
     var showLevelsSheet by mutableStateOf(false)
     val hasOpenSheet: Boolean get() = showSleepTimerDialog || showAudioDialog || showSubtitleDialog ||
-        showQualityDialog || showGuideSheet || showDlnaSheet || showDevicePicker || showActionsSheet ||
+        showQualityDialog || showGuideSheet || showDlnaSheet || showActionsSheet ||
         showChannelsSheet || showLevelsSheet
     var brightnessLevel by mutableFloatStateOf(
         activity?.let(::initialBrightnessLevel) ?: DEFAULT_BRIGHTNESS_LEVEL,
@@ -89,6 +90,9 @@ internal fun PlayerScreenEffects(
     uiState: PlayerUiState,
     transientState: PlayerScreenTransientState,
 ) {
+    LaunchedEffect(uiState.isPlaying) {
+        if (!uiState.isPlaying) transientState.controlsVisible = true
+    }
     LaunchedEffect(transientState.gestureIndicatorNonce) {
         if (transientState.gestureIndicator != null) {
             delay(GESTURE_INDICATOR_AUTO_HIDE_MILLIS)
@@ -109,15 +113,14 @@ internal fun PlayerScreenEffects(
             PipController.syncParams(it, uiState.videoSize, transientState.videoBounds, autoEnterPip)
         }
     }
-    DisposableEffect(environment.activity, isFullscreen) {
+    LaunchedEffect(environment.activity, isFullscreen) {
         environment.activity?.let { FullscreenController.apply(it, isFullscreen) }
-        onDispose {
-            environment.activity?.let { FullscreenController.apply(it, enabled = false) }
-        }
     }
     DisposableEffect(environment.activity) {
         onDispose {
             environment.activity?.let {
+                // Restore only when the player leaves this Activity, not before every mode switch.
+                FullscreenController.apply(it, enabled = false)
                 restoreWindowBrightness(it)
                 // The Activity survives when the player collapses into the mini bar.
                 PipController.disableAutoEnter(it)

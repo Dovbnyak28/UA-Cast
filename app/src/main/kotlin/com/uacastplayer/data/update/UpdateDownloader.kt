@@ -17,6 +17,10 @@ import java.io.InputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -76,7 +80,6 @@ class UpdateDownloader(
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
     private val appContext = context.applicationContext
-    private val downloadMutex = Mutex()
 
     private val directory: File get() = File(appContext.cacheDir, DIRECTORY_NAME)
 
@@ -93,6 +96,9 @@ class UpdateDownloader(
     suspend fun download(apk: ReleaseApk, onProgress: (Long, Long) -> Unit = { _, _ -> }): UpdateDownload =
         withContext(ioDispatcher) {
             downloadMutex.withLock {
+                // GitHub publishes the asset size before any bytes are requested. A file already
+                // known to exceed our cap must not consume mobile data only to be rejected later.
+                if (apk.sizeBytes > maxBytes) return@withLock UpdateDownload.TooLarge
                 deleteStaleDownloads()
                 if (!directory.isDirectory && !directory.mkdirs()) {
                     AppLog.w(TAG) { "Cannot create the update cache directory" }
@@ -104,6 +110,11 @@ class UpdateDownloader(
                 // and whose install the user dismissed, on a connection slow enough that they would
                 // rather not pay for it twice.
                 if (apk.sha256 != null && destination.isFile && FileDigest.sha256(destination) == apk.sha256) {
+                    // A matching digest proves the cached bytes, not that this release's size
+                    // metadata is internally consistent. The streamed path checks both claims.
+                    if (apk.sizeBytes > 0 && destination.length() != apk.sizeBytes) {
+                        return@withLock UpdateDownload.Corrupt
+                    }
                     AppLog.d(TAG) { "Update APK already downloaded and verified; reusing it" }
                     return@withLock UpdateDownload.Ready(destination)
                 }
@@ -114,15 +125,22 @@ class UpdateDownloader(
     @Suppress("ReturnCount")
     private suspend fun fetch(apk: ReleaseApk, destination: File, onProgress: (Long, Long) -> Unit): UpdateDownload {
         val partial = File(destination.parentFile, destination.name + PART_SUFFIX)
+        val owner = currentCoroutineContext().job
         return try {
             httpClient.newCall(Request.Builder().url(apk.downloadUrl).build()).executeCancellable { response ->
                 if (!response.isSuccessful) {
                     AppLog.w(TAG) { "Update download refused: HTTP ${response.code}" }
                     UpdateDownload.Failed
                 } else {
-                    when (val copied = copyHashing(response.body.byteStream(), partial, apk.sizeBytes, onProgress)) {
+                    val copied = copyHashing(
+                        response.body.byteStream(), partial, apk.sizeBytes, onProgress, owner,
+                    )
+                    when (copied) {
                         null -> UpdateDownload.TooLarge
-                        else -> publish(apk, partial, destination, copied)
+                        else -> {
+                            owner.ensureActive()
+                            publish(apk, partial, destination, copied)
+                        }
                     }
                 }
             }
@@ -199,12 +217,14 @@ class UpdateDownloader(
         destination: File,
         declaredTotal: Long,
         onProgress: (Long, Long) -> Unit,
+        owner: Job,
     ): Long? {
         hasher.reset()
         val chunk = ByteArray(CHUNK_SIZE)
         var total = 0L
         destination.outputStream().use { out ->
             while (true) {
+                owner.ensureActive()
                 // executeCancellable owns the Call around this loop, so cancellation closes the
                 // socket even while this read itself is waiting for the next network packet.
                 val read = input.read(chunk)
@@ -241,6 +261,11 @@ class UpdateDownloader(
     }
 
     companion object {
+        // Activity/ViewModel replacement can leave cancelled blocking IO draining while its
+        // successor starts. All instances share the same cache and partial-file names, so this
+        // lane must outlive any one owner. It retains no Context; waiting remains cancellable.
+        private val downloadMutex = Mutex()
+
         /** Generous next to this app's own APK and small enough that a misconfigured endpoint
          * cannot fill the cache partition before anything notices. */
         const val MAX_APK_BYTES = 300L * 1024 * 1024

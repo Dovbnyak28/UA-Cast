@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,10 +30,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.guidedtour.GuidedTourKeys
@@ -39,10 +47,8 @@ import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.player.PlayerCastStatusMessage
 import com.uacastplayer.core.cast.CodecDisplayName
 import com.uacastplayer.playlist.M3uChannel
-import com.uacastplayer.ui.components.CastPeerIconGlyphSize
 import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.components.SmallRoundIconButton
-import com.uacastplayer.ui.components.liveRing
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.GapL
@@ -54,6 +60,7 @@ import com.uacastplayer.ui.theme.UaTheme
 
 private const val PLAYER_ASPECT_RATIO = 16f / 9f
 private const val BUFFERING_PILL_RADIUS_DP = 999
+private const val LANDSCAPE_VIDEO_HEIGHT_FRACTION = 0.45f
 
 @Composable
 internal fun InlinePlayerContent(
@@ -61,9 +68,13 @@ internal fun InlinePlayerContent(
     actions: PlayerScreenActions,
     transientState: PlayerScreenTransientState,
     modifier: Modifier = Modifier,
+    videoSurface: @Composable (Int, Modifier) -> Unit = { resizeMode, surfaceModifier ->
+        VideoSurface(actions.viewModel, resizeMode, surfaceModifier)
+    },
 ) {
     val uiState = content.uiState
     val currentChannel = uiState.currentChannel
+    val isFile = currentChannel?.localVideo != null
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -75,6 +86,7 @@ internal fun InlinePlayerContent(
         InlinePlayerHeader(currentChannel, uiState.isCasting, content, actions, transientState)
         if (uiState.fatalError) {
             PlaybackFailureCard(
+                localVideo = currentChannel?.localVideo != null,
                 canGoNext = uiState.canGoNext,
                 onRetry = actions.viewModel::retryCurrentChannel,
                 onNext = actions.viewModel.navigation::requestNext,
@@ -82,13 +94,15 @@ internal fun InlinePlayerContent(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapM),
             )
         } else {
-            InlineVideoPanel(content, actions, transientState)
+            InlineVideoPanel(content, actions, transientState, videoSurface)
         }
         CastStatusBanner(uiState.castStatusMessage)
+        ConnectedReceiverRow(content, actions)
         // The terminal error card already owns Retry/Next/Back. Keeping the ordinary navigation
         // row visible at the same time produced two identically named "Next channel" actions in
         // the accessibility tree and an ambiguous TalkBack destination.
-        if (!uiState.fatalError) ChannelNavigationRow(actions, uiState)
+        InlinePlaybackTimeline(content, actions)
+        if (!uiState.fatalError && !isFile) ChannelNavigationRow(actions, uiState)
         currentChannel?.takeUnless { uiState.fatalError }?.let { channel ->
             ChannelInfoCard(
                 channel = channel,
@@ -97,7 +111,11 @@ internal fun InlinePlayerContent(
                 resolveIcon = actions.resolveIcon,
             )
         }
+        rememberPlayerProgramme(currentChannel, content.epgState)?.let {
+            PlayerProgrammePanel(it, content.epgState?.nowMillis ?: 0L)
+        }
         QuickSettingsRow(
+            showGuide = !isFile,
             showAudio = !uiState.fatalError && !remotePlaybackOwnsControls(uiState, content.dlnaState),
             onAudioClick = { transientState.showAudioDialog = true },
             onGuideClick = { transientState.showGuideSheet = true },
@@ -112,7 +130,7 @@ internal fun InlinePlayerContent(
                 onViewAll = { transientState.showChannelsSheet = true },
             )
         }
-        if (!uiState.fatalError) {
+        if (!uiState.fatalError && !isFile) {
             SecondaryButton(
                 text = stringResource(R.string.player_back_to_channels),
                 onClick = actions.onExit,
@@ -130,6 +148,28 @@ private fun InlinePlayerHeader(
     actions: PlayerScreenActions,
     transientState: PlayerScreenTransientState,
 ) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val stacked = maxWidth < INLINE_HEADER_STACK_WIDTH || LocalDensity.current.fontScale > INLINE_HEADER_STACK_SCALE
+        val title = if (currentChannel?.localVideo != null) stringResource(R.string.local_video_label)
+            else currentChannel?.displayName ?: stringResource(R.string.app_name)
+        Column(Modifier.fillMaxWidth()) {
+            InlinePlayerHeaderButtons(currentChannel, isCasting, content, actions, transientState,
+                if (stacked) null else title)
+            if (stacked) InlinePlayerTitle(title,
+                Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun InlinePlayerHeaderButtons(
+    currentChannel: M3uChannel?,
+    isCasting: Boolean,
+    content: PlayerScreenContent,
+    actions: PlayerScreenActions,
+    transientState: PlayerScreenTransientState,
+    title: String?,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -139,16 +179,8 @@ private fun InlinePlayerHeader(
             onClick = actions.onExit,
             contentDescription = stringResource(R.string.common_back),
         )
-        Text(
-            text = currentChannel?.displayName ?: stringResource(R.string.app_name),
-            style = Title,
-            color = UaTheme.palette.labelPrimary,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        currentChannel?.let { channel ->
+        if (title == null) Box(Modifier.weight(1f)) else InlinePlayerTitle(title, Modifier.weight(1f))
+        currentChannel?.takeIf { it.localVideo == null }?.let { channel ->
             SmallRoundIconButton(
                 icon = AppIcons.Favorites,
                 onClick = { actions.onToggleFavorite(channel) },
@@ -164,80 +196,90 @@ private fun InlinePlayerHeader(
             )
         }
         val dlnaConnected = content.dlnaState.connectedDevice != null
-        SmallRoundIconButton(
-            icon = AppIcons.CastToTv,
-            onClick = { transientState.showDevicePicker = true },
-            contentDescription = stringResource(
-                R.string.player_devices,
-            ),
-            tint = if (dlnaConnected || isCasting) UaTheme.palette.azure else UaTheme.palette.labelPrimary,
-            iconSize = CastPeerIconGlyphSize,
-            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON)
-                .liveRing(active = dlnaConnected || isCasting, color = UaTheme.palette.azure),
-        )
+        PlayerCastButton(isCasting = isCasting,
+            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON))
+        OtherTvButton(dlnaConnected) { transientState.showDlnaSheet = true }
     }
 }
+
+@Composable
+private fun InlinePlayerTitle(title: String, modifier: Modifier) {
+    val description = stringResource(R.string.player_now_playing, title)
+    Text(title, style = Title, color = UaTheme.palette.labelPrimary, textAlign = TextAlign.Center,
+        maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = modifier.semantics { heading(); contentDescription = description })
+}
+
+private val INLINE_HEADER_STACK_WIDTH = 420.dp
+private const val INLINE_HEADER_STACK_SCALE = 1.3f
 
 @Composable
 private fun InlineVideoPanel(
     content: PlayerScreenContent,
     actions: PlayerScreenActions,
     transientState: PlayerScreenTransientState,
+    videoSurface: @Composable (Int, Modifier) -> Unit,
 ) {
     val uiState = content.uiState
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenHPadding)
-            .aspectRatio(PLAYER_ASPECT_RATIO)
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(Color.Black)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-                onClickLabel = stringResource(R.string.player_toggle_controls),
-                onClick = { transientState.controlsVisible = !transientState.controlsVisible },
-            ),
-    ) {
-        VideoSurface(
-            viewModel = actions.viewModel,
-            resizeMode = content.videoResizeMode,
-            modifier = Modifier.fillMaxSize(),
-        )
-        when {
-            uiState.autoSkipRecovery != null -> AutoSkipRecoveryIndicator(
-                state = uiState.autoSkipRecovery,
-                onCancel = actions.viewModel::cancelAutoSkipRecovery,
-                modifier = Modifier.align(Alignment.Center),
-            )
-            uiState.isRecoveringPlayback -> RecoveringPlaybackIndicator(
-                attempt = uiState.stallRecoveryAttempt,
-                onPickAnotherChannel = actions.onExit,
-                modifier = Modifier.align(Alignment.Center),
-            )
-            uiState.isBuffering && !uiState.fatalError -> Text(
-                text = stringResource(R.string.player_buffering),
-                color = Color.White,
-                style = Caption,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(BUFFERING_PILL_RADIUS_DP.dp))
-                    .background(UaTheme.palette.scrimBackground)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            )
+    val windowSize = LocalWindowInfo.current.containerSize
+    val maxVideoWidth = if (windowSize.width > windowSize.height) {
+        with(LocalDensity.current) {
+            windowSize.height.toDp() * LANDSCAPE_VIDEO_HEIGHT_FRACTION * PLAYER_ASPECT_RATIO
         }
-        if (transientState.showResizeModeToast) {
-            ResizeModeToast(uiState.resizeMode, modifier = Modifier.align(Alignment.Center))
-        }
-        if (transientState.controlsVisible && !uiState.fatalError) {
-            InlineVideoControls(
-                wantsToPlay = uiState.wantsToPlay,
-                canControlPlayback = uiState.canControlPlayback,
-                onPlayPause = actions.viewModel::togglePlayback,
-                onToggleFullscreen = { actions.onFullscreenChanged(true) },
-            )
+    } else {
+        Dp.Infinity
+    }
+    Box(Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = maxVideoWidth)
+                .fillMaxWidth()
+                .aspectRatio(PLAYER_ASPECT_RATIO)
+                .clip(RoundedCornerShape(RadiusCard))
+                .background(Color.Black)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.player_toggle_controls),
+                    onClick = { transientState.controlsVisible = !transientState.controlsVisible },
+                ),
+        ) {
+            videoSurface(content.videoResizeMode, Modifier.fillMaxSize())
+            when {
+                uiState.autoSkipRecovery != null -> AutoSkipRecoveryIndicator(
+                    state = uiState.autoSkipRecovery,
+                    onCancel = actions.viewModel::cancelAutoSkipRecovery,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+                uiState.isRecoveringPlayback -> RecoveringPlaybackIndicator(
+                    attempt = uiState.stallRecoveryAttempt,
+                    onPickAnotherChannel = actions.onExit,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+                uiState.isBuffering && !uiState.fatalError -> Text(
+                    text = stringResource(R.string.player_buffering),
+                    color = Color.White,
+                    style = Caption,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(BUFFERING_PILL_RADIUS_DP.dp))
+                        .background(UaTheme.palette.scrimBackground)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+            if (transientState.showResizeModeToast) {
+                ResizeModeToast(uiState.resizeMode, modifier = Modifier.align(Alignment.Center))
+            }
+            if (transientState.controlsVisible && !uiState.fatalError) {
+                InlineVideoControls(
+                    wantsToPlay = uiState.wantsToPlay,
+                    canControlPlayback = uiState.canControlPlayback,
+                    onPlayPause = actions.viewModel::togglePlayback,
+                    onToggleFullscreen = { actions.onFullscreenChanged(true) },
+                )
+            }
         }
     }
 }

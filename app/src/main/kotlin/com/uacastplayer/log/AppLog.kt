@@ -4,14 +4,10 @@ import android.util.Log
 import com.uacastplayer.BuildConfig
 
 /**
- * Thin logging wrapper that GUARANTEES no raw URL, credential, or token reaches [LogBuffer] or
- * Logcat - every [message] is passed through [LogSanitizer] before either sink sees it. That
- * guarantee is enforced here, in the wrapper itself, precisely so a careless call site (e.g.
- * `AppLog.d { "loading $url" }`) can't bypass it: the wrapper is the only path to both sinks, so
- * there is nowhere for an unsanitized value to leak from. The message is always recorded into
- * [LogBuffer] (so a release build's "Send diagnostics" report has something to show); only the
- * real Logcat write, which would otherwise spam a shipped device's system log for no one to read,
- * stays debug-only.
+ * Records messages after [LogSanitizer] redacts recognized URLs and credential patterns. The
+ * sanitizer is heuristic, so callers must still avoid including secrets in diagnostic messages.
+ * Logcat is debug-only; its exception copy deliberately omits all throwable messages, causes and
+ * suppressed exceptions while retaining the type and sanitized top-level stack locations.
  */
 object AppLog {
 
@@ -30,6 +26,23 @@ object AppLog {
     inline fun e(tag: String, throwable: Throwable? = null, message: () -> String) {
         val text = LogSanitizer.sanitize(message())
         LogBuffer.record(LogLevel.ERROR, tag, text)
-        if (BuildConfig.DEBUG) Log.e(tag, text, throwable)
+        if (BuildConfig.DEBUG) {
+            // Exception messages, including causes and suppressed exceptions, can contain provider
+            // credentials. Preserve the top-level type and sanitized frame locations, never the
+            // original Throwable or its messages.
+            val safeThrowable = throwable?.let { original ->
+                Throwable(original.javaClass.simpleName).apply {
+                    stackTrace = original.stackTrace.map { frame ->
+                        StackTraceElement(
+                            LogSanitizer.sanitize(frame.className),
+                            LogSanitizer.sanitize(frame.methodName),
+                            frame.fileName?.let(LogSanitizer::sanitize),
+                            frame.lineNumber,
+                        )
+                    }.toTypedArray()
+                }
+            }
+            Log.e(tag, text, safeThrowable)
+        }
     }
 }

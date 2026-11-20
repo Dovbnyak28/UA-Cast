@@ -220,12 +220,6 @@ class CastProxyService : Service() {
             putExtra(EXTRA_COMMAND_GENERATION, commandGeneration)
         }
 
-        private fun stopForegroundIntent(context: Context, target: CastProxyTarget): Intent =
-            Intent(context, CastProxyService::class.java).apply {
-                action = ACTION_STOP_FOREGROUND
-                putExtra(EXTRA_TARGET, target.name)
-            }
-
         private fun endSessionIntent(context: Context, target: CastProxyTarget): Intent =
             Intent(context, CastProxyService::class.java).apply {
                 action = ACTION_END_SESSION
@@ -250,10 +244,7 @@ class CastProxyService : Service() {
          * [ACTION_STOP_FOREGROUND]). When the service is already alive, dispatch directly to its
          * main thread. Starting a foreground service just to deliver a stop command is forbidden
          * from the background on Android 12+ and used to leave the wake locks running silently. */
-        fun stop(
-            context: Context,
-            target: CastProxyTarget = CastProxyTarget.CHROMECAST,
-        ) {
+        fun stop(target: CastProxyTarget = CastProxyTarget.CHROMECAST) {
             val commandGeneration = nextCommandGeneration(target)
             val service = runningInstance
             if (service != null) {
@@ -267,12 +258,10 @@ class CastProxyService : Service() {
                         service.removeOwner(target)
                     }
                 }
-            } else {
-                // There is no owner to remove if the service has not been created (or was already
-                // destroyed). stopService is safe from the background and also cancels a pending
-                // start request without attempting another restricted FGS launch.
-                context.stopService(Intent(context, CastProxyService::class.java))
             }
+            // If a start is still pending, its older generation is rejected by onStartCommand.
+            // stopService() here would stop the entire shared service, including a different
+            // target's pending start (Chromecast and DLNA can run concurrently).
         }
 
         /**

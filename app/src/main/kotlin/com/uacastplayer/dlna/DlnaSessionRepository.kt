@@ -2,9 +2,11 @@ package com.uacastplayer.dlna
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import com.uacastplayer.cast.CastProxyService
 import com.uacastplayer.cast.CastProxyTarget
 import com.uacastplayer.core.concurrent.AppDispatchers
@@ -14,6 +16,8 @@ import com.uacastplayer.data.cast.LocalNetworkAddress
 import com.uacastplayer.data.cast.ProxyServer
 import com.uacastplayer.diagnostics.CorrelationId
 import com.uacastplayer.log.AppLog
+import com.uacastplayer.data.media.AndroidLocalVideoSource
+import com.uacastplayer.media.LocalVideo
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -54,6 +58,22 @@ private const val DEVICE_DESCRIPTION_TIMEOUT_SECONDS = 4L
 private const val PROXY_CONNECT_TIMEOUT_SECONDS = 10L
 private const val PROXY_READ_TIMEOUT_SECONDS = 15L
 
+/** The callback must observe the same Wi-Fi network that supplies the proxy address, even when
+ * it is local-only and has no INTERNET capability. No cellular/VPN event can change that address. */
+internal fun dlnaSessionNetworkRequest(): NetworkRequest = NetworkRequest.Builder().apply {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        clearCapabilities()
+    } else {
+        // clearCapabilities was added in API 30. Remove the builder's default filters on older
+        // devices so a local-only/restricted Wi-Fi does not disappear from this callback.
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
+        removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+    }
+    addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+}.build()
+
 private data class PreparedDlnaProxy(val token: String, val localUrl: String)
 private data class DlnaConnectRequest(
     val device: DlnaDevice,
@@ -64,7 +84,10 @@ private data class DlnaConnectRequest(
     val generation: Long,
 )
 
-private data class DlnaMedia(val url: String, val title: String, val userAgent: String?, val referrer: String?)
+private data class DlnaMedia(
+    val url: String, val title: String, val userAgent: String?, val referrer: String?,
+    val localVideo: LocalVideo? = null,
+)
 
 /**
  * App-wide singleton (same lifetime rationale as [com.uacastplayer.cast.CastSessionRepository]:
@@ -120,7 +143,7 @@ class DlnaSessionRepository internal constructor(
      * [com.uacastplayer.data.cast.RawTsRemuxSession]'s reader into a backoff reconnect and a
      * discontinuity, i.e. exactly the stall-and-rebuffer symptom the proxy exists to avoid.
      */
-    private val proxyServer = ProxyServer(proxyHttpClient)
+    private val proxyServer = ProxyServer(proxyHttpClient, localVideoSource = AndroidLocalVideoSource(appContext))
     private val setUriHttpClient = soapHttpClient.newBuilder()
         .readTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .callTimeout(SET_URI_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -196,9 +219,10 @@ class DlnaSessionRepository internal constructor(
      * available: re-pointing the renderer at the new address needs it to still be reachable, which
      * on mobile data it is not, and on a new Wi-Fi it may not be either.
      *
-     * Registered against ANY network rather than Wi-Fi alone, because the event worth catching is
-     * often the *loss* of Wi-Fi to a mobile connection that is perfectly healthy - a Wi-Fi-only
-     * request would simply stop reporting and never fire.
+     * Observe the Wi-Fi carrying the proxy address, including local-only networks with no
+     * Internet capability. Its onLost fires when the phone falls back to mobile data; watching
+     * only Internet-capable networks missed that event for a local-only Wi-Fi and left a stale
+     * "connected" session on screen.
      */
     private fun watchForNetworkChange(generation: Long) {
         networkWatch?.close()
@@ -209,10 +233,10 @@ class DlnaSessionRepository internal constructor(
             override fun onLost(network: Network) = checkSessionStillServable(generation)
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
                 checkSessionStillServable(generation)
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) =
+                checkSessionStillServable(generation)
         }
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
+        val request = dlnaSessionNetworkRequest()
         runCatchingNonFatal { connectivityManager.registerNetworkCallback(request, callback) }
             .onSuccess {
                 networkWatch = AutoCloseable {
@@ -226,13 +250,16 @@ class DlnaSessionRepository internal constructor(
     }
 
     private fun checkSessionStillServable(generation: Long) {
-        if (_state.value.connectedDevice == null) return
-        val current = localAddress(appContext)
-        if (DlnaNetworkChangePolicy.sessionSurvives(sessionHost, current)) return
-        AppLog.d(TAG) { "The address this session was served from is gone; ending it" }
-        // On the main thread deliberately: stop() touches _state and connectJob, and a
-        // NetworkCallback arrives on a binder thread.
-        scope.launch { if (generation == connectGeneration.get()) stop() }
+        // NetworkCallback runs on the connectivity thread. Query on our owning thread, outside
+        // the callback, and decide there: a queued loss can already have recovered by then, and
+        // an old callback must not inspect or stop a replacement session.
+        scope.launch {
+            if (generation != connectGeneration.get() || _state.value.connectedDevice == null) return@launch
+            val current = localAddress(appContext)
+            if (DlnaNetworkChangePolicy.sessionSurvives(sessionHost, current)) return@launch
+            AppLog.d(TAG) { "The address this session was served from is gone; ending it" }
+            stop()
+        }
     }
 
     /** A last-resort net under [SsdpDiscovery]'s own per-stage catches - discovery failing must
@@ -258,7 +285,8 @@ class DlnaSessionRepository internal constructor(
         title: String,
         userAgent: String? = null,
         referrer: String? = null,
-    ) = startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer), isRepoint = false)
+        localVideo: LocalVideo? = null,
+    ) = startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer, localVideo), isRepoint = false)
 
     private fun startSession(device: DlnaDevice, media: DlnaMedia, isRepoint: Boolean) {
         rendererWatchdog.stop()
@@ -325,7 +353,12 @@ class DlnaSessionRepository internal constructor(
     /** Monitoring belongs to the committed session, not a pending SOAP transaction. */
     private fun watchConnectedSession(device: DlnaDevice, generation: Long) {
         watchForNetworkChange(generation)
-        rendererWatchdog.start(device.controlUrl) {
+        rendererWatchdog.start(device.controlUrl, onUnverified = {
+            if (generation == connectGeneration.get() && _state.value.connectedDevice == device) {
+                _state.update { it.copy(playbackStatusUnverified = true) }
+                AppLog.w(TAG) { "DLNA playback status is unavailable for this renderer" }
+            }
+        }) {
             if (generation == connectGeneration.get()) {
                 AppLog.w(TAG) { "DLNA renderer is no longer playing or reachable; ending session" }
                 stop()
@@ -343,10 +376,13 @@ class DlnaSessionRepository internal constructor(
      * never told about the new url and kept playing the old one, while the phone (which stands down
      * for a remote target, see `LocalPlaybackPolicy`) played nothing either.
      */
-    fun setActiveChannel(streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null) {
+    fun setActiveChannel(
+        streamUrl: String, title: String, userAgent: String? = null, referrer: String? = null,
+        localVideo: LocalVideo? = null,
+    ) {
         // A channel selected while the first connection is preparing must replace that attempt.
         val device = pendingConnectDevice ?: _state.value.connectedDevice ?: return
-        startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer), isRepoint = true)
+        startSession(device, DlnaMedia(streamUrl, title, userAgent, referrer, localVideo), isRepoint = true)
     }
 
     /**
@@ -364,9 +400,13 @@ class DlnaSessionRepository internal constructor(
      * was not necessarily accepted, and a timed-out command may still have reached the TV. If the
      * read also fails, null honestly represents unknown volume instead of inventing a rollback.
      */
-    fun setVolume(volume: Int) {
-        val device = _state.value.takeUnless { it.isConnecting }?.connectedDevice ?: return
-        val url = device.renderingControlUrl ?: return
+    fun setVolume(expectedDevice: DlnaDevice, volume: Int) {
+        val current = _state.value
+        val device = current.connectedDevice ?: return
+        val url = device.renderingControlUrl
+        // The UI can still deliver a gesture before it has observed the next renderer state.
+        val matchesTarget = device.controlUrl == expectedDevice.controlUrl && url == expectedDevice.renderingControlUrl
+        if (current.isConnecting || url == null || !matchesTarget) return
         val requested = VolumeRange.clamp(volume)
         val generation = volumeGeneration.incrementAndGet()
         _state.update { it.copy(volume = requested) }
@@ -435,6 +475,7 @@ class DlnaSessionRepository internal constructor(
             request.device.controlUrl,
             prepared.localUrl,
             request.media.title,
+            request.media.localVideo?.mimeType,
         )
         checkpoint()
         val ok = uriAccepted && avTransportClient.play(request.device.controlUrl)
@@ -494,7 +535,9 @@ class DlnaSessionRepository internal constructor(
                 flattenHlsToStream = true,
             )
             val localUrl = proxyServer.buildLocalUrl(
-                proxyServer.registerPlaylist(request.media.url, request.media.userAgent, request.media.referrer),
+                proxyServer.registerPlaylist(
+                    request.media.url, request.media.userAgent, request.media.referrer, request.media.localVideo,
+                ),
             )
             sessionHost = host
             PreparedDlnaProxy(token, localUrl)
@@ -510,7 +553,7 @@ class DlnaSessionRepository internal constructor(
         sessionToken = null
         sessionHost = null
         proxyServer.stop()
-        CastProxyService.stop(appContext, CastProxyTarget.DLNA)
+        CastProxyService.stop(CastProxyTarget.DLNA)
         return token
     }
 

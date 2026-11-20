@@ -1,5 +1,6 @@
 package com.uacastplayer.player
 
+import android.os.SystemClock
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -11,7 +12,9 @@ import kotlinx.coroutines.launch
 /** Owned by the playback ViewModel, not by whichever full/mini screen currently renders it. */
 class PlayerSleepTimer(
     private val scope: CoroutineScope,
-    private val nowMillis: () -> Long = { System.nanoTime() / NANOS_PER_MILLI },
+    // A casting phone may suspend. Uptime/nanoTime excludes that time and extends the timer;
+    // elapsedRealtime lets the first tick after wake observe the original elapsed deadline.
+    private val nowMillis: () -> Long = SystemClock::elapsedRealtime,
     private val onExpire: () -> Unit,
 ) {
     private var timerJob: Job? = null
@@ -40,4 +43,3 @@ class PlayerSleepTimer(
 }
 
 private const val TICK_MILLIS = 1_000L
-private const val NANOS_PER_MILLI = 1_000_000L

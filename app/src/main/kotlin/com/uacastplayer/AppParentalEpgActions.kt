@@ -1,6 +1,5 @@
 package com.uacastplayer
 
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.playlist.M3uChannel
 
@@ -21,6 +20,10 @@ internal suspend fun AppViewModel.setParentalControlPin(pin: String): Boolean =
 
 internal fun AppViewModel.resetParentalControl() = parentalControlController.resetParentalControl()
 
-internal fun AppViewModel.selectEpgSource(source: EpgSource) = epgController.selectEpgSource(source)
+internal fun AppViewModel.setEpgUrl(url: String) {
+    // Retrying an existing provider must not turn an auto-detected guide into a manual choice.
+    if (url.isNotBlank() && url == epgState.value.customUrl) epgController.refresh()
+    else epgController.setUserEpgUrl(url)
+}
 
 internal fun AppViewModel.useSuggestedEpgUrl() = epgController.useSuggestedEpgUrl()

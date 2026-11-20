@@ -28,6 +28,7 @@ data class SettingsUiState(
     val wrapAroundEnabled: Boolean = true,
     val autoSkipDeadEnabled: Boolean = true,
     val cacheSizes: CacheSizes = CacheSizes(),
+    val reducedVisualEffects: Boolean = false,
     val deviceTier: DeviceTier = DeviceTier.MID_RANGE,
     val customIconSources: List<String> = emptyList(),
     val iconSourceAddError: IconSourceAddError? = null,

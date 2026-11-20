@@ -1,51 +1,52 @@
 package com.uacastplayer.ui.theme
 
-import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
 
-private fun colorSchemeFor(palette: UaPalette): ColorScheme = darkColorScheme(
-    primary = palette.azure,
-    onPrimary = palette.accentOnFill,
-    primaryContainer = palette.azure,
-    onPrimaryContainer = palette.accentOnFill,
-    secondary = palette.azure2,
-    onSecondary = palette.void,
-    background = palette.void,
-    onBackground = palette.labelPrimary,
-    surface = palette.surface1,
-    onSurface = palette.labelPrimary,
-    surfaceVariant = palette.surface2,
-    onSurfaceVariant = palette.labelSecondary,
-    surfaceContainer = palette.surface1,
-    surfaceContainerHigh = palette.surface2,
-    surfaceContainerHighest = palette.surface2,
-    outline = palette.hairline,
-    outlineVariant = palette.hairline,
-    error = palette.routeRed,
-    onError = Color.White,
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(12.dp), small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp), large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
 
-/**
- * UA Cast Player is dark-only by design; [androidx.compose.foundation.isSystemInDarkTheme] is
- * intentionally not consulted. [theme] picks which [UaPalette] is exposed through [LocalUaPalette]
- * (and therefore [UaTheme.palette]) for the whole subtree - see docs/DESIGN_SYSTEM.md "Themes".
- */
+/** User-selected chrome; video controls have their own consistently dark palette. */
 @Composable
 fun UaCastTheme(theme: AppTheme, content: @Composable () -> Unit) {
-    val palette = when (theme) {
+    val palette = when (resolvedAppTheme(theme, isSystemInDarkTheme())) {
         AppTheme.AZURE -> AzureUaPalette
         AppTheme.CINEMA -> CinemaUaPalette
         AppTheme.MIDNIGHT -> MidnightUaPalette
+        AppTheme.DAYLIGHT -> DaylightUaPalette
+        AppTheme.SYSTEM -> MidnightUaPalette
     }
-    CompositionLocalProvider(LocalUaPalette provides palette) {
+    val systemMotion = rememberSystemMotionEnabled()
+    CompositionLocalProvider(LocalSystemMotionEnabled provides systemMotion) {
+        UaPaletteTheme(palette, content)
+    }
+}
+
+@Composable
+internal fun UaPaletteTheme(palette: UaPalette, content: @Composable () -> Unit) {
+    val colors = remember(palette) { semanticColorsFor(palette) }
+    CompositionLocalProvider(LocalUaPalette provides palette, LocalUaSemanticColors provides colors) {
         MaterialTheme(
-            colorScheme = colorSchemeFor(palette),
+            colorScheme = colors.material,
             typography = AppTypography,
+            shapes = AppShapes,
             content = content,
         )
     }
+}
+
+/** Keep the same provider topology when the phone theme changes, preserving the native video view. */
+@Composable
+internal fun UaPlayerTheme(content: @Composable () -> Unit) {
+    val palette = UaTheme.palette
+    UaPaletteTheme(if (palette.isDark) palette else MidnightUaPalette, content)
 }

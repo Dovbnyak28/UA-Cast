@@ -21,6 +21,7 @@ import com.uacastplayer.ui.theme.UaTheme
 private data class SettingsNavigationItem(
     val title: String,
     val subtitle: String,
+    val page: SettingsPage,
     val icon: ImageVector,
     val onClick: () -> Unit,
 )
@@ -72,36 +73,42 @@ internal fun SettingsOverview(
         SettingsNavigationItem(
             title = stringResource(R.string.settings_section_general),
             subtitle = generalSummary.ifBlank { stringResource(R.string.settings_page_general_summary) },
+            page = SettingsPage.GENERAL,
             icon = AppIcons.Settings,
             onClick = onOpenGeneral,
         ),
         SettingsNavigationItem(
             title = stringResource(R.string.settings_page_playlist_access),
             subtitle = stringResource(R.string.settings_page_playlist_summary),
+            page = SettingsPage.PLAYLIST,
             icon = AppIcons.Channels,
             onClick = onOpenPlaylist,
         ),
         SettingsNavigationItem(
             title = stringResource(R.string.settings_section_playback),
             subtitle = stringResource(R.string.settings_page_playback_summary),
+            page = SettingsPage.PLAYBACK,
             icon = AppIcons.Play,
             onClick = onOpenPlayback,
         ),
         SettingsNavigationItem(
             title = stringResource(R.string.settings_section_parental_control),
             subtitle = stringResource(R.string.settings_page_parental_summary),
+            page = SettingsPage.PARENTAL,
             icon = AppIcons.Lock,
             onClick = onOpenParental,
         ),
         SettingsNavigationItem(
             title = stringResource(R.string.settings_page_data_storage),
             subtitle = stringResource(R.string.settings_page_data_summary),
+            page = SettingsPage.DATA,
             icon = AppIcons.Storage,
             onClick = onOpenData,
         ),
         SettingsNavigationItem(
             title = stringResource(R.string.settings_page_help_about),
             subtitle = stringResource(R.string.settings_page_help_summary),
+            page = SettingsPage.SUPPORT,
             icon = AppIcons.HelpCircle,
             onClick = onOpenSupport,
         ),
@@ -120,8 +127,12 @@ internal fun SettingsOverview(
         items
     } else {
         items.filter { item ->
-            item.title.contains(normalizedQuery, ignoreCase = true) ||
+            val textMatches = item.title.contains(normalizedQuery, ignoreCase = true) ||
                 item.subtitle.contains(normalizedQuery, ignoreCase = true)
+            val duplicate = matchingSettings.any { entry ->
+                entry.page == item.page && entry.title.equals(item.title, ignoreCase = true)
+            }
+            textMatches && !duplicate
         }
     }
     if (normalizedQuery.isNotEmpty()) {

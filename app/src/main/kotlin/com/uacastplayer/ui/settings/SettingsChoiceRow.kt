@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.ui.theme.BodyRegular
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 
 /** A readable alternative to horizontal chips when choices have long localized names. */
 @Composable
@@ -48,10 +50,11 @@ internal fun SettingsChoiceRow(
         onDismissRequest = { expanded = false },
         title = { Text(label) },
         text = {
+            TvDialogInputRegistration()
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 options.forEachIndexed { index, option ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().selectable(
+                        modifier = Modifier.fillMaxWidth().tvFocus().selectable(
                             selected = index == selectedIndex,
                             role = Role.RadioButton,
                             onClick = { expanded = false; onSelected(index) },

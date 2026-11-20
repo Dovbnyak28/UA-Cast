@@ -33,7 +33,6 @@ import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.diagnostics.RemuxEffectivenessCounts
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.guidedtour.GuidedTourSectionState
 import com.uacastplayer.playlist.M3uChannel
@@ -56,7 +55,7 @@ fun SettingsScreen(
     currentAppTheme: AppTheme,
     onAppThemeSelected: (AppTheme) -> Unit,
     epgState: EpgUiState,
-    onEpgSourceSelected: (EpgSource) -> Unit,
+    onEpgUrlChanged: (String) -> Unit,
     onUseSuggestedEpgUrl: () -> Unit,
     iconWifiOnly: Boolean,
     onIconWifiOnlyChanged: (Boolean) -> Unit,
@@ -97,11 +96,17 @@ fun SettingsScreen(
     premiumSection: PremiumSectionState,
     guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
+    openEpgSettings: Boolean = false,
+    onEpgSettingsOpened: () -> Unit = {},
 ) {
     var showBackupExportWarning by rememberSaveable { mutableStateOf(false) }
     var page by rememberSaveable { mutableStateOf(SettingsPage.OVERVIEW) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    OpenEpgSettingsEffect(openEpgSettings, onEpgSettingsOpened) {
+        page = SettingsPage.PLAYLIST
+        searchTarget = R.string.home_epg_label
+    }
     BackHandler(enabled = page != SettingsPage.OVERVIEW) { page = SettingsPage.OVERVIEW }
     if (showBackupExportWarning) {
         BackupExportWarningDialog(
@@ -118,12 +123,10 @@ fun SettingsScreen(
             Column(
                 modifier = modifier.fillMaxWidth(),
             ) {
-                if (page != SettingsPage.OVERVIEW) {
-                    SettingsSubpageHeader(
-                        title = stringResource(settingsPageTitle(page)),
-                        onBack = { page = SettingsPage.OVERVIEW },
-                    )
-                }
+                com.uacastplayer.ui.components.ScreenHeader(
+                    title = stringResource(settingsPageTitle(page)),
+                    onBack = if (page == SettingsPage.OVERVIEW) null else ({ page = SettingsPage.OVERVIEW }),
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -179,7 +182,7 @@ fun SettingsScreen(
                                 onRestoreGroup = onRestoreGroup,
                             )
                             EpgSettingsSection(
-                                epgState, onEpgSourceSelected, onUseSuggestedEpgUrl,
+                                epgState, onEpgUrlChanged, onUseSuggestedEpgUrl,
                             )
                         }
                         SettingsPage.PLAYBACK -> PlaybackSettingsSection(
@@ -206,16 +209,6 @@ fun SettingsScreen(
                             )
                         }
                         SettingsPage.SUPPORT -> {
-                            PremiumSettingsSection(premiumSection)
-                            if (BuildConfig.SELF_UPDATER_ENABLED) {
-                                SettingsSection(
-                                    title = stringResource(R.string.settings_section_updates),
-                                    icon = AppIcons.Refresh,
-                                ) {
-                                    UpdateCheckRow(updateSection)
-                                }
-                            }
-                            TutorialSettingsSection(guidedTourSection)
                             HelpSettingsSection(
                                 settingsState,
                                 onOpenHelp,
@@ -224,35 +217,21 @@ fun SettingsScreen(
                                 onBuildDiagnosticsReport,
                                 remuxEffectiveness,
                             )
+                            TutorialSettingsSection(guidedTourSection)
+                            if (BuildConfig.SELF_UPDATER_ENABLED) {
+                                SettingsSection(
+                                    title = stringResource(R.string.settings_section_updates),
+                                    icon = AppIcons.Refresh,
+                                ) {
+                                    UpdateCheckRow(updateSection)
+                                }
+                            }
+                            PremiumSettingsSection(premiumSection)
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SettingsSubpageHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenHPadding, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = AppIcons.ArrowBack,
-                contentDescription = stringResource(R.string.settings_back_to_overview),
-                tint = UaTheme.palette.labelPrimary,
-            )
-        }
-        Text(
-            text = title,
-            style = Title,
-            color = UaTheme.palette.labelPrimary,
-            modifier = Modifier.padding(start = 4.dp),
-        )
     }
 }
 
@@ -279,4 +258,13 @@ private fun AppTheme.settingsLabelRes(): Int = when (this) {
     AppTheme.AZURE -> R.string.theme_name_azure
     AppTheme.CINEMA -> R.string.theme_name_cinema
     AppTheme.MIDNIGHT -> R.string.theme_name_midnight
+    AppTheme.DAYLIGHT -> R.string.theme_name_daylight
+    AppTheme.SYSTEM -> R.string.theme_name_system
+}
+
+@Composable
+private fun OpenEpgSettingsEffect(requested: Boolean, onConsumed: () -> Unit, onOpen: () -> Unit) {
+    androidx.compose.runtime.LaunchedEffect(requested) {
+        if (requested) { onOpen(); onConsumed() }
+    }
 }

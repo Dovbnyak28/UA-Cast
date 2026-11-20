@@ -78,7 +78,7 @@ internal class PlayerTrackMapper(
 
     private fun selectedAudioFormat(format: Format) = SelectedAudioFormat(
         mime = format.sampleMimeType,
-        channelCount = format.channelCount.takeIf { it != Format.NO_VALUE },
+        channelCount = format.channelCount.takeIf { it > 0 },
         sampleRateHz = format.sampleRate.takeIf { it != Format.NO_VALUE },
         bitrateBps = format.bitrate.takeIf { it != Format.NO_VALUE },
     )
@@ -89,7 +89,7 @@ internal class PlayerTrackMapper(
         format: Format,
         selected: Boolean,
     ): SelectableTrack {
-        val channelCount = format.channelCount.takeIf { it != Format.NO_VALUE }
+        val channelCount = format.channelCount.takeIf { it > 0 }
         return SelectableTrack(
             trackGroup = group.mediaTrackGroup,
             indexInGroup = index,

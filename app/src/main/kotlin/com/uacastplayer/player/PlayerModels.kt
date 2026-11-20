@@ -46,6 +46,7 @@ data class PlayerUiState(
     val currentChannel: M3uChannel? = null,
     val isBuffering: Boolean = true,
     val isPlaying: Boolean = false,
+    val hasRenderedVideoFrame: Boolean = false,
     /** Media3 playback intent, including buffering; never inferred from rendered frames. */
     val wantsToPlay: Boolean = false,
     val canControlPlayback: Boolean = false,
@@ -79,6 +80,7 @@ data class PlayerUiState(
      * silently went wrong; nothing else on this screen ever read them separately.
      */
     val castStatusMessage: PlayerCastStatusMessage? = null,
+    val castReceiverName: String? = null,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.DEFAULT,
     /** Whether [PlayerViewModel.requestPreviousChannel] has anywhere to go - false until a second
      * distinct channel has ever loaded this session. */

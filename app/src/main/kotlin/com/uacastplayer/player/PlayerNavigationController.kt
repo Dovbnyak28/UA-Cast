@@ -55,8 +55,18 @@ class PlayerNavigationController internal constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        if (canSeek()) player.seekTo(positionMs)
+        if (canSeekNow()) player.seekTo(positionMs)
     }
+
+    /** Read Media3's current masked position on every tap, never a 500ms UI projection. */
+    fun seekBy(offsetMs: Long) {
+        if (!canSeekNow()) return
+        val duration = player.duration
+        if (duration > 0L) player.seekTo(SeekPolicy.relativeTarget(player.currentPosition, duration, offsetMs))
+    }
+
+    private fun canSeekNow(): Boolean =
+        canSeek() && player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
 
     fun cycleResizeMode() {
         val next = ResizeModeCycle.next(resizeMode.current())

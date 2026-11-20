@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -31,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -280,24 +283,26 @@ private fun BoxScope.GuidedTourCard(
                 .padding(GapL),
             verticalArrangement = Arrangement.spacedBy(GapM),
         ) {
-            when (state.phase) {
-                GuidedTourPhase.WELCOME -> WelcomeContent(
-                    onNext = onNext,
-                    onSkip = onSkip,
-                    onAddPlaylist = onAddPlaylist,
-                )
-                GuidedTourPhase.STEPS -> state.currentStep?.let { step ->
-                    StepContent(state = state, step = step, onNext = onNext, onBack = onBack, onSkip = onSkip)
+            key(state.phase, state.currentStep) {
+                Column(
+                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(GapM),
+                ) {
+                    when (state.phase) {
+                        GuidedTourPhase.WELCOME -> WelcomeContent(onSkip)
+                        GuidedTourPhase.STEPS -> state.currentStep?.let { StepContent(state, it) }
+                        GuidedTourPhase.DONE -> DoneContent()
+                        GuidedTourPhase.IDLE -> Unit
+                    }
                 }
-                GuidedTourPhase.DONE -> DoneContent(onComplete = onComplete)
-                GuidedTourPhase.IDLE -> Unit
             }
+            GuidedTourActions(state.phase, onNext, onBack, onSkip, onAddPlaylist, onComplete)
         }
     }
 }
 
 @Composable
-private fun WelcomeContent(onNext: () -> Unit, onSkip: () -> Unit, onAddPlaylist: () -> Unit) {
+private fun WelcomeContent(onSkip: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = stringResource(R.string.guided_tour_welcome_title),
@@ -318,27 +323,13 @@ private fun WelcomeContent(onNext: () -> Unit, onSkip: () -> Unit, onAddPlaylist
         style = BodyText,
         color = UaTheme.palette.labelSecondary,
     )
-    Button(
-        onClick = onAddPlaylist,
-        modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
-    ) {
-        Text(stringResource(R.string.guided_tour_add_playlist))
-    }
-    TextButton(
-        onClick = onNext,
-        modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
-    ) {
-        Text(stringResource(R.string.guided_tour_start), color = UaTheme.palette.accentText)
-    }
+
 }
 
 @Composable
 private fun StepContent(
     state: GuidedTourState,
     step: GuidedTourStep,
-    onNext: () -> Unit,
-    onBack: () -> Unit,
-    onSkip: () -> Unit,
 ) {
     StepProgress(current = state.stepNumber, total = state.stepCount)
     StepIllustration(step = step)
@@ -352,7 +343,44 @@ private fun StepContent(
         style = BodyText,
         color = UaTheme.palette.labelSecondary,
     )
-    StepActions(onNext = onNext, onBack = onBack, onSkip = onSkip)
+}
+
+/** Actions stay visible while long descriptions and illustrations scroll at accessibility sizes. */
+@Composable
+private fun GuidedTourActions(
+    phase: GuidedTourPhase,
+    onNext: () -> Unit,
+    onBack: () -> Unit,
+    onSkip: () -> Unit,
+    onAddPlaylist: () -> Unit,
+    onComplete: () -> Unit,
+) {
+    when (phase) {
+        GuidedTourPhase.WELCOME -> Column(verticalArrangement = Arrangement.spacedBy(GapM)) {
+            Button(
+                onClick = onAddPlaylist,
+                modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
+            ) {
+                Text(stringResource(R.string.guided_tour_add_playlist))
+            }
+            TextButton(
+                onClick = onNext,
+                modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
+            ) {
+                Text(stringResource(R.string.guided_tour_start), color = UaTheme.palette.accentText)
+            }
+        }
+        GuidedTourPhase.STEPS -> StepActions(onNext, onBack, onSkip)
+        GuidedTourPhase.DONE -> {
+            Button(
+                onClick = onComplete,
+                modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
+            ) {
+                Text(stringResource(R.string.guided_tour_finish))
+            }
+        }
+        GuidedTourPhase.IDLE -> Unit
+    }
 }
 
 /**
@@ -440,7 +468,7 @@ private fun StepIllustration(step: GuidedTourStep) {
 }
 
 @Composable
-private fun DoneContent(onComplete: () -> Unit) {
+private fun DoneContent() {
     Text(
         text = stringResource(R.string.guided_tour_done_title),
         style = LargeTitle,
@@ -451,12 +479,7 @@ private fun DoneContent(onComplete: () -> Unit) {
         style = BodyText,
         color = UaTheme.palette.labelSecondary,
     )
-    Button(
-        onClick = onComplete,
-        modifier = Modifier.fillMaxWidth().heightIn(min = ActionMinHeight),
-    ) {
-        Text(stringResource(R.string.guided_tour_finish))
-    }
+
 }
 
 /**

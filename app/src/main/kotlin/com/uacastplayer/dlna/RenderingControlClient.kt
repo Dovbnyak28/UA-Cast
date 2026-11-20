@@ -23,7 +23,8 @@ private const val TAG = "RenderingControlClient"
  * third type parameterised over exactly the differences above, which is more machinery than fifteen
  * lines of OkHttp is worth.
  */
-class RenderingControlClient(private val httpClient: OkHttpClient) {
+class RenderingControlClient(httpClient: OkHttpClient) {
+    private val httpClient = httpClient.forUpnpControl()
 
     /**
      * The renderer's current volume, or null when it cannot be read.

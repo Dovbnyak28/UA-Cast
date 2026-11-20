@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,20 +52,18 @@ fun rememberArtworkTone(
     refreshKey: Any = Unit,
 ): Color? {
     if (!enabled) return null
-    // EPG matching can fall back to the channel name, so stream URL/logo/id alone do not capture
-    // every change that can select a different icon. The cache key also retires a "no artwork"
-    // result after prefetch or a fresh EPG has supplied an icon.
-    val tone by produceState<Color?>(
-        initialValue = null,
-        key1 = channel,
-        key2 = refreshKey,
-    ) {
-        value = withContext(ioDispatcher) {
-            val file = resolveArtworkToneFile(channel, resolveIcon) ?: return@withContext null
-            sampleTone(file)
+    // The selected-pack revision retires a previous result after pack edits; completed prefetch
+    // retires a "no artwork" result after a matching user-pack logo reaches the cache.
+    // Restarting the producer alone retains the old colour while the next resolver suspends.
+    return key(channel, refreshKey) {
+        val tone by produceState<Color?>(initialValue = null) {
+            value = withContext(ioDispatcher) {
+                val file = resolveArtworkToneFile(channel, resolveIcon) ?: return@withContext null
+                sampleTone(file)
+            }
         }
+        tone
     }
-    return tone
 }
 
 /**

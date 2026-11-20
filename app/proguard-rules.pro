@@ -7,7 +7,4 @@
 # names never leak into persisted data. Don't re-add a keep rule here without
 # first checking a codec actually needs one.
 
-# media3 decoder extensions and nextlib register renderers via reflection.
--keep class androidx.media3.decoder.** { *; }
--keep class io.github.anilbeesetti.nextlib.** { *; }
--dontwarn io.github.anilbeesetti.nextlib.**
+# :ffmpegdecoder owns scoped JNI/reflection keep rules via its consumer-rules.pro.

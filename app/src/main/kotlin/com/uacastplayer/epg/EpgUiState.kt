@@ -4,9 +4,7 @@ data class EpgUiState(
     val data: EpgData? = null,
     val isLoading: Boolean = false,
     val hasError: Boolean = false,
-    val selectedSource: EpgSource = EpgSource.DEFAULT,
-    /** Non-null when a playlist/Xtream-provided URL (see [EpgSourceAutoDetect]) is active instead
-     * of [selectedSource]. */
+    /** User-configured or user-playlist-provided guide. Null means no guide is configured. */
     val customUrl: String? = null,
     /** A playlist-provided EPG URL not yet applied - see [EpgSourceAutoDetect.Action.Suggest].
      * Shown in Settings with a "Use" action. */

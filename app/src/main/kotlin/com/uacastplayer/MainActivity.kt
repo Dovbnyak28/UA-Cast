@@ -10,49 +10,32 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.saveable.Saver
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import com.uacastplayer.remote.PhoneRemoteViewModel
+import com.uacastplayer.remote.TvRemoteReceiverViewModel
+import com.uacastplayer.remote.dispatchTvRemote
+import com.uacastplayer.ui.remote.RemoteControlHost
+import com.uacastplayer.ui.tv.TvPresentation
+import com.uacastplayer.ui.tv.TvInputRegistry
+import com.uacastplayer.ui.tv.isTelevision
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.data.prefs.withAppLocale
-import com.uacastplayer.favorites.FavoriteKey
-import com.uacastplayer.player.PlayerRequest
+import android.content.Intent
+import com.uacastplayer.media.LocalVideoOpenViewModel
 import com.uacastplayer.ui.language.LanguagePickerScreen
 import com.uacastplayer.ui.legal.TermsScreen
-import com.uacastplayer.ui.theme.UaCastTheme
 import com.uacastplayer.update.UpdateInstallState
 
 /** Key for the one entry in `ScaffoldZone`'s [rememberSaveableStateHolder] - see its `else`
  * branch. There is deliberately only ever one: the Help/Terms/AddPlaylist screens are transient and
  * keep nothing, so only the tab scaffold underneath them has state worth holding on to. */
 internal const val ROOT_SCAFFOLD_STATE_KEY = "root-scaffold"
-
-internal fun PlayerRequest.toSavedRequest(): SavedPlayerRequest? = channels.getOrNull(startIndex)?.let { channel ->
-    SavedPlayerRequest(FavoriteKey.of(channel), startIndex)
-}
-
-/** The Bundle-safe remnant of a [PlayerRequest] that survives process death - just the playing
- * channel's stable key (see [FavoriteKey]), never the channel list itself, which can be
- * megabytes for large playlists and would risk a TransactionTooLargeException. */
-internal data class SavedPlayerRequest(val channelKey: String, val startIndex: Int)
-
-/** The persisted player key is newer than the saveable marker after a channel switch. */
-internal fun SavedPlayerRequest.preferredChannelKey(persistedKey: String?): String =
-    persistedKey ?: channelKey
-
-internal val SavedPlayerRequestSaver: Saver<SavedPlayerRequest?, List<Any>> = Saver(
-    save = { request -> request?.let { listOf(it.channelKey, it.startIndex) }.orEmpty() },
-    restore = { saved ->
-        val channelKey = saved.getOrNull(0) as? String
-        val startIndex = saved.getOrNull(1) as? Int
-        if (channelKey.isNullOrBlank() || startIndex == null || startIndex < 0) {
-            null
-        } else {
-            SavedPlayerRequest(channelKey, startIndex)
-        }
-    },
-)
 
 /**
  * A plain ComponentActivity crashes the Cast SDK's MediaRouteButton, so this must stay a
@@ -61,14 +44,30 @@ internal val SavedPlayerRequestSaver: Saver<SavedPlayerRequest?, List<Any>> = Sa
 class MainActivity : FragmentActivity() {
 
     private val viewModel: AppViewModel by viewModels()
+    private val phoneRemote: PhoneRemoteViewModel by viewModels()
+    private val tvRemote: TvRemoteReceiverViewModel by viewModels()
+    private val localVideo: LocalVideoOpenViewModel by viewModels()
+    private val tvInputRegistry = TvInputRegistry()
     private var activeLanguage: AppLanguage? = null
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase.withAppLocale())
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openVideoIntent(intent)
+    }
+
+    private fun openVideoIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW || intent.data?.scheme != "content") return
+        localVideo.open(checkNotNull(intent.data).toString(),
+            persist = intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0)
+    }
+
     override fun onStart() {
         super.onStart()
+        viewModel.refreshPremiumAccess()
         // Returning from the system's "install unknown apps" screen is not an installer result.
         // Once permission was granted, return the action to its retryable state; otherwise the
         // banner would keep opening Settings even though the user has already allowed installs.
@@ -96,6 +95,16 @@ class MainActivity : FragmentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) openVideoIntent(intent)
+
+        val television = isTelevision()
+        if (television) lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                tvRemote.commands.collect { event ->
+                    tvRemote.consume(event) { command -> dispatchTvRemote(command, tvInputRegistry::dispatchToDialog) }
+                }
+            }
+        }
 
         activeLanguage = viewModel.uiState.value.language
 
@@ -116,7 +125,12 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            UaCastTheme(theme = uiState.appTheme) {
+            AppAppearanceTheme(viewModel, uiState.appTheme, television) {
+                if (uiState.needsLanguagePicker || uiState.needsTermsAcceptance) {
+                    com.uacastplayer.ui.theme.SystemBarAppearance(com.uacastplayer.ui.theme.UaTheme.palette.isDark)
+                }
+                TvPresentation(television, tvInputRegistry) {
+                    RemoteControlHost(television, phoneRemote, tvRemote) {
                 when {
                     uiState.needsLanguagePicker ->
                         LanguagePickerScreen(onLanguageConfirmed = viewModel::selectLanguage)
@@ -133,11 +147,20 @@ class MainActivity : FragmentActivity() {
                     else -> MainAppContent(
                         viewModel = viewModel,
                         currentLanguage = uiState.language,
-                        currentAppTheme = uiState.appTheme,
+                        currentAppTheme = com.uacastplayer.ui.theme.themeForScreen(uiState.appTheme, television),
                         onFinish = { finish() },
                     )
                 }
+                    }
+                }
             }
         }
+    }
+
+    override fun onStop() {
+        // Also covers language/Activity recreation; no listener or socket survives an invisible owner.
+        phoneRemote.disconnect()
+        tvRemote.stop()
+        super.onStop()
     }
 }

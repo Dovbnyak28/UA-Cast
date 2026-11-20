@@ -18,19 +18,19 @@ val LargeTitle = TextStyle(
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val Title = TextStyle(
-    fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.03).em,
+    fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.025).em,
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val CardTitle = TextStyle(
-    fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.02).em,
+    fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.015).em,
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val BodyText = TextStyle(
-    fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.01).em,
+    fontSize = 14.5.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.01).em,
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val BodyRegular = TextStyle(
-    fontSize = 13.5.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.em,
+    fontSize = 13.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.em,
     fontFeatureSettings = TABULAR_NUMS, fontFamily = AppSansFamily,
 )
 val Caption = TextStyle(
@@ -89,13 +89,19 @@ val DisplayName: TextStyle
     @Composable get() = CardTitle.copy(fontFamily = UaTheme.palette.displayFontFamily)
 
 val AppTypography = Typography(
-    displayLarge = LargeTitle,
+    displayLarge = LargeTitle.copy(fontSize = 36.sp, lineHeight = 44.sp),
+    displayMedium = LargeTitle.copy(fontSize = 32.sp, lineHeight = 40.sp),
+    displaySmall = LargeTitle.copy(lineHeight = 36.sp),
     headlineLarge = Title,
-    titleLarge = CardTitle,
+    headlineMedium = Title.copy(fontSize = 22.sp, lineHeight = 28.sp),
+    headlineSmall = Title.copy(fontSize = 20.sp, lineHeight = 26.sp),
+    titleLarge = CardTitle.copy(fontSize = 20.sp, lineHeight = 26.sp),
     titleMedium = CardTitle,
+    titleSmall = CardTitle.copy(fontSize = 14.sp, lineHeight = 20.sp),
+    // Preserve compact form metrics: at 200% a 240dp landscape sheet still needs a full 48dp row.
     bodyLarge = BodyText,
-    bodyMedium = BodyRegular,
-    bodySmall = Caption,
+    bodyMedium = BodyRegular.copy(fontSize = 14.sp, lineHeight = 21.sp),
+    bodySmall = Caption.copy(lineHeight = 18.sp),
     // labelLarge is what Material3's own Button/OutlinedButton/TextButton use for their text by
     // default (every plain Button(onClick = ...) { Text(...) } with no explicit style, e.g. the
     // "Додати плейлист"/"Завантажити та зберегти"/onboarding "Продовжити" buttons) - it was
@@ -103,7 +109,7 @@ val AppTypography = Typography(
     // button text was unreadably small confirmed it. labelMedium/labelSmall are meant to be
     // smaller than labelLarge; SectionLabel was actually smaller than both, which was itself a
     // sign this mapping was a mistake rather than a deliberate small-button-text design choice.
-    labelLarge = ButtonLabel,
-    labelMedium = CaptionSemibold,
-    labelSmall = Micro,
+    labelLarge = ButtonLabel.copy(lineHeight = 20.sp),
+    labelMedium = CaptionSemibold.copy(lineHeight = 16.sp),
+    labelSmall = Micro.copy(lineHeight = 16.sp),
 )

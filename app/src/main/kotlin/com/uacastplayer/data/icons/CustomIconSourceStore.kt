@@ -7,8 +7,8 @@ import com.uacastplayer.icons.CustomIconSourcePolicy
 import org.json.JSONArray
 
 /**
- * User-added base-URL icon sources (e.g. `https://mycdn.com/logos/`), tried before the built-in
- * CDN fallback - see [IconRepository]/[com.uacastplayer.icons.IconResolver]. Small, non-critical,
+ * User-added base-URL icon packs (e.g. `https://mycdn.com/logos/`), the only channel-logo sources
+ * used by [IconRepository]/[com.uacastplayer.icons.IconResolver]. Small, non-critical,
  * editable list, so a plain JSON-array-in-one-SharedPreferences-value is enough - unlike
  * [com.uacastplayer.data.favorites.FavoritesStore] this doesn't need AtomicFile crash-safety;
  * losing this list in a rare write race just means re-adding a couple of URLs, not losing user data.

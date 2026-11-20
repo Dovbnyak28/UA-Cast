@@ -21,9 +21,19 @@ val RadiusSegInner = 9.dp
 
 // Buttons
 val PlayButtonSize = 66.dp
-val RoundButtonSize = 46.dp
-val IconButtonSize = 38.dp
+val RoundButtonSize = 48.dp
+val IconButtonSize = 48.dp
 val TouchTargetMin = 48.dp
+
+/** 4/8dp rhythm for new foundations. Existing screen spacing aliases remain compatible. */
+object AppSpacing {
+    val xxs = 4.dp
+    val xs = 8.dp
+    val small = 12.dp
+    val medium = 16.dp
+    val large = 24.dp
+    val extraLarge = 32.dp
+}
 
 /** Fixed height for a [com.uacastplayer.ui.player.QuickSettingsRow] item's label - some labels
  * (translated, in the longer locales) wrap to 2 lines while others fit on 1, and without a shared
@@ -47,7 +57,7 @@ val MiniPlayerBarHeight = 64.dp
  * [MiniPlayerBar][com.uacastplayer.ui.player.MiniPlayerBar] positioning code, which floats above
  * the tab bar from outside RootScaffold's own Scaffold layout, can stay in sync with it. */
 val GlassTabBarHeight = 64.dp
-val GlassTabBarVerticalPadding = 8.dp
+val GlassTabBarVerticalPadding = 0.dp
 val NpLogoSize = 54.dp
 val NpLogoRadius = 16.dp
 val ProgressHeightThin = 3.dp

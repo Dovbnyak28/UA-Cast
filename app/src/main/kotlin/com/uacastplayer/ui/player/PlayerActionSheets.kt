@@ -2,25 +2,40 @@
 
 package com.uacastplayer.ui.player
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.ui.theme.BodyText
+import com.uacastplayer.ui.theme.panelSurface
 import com.uacastplayer.R
 import com.uacastplayer.dlna.DlnaConnectionState
 import com.uacastplayer.player.PlayerUiState
-import com.uacastplayer.ui.components.SecondaryButton
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.UaTheme
@@ -33,46 +48,82 @@ internal fun PlayerActionsSheet(
     actions: PlayerScreenActions,
     hasPreviousChannel: Boolean,
     isRemote: Boolean = false,
+    isFile: Boolean = false,
 ) {
-    ModalBottomSheet(onDismissRequest = { state.showActionsSheet = false }, containerColor = UaTheme.palette.surface2) {
+    ModalBottomSheet(onDismissRequest = { state.showActionsSheet = false }, containerColor = UaTheme.palette.surface2,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(ScreenHPadding)) {
             Text(stringResource(R.string.player_more_controls), style = Title)
             if (isRemote) Text(stringResource(R.string.player_remote_controls_notice))
-            if (hasPreviousChannel) {
-                SecondaryButton(
-                    text = stringResource(R.string.player_previous_channel),
-                    onClick = { state.showActionsSheet = false; actions.viewModel.navigation.requestPreviousChannel() },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
+            if (hasPreviousChannel && !isFile) {
+                PlayerActionRow(stringResource(R.string.player_previous_channel), AppIcons.SkipPrevious) {
+                    state.showActionsSheet = false
+                    actions.viewModel.navigation.requestPreviousChannel()
+                }
             }
             listOf(
-                R.string.player_levels to { state.showLevelsSheet = true },
-                R.string.player_audio_track to { state.showAudioDialog = true },
-                R.string.player_subtitle_track to { state.showSubtitleDialog = true },
-                R.string.player_tv_guide to { state.showGuideSheet = true },
-                R.string.player_quality to { state.showQualityDialog = true },
-                R.string.player_aspect_ratio to {
+                Triple(R.string.player_levels, AppIcons.Brightness) { state.showLevelsSheet = true },
+                Triple(R.string.player_audio_track, AppIcons.AudioTrack) { state.showAudioDialog = true },
+                Triple(R.string.player_subtitle_track, AppIcons.Subtitles) { state.showSubtitleDialog = true },
+                Triple(R.string.player_tv_guide, AppIcons.Guide) { state.showGuideSheet = true },
+                Triple(R.string.player_quality, AppIcons.Quality) { state.showQualityDialog = true },
+                Triple(R.string.player_aspect_ratio, AppIcons.AspectRatio) {
                     actions.viewModel.navigation.cycleResizeMode()
                     state.resizeModeToastNonce++
                 },
-                R.string.player_sleep_timer to { state.showSleepTimerDialog = true },
-                R.string.player_view_all to { state.showChannelsSheet = true },
-            ).filter { (label, _) -> !isRemote || playerActionAvailableRemotely(label) }.forEach { (label, action) ->
-                SecondaryButton(
-                    text = stringResource(label),
-                    onClick = { state.showActionsSheet = false; action() },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-            }
+                Triple(R.string.player_sleep_timer, AppIcons.Timer) { state.showSleepTimerDialog = true },
+                Triple(R.string.player_view_all, AppIcons.Channels) { state.showChannelsSheet = true },
+            ).filter { (label, _, _) -> playerActionVisible(label, isRemote, isFile) }
+                .forEach { (label, icon, action) ->
+                    PlayerActionRow(stringResource(label), icon) {
+                        state.showActionsSheet = false
+                        action()
+                    }
+                }
         }
+    }
+}
+
+private const val ACTION_CHEVRON_ROTATION = -90f
+
+@Composable
+private fun PlayerActionRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp).panelSurface(shape).tvFocus(shape)
+        .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+        .heightIn(min = 56.dp).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(32.dp).background(UaTheme.palette.azure.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = UaTheme.palette.azure, modifier = Modifier.size(20.dp))
+        }
+        Text(label, style = BodyText, color = UaTheme.palette.labelPrimary, modifier = Modifier.weight(1f))
+        Icon(AppIcons.ChevronDown, null, tint = UaTheme.palette.labelSecondary,
+            modifier = Modifier.size(16.dp).rotate(ACTION_CHEVRON_ROTATION))
     }
 }
 
 internal fun playerActionAvailableRemotely(label: Int): Boolean = label == R.string.player_tv_guide ||
     label == R.string.player_sleep_timer || label == R.string.player_view_all
 
+internal fun playerActionVisible(label: Int, remote: Boolean, file: Boolean): Boolean {
+    val channelAction = label == R.string.player_tv_guide || label == R.string.player_view_all ||
+        label == R.string.player_previous_channel
+    return !(file && channelAction) && (!remote || playerActionAvailableRemotely(label))
+}
+
 internal fun remotePlaybackOwnsControls(player: PlayerUiState, dlna: DlnaConnectionState): Boolean =
     player.isCasting || dlna.isConnecting || dlna.connectedDevice != null
+
+@Composable
+internal fun FilePlaybackDialogEffect(isFile: Boolean, state: PlayerScreenTransientState) {
+    LaunchedEffect(isFile) {
+        if (isFile) {
+            state.showGuideSheet = false
+            state.showChannelsSheet = false
+        }
+    }
+}
 
 @Composable
 internal fun RemotePlaybackDialogEffect(isRemote: Boolean, state: PlayerScreenTransientState) {
@@ -82,26 +133,6 @@ internal fun RemotePlaybackDialogEffect(isRemote: Boolean, state: PlayerScreenTr
             state.showAudioDialog = false
             state.showSubtitleDialog = false
             state.showQualityDialog = false
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun PlayerDevicePicker(onDlna: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = UaTheme.palette.surface2) {
-        Column(Modifier.fillMaxWidth().padding(ScreenHPadding)) {
-            Text(stringResource(R.string.player_devices), style = Title)
-            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.player_chromecast_cast), modifier = Modifier.weight(1f))
-                // The native route button owns Chromecast status; aggregate remote playback also includes DLNA.
-                PlayerCastButton()
-            }
-            SecondaryButton(
-                text = stringResource(R.string.dlna_sheet_title),
-                onClick = { onDismiss(); onDlna() },
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }

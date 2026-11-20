@@ -16,11 +16,13 @@ class PlayerDlnaController(
     fun connect(device: DlnaDevice) {
         val channel = currentChannel() ?: return
         beforeConnect()
-        repository.connect(device, channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer)
+        repository.connect(
+            device, channel.streamUrl, channel.displayName, channel.userAgent, channel.referrer, channel.localVideo,
+        )
     }
 
     fun stop() = repository.stop()
 
-    /** No-op if nothing is connected or the renderer has no RenderingControl service. */
-    fun setVolume(volume: Int) = repository.setVolume(volume)
+    /** A delayed UI gesture must still belong to the renderer shown when it began. */
+    fun setVolume(device: DlnaDevice, volume: Int) = repository.setVolume(device, volume)
 }

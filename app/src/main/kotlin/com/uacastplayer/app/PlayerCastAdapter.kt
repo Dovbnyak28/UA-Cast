@@ -56,6 +56,8 @@ internal object PlayerCastMapping {
         isConnected = state.loadPhase != CastLoadPhase.FAILED && !state.receiverLoadFailed &&
             (state.isSessionConnected || state.loadPhase == CastLoadPhase.LOADING),
         statusMessage = status(CastStatusMessagePolicy.messageFor(state)),
+        // Name belongs to the SDK session, including a media load that failed before its first status update.
+        receiverName = state.receiverName,
     )
 
     fun channel(channel: PlayerCastChannel): CastChannel = CastChannel(
@@ -65,6 +67,7 @@ internal object PlayerCastMapping {
         userAgent = channel.userAgent,
         referrer = channel.referrer,
         logoUrl = channel.logoUrl,
+        localVideo = channel.localVideo,
     )
 
     fun effect(effect: CastSideEffect): PlayerCastSideEffect = when (effect) {

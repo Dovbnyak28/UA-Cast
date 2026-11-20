@@ -2,7 +2,7 @@ package com.uacastplayer
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -21,7 +22,8 @@ import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.log.AppLog
 import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.ui.platform.launchOrLogAbsence
-import com.uacastplayer.data.playlist.withPlaylistCpu
+import com.uacastplayer.ui.settings.LocalIconPackCheck
+import com.uacastplayer.ui.settings.rememberIconPackCheckAction
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.player.PlayerContainerStateMachine
 import com.uacastplayer.player.PlayerRequest
@@ -29,14 +31,18 @@ import com.uacastplayer.parentalcontrol.PlayerChannelAccess
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.ui.guidedtour.GuidedTourHost
+import com.uacastplayer.ui.nav.AdaptiveRootLayout
+import com.uacastplayer.ui.tv.LocalTvMode
+import com.uacastplayer.ads.BannerAdAudience
+import com.uacastplayer.ui.ads.LocalBannerAdAudience
 import com.uacastplayer.ui.components.UpdateOfferDialog
+import com.uacastplayer.ui.components.RetainedUnderlay
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.premium.LocalPremiumNotice
 import com.uacastplayer.ui.premium.rememberFeatureGate
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.player.PlayerRequestViewModel
 import com.uacastplayer.update.GitHubRelease
-import java.time.LocalDate
 
 /**
  * Everything past the onboarding gate: the main scaffold (Home/Channels/Favorites/Settings tabs),
@@ -60,19 +66,20 @@ internal fun MainAppContent(
     val pickPlaylistFile = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::loadPlaylistFromFile) }
-    val exportBackupFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri -> uri?.let(viewModel::exportBackupTo) }
-    val importBackupFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::importBackupFrom) }
+    val backupDocuments = rememberBackupDocumentActions(viewModel)
+    val iconPackCheck = rememberIconPackCheckAction(playlistState.channels)
 
     val requestOwner = androidx.lifecycle.viewmodel.compose.viewModel<PlayerRequestViewModel>()
     val playerRequest by requestOwner.request.collectAsStateWithLifecycle()
     var pendingOpen by remember { mutableStateOf<PlayerRequest?>(null) }
+    var opaquePlayerToken by remember { mutableStateOf<Any?>(null) }
     var playerContainerState by rememberSaveable {
         mutableStateOf(PlayerContainerStateMachine.State.CLOSED)
     }
+    com.uacastplayer.ui.theme.SystemBarAppearance(
+        dark = com.uacastplayer.ui.theme.UaTheme.palette.isDark ||
+            (playerRequest != null && playerContainerState == PlayerContainerStateMachine.State.EXPANDED),
+    )
     var savedPlayerRequest by rememberSaveable(stateSaver = SavedPlayerRequestSaver) {
         mutableStateOf<SavedPlayerRequest?>(null)
     }
@@ -132,7 +139,8 @@ internal fun MainAppContent(
 
     // Offered here rather than from AppViewModel's init, so it happens *after* the language and
     // terms gates rather than behind them.
-    LaunchedEffect(Unit) { viewModel.offerGuidedTourOnLaunch() }
+    val television = LocalTvMode.current
+    LaunchedEffect(television) { if (!television) viewModel.offerGuidedTourOnLaunch() }
     // Incremented (never reset) each time a playlist load finishes from AddPlaylistScreen, so
     // RootScaffold's LaunchedEffect(token) fires again even if the value happened to repeat - it's
     // a one-shot "switch to Channels" signal, not a persisted tab selection.
@@ -143,47 +151,33 @@ internal fun MainAppContent(
     // find it by key. The original sub-list (e.g. a specific group or search results) isn't
     // recoverable, so this falls back to the full flat playlist; if the channel is gone entirely,
     // the saved marker is dropped and the player just stays closed.
-    LaunchedEffect(savedPlayerRequest, playlistState.groups, parentalReady, lockedKeys, sessionUnlocked) {
-        val saved = savedPlayerRequest ?: return@LaunchedEffect
-        if (requestOwner.request.value != null || !playlistState.hasChannels || !parentalReady) return@LaunchedEffect
-        // Off the main thread: FavoriteKey.of is a SHA-256 per channel without a tvg-id, and this
-        // scans the entire flattened playlist - tens of thousands of channels on a large provider
-        // list, at exactly the moment the app is being restored and the user is waiting on a frame.
-        val restored = withPlaylistCpu {
-            // PlayerViewModel persists every switch, while AppViewModel's StateFlow is refreshed
-            // only when the player closes. Prefer that synchronous value so a process death or a
-            // rotation after Next/Previous restores the channel that was actually on screen, not
-            // the channel that originally opened this PlayerHost.
-            val restoreKey = saved.preferredChannelKey(viewModel.persistedLastWatchedChannelKey())
-            PlayerChannelAccess.forRestore(
-                playlistState.channels, restoreKey, lockedKeys, FavoriteKey::of, sessionUnlocked, parentalReady,
-            )
-        }
-        // A new open/close can arrive during the CPU hop. It must win over this old restore.
-        if (savedPlayerRequest != saved || requestOwner.request.value != null) return@LaunchedEffect
-        // A locked channel must not come back on its own - see
-        // PlayerChannelAccess.mayRestoreAfterProcessDeath. This path reopens the player without a
-        // tap, so it is the one place the PIN gate can never have run.
-        if (restored != null) {
-            // playerContainerState is itself rememberSaveable, so the Expanded/Collapsed layout the
-            // user left it in normally survives process death on its own - this only needs to force
-            // it open if that somehow didn't happen (fresh state).
-            requestOwner.open(PlayerRequest(restored.channels, restored.startIndex))
+    RestorePlayerRequest(
+        savedPlayerRequest, playlistState, parentalReady, lockedKeys, sessionUnlocked, requestOwner,
+        { savedPlayerRequest }, viewModel::persistedLastWatchedChannelKey,
+        onRestored = {
             if (playerContainerState == PlayerContainerStateMachine.State.CLOSED) {
                 playerContainerState = PlayerContainerStateMachine.reduce(
                     playerContainerState,
                     PlayerContainerStateMachine.Event.Open,
                 )
             }
-        } else {
-            savedPlayerRequest = null
-        }
-    }
+        },
+        onMissing = { savedPlayerRequest = null },
+    )
 
     // Wraps everything, including the player and the dialogs: the tour is drawn over the app, and
     // the app is what it is pointing at. Placed here rather than inside ScaffoldZone so a target
     // registered anywhere - the player Cast button, a channel row's star - reaches the same
     // registry.
+    com.uacastplayer.ui.media.LocalVideoDocumentHost(onVideo = { video ->
+        viewModel.guidedTourSkip()
+        showHelp = false
+        showTerms = false
+        showPrivacyPolicy = false
+        showAddPlaylist = false
+        val request = PlayerRequest.forLocalVideo(video)
+        openPlayer(request.channels, request.startIndex)
+    }) {
     GuidedTourHost(
         state = guidedTourState,
         onNext = viewModel::guidedTourNext,
@@ -248,63 +242,74 @@ internal fun MainAppContent(
             section = premiumSection,
         )
         CompositionLocalProvider(
+            LocalIconPackCheck provides iconPackCheck,
+            // Stored paid access is resolved synchronously in AppViewModel's init before this UI.
+            // Suppress all ad work during local/remote playback and first-run guidance.
+            LocalBannerAdAudience provides BannerAdAudience(entitlements,
+                blocked = playerRequest != null || guidedTourState.isVisible),
             com.uacastplayer.ui.epg.LocalEpgRefresh provides viewModel.epgController::refresh,
             LocalFeatureGate provides premiumUi.gate,
             LocalPremiumNotice provides premiumUi.notice,
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                ScaffoldZone(
-                    viewModel = viewModel,
-                    miniPlayerVisible = PlayerContainerStateMachine.isMiniPlayerVisible(
-                        playerContainerState, hasRequest = playerRequest != null,
-                    ),
-                    playlistState = playlistState,
-                    guidedTourDestination = guidedTourState.currentStep?.destination,
-                    currentLanguage = currentLanguage,
-                    currentAppTheme = currentAppTheme,
-                    onExitApp = onFinish,
-                    showHelp = showHelp,
-                    showTerms = showTerms,
-                    showPrivacyPolicy = showPrivacyPolicy,
-                    showAddPlaylist = showAddPlaylist,
-                    focusChannelsToken = focusChannelsToken,
-                    onOpenHelp = { showHelp = true },
-                    onOpenTerms = { showTerms = true },
-                    onOpenPrivacyPolicy = { showPrivacyPolicy = true },
-                    onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport,
-                    onOpenAddPlaylist = { showAddPlaylist = true },
-                    onCloseHelp = { showHelp = false },
-                    onCloseTerms = { showTerms = false },
-                    onClosePrivacyPolicy = { showPrivacyPolicy = false },
-                    onCloseAddPlaylist = { showAddPlaylist = false },
-                    onChannelSelected = openPlayer,
-                    onPlaylistLoaded = {
-                        showAddPlaylist = false
-                        focusChannelsToken++
+            // Resolve the shared viewport before either layer is measured. A nested constraints
+            // subcomposition in PlayerZone used to report opacity after navigation was measured.
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val surfaceRequest = playerRequest
+                // Keep only a small UI token after closure, never the previous channel list.
+                val surfaceToken = remember(surfaceRequest) { Any() }
+                RetainedUnderlay(
+                    covered = {
+                        surfaceRequest != null && playerContainerState == PlayerContainerStateMachine.State.EXPANDED &&
+                            opaquePlayerToken === surfaceToken
                     },
-                    // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
-                    // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
-                    pickPlaylistFile = {
-                        pickPlaylistFile.launchOrLogAbsence(
-                            arrayOf("audio/x-mpegurl", "*/*"),
-                            "pick a playlist",
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    CompositionLocalProvider(com.uacastplayer.ui.tv.LocalTvBrowseActive provides
+                        (!television || playerContainerState != PlayerContainerStateMachine.State.EXPANDED)) {
+                        ScaffoldZone(
+                            viewModel = viewModel,
+                            miniPlayerVisible = PlayerContainerStateMachine.isMiniPlayerVisible(
+                                playerContainerState, hasRequest = playerRequest != null,
+                            ),
+                            playlistState = playlistState,
+                            guidedTourDestination = guidedTourState.currentStep?.destination,
+                            currentLanguage = currentLanguage,
+                            currentAppTheme = currentAppTheme,
+                            onExitApp = onFinish,
+                            showHelp = showHelp,
+                            showTerms = showTerms,
+                            showPrivacyPolicy = showPrivacyPolicy,
+                            showAddPlaylist = showAddPlaylist,
+                            focusChannelsToken = focusChannelsToken,
+                            onOpenHelp = { showHelp = true },
+                            onOpenTerms = { showTerms = true },
+                            onOpenPrivacyPolicy = { showPrivacyPolicy = true },
+                            onBuildDiagnosticsReport = viewModel::buildDiagnosticsReport,
+                            onOpenAddPlaylist = { showAddPlaylist = true },
+                            onCloseHelp = { showHelp = false },
+                            onCloseTerms = { showTerms = false },
+                            onClosePrivacyPolicy = { showPrivacyPolicy = false },
+                            onCloseAddPlaylist = { showAddPlaylist = false },
+                            onChannelSelected = openPlayer,
+                            onPlaylistLoaded = {
+                                showAddPlaylist = false
+                                focusChannelsToken++
+                            },
+                            // launchOrLogAbsence, not launch: a device with no Storage Access Framework - an
+                            // Android TV box, a stripped ROM - throws out of these, on the main thread, from a tap.
+                            pickPlaylistFile = {
+                                pickPlaylistFile.launchOrLogAbsence(
+                                    arrayOf("audio/x-mpegurl", "*/*"),
+                                    "pick a playlist",
+                                )
+                            },
+                            exportBackupFile = backupDocuments.export,
+                            importBackupFile = backupDocuments.restore,
+                            requireParentalControlUnlock = requireParentalControlUnlock,
+                            premiumSection = premiumSection,
                         )
-                    },
-                    exportBackupFile = {
-                        exportBackupFile.launchOrLogAbsence(
-                            "ua-cast-backup-${LocalDate.now()}.json",
-                            "export a backup",
-                        )
-                    },
-                    importBackupFile = {
-                        importBackupFile.launchOrLogAbsence(
-                            arrayOf("application/json", "*/*"),
-                            "import a backup",
-                        )
-                    },
-                    requireParentalControlUnlock = requireParentalControlUnlock,
-                    premiumSection = premiumSection,
-                )
+                    }
+                }
 
                 // A single stable PlayerHost call site, always composed whenever a channel is loaded
                 // regardless of layout, drawn as a later sibling so it overlays whatever ScaffoldZone is
@@ -313,11 +318,15 @@ internal fun MainAppContent(
                 // would mean a second, independent instance of all three.
                 PlayerZone(
                     viewModel = viewModel,
-                    playerRequest = playerRequest,
+                    playerRequest = surfaceRequest,
                     playerContainerState = playerContainerState,
+                    usesNavigationRail = maxWidth >= AdaptiveRootLayout.MEDIUM_WIDTH_DP.dp,
                     onPlayerContainerStateChange = { playerContainerState = it },
                     onClosePlayer = closePlayer,
-                    backHandlerBlocked = showHelp || showTerms || showPrivacyPolicy || showAddPlaylist,
+                    onOpacityChanged = { opaque ->
+                        if (opaque) opaquePlayerToken = surfaceToken
+                        else if (opaquePlayerToken === surfaceToken) opaquePlayerToken = null
+                    },
                 )
 
                 BatteryHintZone(viewModel = viewModel)
@@ -341,6 +350,7 @@ internal fun MainAppContent(
                 premiumUi.overlays()
             }
         }
+    }
     }
 }
 

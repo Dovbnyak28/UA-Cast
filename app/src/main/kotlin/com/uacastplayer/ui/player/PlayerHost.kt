@@ -16,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uacastplayer.ui.tv.LocalTvMode
 import androidx.media3.common.util.UnstableApi
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
@@ -68,6 +69,7 @@ fun PlayerHost(
     favoriteActions: PlayerFavoriteActions,
     enrichment: PlayerEnrichmentState,
     modifier: Modifier = Modifier,
+    onOpacityChanged: (Boolean) -> Unit = {},
 ) {
     val (isFavorite, onToggleFavorite) = favoriteActions
     val (epgState, iconPrefetchState) = enrichment
@@ -127,9 +129,12 @@ fun PlayerHost(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Keep entrance state in the host: the expanded child leaves composition when collapsed,
+    // so remembering the same key inside that branch would still replay on every expansion.
+    val openingModifier = Modifier.openTransform(key = channels to startIndex, onOpacityChanged = onOpacityChanged)
     Box(modifier = modifier) {
-        if (collapsed) {
-            val iconRefreshKey: Any = epgState.data?.index to iconPrefetchState.completedRuns
+        if (collapsed && !LocalTvMode.current) {
+            val iconRefreshKey: Any = iconPrefetchState.refreshKey
             MiniPlayerBar(
                 viewModel = viewModel,
                 resolveIcon = resolveIcon,
@@ -142,16 +147,13 @@ fun PlayerHost(
             PlayerScreen(
                 viewModel = viewModel,
                 channels = channels,
-                onExit = onCollapse,
+                onExit = if (LocalTvMode.current) onExit else onCollapse,
                 isFavorite = isFavorite,
                 onToggleFavorite = onToggleFavorite,
                 resolveIcon = resolveIcon,
                 epgState = epgState,
                 iconPrefetchState = iconPrefetchState,
-                // Keyed on the request, not on `collapsed`: expanding the mini bar back to full
-                // screen is a return to something already open, and replaying the opening there
-                // would say a channel had just been picked when none had.
-                modifier = Modifier.openTransform(key = channels to startIndex),
+                modifier = openingModifier,
             )
         }
     }

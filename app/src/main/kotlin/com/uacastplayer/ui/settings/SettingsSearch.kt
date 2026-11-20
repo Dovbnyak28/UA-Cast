@@ -37,6 +37,7 @@ private fun normalize(value: String): String = value.lowercase(Locale.ROOT)
 
 @Composable
 internal fun settingsSearchEntries(): List<SettingsSearchEntry> = listOf(
+    searchEntry(R.string.settings_reduced_effects, SettingsPage.GENERAL, "animation effects"),
     searchEntry(R.string.settings_theme_label, SettingsPage.GENERAL, ""),
     searchEntry(R.string.settings_language_label, SettingsPage.GENERAL, ""),
     searchEntry(R.string.settings_epg_source_label, SettingsPage.PLAYLIST, "EPG XMLTV"),

@@ -34,7 +34,7 @@ sealed interface EpgDownloadResult {
 
 /**
  * Downloads an XMLTV feed's raw bytes as-is - never inflated at download time, since some feeds
- * are gzip-compressed and others are already-plain XML (see [EpgSource]). Streams straight to a
+ * are gzip-compressed and others are already-plain XML. Streams straight to a
  * temp file under [tempDir] instead of buffering in memory: feeds can run tens of megabytes, and
  * a single in-memory ByteArray that size is wasteful on top of whatever else is loaded at once.
  * Callers own the returned [EpgDownloadResult.Success.documentFile] and must delete it once done.
@@ -45,16 +45,27 @@ class EpgDownloader(
     private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
 ) {
 
-    suspend fun download(url: String): EpgDownloadResult = withContext(ioDispatcher) {
-        deleteStaleDownloads()
-        var attempt = 0
-        var result: EpgDownloadResult
-        do {
-            attempt++
-            delay(HttpRetryPolicy.delayBeforeAttemptMillis(attempt))
-            result = attemptOnce(url)
-        } while (isRetryable(result, attempt))
-        result
+    suspend fun download(url: String): EpgDownloadResult {
+        // Ownership is not transferred until withContext returns to the caller. Prompt cancellation
+        // at that dispatcher boundary can discard Success after all bytes have landed on disk.
+        var unclaimedFile: File? = null
+        return try {
+            withContext(ioDispatcher) {
+                deleteStaleDownloads()
+                var attempt = 0
+                var result: EpgDownloadResult
+                do {
+                    attempt++
+                    delay(HttpRetryPolicy.delayBeforeAttemptMillis(attempt))
+                    result = attemptOnce(url)
+                } while (isRetryable(result, attempt))
+                if (result is EpgDownloadResult.Success) unclaimedFile = result.documentFile
+                result
+            }
+        } catch (cancelled: CancellationException) {
+            unclaimedFile?.delete()
+            throw cancelled
+        }
     }
 
     /**

@@ -34,6 +34,9 @@ internal fun openInstallPermissionSettings(context: Context) {
         context.startActivity(intent)
     } catch (e: ActivityNotFoundException) {
         AppLog.w("MainActivity") { "this device has no install-permission screen: ${e.javaClass.simpleName}" }
+    } catch (e: SecurityException) {
+        // An OEM Settings component can resolve but refuse external callers. Keep the user in
+        // the app instead of crashing on the update button; the permission row remains retryable.
+        AppLog.w("MainActivity") { "this device denied the install-permission screen: ${e.javaClass.simpleName}" }
     }
 }
-

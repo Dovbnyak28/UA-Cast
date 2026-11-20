@@ -13,6 +13,7 @@ val EaseSpring = CubicBezierEasing(
 )
 
 const val DUR_ENTER = 220
+const val DUR_FEEDBACK = 120
 /** Duration for subtle top-level destination transitions. */
 const val DUR_NAV = 220
 const val DUR_PRESS = 250
@@ -22,9 +23,9 @@ const val GLIDE_MS = 2200
 const val BREATHE_MS = 2000
 
 // Press-scale targets (rule 2)
-const val PRESS_SCALE_PLAY = 0.94f
-const val PRESS_SCALE_ROUND = 0.88f
-const val PRESS_SCALE_ICON = 0.90f
+const val PRESS_SCALE_PLAY = 0.97f
+const val PRESS_SCALE_ROUND = 0.97f
+const val PRESS_SCALE_ICON = 0.96f
 
 /** Unified pressed-state darkening (rule 2 extension, see ui/theme/Depth.kt's [darken]) - how much
  * darker a [com.uacastplayer.ui.theme.raisedSurface]'s base color gets while pressed, instead of

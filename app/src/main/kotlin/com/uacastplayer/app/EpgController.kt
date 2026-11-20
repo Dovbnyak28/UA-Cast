@@ -5,9 +5,9 @@ import com.uacastplayer.data.epg.EpgOutcome
 import com.uacastplayer.data.epg.EpgRepository
 import com.uacastplayer.data.prefs.AppPreferences
 import com.uacastplayer.epg.EpgRefreshPolicy
-import com.uacastplayer.epg.EpgSource
 import com.uacastplayer.epg.EpgSourceAutoDetect
 import com.uacastplayer.epg.EpgUiState
+import com.uacastplayer.epg.EpgUrlPolicy
 import com.uacastplayer.log.AppLog
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -43,7 +46,7 @@ class EpgController(
     private val isUnmeteredNetwork: () -> Boolean = { false },
 ) {
     private val _epgState = MutableStateFlow(
-        EpgUiState(selectedSource = preferences.epgSource, customUrl = preferences.customEpgUrl)
+        EpgUiState(customUrl = preferences.customEpgUrl)
     )
     val epgState: StateFlow<EpgUiState> = _epgState.asStateFlow()
 
@@ -61,6 +64,7 @@ class EpgController(
      * [startTicking] is deliberately not routed through here - it is a permanent loop, not a load.
      */
     private var loadJob: Job? = null
+    private var tickJob: Job? = null
     private val loadGeneration = AtomicLong()
     private val initialLoadStarted = AtomicBoolean(false)
 
@@ -86,7 +90,7 @@ class EpgController(
             // non-suspending sweep inside a single withContext, so cancellation can only be
             // observed on the way out - after the sweep has already run.
             epgRepository.deleteStaleDownloads()
-            val configuredUrl = preferences.customEpgUrl ?: preferences.epgSource.url
+            val configuredUrl = preferences.customEpgUrl ?: return@launchLoad
             val restored = epgRepository.restoreSnapshot(configuredUrl)
             if (restored != null) {
                 applyEpgOutcome(restored.outcome, loadGeneration = generation)
@@ -96,13 +100,7 @@ class EpgController(
                 // configured source is never fetched until the user manually reopens Settings and
                 // reselects it, leaving the Home screen's "restoring" status stuck forever.
                 _epgState.update { it.copy(isLoading = true) }
-                val customUrl = preferences.customEpgUrl
-                val outcome = if (customUrl != null) {
-                    epgRepository.loadFromUrl(customUrl)
-                } else {
-                    epgRepository.loadFromSource(preferences.epgSource)
-                }
-                applyEpgOutcome(outcome, loadGeneration = generation)
+                applyEpgOutcome(epgRepository.loadFromUrl(configuredUrl), loadGeneration = generation)
             }
         }
     }
@@ -123,12 +121,8 @@ class EpgController(
             isUnmetered = isUnmeteredNetwork(),
         )
         if (!shouldRefresh) return
-        val customUrl = preferences.customEpgUrl
-        val outcome = if (customUrl != null) {
-            epgRepository.loadFromUrl(customUrl)
-        } else {
-            epgRepository.loadFromSource(preferences.epgSource)
-        }
+        val customUrl = preferences.customEpgUrl ?: return
+        val outcome = epgRepository.loadFromUrl(customUrl)
         if (outcome is EpgOutcome.Loaded) {
             applyEpgOutcome(outcome, loadGeneration = generation)
         } else {
@@ -139,54 +133,48 @@ class EpgController(
     /** Refreshes [EpgUiState.nowMillis] every [EPG_TICK_MILLIS] so current/next-programme
      * lookups stay live - called once from AppViewModel.init. */
     fun startTicking() {
-        scope.launch {
-            while (isActive) {
-                delay(EPG_TICK_MILLIS)
-                _epgState.update { it.copy(nowMillis = System.currentTimeMillis()) }
+        if (tickJob?.isActive == true) return
+        tickJob = scope.launch {
+            epgState.map { it.data != null }.distinctUntilChanged().collectLatest { hasGuide ->
+                if (hasGuide) while (isActive) {
+                    delay(EPG_TICK_MILLIS)
+                    _epgState.update { it.copy(nowMillis = System.currentTimeMillis()) }
+                }
             }
-        }
-    }
-
-    fun selectEpgSource(source: EpgSource) {
-        initialLoadStarted.set(true)
-        preferences.epgSource = source
-        preferences.customEpgUrl = null
-        preferences.hasChosenEpgSource = true
-        _epgState.update {
-            val sourceChanged = it.customUrl != null || it.selectedSource != source
-            it.copy(
-                data = if (sourceChanged) null else it.data,
-                selectedSource = source,
-                customUrl = null,
-                suggestedUrl = null,
-                isLoading = true,
-                hasError = false,
-                lastFailure = null,
-            )
-        }
-        launchLoad { generation ->
-            applyEpgOutcome(epgRepository.loadFromSource(source), loadGeneration = generation)
         }
     }
 
     /** Retry the current source without changing the user's provider or auto-detection choice. */
     fun refresh() {
         if (_epgState.value.isLoading) return
+        val url = _epgState.value.customUrl ?: return
         initialLoadStarted.set(true)
-        val current = _epgState.value
         _epgState.update { it.copy(isLoading = true, hasError = false, lastFailure = null) }
         launchLoad { generation ->
-            val outcome = current.customUrl?.let { epgRepository.loadFromUrl(it) }
-                ?: epgRepository.loadFromSource(current.selectedSource)
-            applyEpgOutcome(outcome, loadGeneration = generation)
+            applyEpgOutcome(epgRepository.loadFromUrl(url), loadGeneration = generation)
         }
     }
 
     /** Accepts the "EPG address found in playlist" suggestion (see [EpgSourceAutoDetect]) - counts
-     * as the user's own manual choice from here on, same as [selectEpgSource]. */
+     * as the user's own manual choice from here on. */
     fun useSuggestedEpgUrl() {
         val url = epgState.value.suggestedUrl ?: return
         applyCustomEpgUrl(url, markChosen = true)
+    }
+
+    /** Empty input explicitly disables the guide; later playlist suggestions remain optional. */
+    fun setUserEpgUrl(value: String) {
+        if (value.isNotBlank()) {
+            EpgUrlPolicy.normalize(value)?.let { applyCustomEpgUrl(it, markChosen = true) }
+            return
+        }
+        initialLoadStarted.set(true)
+        loadGeneration.incrementAndGet()
+        loadJob?.cancel()
+        preferences.customEpgUrl = null
+        preferences.hasChosenEpgSource = true
+        _epgState.value = EpgUiState()
+        onLoaded()
     }
 
     fun applyCustomEpgUrl(url: String, markChosen: Boolean) {
@@ -230,7 +218,8 @@ class EpgController(
         _epgState.update { current ->
             when (outcome) {
                 is EpgOutcome.Loaded ->
-                    current.copy(data = outcome.data, isLoading = false, hasError = false, lastFailure = null)
+                    current.copy(data = outcome.data, isLoading = false, hasError = false,
+                        lastFailure = null, nowMillis = System.currentTimeMillis())
                 else -> current.copy(isLoading = false, hasError = true, lastFailure = failure)
             }
         }

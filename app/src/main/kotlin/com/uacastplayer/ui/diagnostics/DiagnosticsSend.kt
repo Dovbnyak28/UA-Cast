@@ -1,6 +1,5 @@
 package com.uacastplayer.ui.diagnostics
 
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -30,6 +29,8 @@ import com.uacastplayer.ui.UiTestTags
 import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
+import com.uacastplayer.ui.tv.tvFocus
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -139,19 +140,19 @@ suspend fun sendDiagnostics(
             .onSuccess { return }
             .onFailure { AppLog.w(TAG) { "Nothing could take the report with its log; sending the summary" } }
     }
-    try {
-        context.startActivity(diagnosticsEmailIntent(report))
-    } catch (_: ActivityNotFoundException) {
-        AppLog.w(TAG) { "No mail app to send the report with - falling back to a share sheet" }
-        val fallback = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_EMAIL, arrayOf(DiagnosticsEmail.RECIPIENT))
-            putExtra(Intent.EXTRA_SUBJECT, DiagnosticsEmail.subject(BuildConfig.VERSION_NAME, android.os.Build.MODEL))
-            putExtra(Intent.EXTRA_TEXT, report)
-        }
-        runCatchingNonFatal { context.startActivity(Intent.createChooser(fallback, chooserTitle)) }
-            .onFailure { AppLog.w(TAG) { "Nothing on this device can send the report" } }
+    if (runCatchingNonFatal { context.startActivity(diagnosticsEmailIntent(report)) }.isSuccess) return
+    // A mail activity can resolve yet reject the launch (for example under a managed-profile
+    // policy). The attachment and share-sheet paths already treat any nonfatal launch failure as
+    // recoverable; the summary-only path must offer the same fallback.
+    AppLog.w(TAG) { "Mail app could not open the report - falling back to a share sheet" }
+    val fallback = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(DiagnosticsEmail.RECIPIENT))
+        putExtra(Intent.EXTRA_SUBJECT, DiagnosticsEmail.subject(BuildConfig.VERSION_NAME, android.os.Build.MODEL))
+        putExtra(Intent.EXTRA_TEXT, report)
     }
+    runCatchingNonFatal { context.startActivity(Intent.createChooser(fallback, chooserTitle)) }
+        .onFailure { AppLog.w(TAG) { "Nothing on this device can send the report" } }
 }
 
 /**
@@ -177,6 +178,7 @@ fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () ->
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.diagnostics_preview_title)) },
         text = {
+            TvDialogInputRegistration()
             Column {
                 Text(
                     text = stringResource(R.string.diagnostics_preview_body_hint),
@@ -198,10 +200,14 @@ fun DiagnosticsPreviewDialog(report: String, onCancel: () -> Unit, onSend: () ->
             }
         },
         confirmButton = {
-            TextButton(onClick = onSend) { Text(stringResource(R.string.diagnostics_preview_send)) }
+            TextButton(onClick = onSend, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.diagnostics_preview_send))
+            }
         },
         dismissButton = {
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.diagnostics_preview_cancel)) }
+            TextButton(onClick = onCancel, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.diagnostics_preview_cancel))
+            }
         },
     )
 }

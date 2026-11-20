@@ -5,32 +5,33 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.RenderersFactory
 import com.uacastplayer.log.AppLog
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 
 private const val TAG = "PlayerRenderersFactory"
 
 /**
- * NextRenderersFactory adds FFmpeg-backed software decoders (MP2/AC-3/DTS audio in particular,
- * which are common on IPTV feeds but not guaranteed on-device). If it fails to construct for any
- * reason, fall back to the plain DefaultRenderersFactory rather than crashing the player.
+ * Media3 discovers the Apache/LGPL software audio/video extensions from :ffmpegdecoder.
+ * Hardware stays first to preserve power/CPU use; software covers codecs unavailable on-device.
+ * Packaging fails closed on missing/stale native inputs. A device-specific native-load failure
+ * must still allow supported platform formats, rather than crashing the entire player.
  */
 @UnstableApi
 object PlayerRenderersFactoryProvider {
 
-    // Not narrowed further: the doc above covers "fails to construct for any reason" - any
-    // exception from the third-party factory should trigger the same fallback, not just some.
-    @Suppress("TooGenericExceptionCaught")
     fun create(context: Context): RenderersFactory {
-        return try {
-            NextRenderersFactory(context).apply {
-                setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-                setEnableDecoderFallback(true)
-            }
-        } catch (e: Exception) {
-            AppLog.w(TAG) { "NextRenderersFactory unavailable, falling back to default: ${e.javaClass.simpleName}" }
-            DefaultRenderersFactory(context).apply {
-                setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-            }
+        val softwareAvailable = try {
+            FfmpegLibrary.isAvailable()
+        } catch (error: LinkageError) {
+            AppLog.w(TAG) { "Software decoder native load failed: ${error.javaClass.simpleName}" }
+            false
+        }
+        if (!softwareAvailable) AppLog.w(TAG) { "Software decoder unavailable on this runtime" }
+        return DefaultRenderersFactory(context.applicationContext).apply {
+            setExtensionRendererMode(
+                if (softwareAvailable) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF,
+            )
+            setEnableDecoderFallback(true)
         }
     }
 }

@@ -36,8 +36,8 @@ private const val LIVE_STREAM_PROTOCOL_INFO =
  */
 object AvTransportSoapBuilder {
 
-    fun setAvTransportUriEnvelope(mediaUrl: String, title: String): String {
-        val metadata = xmlEscape(didlLite(mediaUrl, title))
+    fun setAvTransportUriEnvelope(mediaUrl: String, title: String, contentType: String? = null): String {
+        val metadata = xmlEscape(didlLite(mediaUrl, title, contentType))
         val body = "<InstanceID>0</InstanceID>" +
             "<CurrentURI>${xmlEscape(mediaUrl)}</CurrentURI>" +
             "<CurrentURIMetaData>$metadata</CurrentURIMetaData>"
@@ -52,8 +52,12 @@ object AvTransportSoapBuilder {
 
     fun soapAction(action: String): String = "\"$AV_TRANSPORT_SERVICE_TYPE#$action\""
 
-    fun didlLite(mediaUrl: String, title: String): String =
-        "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
+    fun didlLite(mediaUrl: String, title: String, contentType: String? = null): String {
+        require(contentType == null || contentType.matches(Regex("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")))
+        val mediaClass = if (contentType == null) "object.item.videoItem.videoBroadcast" else "object.item.videoItem"
+        val protocolInfo = contentType?.let { "http-get:*:$it:DLNA.ORG_OP=01;DLNA.ORG_CI=0" }
+            ?: LIVE_STREAM_PROTOCOL_INFO
+        return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
             "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
             "<item id=\"0\" parentID=\"0\" restricted=\"1\">" +
@@ -61,9 +65,10 @@ object AvTransportSoapBuilder {
             // videoBroadcast, not the generic videoItem: it is the DIDL class for a live channel,
             // and it is the signal a renderer uses to lay out a "no duration, no scrub bar" UI
             // instead of showing a progress bar for a stream that has no end.
-            "<upnp:class>object.item.videoItem.videoBroadcast</upnp:class>" +
-            "<res protocolInfo=\"$LIVE_STREAM_PROTOCOL_INFO\">${xmlEscape(mediaUrl)}</res>" +
+            "<upnp:class>$mediaClass</upnp:class>" +
+            "<res protocolInfo=\"$protocolInfo\">${xmlEscape(mediaUrl)}</res>" +
             "</item></DIDL-Lite>"
+    }
 
     private fun envelope(action: String, body: String): String =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +

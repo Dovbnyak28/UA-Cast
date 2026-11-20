@@ -24,25 +24,32 @@ class IconFailureStore(context: Context) {
         // IconRepository.fetchAndValidate) may have blacklisted URLs that only 403'd because of
         // that missing header - clear them once per schema bump so those channels get a fresh
         // chance. See IconFailureStoreMigration for the stored-vs-current version decision.
-        val storedVersion = if (prefs.contains(KEY_SCHEMA_VERSION)) prefs.getInt(KEY_SCHEMA_VERSION, 0) else null
-        if (IconFailureStoreMigration.shouldClearPermanentFailures(storedVersion, SCHEMA_VERSION)) {
-            prefs.edit {
-                for (key in prefs.all.keys) {
-                    if (key != KEY_SCHEMA_VERSION) remove(key)
+        synchronized(permanentRecordLock) {
+            val storedVersion = if (prefs.contains(KEY_SCHEMA_VERSION)) prefs.getInt(KEY_SCHEMA_VERSION, 0) else null
+            if (IconFailureStoreMigration.shouldClearPermanentFailures(storedVersion, SCHEMA_VERSION)) {
+                prefs.edit {
+                    for (key in prefs.all.keys) {
+                        if (key != KEY_SCHEMA_VERSION) remove(key)
+                    }
+                    putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
                 }
-                putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
             }
         }
     }
 
     fun shouldSkip(url: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
         val key = Fingerprint.of(url)
-        val permanentAt = if (prefs.contains(key)) prefs.getLong(key, 0L) else null
+        val skipPermanent = synchronized(permanentRecordLock) {
+            val permanentAt = if (prefs.contains(key)) prefs.getLong(key, 0L) else null
+            storedFailureShouldSkip(permanentAt, isPermanent = true, nowMillis) {
+                prefs.edit { remove(key) }
+            }
+        }
+        if (skipPermanent) return true
         val transientAt = transientFailures[key]
-        return storedFailureShouldSkip(permanentAt, isPermanent = true, nowMillis) {
-            prefs.edit { remove(key) }
-        } || storedFailureShouldSkip(transientAt, isPermanent = false, nowMillis) {
-            transientFailures.remove(key)
+        return storedFailureShouldSkip(transientAt, isPermanent = false, nowMillis) {
+            // Expiring one snapshot must not remove a newer network failure for the same URL.
+            transientFailures.remove(key, transientAt)
         }
     }
 
@@ -61,7 +68,9 @@ class IconFailureStore(context: Context) {
     fun recordFailure(url: String, isPermanent: Boolean, nowMillis: Long = System.currentTimeMillis()) {
         val key = Fingerprint.of(url)
         if (isPermanent) {
-            prefs.edit { putLong(key, nowMillis) }
+            synchronized(permanentRecordLock) {
+                prefs.edit { putLong(key, nowMillis) }
+            }
         } else {
             transientFailures[key] = nowMillis
         }
@@ -91,26 +100,38 @@ class IconFailureStore(context: Context) {
      * [IconFailurePolicy.PERMANENT_TTL_MILLIS]) - nothing was enforcing it.
      */
     fun pruneExpiredFailures(nowMillis: Long = System.currentTimeMillis()) {
-        transientFailures.entries.removeIf { (_, recordedAt) ->
-            IconFailurePolicy.isExpired(FailureRecord(recordedAt, isPermanent = false), nowMillis)
+        transientFailures.forEach { (key, recordedAt) ->
+            if (IconFailurePolicy.isExpired(FailureRecord(recordedAt, isPermanent = false), nowMillis)) {
+                transientFailures.remove(key, recordedAt)
+            }
         }
         prunePersistedFailures(nowMillis)
     }
 
     private fun prunePersistedFailures(nowMillis: Long) {
         val expired = prefs.all
-            .filterKeys { it != KEY_SCHEMA_VERSION }
             // Anything that is not a Long is not a failure record this class wrote - skipped rather
             // than assumed, so a future key of another type here can never be deleted by accident.
-            .filterValues { value ->
-                value is Long && IconFailurePolicy.isExpired(FailureRecord(value, isPermanent = true), nowMillis)
+            .filter { (key, value) ->
+                key != KEY_SCHEMA_VERSION && value is Long &&
+                    IconFailurePolicy.isExpired(FailureRecord(value, isPermanent = true), nowMillis)
             }
-            .keys
         if (expired.isEmpty()) return
-        prefs.edit { expired.forEach(::remove) }
+        // Snapshot/filter maintenance stays off the record lock. A fetch can renew a key while
+        // that work runs; re-check it atomically with removal instead of deleting the fresh value.
+        synchronized(permanentRecordLock) {
+            val unchangedKeys = expired.keys.filter { key ->
+                prefs.contains(key) && prefs.getLong(key, 0L) == expired[key]
+            }
+            if (unchangedKeys.isNotEmpty()) prefs.edit { unchangedKeys.forEach(::remove) }
+        }
     }
 
     private companion object {
+        // All owners write the same prefs file. This lock retains no Context and covers only
+        // timestamp metadata, never HTTP, icon bytes, or the maintenance snapshot scan.
+        val permanentRecordLock = Any()
+
         // Not a URL fingerprint (see Fingerprint.of) - namespaced so it can't collide with one.
         const val KEY_SCHEMA_VERSION = "__schema_version__"
 

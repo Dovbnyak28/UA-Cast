@@ -7,7 +7,6 @@ import com.uacastplayer.favorites.FavoritesSortOrder
 import com.uacastplayer.core.settings.IconDisplayMode
 import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.performance.DeviceTier
-import com.uacastplayer.performance.HeapBudget
 import com.uacastplayer.performance.DeviceTierDefaults
 import com.uacastplayer.settings.CacheSizes
 import com.uacastplayer.settings.IconPlaceholdersBannerPolicy
@@ -42,6 +41,7 @@ class SettingsController(
             wrapAroundEnabled = preferences.wrapAroundEnabled,
             autoSkipDeadEnabled = preferences.autoSkipDeadEnabled,
             deviceTier = baseDeviceTier,
+            reducedVisualEffects = resolvedReducedEffects(baseDeviceTier),
         )
     )
     val settingsState: StateFlow<SettingsUiState> = _settingsState.asStateFlow()
@@ -92,6 +92,7 @@ class SettingsController(
         _settingsState.update {
             it.copy(
                 deviceTier = effectiveTier,
+                reducedVisualEffects = resolvedReducedEffects(effectiveTier),
                 iconDisplayMode = iconDisplayMode,
                 iconDisplayModeIsAutomatic = !preferences.hasChosenIconDisplayMode,
                 showIconTierBanner = iconTierBannerVisible(iconDisplayMode),
@@ -123,6 +124,14 @@ class SettingsController(
     fun setAutoSkipDeadEnabled(enabled: Boolean) {
         preferences.autoSkipDeadEnabled = enabled
         _settingsState.update { it.copy(autoSkipDeadEnabled = enabled) }
+    }
+
+    private fun resolvedReducedEffects(tier: DeviceTier): Boolean =
+        preferences.reducedVisualEffects ?: (tier == DeviceTier.LOW_END)
+
+    fun setReducedVisualEffects(enabled: Boolean) {
+        preferences.reducedVisualEffects = enabled
+        _settingsState.update { it.copy(reducedVisualEffects = enabled) }
     }
 
     fun updateCacheSizes(sizes: CacheSizes) {

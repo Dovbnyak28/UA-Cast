@@ -39,7 +39,9 @@ object PlaybackBadges {
     fun audioCodecLabel(mimeType: String?): String? = when (mimeType?.lowercase()) {
         null -> null
         "audio/mp4a-latm" -> "AAC"
-        "audio/mpeg", "audio/mpeg-l2" -> "MP2"
+        "audio/mpeg" -> "MP3"
+        "audio/mpeg-l1" -> "MP1"
+        "audio/mpeg-l2" -> "MP2"
         "audio/ac3" -> "AC-3"
         "audio/eac3" -> "E-AC-3"
         "audio/vnd.dts" -> "DTS"
@@ -54,7 +56,8 @@ object PlaybackBadges {
     fun textCodecLabel(mimeType: String?): String? = when (mimeType?.lowercase()) {
         null -> null
         "text/vtt" -> "WebVTT"
-        "application/x-subrip", "text/x-ssa" -> "SRT"
+        "application/x-subrip" -> "SRT"
+        "text/x-ssa" -> "SSA/ASS"
         "application/ttml+xml" -> "TTML"
         "application/cea-608" -> "CEA-608"
         "application/cea-708" -> "CEA-708"

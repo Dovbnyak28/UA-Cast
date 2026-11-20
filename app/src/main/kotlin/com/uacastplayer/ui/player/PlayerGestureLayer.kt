@@ -70,12 +70,14 @@ internal fun restoreWindowBrightness(activity: Activity) {
 private const val MAX_SYSTEM_BRIGHTNESS = 255f
 
 internal fun initialBrightnessLevel(activity: Activity): Float {
+    val windowBrightness = activity.window.attributes.screenBrightness
+    if (windowBrightness >= 0f) return BrightnessGestureStart.level(windowBrightness, null)
     val systemBrightness = try {
         Settings.System.getInt(activity.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / MAX_SYSTEM_BRIGHTNESS
     } catch (_: Settings.SettingNotFoundException) {
         null
     }
-    return BrightnessGestureStart.level(activity.window.attributes.screenBrightness, systemBrightness)
+    return BrightnessGestureStart.level(windowBrightness, systemBrightness)
 }
 
 internal fun applyStreamVolume(audioManager: AudioManager, level: Float) = applyStreamVolume(
@@ -167,11 +169,12 @@ internal fun GestureLevelIndicator(kind: GestureIndicatorKind, level: Float, mod
 
 internal object FullscreenController {
     fun apply(activity: Activity, enabled: Boolean) {
-        activity.requestedOrientation = if (enabled) {
+        val orientation = if (enabled) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+        if (activity.requestedOrientation != orientation) activity.requestedOrientation = orientation
         val windowInsetsController = androidx.core.view.WindowCompat.getInsetsController(
             activity.window,
             activity.window.decorView,

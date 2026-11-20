@@ -1,23 +1,16 @@
 package com.uacastplayer.ui.channels
 import com.uacastplayer.ui.theme.UaTheme
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -28,8 +21,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,49 +29,30 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.playlist.withPlaylistCpu
-import com.uacastplayer.guidedtour.GuidedTourKeys
-import com.uacastplayer.ui.guidedtour.guidedTourTarget
+import com.uacastplayer.data.playlist.filterPlaylistChannels
 import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.core.settings.ListDensity
-import com.uacastplayer.epg.CurrentNextProgrammes
 import com.uacastplayer.epg.EpgLookup
 import com.uacastplayer.epg.EpgUiState
-import com.uacastplayer.epg.ProgrammeProgress
 import com.uacastplayer.playlist.ChannelListKeys
 import com.uacastplayer.playlist.ChannelRowShape
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
-import com.uacastplayer.playlist.NameQualityBadge
 import com.uacastplayer.playlist.groupDisplayKey
-import com.uacastplayer.ui.components.ChannelIcon
-import com.uacastplayer.ui.components.GlowStatusDot
-import com.uacastplayer.ui.components.StatusPillVariant
-import com.uacastplayer.ui.components.TrackProgress
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.rememberEntryStagger
 import com.uacastplayer.ui.components.staggeredEntry
-import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.BodyText
-import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.DUR_PRESS
-import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapM
-import com.uacastplayer.ui.theme.ItemPadding
-import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
-import com.uacastplayer.ui.theme.RadiusField
 import com.uacastplayer.ui.theme.RadiusList
-import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.ChannelTileMinWidth
 import com.uacastplayer.ui.theme.ChannelTileMinWidthLarge
 import com.uacastplayer.ui.theme.HairlineInsetChannels
@@ -103,8 +75,12 @@ internal fun SingleGroupChannelList(
     onBack: () -> Unit,
     onChannelClick: (M3uChannel) -> Unit,
     onLongPressChannel: (M3uChannel) -> Unit,
+    onGuide: (M3uChannel) -> Unit = {},
+    categoryStrip: @Composable () -> Unit = {},
 ) {
     var query by rememberSaveable(groupDisplayKey(grouped.group)) { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     val trimmedQuery = rememberDebounced(query.trim())
     val filteredChannels by produceState(grouped.channels, grouped.channels, trimmedQuery) {
         value = if (trimmedQuery.isEmpty()) {
@@ -112,58 +88,36 @@ internal fun SingleGroupChannelList(
         } else {
             // One provider can put every channel in a single group. Filtering that list belongs
             // beside whole-playlist search, not in the composition that draws the text field.
-            withPlaylistCpu {
-                grouped.channels.filter { it.displayName.contains(trimmedQuery, ignoreCase = true) }
-            }
+            filterPlaylistChannels(grouped.channels, trimmedQuery)
         }
     }
+    SyncCatalogScrollAnchor(layout, filteredChannels.size, listState, gridState)
     // Replays when the filter changes: a search that narrows 400 rows to 3 is new content arriving,
     // and the wave is what makes that legible. Also covers opening a different group.
     val entryStagger = rememberEntryStagger(filteredChannels)
+    val animateItems = animationsAllowed()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxWidth().padding(top = GapM)) {
-            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                Icon(
-                    AppIcons.ArrowBack,
-                    contentDescription = stringResource(R.string.common_back),
-                    tint = UaTheme.palette.labelPrimary,
-                )
-            }
-            Text(
-                text = groupLabel(grouped.group),
-                style = Title,
-                color = UaTheme.palette.labelPrimary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                maxLines = 1,
-                modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
-            )
-            Box(modifier = Modifier.align(Alignment.CenterEnd)) {
-                ChannelLayoutMenu(selected = layout, onSelect = onLayoutChange)
-            }
-        }
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text(stringResource(R.string.channels_search_hint)) },
-            leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
-            singleLine = true,
-            shape = RoundedCornerShape(RadiusField),
-            colors = uaTextFieldColors(),
-            // Same tour key as the groups screen's own search field. The two are never composed
-            // together - this one exists only inside an opened group - so whichever the user is
-            // looking at is the one the tour highlights.
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = GapM)
-                .guidedTourTarget(GuidedTourKeys.CHANNEL_SEARCH),
-        )
-
+    val header: @Composable () -> Unit = {
+        ChannelCatalogHeader(query, { query = it }, categoryStrip)
+    }
+    Column(Modifier.fillMaxSize()) {
+        ChannelCatalogToolbar(grouped, layout, onLayoutChange, onBack)
+        Box(Modifier.weight(1f)) {
         if (filteredChannels.isEmpty()) {
-            NoSearchResults(trimmedQuery)
+            LazyColumn(Modifier.fillMaxSize()) {
+                item(key = "header", contentType = "header") { header() }
+                item(key = "empty", contentType = "empty") {
+                    Text(stringResource(R.string.channels_no_search_results, trimmedQuery), style = BodyText,
+                        modifier = Modifier.padding(vertical = GapM))
+                    androidx.compose.material3.TextButton(onClick = { query = "" }) {
+                        Text(stringResource(R.string.channels_clear_search))
+                    }
+                }
+            }
         } else if (layout == ChannelLayout.LIST) {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(top = GapM),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = GapM)) {
+                item(key = "header", contentType = "header") { header() }
                 // One LazyColumn item per channel - NOT a single item wrapping a forEachIndexed
                 // Column - so LazyColumn actually virtualizes a large group instead of composing
                 // every row up front regardless of what's on screen. Corner rounding is computed
@@ -174,6 +128,7 @@ internal fun SingleGroupChannelList(
                 itemsIndexed(
                     filteredChannels,
                     key = { index, channel -> ChannelListKeys.keyFor(index, channel.streamUrl) },
+                    contentType = { _, _ -> "channel" },
                 ) { index, channel ->
                     val rounding = ChannelRowShape.roundingFor(index, filteredChannels.lastIndex)
                     val shape = RoundedCornerShape(
@@ -189,17 +144,15 @@ internal fun SingleGroupChannelList(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index)
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, entryKey, index, animationsEnabled = animateItems)
                             .clip(shape)
                             .background(UaTheme.palette.surface1),
                     ) {
                         // nowMillis only changes once a minute (see EpgUiState), so this only
                         // recomputes on an actual minute tick or a channel/data change - not on
                         // every recomposition this row goes through while scrolling.
-                        val programme = remember(channel.streamUrl, epgState.data, epgState.nowMillis) {
-                            epgState.data?.let { EpgLookup.currentAndNext(it, channel, epgState.nowMillis) }
-                        }
+                        val programme = rememberChannelProgramme(channel, epgState)
                         ChannelRow(
                             channel = channel,
                             programme = programme,
@@ -212,6 +165,7 @@ internal fun SingleGroupChannelList(
                             isLocked = isLocked(channel),
                             onClick = { onChannelClick(channel) },
                             onLongClick = { onLongPressChannel(channel) },
+                            onGuide = { onGuide(channel) },
                         )
                         if (!rounding.bottom) {
                             Box(
@@ -229,17 +183,25 @@ internal fun SingleGroupChannelList(
             val tileMinWidth = if (layout == ChannelLayout.LARGE_ICONS) {
                 ChannelTileMinWidthLarge
             } else {
-                ChannelTileMinWidth
+                // Two independent 48dp controls plus horizontal padding must fit in every tile.
+                maxOf(ChannelTileMinWidth, 128.dp)
             }
+            val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(tileMinWidth),
+                columns = GridCells.Adaptive(
+                    if (fontScale >= LARGE_CATALOG_FONT_SCALE) ChannelTileMinWidthLarge else tileMinWidth),
+                state = gridState,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = GapM),
                 modifier = Modifier.fillMaxSize().padding(top = GapM),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                item(key = "header", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) },
+                    contentType = "header") { header() }
                 gridItemsIndexed(
                     filteredChannels,
                     key = { index, channel -> ChannelListKeys.keyFor(index, channel.streamUrl) },
+                    contentType = { _, _ -> "channel" },
                 ) { index, channel ->
                     val entryKey = ChannelListKeys.keyFor(index, channel.streamUrl)
                     ChannelTile(
@@ -248,14 +210,20 @@ internal fun SingleGroupChannelList(
                         resolveIcon = resolveIcon,
                         large = layout == ChannelLayout.LARGE_ICONS,
                         isLocked = isLocked(channel),
+                        programme = rememberChannelProgramme(channel, epgState),
+                        nowMillis = epgState.nowMillis,
+                        isFavorite = isFavorite(channel),
+                        onToggleFavorite = { onToggleFavorite(channel) },
+                        onGuide = { onGuide(channel) },
                         onClick = { onChannelClick(channel) },
                         onLongClick = { onLongPressChannel(channel) },
                         modifier = Modifier
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = entryKey, index = index),
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, entryKey, index, animationsEnabled = animateItems),
                     )
                 }
             }
+        }
         }
     }
 }
@@ -311,173 +279,3 @@ private fun ChannelLayout.labelRes(): Int = when (this) {
     ChannelLayout.LARGE_ICONS -> R.string.channel_layout_large_icons
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChannelRow(
-    channel: M3uChannel,
-    programme: CurrentNextProgrammes?,
-    nowMillis: Long,
-    iconRefreshKey: Any,
-    resolveIcon: suspend (M3uChannel) -> File?,
-    density: ListDensity,
-    isFavorite: Boolean,
-    onToggleFavorite: () -> Unit,
-    isLocked: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) PRESS_SCALE_ROUND else 1f,
-        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
-        label = "channelRowScale",
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
-                role = Role.Button,
-                onClickLabel = channel.displayName,
-                onLongClickLabel = stringResource(R.string.channels_more_actions),
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .padding(ItemPadding),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (density != ListDensity.MINIMAL) ChannelIcon(channel, resolveIcon, refreshKey = iconRefreshKey)
-        Column(modifier = Modifier.weight(1f).padding(start = if (density == ListDensity.MINIMAL) 0.dp else 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = channel.displayName,
-                    style = BodyText.copy(fontFamily = UaTheme.palette.displayFontFamily),
-                    color = UaTheme.palette.labelPrimary,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (density == ListDensity.FULL) {
-                    // NameQualityBadge.detect runs a handful of regexes - only worth redoing when
-                    // the name it's scanning actually changes, not on every recomposition this row
-                    // goes through while scrolling.
-                    val qualityBadge = remember(channel.displayName) { NameQualityBadge.detect(channel.displayName) }
-                    qualityBadge?.let { badge ->
-                        Text(
-                            text = badge,
-                            style = Caption,
-                            color = UaTheme.palette.accentText,
-                            modifier = Modifier.padding(start = 6.dp),
-                        )
-                    }
-                }
-            }
-            val current = programme?.current
-            val effectiveStop = programme?.effectiveStopMillis
-            if (density == ListDensity.FULL && current != null && effectiveStop != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                    GlowStatusDot(variant = StatusPillVariant.Bad, size = 6.dp)
-                    Text(
-                        text = current.title,
-                        style = Caption,
-                        color = UaTheme.palette.labelSecondary,
-                        modifier = Modifier.padding(start = 6.dp),
-                    )
-                }
-                TrackProgress(
-                    progress = ProgrammeProgress.progress(current.startMillis, effectiveStop, nowMillis),
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-        }
-        if (isLocked) {
-            Icon(
-                AppIcons.Lock,
-                contentDescription = stringResource(R.string.channels_channel_locked),
-                tint = UaTheme.palette.labelSecondary,
-                modifier = Modifier.size(18.dp).padding(end = 4.dp),
-            )
-        }
-        IconButton(onClick = onToggleFavorite) {
-            Icon(
-                AppIcons.Favorites,
-                contentDescription = stringResource(
-                    if (isFavorite) R.string.channels_channel_remove_favorite
-                    else R.string.channels_channel_add_favorite,
-                ),
-                tint = if (isFavorite) UaTheme.palette.azure else UaTheme.palette.labelSecondary,
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChannelTile(
-    channel: M3uChannel,
-    iconRefreshKey: Any,
-    resolveIcon: suspend (M3uChannel) -> File?,
-    large: Boolean,
-    isLocked: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val tileShape = RoundedCornerShape(RadiusList)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // Inside a LazyVerticalGrid - shadow = false, see docs/DESIGN_SYSTEM.md "§D Depth".
-            .raisedSurface(tileShape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
-            .combinedClickable(
-                role = Role.Button,
-                onClickLabel = channel.displayName,
-                onLongClickLabel = stringResource(R.string.channels_more_actions),
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .padding(12.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            ChannelIcon(channel, resolveIcon, size = if (large) 64.dp else 44.dp, refreshKey = iconRefreshKey)
-            Text(
-                text = channel.displayName,
-                style = Caption,
-                color = UaTheme.palette.labelPrimary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                maxLines = 2,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            // See ChannelRow's identical remember() - only worth redoing when the name actually
-            // changes, not on every recomposition this tile goes through while scrolling a grid
-            // (GRID is ChannelLayout.DEFAULT, so this runs for every user by default).
-            val qualityBadge = remember(channel.displayName) { NameQualityBadge.detect(channel.displayName) }
-            qualityBadge?.let { badge ->
-                Text(
-                    text = badge,
-                    style = Caption,
-                    color = UaTheme.palette.accentText,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-        // No favorite star here, unlike ChannelRow. A tile is roughly 150dp wide, and the star was
-        // an IconButton with minimumInteractiveComponentSize() - a 48dp touch target around a 16dp
-        // glyph, which reached well past the corner and over the channel's own icon. Tapping what
-        // looked like the middle of the tile favorited the channel instead of opening it, and since
-        // the grid is the default layout that was most users. The star showed favorite *state*
-        // too, but not at a cost worth paying: a 16dp tint on a small tile was the least legible
-        // place in the app to read it, and toggling now lives in ChannelActionsSheet on long press,
-        // beside lock/unlock - where a per-channel action that is not "play this" belongs.
-        if (isLocked) {
-            Icon(
-                AppIcons.Lock,
-                contentDescription = stringResource(R.string.channels_channel_locked),
-                tint = UaTheme.palette.labelSecondary,
-                modifier = Modifier.align(Alignment.TopStart).size(16.dp),
-            )
-        }
-    }
-}

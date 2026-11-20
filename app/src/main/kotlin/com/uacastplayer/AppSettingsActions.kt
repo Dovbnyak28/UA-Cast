@@ -25,3 +25,6 @@ internal fun AppViewModel.setWrapAroundEnabled(enabled: Boolean) =
 
 internal fun AppViewModel.setAutoSkipDeadEnabled(enabled: Boolean) =
     settingsController.setAutoSkipDeadEnabled(enabled)
+
+internal fun AppViewModel.setReducedVisualEffects(enabled: Boolean) =
+    settingsController.setReducedVisualEffects(enabled)

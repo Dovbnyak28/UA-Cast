@@ -2,7 +2,6 @@ package com.uacastplayer.ui.playlist
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.appBackground
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +21,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.uacastplayer.ui.tv.tvTextFieldNavigation
+import com.uacastplayer.ui.tv.tvFocus
+import com.uacastplayer.ui.tv.TvDialogInputRegistration
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,13 +31,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import com.uacastplayer.R
+import kotlinx.coroutines.launch
 import com.uacastplayer.playlist.CleartextCredentialPolicy
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.Feature
@@ -82,9 +84,10 @@ fun AddPlaylistScreen(
     onBackClick: () -> Unit,
     onPlaylistLoaded: () -> Unit,
     modifier: Modifier = Modifier,
+    hasExistingSources: Boolean = playlistState.hasChannels,
 ) {
     var sourceType by rememberSaveable { mutableStateOf(PlaylistSourceType.URL) }
-    var name by rememberSaveable { mutableStateOf(playlistState.displayName.orEmpty()) }
+    var name by rememberSaveable { mutableStateOf("") }
     var url by rememberSaveable { mutableStateOf("") }
     val gate = LocalFeatureGate.current
     var xtreamServer by rememberSaveable { mutableStateOf("") }
@@ -130,7 +133,7 @@ fun AddPlaylistScreen(
             )
         }
 
-        ProviderSourceHint()
+        AddPlaylistProviderHint(hasExistingSources)
 
         SegmentedControl(
             options = listOf(
@@ -181,14 +184,7 @@ fun AddPlaylistScreen(
             )
         }
 
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text(stringResource(R.string.add_playlist_name_hint)) },
-            singleLine = true,
-            colors = uaTextFieldColors(),
-            modifier = Modifier.fillMaxWidth().padding(top = GapL),
-        )
+        PlaylistNameOptions(name) { name = it }
 
         if (hasLoadFeedback(playlistState)) {
             Column(
@@ -263,7 +259,7 @@ fun AddPlaylistScreen(
 }
 
 @Composable
-private fun ProviderSourceHint() {
+internal fun ProviderSourceHint() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -311,9 +307,9 @@ private fun CleartextLoadDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.add_playlist_title)) },
-        text = { Text(stringResource(message)) },
+        text = { TvDialogInputRegistration(); Text(stringResource(message)) },
         confirmButton = {
-            TextButton(onClick = { onConfirm(pending) }) {
+            TextButton(onClick = { onConfirm(pending) }, modifier = Modifier.tvFocus()) {
                 Text(stringResource(R.string.common_confirm))
             }
         },
@@ -403,10 +399,27 @@ private fun SourceActionButton(
 
 @Composable
 private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val currentUrl by androidx.compose.runtime.rememberUpdatedState(url)
+    var editGeneration by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    val onEdit = { value: String -> editGeneration++; onUrlChange(value) }
+    TextButton(onClick = {
+        val requestedFor = url
+        val requestedGeneration = ++editGeneration
+        scope.launch {
+            val text = readClipboardLink(clipboard)
+            if (text != null && editGeneration == requestedGeneration && currentUrl == requestedFor) {
+                onEdit(text.trim())
+            }
+        }
+    }, modifier = Modifier.padding(top = GapM).tvFocus()) {
+        Text(stringResource(R.string.add_playlist_paste_link))
+    }
     val invalidUrl = url.isNotBlank() && !PlaylistSourceInputValidator.isValidHttpUrl(url)
     OutlinedTextField(
         value = url,
-        onValueChange = onUrlChange,
+        onValueChange = onEdit,
         label = { Text(stringResource(R.string.add_playlist_url_hint)) },
         singleLine = true,
         isError = invalidUrl,
@@ -417,7 +430,7 @@ private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
         },
         trailingIcon = if (url.isNotBlank()) {
             {
-                IconButton(onClick = { onUrlChange("") }) {
+                IconButton(onClick = { onEdit("") }) {
                     Icon(
                         AppIcons.Close,
                         contentDescription = stringResource(R.string.add_playlist_clear_url),
@@ -430,7 +443,7 @@ private fun UrlSourceFields(url: String, onUrlChange: (String) -> Unit) {
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
     Text(
         text = stringResource(R.string.add_playlist_helper),
@@ -473,7 +486,7 @@ private fun XtreamSourceFields(
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
     if (CleartextCredentialPolicy.exposesCredentials(server)) {
         Text(
@@ -490,7 +503,7 @@ private fun XtreamSourceFields(
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
     OutlinedTextField(
         value = password,
@@ -516,7 +529,7 @@ private fun XtreamSourceFields(
             }
         },
         colors = uaTextFieldColors(),
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation().padding(top = GapM),
     )
 }
 
@@ -538,4 +551,10 @@ private fun loadFeedbackMessage(playlistState: PlaylistUiState): String = when {
     playlistState.activePlaylistId != null && !playlistState.hasChannels ->
         stringResource(R.string.add_playlist_status_no_channels)
     else -> ""
+}
+
+/** Text only: never dereference a clipboard URI or load its provider/network content. */
+private suspend fun readClipboardLink(clipboard: androidx.compose.ui.platform.Clipboard): String? {
+    val clip = clipboard.getClipEntry()?.clipData ?: return null
+    return if (clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
 }

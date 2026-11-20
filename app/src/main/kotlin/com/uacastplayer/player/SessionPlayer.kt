@@ -6,14 +6,6 @@ import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
-internal data class SessionPlayerControls(
-    val canPlay: Boolean,
-    val canStop: Boolean,
-    val canSeek: Boolean,
-    val canGoNext: Boolean,
-    val canGoPrevious: Boolean,
-)
-
 internal data class SessionPlayerActions(
     val playWhenReady: (Boolean) -> Unit,
     val prepare: () -> Unit,
@@ -27,7 +19,7 @@ internal data class SessionPlayerActions(
  * The VM releases this wrapper once; the underlying engine is released by the superclass. */
 @UnstableApi
 internal class SessionPlayer(
-    engine: Player,
+    private val engine: Player,
     private val controls: () -> SessionPlayerControls,
     private val actions: SessionPlayerActions,
 ) : ForwardingSimpleBasePlayer(engine) {
@@ -36,15 +28,16 @@ internal class SessionPlayer(
     override fun getState(): State {
         val state = super.getState()
         val policy = controls()
+        val capabilities = policy.resolve(state.availableCommands::contains)
         val commands = Player.Commands.Builder()
             .addAll(*READ_COMMANDS.filter(state.availableCommands::contains).toIntArray())
-            .addIf(Player.COMMAND_PLAY_PAUSE, policy.canPlay)
-            .addIf(Player.COMMAND_PREPARE, policy.canPlay)
-            .addIf(Player.COMMAND_STOP, policy.canStop)
-            .addIf(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, policy.canGoNext)
-            .addIf(Player.COMMAND_SEEK_TO_NEXT, policy.canGoNext)
-            .addIf(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, policy.canGoPrevious)
-            .addIf(Player.COMMAND_SEEK_TO_PREVIOUS, policy.canGoPrevious)
+            .addIf(Player.COMMAND_PLAY_PAUSE, capabilities.canPlayPause)
+            .addIf(Player.COMMAND_PREPARE, capabilities.canPrepare)
+            .addIf(Player.COMMAND_STOP, capabilities.canStop)
+            .addIf(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, capabilities.canGoNext)
+            .addIf(Player.COMMAND_SEEK_TO_NEXT, capabilities.canGoNext)
+            .addIf(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, capabilities.canGoPrevious)
+            .addIf(Player.COMMAND_SEEK_TO_PREVIOUS, capabilities.canGoPrevious)
         for (command in SEEK_COMMANDS) {
             commands.addIf(command, policy.canSeek && state.availableCommands.contains(command))
         }
@@ -52,12 +45,14 @@ internal class SessionPlayer(
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
-        if (controls().canPlay) actions.playWhenReady(playWhenReady)
+        if (controls().resolve(engine::isCommandAvailable).canPlayPause) {
+            actions.playWhenReady(playWhenReady)
+        }
         return Futures.immediateVoidFuture()
     }
 
     override fun handlePrepare(): ListenableFuture<*> {
-        if (controls().canPlay) actions.prepare()
+        if (controls().resolve(engine::isCommandAvailable).canPrepare) actions.prepare()
         return Futures.immediateVoidFuture()
     }
 
@@ -71,7 +66,9 @@ internal class SessionPlayer(
         when (MediaSessionCommandPolicy.mapCommand(seekCommand)) {
             MediaSessionCommandPolicy.Action.NEXT -> if (policy.canGoNext) actions.next()
             MediaSessionCommandPolicy.Action.PREVIOUS -> if (policy.canGoPrevious) actions.previous()
-            null -> if (policy.canSeek) return super.handleSeek(mediaItemIndex, positionMs, seekCommand)
+            null -> if (policy.canSeek && engine.isCommandAvailable(seekCommand)) {
+                return super.handleSeek(mediaItemIndex, positionMs, seekCommand)
+            }
         }
         return Futures.immediateVoidFuture()
     }

@@ -18,7 +18,7 @@ object CustomIconSourcePolicy {
                 candidate.isAbsolute &&
                     candidate.userInfo == null &&
                     !candidate.host.isNullOrBlank() &&
-                    candidate.port in -1..MAX_TCP_PORT &&
+                    (candidate.port == -1 || candidate.port in 1..MAX_TCP_PORT) &&
                     (candidate.scheme.equals("http", ignoreCase = true) ||
                         candidate.scheme.equals("https", ignoreCase = true)) &&
                     candidate.query == null &&

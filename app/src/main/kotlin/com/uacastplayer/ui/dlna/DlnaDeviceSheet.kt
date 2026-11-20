@@ -3,6 +3,7 @@ package com.uacastplayer.ui.dlna
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
@@ -137,11 +140,19 @@ internal fun DlnaDeviceSheetContent(
 
         val connected = connectionState.connectedDevice
         connected?.takeUnless { connectionState.isConnecting }?.let { device ->
-            DlnaConnectedRow(deviceName = device.friendlyName, onStop = onStopCasting)
+            DlnaConnectedRow(
+                deviceName = device.friendlyName,
+                playbackStatusUnverified = connectionState.playbackStatusUnverified,
+                onStop = onStopCasting,
+            )
             // Absent, not disabled, when the renderer has no RenderingControl service or the
             // first read failed: a greyed-out slider sitting at zero would say the TV is muted.
             connectionState.volume?.let { volume ->
-                DlnaVolumeRow(volume = volume, onVolumeChange = onVolumeChange)
+                // A drag belongs to one renderer, even when StateFlow conflates a reconnect's
+                // intermediate state and the new TV happens to report the same volume.
+                key(device.controlUrl, device.renderingControlUrl) {
+                    DlnaVolumeRow(volume = volume, onVolumeChange = onVolumeChange)
+                }
             }
         }
 
@@ -222,46 +233,44 @@ private fun DlnaSearchingRow() {
 }
 
 @Composable
-private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
-    Row(
+private fun DlnaConnectedRow(deviceName: String, playbackStatusUnverified: Boolean, onStop: () -> Unit) {
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusItem))
             .background(UaTheme.palette.surface1)
             .padding(start = 14.dp, end = GapS, top = 10.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(GapS),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.azure)
-        // weight(1f) is the whole fix for what this row used to look like. With SpaceBetween and an
-        // unweighted Column, the text was measured at its full intrinsic width first and the button
-        // got whatever was left - which for a real device name was almost nothing, so "Stop casting"
-        // laid itself out one character per line and the card grew to half the sheet. Weighted, the
-        // button is measured first at the width it actually needs and the name takes the remainder.
-        Column(modifier = Modifier.weight(1f)) {
-            // The name alone, not "Connected to <name>": the green line right below already says
-            // this is a live cast, and the name was appearing a third time in the device list under
-            // the card. Ellipsized because a friendlyName is whatever the TV's owner typed into it.
-            Text(
-                text = deviceName,
-                style = BodyText,
-                color = UaTheme.palette.labelPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = stringResource(R.string.cast_status_connected),
-                style = Caption,
-                color = UaTheme.palette.routeGreen,
-            )
+        // Account for text scale as well as screen width: reserving an inline Stop button can
+        // leave only a few characters per line for the actual connection status.
+        val stacked = maxWidth / LocalDensity.current.fontScale < MIN_INLINE_STATUS_WIDTH
+        Column {
+            Row(horizontalArrangement = Arrangement.spacedBy(GapS), verticalAlignment = Alignment.CenterVertically) {
+                Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.azure)
+                Column(Modifier.weight(1f)) {
+                    Text(deviceName, style = BodyText, color = UaTheme.palette.labelPrimary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        stringResource(if (playbackStatusUnverified) R.string.dlna_status_unverified
+                            else R.string.cast_status_connected),
+                        style = Caption,
+                        color = if (playbackStatusUnverified) UaTheme.palette.routeAmber
+                            else UaTheme.palette.routeGreen,
+                    )
+                }
+                if (!stacked) DlnaStopButton(onStop)
+            }
+            if (stacked) DlnaStopButton(onStop, Modifier.align(Alignment.End))
         }
-        TextButton(onClick = onStop) {
-            Text(
-                text = stringResource(R.string.dlna_stop_casting),
-                color = UaTheme.palette.azure,
-                maxLines = 1,
-            )
-        }
+    }
+}
+
+private val MIN_INLINE_STATUS_WIDTH = 240.dp
+
+@Composable
+private fun DlnaStopButton(onStop: () -> Unit, modifier: Modifier = Modifier) {
+    TextButton(onClick = onStop, modifier = modifier) {
+        Text(stringResource(R.string.dlna_stop_casting), color = UaTheme.palette.azure)
     }
 }
 
@@ -276,12 +285,10 @@ private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
  */
 @Composable
 private fun DlnaVolumeRow(volume: Int, onVolumeChange: (Int) -> Unit) {
-    // Where the finger is, while the finger is down. Retired by the repository publishing a volume -
-    // it publishes the requested value immediately and the renderer's reported one a round trip
-    // later (see DlnaSessionRepository.setVolume), so the thumb neither snaps back nor holds a value
-    // the TV refused.
+    // Only the active gesture owns a draft. A readback for an earlier command can arrive while
+    // the user is dragging again, so external volume updates must not discard that new draft.
+    // The repository publishes requests synchronously and then corrects them from the TV.
     var dragged by remember { mutableStateOf<Float?>(null) }
-    LaunchedEffect(volume) { dragged = null }
     val shown = dragged ?: volume.toFloat()
     val label = stringResource(R.string.dlna_volume)
     val valueLabel = stringResource(R.string.dlna_volume_value, shown.roundToInt())
@@ -325,7 +332,11 @@ private fun DlnaVolumeRow(volume: Int, onVolumeChange: (Int) -> Unit) {
         Slider(
             value = shown,
             onValueChange = { dragged = it },
-            onValueChangeFinished = { dragged?.let { onVolumeChange(it.roundToInt()) } },
+            onValueChangeFinished = {
+                val requested = dragged
+                dragged = null
+                requested?.let { onVolumeChange(it.roundToInt()) }
+            },
             valueRange = VolumeRange.MIN.toFloat()..VolumeRange.MAX.toFloat(),
             colors = SliderDefaults.colors(
                 thumbColor = UaTheme.palette.azure,
@@ -374,7 +385,7 @@ private fun DlnaDeviceSheetRowsPreview(@PreviewParameter(AppThemePreviewParamete
         Column(verticalArrangement = Arrangement.spacedBy(GapS), modifier = Modifier.padding(ScreenHPadding)) {
             // The real friendlyName of the TV this layout was fixed against - a short placeholder
             // is exactly what hid the wrapping bug from this preview in the first place.
-            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", onStop = {})
+            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", playbackStatusUnverified = false, onStop = {})
             DlnaVolumeRow(volume = 23, onVolumeChange = {})
             DlnaDeviceRow(
                 device = DlnaDevice(friendlyName = "LG webOS TV", controlUrl = "http://192.168.1.5/upnp/control"),
