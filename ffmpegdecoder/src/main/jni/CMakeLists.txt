@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.22)
+project(uacast_ffmpeg_decoder LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+if(NOT ANDROID)
+  message(FATAL_ERROR "This JNI wrapper must be built with the Android toolchain")
+endif()
+if(NOT IS_DIRECTORY "${FFMPEG_INSTALL}/include" OR NOT IS_DIRECTORY "${LIBYUV_SOURCE}/include")
+  message(FATAL_ERROR "Verified FFmpeg install and libyuv source directories are required")
+endif()
+
+set(LIBYUV_DISABLE_JPEG ON CACHE BOOL "No JPEG dependency" FORCE)
+set(UNIT_TEST OFF CACHE BOOL "Wrapper tests are separate" FORCE)
+add_subdirectory("${LIBYUV_SOURCE}" "libyuv" EXCLUDE_FROM_ALL)
+foreach(library avcodec avutil swresample swscale)
+  add_library(${library} SHARED IMPORTED)
+  set_target_properties(${library} PROPERTIES
+    IMPORTED_LOCATION "${FFMPEG_INSTALL}/lib/lib${library}.so")
+endforeach()
+
+add_library(ffmpegJNI SHARED ffmpeg_jni.cc)
+target_include_directories(ffmpegJNI PRIVATE "${FFMPEG_INSTALL}/include" "${LIBYUV_SOURCE}/include")
+target_link_libraries(ffmpegJNI PRIVATE avcodec avutil swresample swscale yuv android log)
+target_link_options(ffmpegJNI PRIVATE "-Wl,-z,max-page-size=16384")

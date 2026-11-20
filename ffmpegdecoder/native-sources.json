@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "media3": "1.10.1",
+  "toolchain": {"ndk": "26.1.10909125", "cmake": "3.22.1", "androidMinApi": 24},
+  "ffmpeg": {
+    "version": "6.1.6",
+    "url": "https://ffmpeg.org/releases/ffmpeg-6.1.6.tar.xz",
+    "sha256": "d4fcb164028dd3beee5d92c0ac72e46aac6973c75ea12dc14de07bf8f407370a",
+    "license": "LGPL-2.1-or-later; configure GPL/nonfree/version3 disabled"
+  },
+  "libyuv": {
+    "commit": "eeb06a6451ba2e21f8ff272c7b42fc62b9faecc5",
+    "url": "https://codeload.github.com/lemenkov/libyuv/zip/eeb06a6451ba2e21f8ff272c7b42fc62b9faecc5",
+    "sha256": "7c59b4c301c24d90f0e532ba8f4bbdc63126e85eb043ee99cd87b3b1619cf24e",
+    "license": "BSD-3-Clause",
+    "upstream": "https://chromium.googlesource.com/libyuv/libyuv/+/eeb06a6451ba2e21f8ff272c7b42fc62b9faecc5"
+  },
+  "wrapper": {
+    "commit": "ddf578a27a97e6296062d1997ba41784b0dcf497",
+    "url": "https://github.com/rabbitknight/media/tree/ddf578a27a97e6296062d1997ba41784b0dcf497/libraries/decoder_ffmpeg",
+    "license": "Apache-2.0; locally modified, see ORIGIN.md"
+  }
+}
