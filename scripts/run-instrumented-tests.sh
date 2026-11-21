@@ -125,6 +125,14 @@ run_adb "$install_timeout_seconds" "test installation" -s "$DEVICE_SERIAL" insta
 # previous failed runner cannot leave a hidden Activity window behind.
 run_adb "$adb_timeout_seconds" "display wake" -s "$DEVICE_SERIAL" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
 run_adb "$adb_timeout_seconds" "non-secure keyguard dismissal" -s "$DEVICE_SERIAL" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+# The first time an app hides the system bars, Android shows its own "Viewing full screen" hint
+# (ImmersiveModeConfirmation) and gives it window focus. Compose clicks still land, but a key-
+# injected Back goes to the hint instead of the app, so the first immersive test on a fresh emulator
+# failed while every later one passed. Mark the hint as seen - on emulators only: on a personal
+# phone this is the owner's setting and is left alone.
+if [ "$device_is_emulator" = "1" ]; then
+  run_adb "$adb_timeout_seconds" "immersive hint suppression" -s "$DEVICE_SERIAL" shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
+fi
 run_adb "$adb_timeout_seconds" "app stop" -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
 run_adb "$adb_timeout_seconds" "test package stop" -s "$DEVICE_SERIAL" shell am force-stop "$PACKAGE.test" >/dev/null 2>&1 || true
 

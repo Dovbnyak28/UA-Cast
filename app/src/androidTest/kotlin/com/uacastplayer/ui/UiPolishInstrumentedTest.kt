@@ -149,9 +149,14 @@ class UiPolishInstrumentedTest {
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             val railBounds = rule.onNodeWithTag(UiTestTags.NAVIGATION_RAIL)
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            // On a short landscape window (the ~320dp-high CI emulators, more so on API 36 with its
+            // taller system bars) four 48dp targets do not fit between the top bar and the mini player,
+            // so the rail scrolls (see GlassNavigationRail). What must hold is that every destination
+            // can be reached and is never covered by the mini player - not that all four fit at once.
             listOf(R.string.nav_home, R.string.nav_channels, R.string.nav_favorites, R.string.nav_settings)
                 .forEach { destination ->
                     val bounds = rule.onNodeWithContentDescription(label(destination))
+                        .performScrollTo()
                         .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
                     org.junit.Assert.assertTrue("Navigation destination is clipped or covered: $bounds",
                         bounds.top >= railBounds.top && bounds.bottom <= railBounds.bottom &&
