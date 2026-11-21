@@ -112,7 +112,9 @@ class LocalVideoInstrumentedTest {
         assertTrue(playerModel.uiState.value.isPlaying)
         rule.waitUntil(15_000) { playerModel.uiState.value.hasRenderedVideoFrame }
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        assertNotNull(device.wait(Until.findObject(By.desc(app.getString(R.string.player_frame_displayed))), 5000))
+        // Same budget as the waits above: the frame is already rendered, but on the slow API-24 CI
+        // emulator the accessibility tree that UiAutomator reads can lag it by more than five seconds.
+        assertNotNull(device.wait(Until.findObject(By.desc(app.getString(R.string.player_frame_displayed))), 15_000))
         assertTrue(playerModel.uiState.value.canSeek)
         assertEquals(previousKey, preferences.lastWatchedChannelKey)
         rule.runOnUiThread { playerModel.player.seekTo(500) }
