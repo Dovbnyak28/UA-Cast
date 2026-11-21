@@ -71,7 +71,7 @@ jobs:
           disable-animations: true
           script: |
             bash scripts/run-instrumented-tests.sh
-            ./gradlew :ffmpegdecoder:connectedDebugAndroidTest --stacktrace
+            bash scripts/run-decoder-instrumented-tests.sh
 
       - name: Upload instrumentation reports
         if: always()
