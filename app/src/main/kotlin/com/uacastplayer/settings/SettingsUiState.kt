@@ -1,10 +1,10 @@
 package com.uacastplayer.settings
 
-import com.uacastplayer.data.prefs.BufferSize
-import com.uacastplayer.data.prefs.ChannelLayout
-import com.uacastplayer.data.prefs.FavoritesSortOrder
-import com.uacastplayer.data.prefs.IconDisplayMode
-import com.uacastplayer.data.prefs.ListDensity
+import com.uacastplayer.core.settings.BufferSize
+import com.uacastplayer.core.settings.ChannelLayout
+import com.uacastplayer.favorites.FavoritesSortOrder
+import com.uacastplayer.core.settings.IconDisplayMode
+import com.uacastplayer.core.settings.ListDensity
 import com.uacastplayer.performance.DeviceTier
 
 data class CacheSizes(
@@ -28,6 +28,7 @@ data class SettingsUiState(
     val wrapAroundEnabled: Boolean = true,
     val autoSkipDeadEnabled: Boolean = true,
     val cacheSizes: CacheSizes = CacheSizes(),
+    val reducedVisualEffects: Boolean = false,
     val deviceTier: DeviceTier = DeviceTier.MID_RANGE,
     val customIconSources: List<String> = emptyList(),
     val iconSourceAddError: IconSourceAddError? = null,
@@ -36,4 +37,4 @@ data class SettingsUiState(
 enum class CacheKind { PLAYLIST, EPG, ICONS, COIL }
 
 /** Why [com.uacastplayer.AppViewModel.addCustomIconSource] rejected the entered URL. */
-enum class IconSourceAddError { INVALID_URL, ALREADY_ADDED }
+enum class IconSourceAddError { INVALID_URL, ALREADY_ADDED, LIMIT_REACHED }

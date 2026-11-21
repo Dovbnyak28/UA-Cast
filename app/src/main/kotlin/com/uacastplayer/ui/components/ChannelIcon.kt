@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -21,6 +23,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.ui.theme.AppTheme
+import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppThemePreviewParameter
 import com.uacastplayer.ui.theme.Caption
 import com.uacastplayer.ui.theme.ChannelLogoRadius
@@ -45,11 +48,33 @@ fun ChannelIcon(
     modifier: Modifier = Modifier,
     size: Dp = ChannelLogoSize,
     // Included in produceState's key so a caller can force a re-resolve once new information that
-    // could change the result becomes available (EPG data arriving, an icon prefetch run
-    // finishing) - resolveIcon's own result is otherwise only ever computed once per streamUrl.
+    // could change the result becomes available (user pack edits or completed downloads).
     refreshKey: Any? = null,
 ) {
-    val iconFile by produceState<File?>(initialValue = null, key1 = channel.streamUrl, key2 = refreshKey) {
+    if (channel.localVideo != null) {
+        Box(modifier.size(size).raisedSurface(RoundedCornerShape(ChannelLogoRadius), UaTheme.palette.surface2),
+            contentAlignment = Alignment.Center) {
+            Icon(AppIcons.Play, null, tint = UaTheme.palette.azure, modifier = Modifier.size(size / 2))
+        }
+        return
+    }
+    // produceState restarts work for new keys but retains its previous value. Own the file,
+    // decode error and painter by the same generation so none can leak into a different channel
+    // or prevent a repaired file at the same path from being decoded after an explicit refresh.
+    key(channel, refreshKey) {
+        ChannelIconContent(channel, resolveIcon, modifier, size)
+    }
+}
+
+@Composable
+private fun ChannelIconContent(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    modifier: Modifier,
+    size: Dp,
+) {
+    // The outer key owns both the channel and selected-pack revision.
+    val iconFile by produceState<File?>(initialValue = null) {
         value = resolveIcon(channel)
     }
     var isDecodeError by remember(iconFile) { mutableStateOf(false) }

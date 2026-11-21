@@ -11,7 +11,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.uacastplayer.testing.RequiresComposeTestManifest
-import com.uacastplayer.ui.components.SegmentedControl
+import com.uacastplayer.ui.settings.SettingsChoiceRow
+import com.uacastplayer.ui.theme.AppIcons
+import com.uacastplayer.R
 import com.uacastplayer.ui.settings.nameRes
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
@@ -24,18 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Golden coverage for the theme picker specifically, because adding a theme narrows it.
- *
- * [SegmentedControl] gives every segment `weight(1f)` and centres a label in it, and the label has
- * no `maxLines`. A weight decides how much room a segment gets; it cannot create a place to wrap -
- * so a label that outgrows one third of the row does not get truncated, it silently goes two lines
- * tall and takes the whole control with it. Three themes means each segment is a third of the row
- * instead of a half, and the longest labels ("Опівніч", "Medianoche") are the new ones.
- *
- * Rendered off the same [nameRes] the settings screen uses, in the widest-label locales, at the
- * narrowest width the app supports. See [DesignSystemScreenshotTest] for record/verify commands.
- */
+/** Production theme choice stays readable at narrow widths in all supported locales. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Category(RequiresComposeTestManifest::class)
@@ -53,7 +44,8 @@ class ThemePickerScreenshotTest {
                         .background(UaTheme.palette.void)
                         .padding(16.dp),
                 ) {
-                    SegmentedControl(
+                    SettingsChoiceRow(
+                        label = stringResource(R.string.settings_theme_label), icon = AppIcons.Image,
                         options = AppTheme.entries.map { stringResource(it.nameRes()) },
                         selectedIndex = AppTheme.entries.indexOf(AppTheme.MIDNIGHT),
                         onSelected = {},

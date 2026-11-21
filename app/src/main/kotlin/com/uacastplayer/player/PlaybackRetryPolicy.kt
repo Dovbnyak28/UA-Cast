@@ -4,9 +4,9 @@ enum class PlaybackErrorType { NETWORK, TIMEOUT, BEHIND_LIVE_WINDOW, OTHER }
 
 data class RetryState(val attempt: Int = 0)
 
-sealed class RetryDecision {
-    data class Retry(val delayMillis: Long, val newState: RetryState) : RetryDecision()
-    data object GiveUp : RetryDecision()
+sealed interface RetryDecision {
+    data class Retry(val delayMillis: Long, val newState: RetryState) : RetryDecision
+    data object GiveUp : RetryDecision
 }
 
 /**
@@ -20,12 +20,16 @@ object PlaybackRetryPolicy {
     private const val BASE_DELAY_MILLIS = 500L
 
     fun onError(state: RetryState, errorType: PlaybackErrorType): RetryDecision {
-        if (errorType == PlaybackErrorType.OTHER) return RetryDecision.GiveUp
-        if (state.attempt >= MAX_ATTEMPTS) return RetryDecision.GiveUp
-
-        val nextAttempt = state.attempt + 1
-        val delay = BASE_DELAY_MILLIS * nextAttempt
-        return RetryDecision.Retry(delayMillis = delay, newState = RetryState(attempt = nextAttempt))
+        val canRetry = errorType != PlaybackErrorType.OTHER && state.attempt < MAX_ATTEMPTS
+        return if (canRetry) {
+            val nextAttempt = state.attempt + 1
+            RetryDecision.Retry(
+                delayMillis = BASE_DELAY_MILLIS * nextAttempt,
+                newState = RetryState(attempt = nextAttempt),
+            )
+        } else {
+            RetryDecision.GiveUp
+        }
     }
 
     fun onIsPlaying(state: RetryState): RetryState =

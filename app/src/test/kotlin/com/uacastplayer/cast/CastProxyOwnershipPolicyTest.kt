@@ -1,0 +1,70 @@
+package com.uacastplayer.cast
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CastProxyOwnershipPolicyTest {
+
+    @Test
+    fun `stopping DLNA leaves Chromecast protected`() {
+        val both = CastProxyOwnershipPolicy.started(
+            CastProxyOwnershipPolicy.started(CastProxyOwnership(), CastProxyTarget.CHROMECAST),
+            CastProxyTarget.DLNA,
+        )
+
+        val remaining = CastProxyOwnershipPolicy.stopped(both, CastProxyTarget.DLNA)
+
+        assertEquals(listOf(CastProxyTarget.CHROMECAST), remaining.activeTargets)
+        assertEquals(CastProxyTarget.CHROMECAST, remaining.displayedTarget)
+    }
+
+    @Test
+    fun `stopping Chromecast leaves DLNA protected`() {
+        val both = CastProxyOwnershipPolicy.started(
+            CastProxyOwnershipPolicy.started(CastProxyOwnership(), CastProxyTarget.CHROMECAST),
+            CastProxyTarget.DLNA,
+        )
+
+        val remaining = CastProxyOwnershipPolicy.stopped(both, CastProxyTarget.CHROMECAST)
+
+        assertEquals(listOf(CastProxyTarget.DLNA), remaining.activeTargets)
+        assertEquals(CastProxyTarget.DLNA, remaining.displayedTarget)
+    }
+
+    @Test
+    fun `restarting one target creates no duplicate and makes it the displayed owner`() {
+        val both = CastProxyOwnershipPolicy.started(
+            CastProxyOwnershipPolicy.started(CastProxyOwnership(), CastProxyTarget.CHROMECAST),
+            CastProxyTarget.DLNA,
+        )
+
+        val restarted = CastProxyOwnershipPolicy.started(both, CastProxyTarget.CHROMECAST)
+
+        assertEquals(
+            listOf(CastProxyTarget.DLNA, CastProxyTarget.CHROMECAST),
+            restarted.activeTargets,
+        )
+        assertEquals(CastProxyTarget.CHROMECAST, restarted.displayedTarget)
+        assertTrue(restarted.activeTargets.distinct().size == restarted.activeTargets.size)
+    }
+
+    @Test
+    fun `older stop command is rejected after a newer start`() {
+        assertTrue(CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 8L))
+        assertTrue(!CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 7L))
+    }
+
+    @Test
+    fun `pending start is rejected after its owner stops before service creation`() {
+        val pendingStartGeneration = 4L
+        val latestGenerationAfterStop = 5L
+
+        assertTrue(!CastProxyCommandPolicy.accepts(latestGenerationAfterStop, pendingStartGeneration))
+    }
+
+    @Test
+    fun `legacy command without generation remains accepted`() {
+        assertTrue(CastProxyCommandPolicy.accepts(latestGeneration = 8L, commandGeneration = 0L))
+    }
+}

@@ -5,36 +5,20 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class IconMemoryCacheKeyTest {
-
-    @Test
-    fun `identical inputs produce the same key`() {
-        val first = IconMemoryCacheKey.of("logo", "epg", "id")
-        val second = IconMemoryCacheKey.of("logo", "epg", "id")
-
-        assertEquals(first, second)
+    @Test fun `identical channel IDs share a key`() {
+        assertEquals(IconMemoryCacheKey.of("id"), IconMemoryCacheKey.of("id"))
     }
 
-    @Test
-    fun `different tvgLogo produces a different key`() {
-        val first = IconMemoryCacheKey.of("logo-a", "epg", "id")
-        val second = IconMemoryCacheKey.of("logo-b", "epg", "id")
-
-        assertNotEquals(first, second)
+    @Test fun `different channel IDs never share a key`() {
+        assertNotEquals(IconMemoryCacheKey.of("news"), IconMemoryCacheKey.of("sport"))
     }
 
-    @Test
-    fun `a value shifted across the field boundary does not collide`() {
-        val first = IconMemoryCacheKey.of("ab", null, null)
-        val second = IconMemoryCacheKey.of("a", "b", null)
-
-        assertNotEquals(first, second)
+    @Test fun `missing and blank IDs share the empty candidate result`() {
+        assertEquals(IconMemoryCacheKey.of(null), IconMemoryCacheKey.of(" "))
     }
 
-    @Test
-    fun `all-null inputs still produce a stable key`() {
-        val first = IconMemoryCacheKey.of(null, null, null)
-        val second = IconMemoryCacheKey.of(null, null, null)
-
-        assertEquals(first, second)
+    @Test fun `literal null and delimiters are valid distinct IDs`() {
+        assertNotEquals(IconMemoryCacheKey.of(null), IconMemoryCacheKey.of("null"))
+        assertNotEquals(IconMemoryCacheKey.of("news|sport"), IconMemoryCacheKey.of("news"))
     }
 }

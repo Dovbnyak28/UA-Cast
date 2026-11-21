@@ -21,7 +21,7 @@ import org.junit.Test
  */
 class PlaylistBenchmark {
 
-    private val sizes = listOf(100, 1_000, 10_000, 50_000, 100_000)
+    private val sizes = listOf(100, 1_000, 10_000, M3uParser.MAX_CHANNELS)
 
     /** A playlist shaped like a real one: quoted attributes, a logo url, a group per 40 channels,
      * names with spaces and mixed case, so the parser and the search both do their real work. */

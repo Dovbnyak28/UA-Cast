@@ -1,0 +1,11 @@
+// Opt in with --init-script for disposable physical-device UI tests. The production and regular
+// debug package IDs remain unchanged; their private data is never the target of this QA package.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.pluginManager.withPlugin('com.android.application') {
+            project.extensions.getByName('androidComponents').finalizeDsl { android ->
+                android.buildTypes.getByName('debug').applicationIdSuffix = '.debug.stage5qa'
+            }
+        }
+    }
+}

@@ -2,8 +2,8 @@ package com.uacastplayer.data.cast
 
 import android.content.Context
 import androidx.core.content.edit
-import com.uacastplayer.cast.IncompatibilityMemoryPolicy
-import com.uacastplayer.cast.IncompatibilityRecord
+import com.uacastplayer.core.cast.IncompatibilityMemoryPolicy
+import com.uacastplayer.core.cast.IncompatibilityRecord
 import com.uacastplayer.core.security.Fingerprint
 
 private const val MIN_WRITE_INTERVAL_MILLIS = 2_000L
@@ -26,7 +26,10 @@ private const val SCHEMA_VERSION_KEY = "schema_version"
  */
 class IncompatibilityMemoryStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences("uacast_cast_incompatibility", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences(
+        "uacast_cast_incompatibility",
+        Context.MODE_PRIVATE,
+    )
 
     // Per key, not one global timestamp: the interval exists to absorb repeated records of the
     // SAME failure (a burst of receiver errors for one channel), and a global stamp would also

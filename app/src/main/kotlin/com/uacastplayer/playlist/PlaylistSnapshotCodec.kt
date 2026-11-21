@@ -1,11 +1,18 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.io.presizeFor
+import com.uacastplayer.core.io.readCountField
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+
+/** A persisted playlist came from a version that accepted more entries than this build supports. */
+internal class PlaylistChannelLimitExceededException : IOException(
+    "Playlist snapshot exceeds the supported channel limit",
+)
 
 /**
  * Hand-rolled versioned binary (de)serializer for [PlaylistSnapshot]. Bumping [FORMAT_VERSION]
@@ -20,6 +27,9 @@ object PlaylistSnapshotCodec {
     private const val FORMAT_VERSION_1 = 1
 
     fun encode(snapshot: PlaylistSnapshot, output: OutputStream) {
+        if (snapshot.channels.size > M3uParser.MAX_CHANNELS) {
+            throw PlaylistChannelLimitExceededException()
+        }
         val out = DataOutputStream(output)
         out.writeInt(FORMAT_VERSION)
         out.writeUTF(snapshot.sourceFingerprint)
@@ -50,6 +60,8 @@ object PlaylistSnapshotCodec {
             }
         } catch (_: EOFException) {
             null
+        } catch (limitExceeded: PlaylistChannelLimitExceededException) {
+            throw limitExceeded
         } catch (_: IOException) {
             null
         }
@@ -59,9 +71,10 @@ object PlaylistSnapshotCodec {
         val sourceFingerprint = input.readUTF()
         val sourceUrl = input.readNullableUTF()
         val savedAtEpochMillis = input.readLong()
-        val skippedLineCount = input.readInt()
-        val channelCount = input.readInt()
-        val channels = ArrayList<M3uChannel>(channelCount)
+        val skippedLineCount = input.readCountField()
+        val channelCount = input.readCountField()
+        if (channelCount > M3uParser.MAX_CHANNELS) throw PlaylistChannelLimitExceededException()
+        val channels = ArrayList<M3uChannel>(presizeFor(channelCount))
         repeat(channelCount) {
             val displayName = input.readUTF()
             val streamUrl = input.readUTF()
@@ -80,9 +93,10 @@ object PlaylistSnapshotCodec {
     private fun decodeV1(input: DataInputStream): PlaylistSnapshot {
         val sourceFingerprint = input.readUTF()
         val savedAtEpochMillis = input.readLong()
-        val skippedLineCount = input.readInt()
-        val channelCount = input.readInt()
-        val channels = ArrayList<M3uChannel>(channelCount)
+        val skippedLineCount = input.readCountField()
+        val channelCount = input.readCountField()
+        if (channelCount > M3uParser.MAX_CHANNELS) throw PlaylistChannelLimitExceededException()
+        val channels = ArrayList<M3uChannel>(presizeFor(channelCount))
         repeat(channelCount) {
             val displayName = input.readUTF()
             val streamUrl = input.readUTF()

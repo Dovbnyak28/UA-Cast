@@ -1,8 +1,8 @@
 package com.uacastplayer.ui.channels
 import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.panelSurface
+import com.uacastplayer.ui.theme.CardTitle
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,16 +13,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,16 +32,22 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
-import com.uacastplayer.data.prefs.ChannelLayout
+import com.uacastplayer.data.playlist.searchPlaylistChannels
+import com.uacastplayer.core.settings.ChannelLayout
 import com.uacastplayer.guidedtour.GuidedTourKeys
 import com.uacastplayer.ui.guidedtour.guidedTourTarget
 import com.uacastplayer.playlist.ChannelGroup
@@ -51,27 +57,23 @@ import com.uacastplayer.playlist.GroupOrderPolicy
 import com.uacastplayer.playlist.GroupedChannels
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.groupDisplayKey
+import com.uacastplayer.ui.components.controlFeedback
+import com.uacastplayer.ui.tv.tvFocus
 import com.uacastplayer.ui.components.rememberDebounced
+import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.ui.components.rememberEntryStagger
 import com.uacastplayer.ui.components.staggeredEntry
 import com.uacastplayer.ui.components.uaTextFieldColors
 import com.uacastplayer.ui.theme.AppIcons
-import com.uacastplayer.ui.theme.BodyText
 import com.uacastplayer.ui.theme.Caption
-import com.uacastplayer.ui.theme.DurPress
-import com.uacastplayer.ui.theme.EaseSpring
 import com.uacastplayer.ui.theme.GapM
 import com.uacastplayer.ui.theme.GroupTileMinWidth
-import com.uacastplayer.ui.theme.PressScaleRound
+import com.uacastplayer.ui.theme.PRESS_SCALE_ROUND
 import com.uacastplayer.ui.theme.RadiusField
 import com.uacastplayer.ui.theme.RadiusItem
 import com.uacastplayer.ui.theme.RadiusList
 import com.uacastplayer.ui.theme.Title
-import com.uacastplayer.ui.theme.raisedSurface
-import com.uacastplayer.ui.theme.sunkenSurface
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Landing screen for the Channels tab: one card per group, showing its channel count. A non-blank
@@ -81,6 +83,15 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun GroupsOverviewGrid(
     groups: List<GroupedChannels>,
+    /**
+     * Hoisted into [com.uacastplayer.ui.channels.ChannelsScreen] rather than remembered here.
+     *
+     * Opening a group swaps this whole grid out for the single-group list, so a state remembered
+     * inside it is discarded the moment a group is opened and starts again at the top when the user
+     * comes back - which, with a few dozen groups, means hunting for the folder they were just in
+     * after every channel they watch. Held above the switch, the position outlives the excursion.
+     */
+    gridState: LazyGridState,
     layout: ChannelLayout,
     onLayoutChange: (ChannelLayout) -> Unit,
     onGroupClick: (GroupedChannels) -> Unit,
@@ -94,6 +105,8 @@ internal fun GroupsOverviewGrid(
     onPinGroup: (String) -> Unit,
     onHideGroup: (String) -> Unit,
     onClearGroupOverride: (String) -> Unit,
+    onGuide: (M3uChannel) -> Unit = {},
+    epgState: com.uacastplayer.epg.EpgUiState = com.uacastplayer.epg.EpgUiState(),
 ) {
     // Search (below) deliberately keeps searching every group, hidden ones included - hiding a
     // group only affects the overview grid; its channels stay reachable via global search.
@@ -104,12 +117,26 @@ internal fun GroupsOverviewGrid(
     // Keyed on the ordered list, so pinning or hiding a group replays the wave over the new order
     // rather than leaving the moved cards as the only static things on screen.
     val entryStagger = rememberEntryStagger(orderedGroups)
+    val animateItems = animationsAllowed()
     val totalChannels = remember(orderedGroups) { orderedGroups.sumOf { it.channels.size } }
     // LIST mode stays a literal single column (a list of group cards); GRID/LARGE_ICONS lets the
     // width fit as many ~GroupTileMinWidth tiles as the screen allows, unlike a fixed column count.
-    val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(GroupTileMinWidth)
+    val categoryWidth = if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= LARGE_CATALOG_FONT_SCALE) {
+        224.dp
+    } else 128.dp
+    val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(categoryWidth)
 
     var query by rememberSaveable { mutableStateOf("") }
+    // Opening a result must also release the search field. It used to keep focus behind the
+    // player, so the soft keyboard stayed up over the video, swallowed the first system Back, and
+    // after a rotation re-opened over a landscape screen it shrank to almost nothing.
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val openSearchResult: (M3uChannel) -> Unit = { channel ->
+        keyboard?.hide()
+        focusManager.clearFocus(force = true)
+        onChannelClick(channel)
+    }
     // Debounced so a burst of keystrokes costs one search rather than one per character - this
     // searches the whole playlist, not just one group.
     val trimmedQuery = rememberDebounced(query.trim())
@@ -121,7 +148,10 @@ internal fun GroupsOverviewGrid(
         value = if (trimmedQuery.isEmpty()) {
             null
         } else {
-            withContext(Dispatchers.Default) { ChannelSearch.search(groups, trimmedQuery) }
+            // Search belongs to the same bounded CPU lane as playlist parsing. Media3 recovery can
+            // saturate Dispatchers.Default; making search wait behind it left the Channels screen
+            // apparently empty even though the playlist itself had already loaded.
+            searchPlaylistChannels(groups, trimmedQuery)
         }
     }
 
@@ -131,7 +161,7 @@ internal fun GroupsOverviewGrid(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = stringResource(R.string.channels_groups_title),
                     style = Title,
@@ -158,6 +188,19 @@ internal fun GroupsOverviewGrid(
             onValueChange = { query = it },
             placeholder = { Text(stringResource(R.string.channels_search_all_hint)) },
             leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.labelSecondary) },
+            trailingIcon = if (query.isNotEmpty()) {
+                {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(
+                            AppIcons.Close,
+                            contentDescription = stringResource(R.string.channels_clear_search),
+                            tint = UaTheme.palette.labelSecondary,
+                        )
+                    }
+                }
+            } else {
+                null
+            },
             singleLine = true,
             shape = RoundedCornerShape(RadiusField),
             colors = uaTextFieldColors(),
@@ -173,6 +216,7 @@ internal fun GroupsOverviewGrid(
         when (val outcome = searchOutcome) {
             null -> LazyVerticalGrid(
                 columns = gridCells,
+                state = gridState,
                 modifier = Modifier.fillMaxSize().padding(top = GapM),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -184,14 +228,14 @@ internal fun GroupsOverviewGrid(
                         onClick = { onGroupClick(grouped) },
                         onLongClick = { groupActionsFor = grouped },
                         modifier = Modifier
-                            .animateItem()
-                            .staggeredEntry(stagger = entryStagger, key = key, index = index),
+                            .then(if (animateItems) Modifier.animateItem() else Modifier)
+                            .staggeredEntry(entryStagger, key, index, animationsEnabled = animateItems),
                     )
                 }
             }
 
             is ChannelSearchOutcome.Matches -> if (outcome.results.isEmpty()) {
-                NoSearchResults(trimmedQuery)
+                NoSearchResults(trimmedQuery, onClearSearch = { query = "" })
             } else {
                 ChannelSearchResultsList(
                     results = outcome.results,
@@ -199,7 +243,9 @@ internal fun GroupsOverviewGrid(
                     resolveIcon = resolveIcon,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
-                    onChannelClick = onChannelClick,
+                    onChannelClick = openSearchResult,
+                    onGuide = onGuide,
+                    epgState = epgState,
                 )
             }
 
@@ -216,7 +262,9 @@ internal fun GroupsOverviewGrid(
                     resolveIcon = resolveIcon,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
-                    onChannelClick = onChannelClick,
+                    onChannelClick = openSearchResult,
+                    onGuide = onGuide,
+                    epgState = epgState,
                 )
             }
         }
@@ -235,14 +283,6 @@ internal fun GroupsOverviewGrid(
     }
 }
 
-private val GroupBadgeSize = 44.dp
-
-/** Inset into [GroupBadgeSize], so the mark sits in the plate rather than filling it. */
-private val GroupLogoSize = 24.dp
-
-/** One pixel at mdpi - the whole engraving. More reads as two glyphs, less as none. */
-private val EngraveOffset = 1.dp
-
 /**
  * The quality of a group, when its name states one - never its category.
  *
@@ -259,52 +299,27 @@ private fun groupQualityBadge(label: String): String? {
     }
 }
 
-/**
- * The app's own mark, engraved into the card.
- *
- * Two illustration schemes came before this and both were removed for the same reason: a *picture*
- * on a group card claims to say something about that group, and neither could. The first was a
- * collage of up to 4 channel logos pulled from whatever happened to be in the icon cache, so the
- * same group rendered differently on two launches. The second was a set of curated per-category
- * illustrations, which at least stayed still - but the category is already stated, in words,
- * directly beneath, so the picture repeated the title in a form carrying less information than the
- * title did.
- *
- * This one makes no claim at all, which is the point: it is the same neutral mark on every card, so
- * it reads as the card's material rather than as a statement about the group. Recessed rather than
- * raised for the same reason - [Modifier.sunkenSurface] makes the plate recede, and a mark that
- * recedes with it cannot compete with the group's name for attention.
- *
- * The engraving is the glyph drawn three times, and the order is what makes it read as cut rather
- * than printed: [UaPalette.void] one step *up* is the shadow the upper wall of a groove casts,
- * [UaPalette.edgeHighlightStrong] one step *down* is light catching its lower lip, and the body
- * over both is what the eye actually resolves as the mark.
- *
- * The body deliberately is **not** the darkest color available. Drawn in [UaPalette.void] on a
- * surface only slightly lighter than it, the first version of this was very nearly invisible on the
- * device - technically an engraving, practically an empty plate. [UaPalette.labelSecondary] keeps
- * it a foreground rather than a hole, and the two offset copies are what put it below the surface.
- */
-@Composable
-private fun EngravedAppMark() {
-    Icon(
-        imageVector = AppIcons.CastToTv,
-        contentDescription = null,
-        tint = UaTheme.palette.void,
-        modifier = Modifier.size(GroupLogoSize).offset(y = -EngraveOffset),
-    )
-    Icon(
-        imageVector = AppIcons.CastToTv,
-        contentDescription = null,
-        tint = UaTheme.palette.edgeHighlightStrong,
-        modifier = Modifier.size(GroupLogoSize).offset(y = EngraveOffset),
-    )
-    Icon(
-        imageVector = AppIcons.CastToTv,
-        contentDescription = null,
-        tint = UaTheme.palette.labelSecondary,
-        modifier = Modifier.size(GroupLogoSize),
-    )
+/** Presentation-only category cue; custom/provider groups keep a neutral channels glyph. */
+private fun groupIcon(group: ChannelGroup): ImageVector = when (group) {
+    is ChannelGroup.Known -> when (group.key) {
+        ChannelGroup.KEY_MOVIES,
+        ChannelGroup.KEY_SERIES,
+        ChannelGroup.KEY_NEWS,
+        ChannelGroup.KEY_DOCUMENTARY,
+        ChannelGroup.KEY_ENTERTAINMENT,
+        -> AppIcons.Tv
+        ChannelGroup.KEY_SPORTS -> AppIcons.Play
+        ChannelGroup.KEY_KIDS -> AppIcons.Kids
+        ChannelGroup.KEY_MUSIC -> AppIcons.AudioTrack
+        ChannelGroup.KEY_SCIENCE,
+        ChannelGroup.KEY_RELIGION,
+        ChannelGroup.KEY_REGIONAL,
+        -> AppIcons.Globe
+        else -> AppIcons.Channels
+    }
+    is ChannelGroup.Custom,
+    ChannelGroup.Ungrouped,
+    -> AppIcons.Channels
 }
 
 @Composable
@@ -316,67 +331,72 @@ private fun GroupCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) PressScaleRound else 1f,
-        animationSpec = tween(DurPress, easing = EaseSpring),
-        label = "groupCardScale",
-    )
+
     val shape = RoundedCornerShape(RadiusList)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .scale(scale)
+            .controlFeedback(pressed, PRESS_SCALE_ROUND)
             // Inside a LazyVerticalGrid (GroupsOverviewGrid) - shadow = false, see
             // docs/DESIGN_SYSTEM.md "§D Depth".
-            .raisedSurface(shape, UaTheme.palette.surface1, edgeColor = UaTheme.palette.hairline, shadow = false)
+            .panelSurface(shape).tvFocus(shape)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
+                onClickLabel = groupLabel(grouped.group),
+                onLongClickLabel = stringResource(R.string.channels_more_actions),
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
+            .heightIn(min = 104.dp)
             .padding(16.dp),
     ) {
-        // One plate on every card, so a quality group and a plain one are the same height and the
-        // grid's rows stay level.
-        Box(
-            modifier = Modifier
-                .size(GroupBadgeSize)
-                .sunkenSurface(RoundedCornerShape(RadiusItem), UaTheme.palette.surface2),
-            contentAlignment = Alignment.Center,
-        ) {
-            val quality = groupQualityBadge(groupLabel(grouped.group))
+        val label = groupLabel(grouped.group)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(RadiusItem))
+                    .background(UaTheme.palette.azure.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = groupIcon(grouped.group),
+                    contentDescription = null,
+                    tint = UaTheme.palette.azure,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            val quality = groupQualityBadge(label)
             if (quality != null) {
                 Text(
                     text = quality,
                     style = Caption,
                     color = UaTheme.palette.accentText,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(UaTheme.palette.azure.copy(alpha = 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
-            } else {
-                EngravedAppMark()
             }
         }
-        Box(
-            modifier = Modifier
-                .padding(top = 12.dp)
-                .width(28.dp)
-                .height(3.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(UaTheme.palette.accentGradient),
-        )
         Text(
-            text = groupLabel(grouped.group),
-            style = BodyText.copy(fontFamily = UaTheme.palette.displayFontFamily),
+            text = label,
+            style = CardTitle,
             color = UaTheme.palette.labelPrimary,
-            maxLines = 1,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 10.dp),
         )
         Text(
             text = pluralStringResource(R.plurals.channels_total_count, grouped.channels.size, grouped.channels.size),
             style = Caption,
             color = UaTheme.palette.labelSecondary,
-            modifier = Modifier.padding(top = 2.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
     }
 }

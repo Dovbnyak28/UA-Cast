@@ -1,0 +1,82 @@
+# Cinema V2 — етап 4: змінені файли
+
+Порівняння з контрольною копією перед етапом 4; попередні локальні зміни сюди не включено.
+
+Файлів у зміні: **74**. Engine, MediaSession, контракти можливостей, Cast/DLNA, Lite/Premium, джерела EPG та залежності збережені.
+
+| Стан | Файл |
+|---|---|
+| Додано | [app/src/androidTest/kotlin/com/uacastplayer/ui/CinemaPlayerInstrumentedTest.kt](../../app/src/androidTest/kotlin/com/uacastplayer/ui/CinemaPlayerInstrumentedTest.kt) |
+| Змінено | [app/src/androidTest/kotlin/com/uacastplayer/ui/epg/EpgTimeZoneInstrumentedTest.kt](../../app/src/androidTest/kotlin/com/uacastplayer/ui/epg/EpgTimeZoneInstrumentedTest.kt) |
+| Змінено | [ui/epg/EpgGuideSheet.kt](../../app/src/main/kotlin/com/uacastplayer/ui/epg/EpgGuideSheet.kt) |
+| Додано | [ui/epg/EpgScheduleList.kt](../../app/src/main/kotlin/com/uacastplayer/ui/epg/EpgScheduleList.kt) |
+| Змінено | [ui/player/FilePlaybackTimeline.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/FilePlaybackTimeline.kt) |
+| Змінено | [ui/player/FilePlayerComponents.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/FilePlayerComponents.kt) |
+| Змінено | [ui/player/PlayerControlsAutoHide.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerControlsAutoHide.kt) |
+| Змінено | [ui/player/PlayerControlsOverlay.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerControlsOverlay.kt) |
+| Змінено | [ui/player/PlayerFullscreenContent.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerFullscreenContent.kt) |
+| Змінено | [ui/player/PlayerInfoPanel.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerInfoPanel.kt) |
+| Змінено | [ui/player/PlayerInlineContent.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerInlineContent.kt) |
+| Змінено | [ui/player/PlayerOverlayFooterActions.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerOverlayFooterActions.kt) |
+| Змінено | [ui/player/PlayerOverlayLayout.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerOverlayLayout.kt) |
+| Додано | [ui/player/PlayerProgrammePanel.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerProgrammePanel.kt) |
+| Змінено | [ui/player/PlayerScreen.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerScreen.kt) |
+| Змінено | [ui/player/PlayerScreenState.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/PlayerScreenState.kt) |
+| Змінено | [ui/player/ReceiverControls.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/ReceiverControls.kt) |
+| Змінено | [ui/player/TvPlayerScreen.kt](../../app/src/main/kotlin/com/uacastplayer/ui/player/TvPlayerScreen.kt) |
+| Змінено | [app/src/main/res/values-es/strings.xml](../../app/src/main/res/values-es/strings.xml) |
+| Змінено | [app/src/main/res/values-ru/strings.xml](../../app/src/main/res/values-ru/strings.xml) |
+| Змінено | [app/src/main/res/values-uk/strings.xml](../../app/src/main/res/values-uk/strings.xml) |
+| Змінено | [app/src/main/res/values/strings.xml](../../app/src/main/res/values/strings.xml) |
+| Додано | [app/src/test/kotlin/com/uacastplayer/ui/epg/CinemaEpgInteractionTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/epg/CinemaEpgInteractionTest.kt) |
+| Змінено | [app/src/test/kotlin/com/uacastplayer/ui/epg/EpgGuideTimeZoneTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/epg/EpgGuideTimeZoneTest.kt) |
+| Додано | [app/src/test/kotlin/com/uacastplayer/ui/player/CinemaControlsLifecycleTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/player/CinemaControlsLifecycleTest.kt) |
+| Додано | [app/src/test/kotlin/com/uacastplayer/ui/player/CinemaPlaybackCommandUiTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/player/CinemaPlaybackCommandUiTest.kt) |
+| Додано | [app/src/test/kotlin/com/uacastplayer/ui/player/CinemaUnknownDurationTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/player/CinemaUnknownDurationTest.kt) |
+| Змінено | [app/src/test/kotlin/com/uacastplayer/ui/player/FileSeekInteractionTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/player/FileSeekInteractionTest.kt) |
+| Змінено | [app/src/test/kotlin/com/uacastplayer/ui/player/LocalFilePlayerUsabilityTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/player/LocalFilePlayerUsabilityTest.kt) |
+| Додано | [app/src/test/kotlin/com/uacastplayer/ui/player/TvPlayerCinemaInteractionTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/player/TvPlayerCinemaInteractionTest.kt) |
+| Додано | [app/src/test/kotlin/com/uacastplayer/ui/screenshot/CinemaV2PlayerScreenshotTest.kt](../../app/src/test/kotlin/com/uacastplayer/ui/screenshot/CinemaV2PlayerScreenshotTest.kt) |
+| Додано | [app/src/test/screenshots/cinema_v2_epg_200.png](../../app/src/test/screenshots/cinema_v2_epg_200.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_epg_empty.png](../../app/src/test/screenshots/cinema_v2_epg_empty.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_epg_error.png](../../app/src/test/screenshots/cinema_v2_epg_error.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_epg_loading.png](../../app/src/test/screenshots/cinema_v2_epg_loading.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_azure.png](../../app/src/test/screenshots/cinema_v2_player_azure.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_daylight.png](../../app/src/test/screenshots/cinema_v2_player_daylight.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_file.png](../../app/src/test/screenshots/cinema_v2_player_file.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_landscape_200.png](../../app/src/test/screenshots/cinema_v2_player_landscape_200.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_live.png](../../app/src/test/screenshots/cinema_v2_player_live.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_midnight.png](../../app/src/test/screenshots/cinema_v2_player_midnight.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_portrait_200.png](../../app/src/test/screenshots/cinema_v2_player_portrait_200.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_portrait_timer_200.png](../../app/src/test/screenshots/cinema_v2_player_portrait_timer_200.png) |
+| Додано | [app/src/test/screenshots/cinema_v2_player_system.png](../../app/src/test/screenshots/cinema_v2_player_system.png) |
+| Змінено | [app/src/test/screenshots/file_player_compact_uk.png](../../app/src/test/screenshots/file_player_compact_uk.png) |
+| Змінено | [app/src/test/screenshots/file_player_inline_cinema.png](../../app/src/test/screenshots/file_player_inline_cinema.png) |
+| Змінено | [app/src/test/screenshots/file_player_overlay_cinema.png](../../app/src/test/screenshots/file_player_overlay_cinema.png) |
+| Змінено | [app/src/test/screenshots/live_player_compact_uk.png](../../app/src/test/screenshots/live_player_compact_uk.png) |
+| Змінено | [app/src/test/screenshots/player_controls_landscape.png](../../app/src/test/screenshots/player_controls_landscape.png) |
+| Змінено | [app/src/test/screenshots/player_short_chips_uk.png](../../app/src/test/screenshots/player_short_chips_uk.png) |
+| Змінено | [app/src/test/screenshots/player_short_file_uk.png](../../app/src/test/screenshots/player_short_file_uk.png) |
+| Змінено | [app/src/test/screenshots/player_short_live_uk.png](../../app/src/test/screenshots/player_short_live_uk.png) |
+| Додано | [docs/CINEMA_V2_STAGE4_CHANGED_FILES_2026-11-14.md](CINEMA_V2_STAGE4_CHANGED_FILES_2026-11-14.md) |
+| Додано | [docs/CINEMA_V2_STAGE4_VERIFICATION_2026-11-14.md](CINEMA_V2_STAGE4_VERIFICATION_2026-11-14.md) |
+| Додано | [docs/design/cinema-v2-stage4/actual-epg-200.png](../design/cinema-v2-stage4/actual-epg-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-epg-320.png](../design/cinema-v2-stage4/actual-epg-320.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-epg-landscape-200.png](../design/cinema-v2-stage4/actual-epg-landscape-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-epg-next-day-200.png](../design/cinema-v2-stage4/actual-epg-next-day-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-local-video.png](../design/cinema-v2-stage4/actual-local-video.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-200.png](../design/cinema-v2-stage4/actual-player-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-320.png](../design/cinema-v2-stage4/actual-player-320.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-after-epg.png](../design/cinema-v2-stage4/actual-player-after-epg.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-azure.png](../design/cinema-v2-stage4/actual-player-azure.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-daylight.png](../design/cinema-v2-stage4/actual-player-daylight.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-landscape.png](../design/cinema-v2-stage4/actual-player-landscape.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-midnight.png](../design/cinema-v2-stage4/actual-player-midnight.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-system.png](../design/cinema-v2-stage4/actual-player-system.png) |
+| Додано | [docs/design/cinema-v2-stage4/actual-player-timer-200.png](../design/cinema-v2-stage4/actual-player-timer-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/after-controls-200.png](../design/cinema-v2-stage4/after-controls-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/after-controls.png](../design/cinema-v2-stage4/after-controls.png) |
+| Додано | [docs/design/cinema-v2-stage4/android-overview.png](../design/cinema-v2-stage4/android-overview.png) |
+| Додано | [docs/design/cinema-v2-stage4/before-after-controls.png](../design/cinema-v2-stage4/before-after-controls.png) |
+| Додано | [docs/design/cinema-v2-stage4/before-controls-200.png](../design/cinema-v2-stage4/before-controls-200.png) |
+| Додано | [docs/design/cinema-v2-stage4/before-controls.png](../design/cinema-v2-stage4/before-controls.png) |

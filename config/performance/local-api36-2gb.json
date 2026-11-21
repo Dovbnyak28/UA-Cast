@@ -1,0 +1,227 @@
+{
+  "description": "Local regression budgets for the `medium_phone` AVD: API 36 x86_64, 2 GiB RAM, default emulator GPU, measured 2026-11-20 (docs/archive/PERFORMANCE_BASELINE_2026-11-20.md). Limits are about 1.5x the measured value so a real regression trips them and run-to-run noise does not. Not comparable with ci-api30.json: API 31+ frame timing comes from FrameTimeline and the GPU differs. Memory units are KiB, time units ms.",
+  "apiLevel": 36,
+  "cases": [
+    {
+      "class": "StartupBenchmark",
+      "test": "coldStartup",
+      "minIterations": 10,
+      "metrics": [
+        {
+          "name": "timeToInitialDisplayMs",
+          "statistic": "median",
+          "limit": 2500
+        }
+      ]
+    },
+    {
+      "class": "StartupBenchmark",
+      "test": "warmStartup",
+      "minIterations": 10,
+      "metrics": [
+        {
+          "name": "timeToInitialDisplayMs",
+          "statistic": "median",
+          "limit": 1500
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "coldRestoreOfFortyThousandChannels",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "timeToInitialDisplayMs",
+          "statistic": "median",
+          "limit": 2500
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        }
+      ]
+    },
+    {
+      "class": "MediumCatalogBenchmark",
+      "test": "coldRestoreOfTenThousandChannels",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "timeToInitialDisplayMs",
+          "statistic": "median",
+          "limit": 2000
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 49152
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "openFortyThousandChannelPlaylist",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 200
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        }
+      ]
+    },
+    {
+      "class": "MediumCatalogBenchmark",
+      "test": "openTenThousandChannelPlaylist",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 160
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 49152
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "searchFortyThousandChannels",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 60
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        }
+      ]
+    },
+    {
+      "class": "MediumCatalogBenchmark",
+      "test": "searchTenThousandChannels",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 50
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 49152
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "scrollLargeChannelGroup",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 80
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "firstPlayerLaunch",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 350
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        },
+        {
+          "name": "UaCastFirstVideoFrameSumMs",
+          "statistic": "median",
+          "limit": 1500
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "switchPlayingChannel",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 150
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        },
+        {
+          "name": "UaCastFirstVideoFrameSumMs",
+          "statistic": "median",
+          "limit": 600
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "enterFullscreen",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 160
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        }
+      ]
+    },
+    {
+      "class": "CriticalJourneysBenchmark",
+      "test": "openEpgGuide",
+      "minIterations": 5,
+      "metrics": [
+        {
+          "name": "frameDurationCpuMs",
+          "statistic": "p95",
+          "limit": 190
+        },
+        {
+          "name": "memoryHeapSizeMaxKb",
+          "statistic": "max",
+          "limit": 65536
+        }
+      ]
+    }
+  ]
+}

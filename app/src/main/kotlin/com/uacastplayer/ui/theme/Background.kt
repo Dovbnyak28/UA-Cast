@@ -4,58 +4,28 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.paint
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import com.uacastplayer.R
+import androidx.compose.ui.graphics.Color
 
-// How strongly the wallpaper texture shows through under the theme-color gradient - low enough
-// that card surfaces and text (drawn on top by every screen) keep the same contrast as the old
-// flat gradient; this only textures the empty space around them.
-private const val WALLPAPER_ALPHA = 0.85f
-private const val OVERLAY_ALPHA = 0.3f
-
-/**
- * The screen background: a decorative wallpaper image (soft ambient glow + grain, see
- * res/drawable-nodpi/app_wallpaper.jpg) with the theme's own gradient over it, from
- * [UaPalette.void] to [UaPalette.voidElevated] - breaks up an otherwise perfectly flat background
- * without introducing a new surface color, while still tinting to the active theme's hue. When
- * [UaPalette.vignette] is set (Cinema), a radial gradient is used instead for a softer, more
- * premium "spotlight" feel.
- */
+/** Cached colour fields, with no wallpaper decode, blur, offscreen layer or animation clock. */
 @Composable
-fun Modifier.appBackground(): Modifier {
+fun Modifier.appBackground(plain: Boolean = false): Modifier {
     val palette = UaTheme.palette
-    // Screen-root modifiers like this recompose along with whatever else is unstable in the
-    // caller's composable (see block 2.4) - remembered so a Brush isn't reallocated on every one
-    // of those recompositions when the palette itself hasn't actually changed.
-    val overlayBrush = remember(palette.vignette, palette.voidElevated, palette.void) {
-        val top = palette.voidElevated.copy(alpha = OVERLAY_ALPHA)
-        val bottom = palette.void.copy(alpha = OVERLAY_ALPHA)
-        if (palette.vignette) {
-            Brush.radialGradient(colors = listOf(top, bottom))
-        } else {
-            Brush.verticalGradient(colors = listOf(bottom, top))
+    val flat = plain || (!palette.wallpaperTexture && palette.isDark)
+    val fill = remember(palette.voidElevated, palette.void) {
+        Brush.verticalGradient(listOf(palette.voidElevated, palette.void))
+    }
+    val base = if (flat) background(palette.void) else background(fill)
+    return if (flat || LocalReducedEffects.current || !palette.wallpaperTexture) base else {
+        base.drawWithCache {
+            val ambient = Brush.radialGradient(
+                listOf(palette.azure.copy(alpha = 0.06f), Color.Transparent),
+                center = Offset(if (palette.vignette) size.width * 0.5f else size.width, 0f),
+                radius = size.maxDimension * 0.7f,
+            )
+            onDrawBehind { drawRect(ambient) }
         }
     }
-    // The wallpaper art is baked with Cinema's warm gold glow - BlendMode.Color keeps its
-    // luminance (so the glow/vignette shape is untouched) but swaps the hue/saturation to the
-    // active theme's own accent, so Azure gets a blue-tinted glow instead of a gold one that
-    // would otherwise fight its cool palette.
-    val wallpaperTint = remember(palette.azure) { ColorFilter.tint(palette.azure, BlendMode.Color) }
-    // Midnight opts out entirely (see UaPalette.wallpaperTexture): its background is true black, and
-    // painting a near-black texture over it would light every pixel the theme exists to leave off.
-    // Its overlayBrush is void-to-void, so what is left here really is a flat fill.
-    if (!palette.wallpaperTexture) return background(palette.void)
-    return background(palette.void)
-        .paint(
-            painterResource(R.drawable.app_wallpaper),
-            contentScale = ContentScale.Crop,
-            alpha = WALLPAPER_ALPHA,
-            colorFilter = wallpaperTint,
-        )
-        .background(overlayBrush)
 }

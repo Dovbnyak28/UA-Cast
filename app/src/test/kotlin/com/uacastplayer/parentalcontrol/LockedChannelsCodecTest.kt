@@ -1,5 +1,6 @@
 package com.uacastplayer.parentalcontrol
 
+import com.uacastplayer.core.json.JsonDecodeResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,6 +21,7 @@ class LockedChannelsCodecTest {
     @Test
     fun `decoding malformed JSON returns an empty set instead of throwing`() {
         assertTrue(LockedChannelsCodec.decode("{not valid").isEmpty())
+        assertTrue(LockedChannelsCodec.decodeResult("{not valid") is JsonDecodeResult.Malformed)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.uacastplayer.playlist
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -41,6 +42,30 @@ class ChannelGrouperTest {
         assertEquals(listOf("Alpha Group", "zeta group"), titles)
     }
 
+    /**
+     * The list a viewer scrolls to find their folder, ordered by an alphabet that is not theirs.
+     * `rawTitle.lowercase()` compares UTF-16 code units: Ґ is U+0490, past я, and Є/І/Ї are
+     * U+0404-0407, in a block that also lands past я. The test above was the only cover this sort
+     * had, and it used English words.
+     */
+    @Test
+    fun `custom groups follow the Ukrainian alphabet, not UTF-16 order`() {
+        val channels = listOf(
+            channel("C1", "Ялта"),
+            channel("C2", "Ґазда"),
+            channel("C3", "Інтер"),
+            channel("C4", "Атлант"),
+            channel("C5", "Єдині"),
+        )
+
+        val result = ChannelGrouper.group(channels, Locale.forLanguageTag("uk"))
+
+        assertEquals(
+            listOf("Атлант", "Ґазда", "Єдині", "Інтер", "Ялта"),
+            result.map { (it.group as ChannelGroup.Custom).rawTitle },
+        )
+    }
+
     @Test
     fun `ungrouped channels always sort last`() {
         val channels = listOf(
@@ -55,5 +80,22 @@ class ChannelGrouperTest {
     @Test
     fun `empty input yields no groups`() {
         assertEquals(emptyList<GroupedChannels>(), ChannelGrouper.group(emptyList()))
+    }
+
+    @Test
+    fun `grouping stays correct after the bounded normalization cache fills`() {
+        val channels = buildList {
+            repeat(300) { index -> add(channel("custom-$index", "Provider Group $index")) }
+            add(channel("news-first", "News"))
+            repeat(20) { index -> add(channel("news-$index", "News")) }
+        }
+
+        val result = ChannelGrouper.group(channels)
+
+        assertEquals(300, result.count { it.group is ChannelGroup.Custom })
+        assertEquals(
+            21,
+            result.single { it.group == ChannelGroup.Known(ChannelGroup.KEY_NEWS) }.channels.size,
+        )
     }
 }

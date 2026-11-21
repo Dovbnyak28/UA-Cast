@@ -8,6 +8,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.mediarouter.app.MediaRouteButton
 import com.google.android.gms.cast.framework.CastButtonFactory
 import com.uacastplayer.R
+import com.uacastplayer.core.concurrent.AppDispatchers
+import com.uacastplayer.log.AppLog
+import kotlinx.coroutines.asExecutor
+
+private val castModuleExecutor = AppDispatchers.io.asExecutor()
 
 /**
  * Thin Compose wrapper around the platform Cast route-picker button; requires a FragmentActivity host.
@@ -22,7 +27,10 @@ fun CastButton(modifier: Modifier = Modifier) {
         factory = {
             val themedContext = ContextThemeWrapper(context, R.style.Theme_UaCastPlayer_CastButton)
             MediaRouteButton(themedContext).also { button ->
-                CastButtonFactory.setUpMediaRouteButton(themedContext, button)
+                CastButtonFactory.setUpMediaRouteButton(themedContext.applicationContext, castModuleExecutor, button)
+                    .addOnFailureListener { error ->
+                        AppLog.w("CastButton") { "Cast button unavailable: ${error.javaClass.simpleName}" }
+                    }
             }
         },
         modifier = modifier,

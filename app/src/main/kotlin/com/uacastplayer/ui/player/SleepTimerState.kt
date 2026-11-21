@@ -1,18 +1,11 @@
 package com.uacastplayer.ui.player
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import com.uacastplayer.player.SleepTimerCalculator
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.uacastplayer.player.PlayerSleepTimer
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
 
 /** User-facing snapshot + actions for the player's sleep timer. [remainingMillis] is exposed as a
  * [State] rather than a plain `Long?` so a caller can hand it down to whichever leaf composable
@@ -26,41 +19,11 @@ internal class SleepTimerState(
 )
 
 /**
- * Counts down to a wall-clock end time (kept in `rememberSaveable` so it survives configuration
- * changes) and invokes [onExpire] once when it reaches zero. Not keyed on the current channel: a
- * timer set on one channel keeps counting down across channel switches, same as a physical TV's
- * sleep timer.
+ * Observes the playback-owned timer. Disposing this screen must not cancel its deadline when the
+ * same player moves into mini-player mode or continues across a configuration change.
  */
 @Composable
-internal fun rememberSleepTimerState(onExpire: () -> Unit): SleepTimerState {
-    var endTimeMillis by rememberSaveable { mutableStateOf<Long?>(null) }
-    val remainingMillisState = remember { mutableStateOf<Long?>(null) }
-    val latestOnExpire by rememberUpdatedState(onExpire)
-
-    LaunchedEffect(endTimeMillis) {
-        val end = endTimeMillis
-        if (end == null) {
-            remainingMillisState.value = null
-            return@LaunchedEffect
-        }
-        while (true) {
-            val now = System.currentTimeMillis()
-            if (SleepTimerCalculator.hasExpired(now, end)) {
-                remainingMillisState.value = null
-                endTimeMillis = null
-                latestOnExpire()
-                break
-            }
-            remainingMillisState.value = SleepTimerCalculator.remainingMillis(now, end)
-            delay(1.seconds)
-        }
-    }
-
-    return SleepTimerState(
-        remainingMillis = remainingMillisState,
-        start = { duration ->
-            endTimeMillis = SleepTimerCalculator.endTimeMillis(System.currentTimeMillis(), duration)
-        },
-        cancel = { endTimeMillis = null },
-    )
+internal fun rememberSleepTimerState(timer: PlayerSleepTimer): SleepTimerState {
+    val remaining = timer.remainingMillis.collectAsStateWithLifecycle()
+    return remember(timer, remaining) { SleepTimerState(remaining, timer::start, timer::cancel) }
 }

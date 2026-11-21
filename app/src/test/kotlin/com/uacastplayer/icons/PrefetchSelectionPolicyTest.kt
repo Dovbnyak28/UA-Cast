@@ -7,6 +7,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PrefetchSelectionPolicyTest {
+    @Test fun `last watched fallback keys preserve names and URL identity`() {
+        val first = channel("News", tvgId = null)
+        val last = first.copy(displayName = "News:HD", streamUrl = "https://unused.example.test/live")
+        val wrongUrl = last.copy(streamUrl = "https://unused.example.test/other")
+        val key = com.uacastplayer.favorites.FavoriteKey.of(last)
+        assertEquals(listOf(last), PrefetchSelectionPolicy.select(
+            listOf(first, wrongUrl, last), PriorityChannels(lastWatchedKey = key), 1,
+        ))
+    }
+
+    @Test fun `cancelled last watched scan propagates cancellation`() {
+        var probes = 0
+        org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+            PrefetchSelectionPolicy.select(
+                List(100_000) { channel("C$it", tvgId = null) }, PriorityChannels(lastWatchedKey = "Missing"), 1,
+                checkCancellation = { if (++probes == 32) throw java.util.concurrent.CancellationException() },
+            )
+        }
+        assertEquals(32, probes)
+    }
+
+    @Test fun `empty priority keys never visit the full playlist`() {
+        val unvisited = object : AbstractList<M3uChannel>() {
+            override val size: Int = 100_000
+            override fun get(index: Int): M3uChannel = error("Unnecessary full-playlist scan")
+        }
+        val firstGroup = List(40) { channel("C$it", tvgId = null) }
+        assertEquals(firstGroup, PrefetchSelectionPolicy.select(
+            unvisited, PriorityChannels(firstGroupChannels = firstGroup), 300,
+        ))
+    }
+
+    @Test fun `full favorite budget avoids scanning remaining channels`() {
+        val first = channel("First")
+        val bounded = object : AbstractList<M3uChannel>() {
+            override val size: Int = 100_000
+            override fun get(index: Int): M3uChannel = if (index == 0) first else error("Budget already filled")
+        }
+        assertEquals(listOf(first), PrefetchSelectionPolicy.select(
+            bounded, PriorityChannels(favoriteKeys = setOf("First"), lastWatchedKey = "Missing"), 1,
+        ))
+    }
+
+    @Test fun `cancelled favorite scan propagates cancellation`() {
+        var visited = 0
+        org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+            PrefetchSelectionPolicy.select(
+                List(100_000) { channel("C$it") }, PriorityChannels(favoriteKeys = setOf("Missing")), 300,
+                checkCancellation = { if (++visited == 32) throw java.util.concurrent.CancellationException() },
+            )
+        }
+        assertEquals(32, visited)
+    }
 
     private fun channel(name: String, group: String? = "News", tvgId: String? = name) =
         M3uChannel(displayName = name, streamUrl = "http://example.com/$name", tvgId = tvgId, groupTitle = group)

@@ -1,11 +1,15 @@
 package com.uacastplayer.ui.screenshot
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import com.uacastplayer.R
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.uacastplayer.epg.EpgUiState
@@ -21,7 +25,7 @@ import com.uacastplayer.ui.home.HomeScreen
 import com.uacastplayer.ui.home.HomeSourceState
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.UaCastTheme
-import com.uacastplayer.ui.theme.UaTheme
+import com.uacastplayer.ui.theme.appBackground
 import org.junit.Rule
 import org.junit.Test
 import org.junit.experimental.categories.Category
@@ -63,6 +67,10 @@ class HomeDashboardScreenshotTest {
                 ),
             ),
             activePlaylistId = "6368ffd4",
+            // A name, because that is what the card is for. This fixture used to pass none, so the
+            // golden recorded the fallback of the day - the first eight characters of a SHA-256 -
+            // and pinned the bug in place as if it were the design.
+            displayName = "iptv.example.com/list.m3u",
             restoredFromCache = true,
         ),
         // Pinned rather than defaulted: EpgUiState.nowMillis defaults to the wall clock, which
@@ -96,7 +104,7 @@ class HomeDashboardScreenshotTest {
                 Box(
                     Modifier
                         .size(width = 411.dp, height = 891.dp)
-                        .background(UaTheme.palette.void),
+                        .appBackground(),
                 ) {
                     HomeScreen(
                         content = content,
@@ -109,11 +117,18 @@ class HomeDashboardScreenshotTest {
             }
         }
         composeRule.onRoot().captureRoboImage("src/test/screenshots/$name.png")
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.home_more_details)).performClick()
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/${name}_details.png")
     }
 
     @Test
     @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
     fun homeDashboard_ukrainian() = capture("home_dashboard_uk")
+
+    @Test
+    @Config(qualifiers = "uk-w320dp-h891dp-xhdpi")
+    fun homeDashboard_daylight() = capture("home_dashboard_daylight", AppTheme.DAYLIGHT)
 
     @Test
     @Config(qualifiers = "en-w411dp-h891dp-xhdpi")
@@ -125,4 +140,56 @@ class HomeDashboardScreenshotTest {
     @Test
     @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
     fun homeDashboard_midnight() = capture("home_dashboard_midnight", AppTheme.MIDNIGHT)
+
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun homeDashboard_newUser_explainsFavoritesNextStep() {
+        val newUserContent = content.copy(favorites = emptyList())
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Box(
+                    Modifier
+                        .size(width = 411.dp, height = 891.dp)
+                        .appBackground(),
+                ) {
+                    HomeScreen(
+                        content = newUserContent,
+                        source = source,
+                        resolveIcon = { null },
+                        onChannelSelected = { _, _ -> },
+                        onOpenChannels = {},
+                    )
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/home_dashboard_personalization_uk.png")
+    }
+
+    @Test
+    @Config(qualifiers = "uk-w411dp-h891dp-xhdpi")
+    fun homeFirstRun_explainsPlaylistRequirementAndNextStep() {
+        val emptyContent = content.copy(
+            playlistState = PlaylistUiState(),
+            favorites = emptyList(),
+            lastWatchedChannelKey = null,
+        )
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Box(
+                    Modifier
+                        .size(width = 411.dp, height = 891.dp)
+                        .appBackground(),
+                ) {
+                    HomeScreen(
+                        content = emptyContent,
+                        source = source,
+                        resolveIcon = { null },
+                        onChannelSelected = { _, _ -> },
+                        onOpenChannels = {},
+                    )
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/home_first_run_uk.png")
+    }
 }

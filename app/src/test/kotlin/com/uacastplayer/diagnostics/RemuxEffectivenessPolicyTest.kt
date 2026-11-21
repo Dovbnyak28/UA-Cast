@@ -1,12 +1,15 @@
 package com.uacastplayer.diagnostics
 
-import com.uacastplayer.diagnostics.CastRouteKind.DIRECT
-import com.uacastplayer.diagnostics.CastRouteKind.PROXY_REMUX
-import com.uacastplayer.diagnostics.CastRouteKind.PROXY_REWRITE
+import com.uacastplayer.core.cast.CastRouteKind
+import com.uacastplayer.core.cast.CastRouteKind.DIRECT
+import com.uacastplayer.core.cast.CastRouteKind.PROXY_REMUX
+import com.uacastplayer.core.cast.CastRouteKind.PROXY_REWRITE
 import com.uacastplayer.diagnostics.CastRouteOutcome.ATTEMPTED
 import com.uacastplayer.diagnostics.CastRouteOutcome.FAILED
 import com.uacastplayer.diagnostics.CastRouteOutcome.REACHED_PLAYING
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RemuxEffectivenessPolicyTest {
@@ -71,5 +74,19 @@ class RemuxEffectivenessPolicyTest {
 
         val expected = RemuxEffectivenessCounts(directAttempted = 1, remuxAttempted = 1, proxyRewriteAttempted = 1)
         assertEquals(expected, counts)
+    }
+
+    @Test
+    fun `a device that has never cast is untouched`() {
+        assertTrue(RemuxEffectivenessPolicy.isUntouched(RemuxEffectivenessCounts()))
+    }
+
+    /** One attempt is enough - a route can be attempted and then abandoned mid-load, leaving every
+     * other counter at zero, and that device has still cast something. */
+    @Test
+    fun `a single attempt is no longer untouched`() {
+        val counts = apply(RemuxEffectivenessCounts(), PROXY_REMUX, ATTEMPTED)
+
+        assertFalse(RemuxEffectivenessPolicy.isUntouched(counts))
     }
 }

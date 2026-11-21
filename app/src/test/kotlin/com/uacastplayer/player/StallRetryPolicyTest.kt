@@ -8,52 +8,54 @@ class StallRetryPolicyTest {
     @Test
     fun `delay sequence escalates 2s 4s 8s 16s then steady 30s`() {
         var state = StallRetryPolicy.State()
-        var now = 0L
         val delays = mutableListOf<Long>()
-        // Stall immediately after each previous recovery (well under the 60s reset window) so the
-        // backoff keeps escalating instead of resetting.
         repeat(6) {
-            val decision = StallRetryPolicy.onStall(now, state)
+            val decision = StallRetryPolicy.onStall(state) as StallRetryPolicy.Decision.Retry
             delays += decision.delayMillis
             state = decision.newState
-            now += 1_000L
         }
         assertEquals(listOf(2_000L, 4_000L, 8_000L, 16_000L, 30_000L, 30_000L), delays)
     }
 
     @Test
-    fun `attempt number 20 still returns a retry, never a give-up`() {
+    fun `a permanently stalled stream receives exactly eight attempts`() {
         var state = StallRetryPolicy.State()
-        var now = 0L
-        repeat(20) {
-            val decision = StallRetryPolicy.onStall(now, state)
+        repeat(StallRetryPolicy.MAX_ATTEMPTS) {
+            val decision = StallRetryPolicy.onStall(state) as StallRetryPolicy.Decision.Retry
             state = decision.newState
-            now += 1_000L
         }
-        assertEquals(20, state.attempt)
-        // Steady-state delay, not some sentinel/give-up value - the policy has no GiveUp branch at all.
-        assertEquals(30_000L, StallRetryPolicy.onStall(now, state).delayMillis)
+        assertEquals(StallRetryPolicy.MAX_ATTEMPTS, state.attempt)
+        assertEquals(StallRetryPolicy.Decision.GiveUp, StallRetryPolicy.onStall(state))
     }
 
     @Test
-    fun `backoff resets to the start after 60s of no further stalls`() {
-        var state = StallRetryPolicy.State()
-        state = StallRetryPolicy.onStall(0L, state).newState
-        state = StallRetryPolicy.onStall(1_000L, state).newState
-        // Second recovery attempt started at t=1000; the stream then plays cleanly for exactly the
-        // 60s reset window before stalling again at t=61000.
-        val decision = StallRetryPolicy.onStall(61_000L, state)
+    fun `backoff resets after a minute of observed forward progress`() {
+        var state = StallRetryPolicy.State(attempt = 5)
+        for (second in 0L..60L) {
+            state = StallRetryPolicy.onPlaybackSample(second * 1_000L, isAdvancing = true, state)
+        }
+        val decision = StallRetryPolicy.onStall(state) as StallRetryPolicy.Decision.Retry
         assertEquals(2_000L, decision.delayMillis)
         assertEquals(1, decision.newState.attempt)
     }
 
     @Test
-    fun `a stall just under the 60s window does not reset the backoff`() {
-        var state = StallRetryPolicy.State()
-        state = StallRetryPolicy.onStall(0L, state).newState
-        val decision = StallRetryPolicy.onStall(59_999L, state)
+    fun `brief progress followed by buffering does not reset the budget`() {
+        var state = StallRetryPolicy.State(attempt = 1)
+        state = StallRetryPolicy.onPlaybackSample(0L, isAdvancing = true, state)
+        state = StallRetryPolicy.onPlaybackSample(59_999L, isAdvancing = true, state)
+        state = StallRetryPolicy.onPlaybackSample(60_000L, isAdvancing = false, state)
+        state = StallRetryPolicy.onPlaybackSample(120_000L, isAdvancing = true, state)
+        val decision = StallRetryPolicy.onStall(state) as StallRetryPolicy.Decision.Retry
         assertEquals(4_000L, decision.delayMillis)
         assertEquals(2, decision.newState.attempt)
+    }
+
+    @Test
+    fun `minutes spent buffering cannot replenish an exhausted budget`() {
+        val exhausted = StallRetryPolicy.State(attempt = StallRetryPolicy.MAX_ATTEMPTS)
+        val afterWait = StallRetryPolicy.onPlaybackSample(600_000L, isAdvancing = false, exhausted)
+        assertEquals(StallRetryPolicy.Decision.GiveUp, StallRetryPolicy.onStall(afterWait))
     }
 
     @Test

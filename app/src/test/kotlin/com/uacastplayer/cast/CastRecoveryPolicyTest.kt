@@ -50,14 +50,14 @@ class CastRecoveryPolicyTest {
     }
 
     @Test
-    fun `a twentieth failure still reloads at 30s - the cast route never permanently gives up on its own`() {
+    fun `permanent failure stops at the total recovery budget`() {
         val decision = CastRecoveryPolicy.onReceiverIdle(
             idleReason = IdleReason.ERROR,
             isConfirmedIncompatible = false,
-            attemptsSoFar = 19,
+            attemptsSoFar = CastRecoveryPolicy.MAX_TOTAL_ATTEMPTS,
             selfInitiated = false,
         )
-        assertEquals(CastRecoveryDecision.Reload(attempt = 20, backoffMillis = 30_000L), decision)
+        assertEquals(CastRecoveryDecision.GiveUp, decision)
     }
 
     @Test

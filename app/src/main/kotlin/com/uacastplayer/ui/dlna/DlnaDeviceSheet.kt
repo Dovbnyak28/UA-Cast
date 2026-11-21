@@ -3,12 +3,15 @@ package com.uacastplayer.ui.dlna
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,14 +24,18 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -57,15 +64,12 @@ import kotlin.math.roundToInt
 private const val SPINNER_SIZE_DP = 18
 private const val SPINNER_STROKE_DP = 2
 
-/** Wide enough for "100%" at the largest font scale this app supports. */
-private const val VOLUME_VALUE_WIDTH_DP = 44
-
 /**
  * "Other devices (DLNA)" bottom sheet: runs [discoverDevices] once per appearance and lists what it
  * finds. There is no live-updating device list - an SSDP search is a fixed ~3s window (see
- * `dlna/SsdpDiscovery`), not a subscription, so re-opening the sheet is how the user retries.
+ * `dlna/SsdpDiscovery`), not a subscription. The explicit search action starts a new window.
  *
- * Separate from the Chromecast button next to it ([com.uacastplayer.ui.player.PlayerCastButton]),
+ * Reached from the shared TV picker, separately from [com.uacastplayer.ui.player.PlayerCastButton],
  * because the two protocols reach different hardware: Cast covers Google devices, DLNA covers the
  * Samsung/LG/Sony sets that have no Cast receiver at all.
  */
@@ -81,8 +85,9 @@ fun DlnaDeviceSheet(
 ) {
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
     var searching by remember { mutableStateOf(true) }
+    var searchGeneration by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(searchGeneration) {
         searching = true
         devices = discoverDevices()
         searching = false
@@ -96,6 +101,7 @@ fun DlnaDeviceSheet(
             onDeviceSelected = onDeviceSelected,
             onStopCasting = onStopCasting,
             onVolumeChange = onVolumeChange,
+            onRetryDiscovery = { searchGeneration++ },
         )
     }
 }
@@ -116,10 +122,12 @@ internal fun DlnaDeviceSheetContent(
     onDeviceSelected: (DlnaDevice) -> Unit,
     onStopCasting: () -> Unit,
     onVolumeChange: (Int) -> Unit,
+    onRetryDiscovery: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = ScreenHPadding)
             .padding(bottom = GapL),
         verticalArrangement = Arrangement.spacedBy(GapS),
@@ -131,12 +139,20 @@ internal fun DlnaDeviceSheetContent(
         )
 
         val connected = connectionState.connectedDevice
-        connected?.let { device ->
-            DlnaConnectedRow(deviceName = device.friendlyName, onStop = onStopCasting)
+        connected?.takeUnless { connectionState.isConnecting }?.let { device ->
+            DlnaConnectedRow(
+                deviceName = device.friendlyName,
+                playbackStatusUnverified = connectionState.playbackStatusUnverified,
+                onStop = onStopCasting,
+            )
             // Absent, not disabled, when the renderer has no RenderingControl service or the
             // first read failed: a greyed-out slider sitting at zero would say the TV is muted.
             connectionState.volume?.let { volume ->
-                DlnaVolumeRow(volume = volume, onVolumeChange = onVolumeChange)
+                // A drag belongs to one renderer, even when StateFlow conflates a reconnect's
+                // intermediate state and the new TV happens to report the same volume.
+                key(device.controlUrl, device.renderingControlUrl) {
+                    DlnaVolumeRow(volume = volume, onVolumeChange = onVolumeChange)
+                }
             }
         }
 
@@ -145,6 +161,17 @@ internal fun DlnaDeviceSheetContent(
         // what it is already playing. What stays listed is what the user could switch *to*.
         val switchable = devices.filter { it != connected }
         when {
+            connectionState.isConnecting -> {
+                Text(
+                    stringResource(
+                        R.string.dlna_connecting_device,
+                        connectionState.connectingDevice?.friendlyName.orEmpty(),
+                    ),
+                    style = BodyText,
+                    color = UaTheme.palette.labelPrimary,
+                )
+                TextButton(onClick = onStopCasting) { Text(stringResource(R.string.common_cancel)) }
+            }
             searching -> DlnaSearchingRow()
             // Only when there is nothing at all. With a device connected, an empty remainder
             // means "nothing else to switch to", and "No devices found" directly under a card
@@ -166,6 +193,21 @@ internal fun DlnaDeviceSheetContent(
                     )
                 }
             }
+        }
+        connectionState.failedDevice?.let { device ->
+            Text(
+                stringResource(R.string.dlna_connection_failed, device.friendlyName),
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+            )
+            val gate = LocalFeatureGate.current
+            TextButton(onClick = gate.guard(Feature.DLNA) { onDeviceSelected(device) }) {
+                Text(stringResource(R.string.common_retry))
+            }
+        }
+        if (!searching && !connectionState.isConnecting) {
+            Text(stringResource(R.string.dlna_network_hint), style = Caption, color = UaTheme.palette.labelSecondary)
+            TextButton(onClick = onRetryDiscovery) { Text(stringResource(R.string.dlna_search_again)) }
         }
     }
 }
@@ -191,46 +233,44 @@ private fun DlnaSearchingRow() {
 }
 
 @Composable
-private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
-    Row(
+private fun DlnaConnectedRow(deviceName: String, playbackStatusUnverified: Boolean, onStop: () -> Unit) {
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusItem))
             .background(UaTheme.palette.surface1)
             .padding(start = 14.dp, end = GapS, top = 10.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(GapS),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.azure)
-        // weight(1f) is the whole fix for what this row used to look like. With SpaceBetween and an
-        // unweighted Column, the text was measured at its full intrinsic width first and the button
-        // got whatever was left - which for a real device name was almost nothing, so "Stop casting"
-        // laid itself out one character per line and the card grew to half the sheet. Weighted, the
-        // button is measured first at the width it actually needs and the name takes the remainder.
-        Column(modifier = Modifier.weight(1f)) {
-            // The name alone, not "Connected to <name>": the green line right below already says
-            // this is a live cast, and the name was appearing a third time in the device list under
-            // the card. Ellipsized because a friendlyName is whatever the TV's owner typed into it.
-            Text(
-                text = deviceName,
-                style = BodyText,
-                color = UaTheme.palette.labelPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = stringResource(R.string.cast_status_connected),
-                style = Caption,
-                color = UaTheme.palette.routeGreen,
-            )
+        // Account for text scale as well as screen width: reserving an inline Stop button can
+        // leave only a few characters per line for the actual connection status.
+        val stacked = maxWidth / LocalDensity.current.fontScale < MIN_INLINE_STATUS_WIDTH
+        Column {
+            Row(horizontalArrangement = Arrangement.spacedBy(GapS), verticalAlignment = Alignment.CenterVertically) {
+                Icon(AppIcons.Tv, contentDescription = null, tint = UaTheme.palette.azure)
+                Column(Modifier.weight(1f)) {
+                    Text(deviceName, style = BodyText, color = UaTheme.palette.labelPrimary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        stringResource(if (playbackStatusUnverified) R.string.dlna_status_unverified
+                            else R.string.cast_status_connected),
+                        style = Caption,
+                        color = if (playbackStatusUnverified) UaTheme.palette.routeAmber
+                            else UaTheme.palette.routeGreen,
+                    )
+                }
+                if (!stacked) DlnaStopButton(onStop)
+            }
+            if (stacked) DlnaStopButton(onStop, Modifier.align(Alignment.End))
         }
-        TextButton(onClick = onStop) {
-            Text(
-                text = stringResource(R.string.dlna_stop_casting),
-                color = UaTheme.palette.azure,
-                maxLines = 1,
-            )
-        }
+    }
+}
+
+private val MIN_INLINE_STATUS_WIDTH = 240.dp
+
+@Composable
+private fun DlnaStopButton(onStop: () -> Unit, modifier: Modifier = Modifier) {
+    TextButton(onClick = onStop, modifier = modifier) {
+        Text(stringResource(R.string.dlna_stop_casting), color = UaTheme.palette.azure)
     }
 }
 
@@ -245,44 +285,70 @@ private fun DlnaConnectedRow(deviceName: String, onStop: () -> Unit) {
  */
 @Composable
 private fun DlnaVolumeRow(volume: Int, onVolumeChange: (Int) -> Unit) {
-    // Where the finger is, while the finger is down. Retired by the repository publishing a volume -
-    // it publishes the requested value immediately and the renderer's reported one a round trip
-    // later (see DlnaSessionRepository.setVolume), so the thumb neither snaps back nor holds a value
-    // the TV refused.
+    // Only the active gesture owns a draft. A readback for an earlier command can arrive while
+    // the user is dragging again, so external volume updates must not discard that new draft.
+    // The repository publishes requests synchronously and then corrects them from the TV.
     var dragged by remember { mutableStateOf<Float?>(null) }
-    LaunchedEffect(volume) { dragged = null }
     val shown = dragged ?: volume.toFloat()
     val label = stringResource(R.string.dlna_volume)
+    val valueLabel = stringResource(R.string.dlna_volume_value, shown.roundToInt())
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(RadiusItem))
+            .background(UaTheme.palette.surface1)
             .padding(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(GapS),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Volume, contentDescription = null, tint = UaTheme.palette.labelSecondary)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(GapS),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                AppIcons.Volume,
+                contentDescription = null,
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = label,
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = valueLabel,
+                style = Caption,
+                color = UaTheme.palette.azure,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(UaTheme.palette.surface2)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
         Slider(
             value = shown,
             onValueChange = { dragged = it },
-            onValueChangeFinished = { dragged?.let { onVolumeChange(it.roundToInt()) } },
+            onValueChangeFinished = {
+                val requested = dragged
+                dragged = null
+                requested?.let { onVolumeChange(it.roundToInt()) }
+            },
             valueRange = VolumeRange.MIN.toFloat()..VolumeRange.MAX.toFloat(),
             colors = SliderDefaults.colors(
                 thumbColor = UaTheme.palette.azure,
                 activeTrackColor = UaTheme.palette.azure,
+                inactiveTrackColor = UaTheme.palette.overlayHighlight,
             ),
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
+                // Keep the visual track compact while preserving the full 48dp touch target.
+                .height(48.dp)
+                .padding(bottom = 2.dp)
                 .semantics { contentDescription = label },
-        )
-        // Fixed width, so the row does not shift sideways under the finger as the number goes from
-        // one digit to three.
-        Text(
-            text = stringResource(R.string.dlna_volume_value, shown.roundToInt()),
-            style = Caption,
-            color = UaTheme.palette.labelSecondary,
-            maxLines = 1,
-            modifier = Modifier.width(VOLUME_VALUE_WIDTH_DP.dp),
         )
     }
 }
@@ -293,7 +359,7 @@ private fun DlnaDeviceRow(device: DlnaDevice, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RadiusItem))
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = device.friendlyName, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(GapS),
         verticalAlignment = Alignment.CenterVertically,
@@ -319,7 +385,7 @@ private fun DlnaDeviceSheetRowsPreview(@PreviewParameter(AppThemePreviewParamete
         Column(verticalArrangement = Arrangement.spacedBy(GapS), modifier = Modifier.padding(ScreenHPadding)) {
             // The real friendlyName of the TV this layout was fixed against - a short placeholder
             // is exactly what hid the wrapping bug from this preview in the first place.
-            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", onStop = {})
+            DlnaConnectedRow(deviceName = "[TV] Samsung 6 Series (40)", playbackStatusUnverified = false, onStop = {})
             DlnaVolumeRow(volume = 23, onVolumeChange = {})
             DlnaDeviceRow(
                 device = DlnaDevice(friendlyName = "LG webOS TV", controlUrl = "http://192.168.1.5/upnp/control"),

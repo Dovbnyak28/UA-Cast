@@ -28,7 +28,17 @@ if [ ! -f "$METADATA" ]; then
 fi
 
 # One "<name> <versionCode>" line per output. An element with no ABI filter is the universal APK.
-rows=$(python -c '
+python_cmd=()
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import json' >/dev/null 2>&1; then
+    python_cmd=(python3)
+elif command -v python >/dev/null 2>&1 && python -c 'import json' >/dev/null 2>&1; then
+    python_cmd=(python)
+elif command -v py >/dev/null 2>&1 && py -3 -c 'import json' >/dev/null 2>&1; then
+    python_cmd=(py -3)
+fi
+
+if [ "${#python_cmd[@]}" -gt 0 ]; then
+    rows=$("${python_cmd[@]}" -c '
 import json, sys
 elements = json.load(open(sys.argv[1]))["elements"]
 for e in elements:
@@ -36,14 +46,42 @@ for e in elements:
     abi = next((f.get("value") for f in filters if f.get("filterType") == "ABI"), "universal")
     print(abi, e["versionCode"])
 ' "$METADATA")
+elif command -v node >/dev/null 2>&1 && node -e 'JSON.parse("{}")' >/dev/null 2>&1; then
+    rows=$(node -e '
+const fs = require("fs");
+const elements = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).elements;
+for (const element of elements) {
+    const filters = element.filters || [];
+    const abiFilter = filters.find(filter => filter.filterType === "ABI");
+    console.log(abiFilter ? abiFilter.value : "universal", element.versionCode);
+}
+' "$METADATA")
+else
+    echo "check-version-code-ordering: no working JSON runtime found (tried Python 3 and Node.js)" >&2
+    exit 1
+fi
 
-universal=$(echo "$rows" | awk '$1 == "universal" { print $2 }')
+# A missing split is a release failure too. Checking only the rows that happened to be present made
+# a universal-only build report the deeply misleading "outranks all 0 per-ABI APKs". Require the
+# exact artifact set configured in app/build.gradle.kts before comparing any codes.
+expected_abis=("armeabi-v7a" "arm64-v8a" "x86_64" "universal")
+for abi in "${expected_abis[@]}"; do
+    matches=$(echo "$rows" | awk -v expected="$abi" '$1 == expected { count++ } END { print count + 0 }')
+    if [ "$matches" -ne 1 ]; then
+        echo "check-version-code-ordering: expected exactly one $abi APK, found $matches" >&2
+        echo "$rows" >&2
+        exit 1
+    fi
+done
 
-if [ -z "$universal" ]; then
-    echo "check-version-code-ordering: no universal APK in $METADATA" >&2
+count=$(echo "$rows" | wc -l | tr -d ' ')
+if [ "$count" -ne "${#expected_abis[@]}" ]; then
+    echo "check-version-code-ordering: expected exactly ${#expected_abis[@]} APKs, found $count" >&2
     echo "$rows" >&2
     exit 1
 fi
+
+universal=$(echo "$rows" | awk '$1 == "universal" { print $2 }')
 
 violations=$(echo "$rows" | awk -v u="$universal" '$1 != "universal" && $2 >= u { print "  " $1 " = " $2 " >= universal " u }')
 
@@ -56,5 +94,4 @@ if [ -n "$violations" ]; then
     exit 1
 fi
 
-count=$(echo "$rows" | wc -l | tr -d ' ')
 echo "check-version-code-ordering: OK - universal $universal outranks all $((count - 1)) per-ABI APKs"

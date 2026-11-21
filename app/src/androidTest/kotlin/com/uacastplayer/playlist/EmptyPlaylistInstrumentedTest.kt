@@ -2,7 +2,9 @@ package com.uacastplayer.playlist
 
 import android.content.Context
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -54,12 +56,13 @@ class EmptyPlaylistInstrumentedTest {
             skipOnboarding(mainActivity)
             composeTestRule.waitForIdle()
 
-            composeTestRule.onNodeWithText(mainActivity.getString(R.string.nav_channels)).performClick()
+            composeTestRule.onNodeWithContentDescription(mainActivity.getString(R.string.nav_channels)).performClick()
             composeTestRule.waitForIdle()
 
             // Throws if the empty-state message never appears - a plain existence check, same as
             // MainActivitySmokeTest's "did anything crash" philosophy.
             composeTestRule.onNodeWithText(mainActivity.getString(R.string.channels_empty_message))
+                .assertIsDisplayed()
         }
     }
 

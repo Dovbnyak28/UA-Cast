@@ -41,25 +41,16 @@ object RenderingControlSoapBuilder {
 /**
  * Reads `CurrentVolume` out of a `GetVolume` response.
  *
- * Deliberately a substring scan rather than an XML parse. The response is a fixed-shape document
- * whose one interesting element is never namespaced or attributed, renderers vary in how much
- * whitespace and how many namespace declarations they wrap it in, and a parser failing on some
- * vendor's malformed envelope would lose a number that is plainly visible in the bytes.
+ * Uses the bounded SOAP reader so namespace prefixes, vendor attributes, CDATA and XML entities
+ * cannot turn a valid value into an unavailable slider. Envelope-free field replies remain supported.
  *
  * Returns null for anything that is not a plain non-negative integer, which is what a fault, an
  * empty body or a truncated response all look like.
  */
 object VolumeResponseParser {
 
-    private const val OPEN = "<CurrentVolume>"
-    private const val CLOSE = "</CurrentVolume>"
-
     fun parse(responseBody: String): Int? {
-        val start = responseBody.indexOf(OPEN)
-        val valueStart = if (start < 0) -1 else start + OPEN.length
-        val end = if (valueStart < 0) -1 else responseBody.indexOf(CLOSE, valueStart)
-        if (end < 0) return null
-        val raw = responseBody.substring(valueStart, end).trim()
+        val raw = SoapResponseFields.read(responseBody, "CurrentVolume")["CurrentVolume"] ?: return null
         // toIntOrNull would accept a leading '-' or '+'; a volume is neither.
         return if (raw.isNotEmpty() && raw.all { it.isDigit() }) raw.toIntOrNull() else null
     }

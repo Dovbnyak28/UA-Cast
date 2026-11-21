@@ -84,7 +84,7 @@ class ChannelSearchTest {
     }
 
     // The cases below pin the matcher that replaced "normalize the channel name into a String, then
-    // call contains" - see ChannelSearch.containsNormalized. Each is something that version got
+    // call contains" - see NormalizedChannelQuery. Each is something that version got
     // right for free and a character-walking matcher can plausibly get wrong.
 
     @Test
@@ -124,8 +124,7 @@ class ChannelSearchTest {
         assertEquals(1, outcome.results.size)
     }
 
-    /** The scan tries every source index as a start, so a name where the query almost matches
-     * earlier must still match at the later, real position. */
+    /** A partial match must not hide the later, real match in the same name. */
     @Test
     fun `matches after a false start earlier in the name`() {
         val outcome = ChannelSearch.search(listOf(groupOf(channel("Disco Dance Discovery"))), "discovery")

@@ -41,12 +41,12 @@ fun darken(color: Color, fraction: Float): Color {
 }
 
 /**
- * [base], darkened by [PressedDarkenFraction] while [pressed] - the one pressed-state color rule
+ * [base], darkened by [PRESSED_DARKEN_FRACTION] while [pressed] - the one pressed-state color rule
  * every [raisedSurface] user should share, instead of each control picking its own ad-hoc pressed
  * tone (e.g. swapping to a whole different palette surface).
  */
 fun pressedSurface(base: Color, pressed: Boolean): Color =
-    if (pressed) darken(base, PressedDarkenFraction) else base
+    if (pressed) darken(base, PRESSED_DARKEN_FRACTION) else base
 
 /**
  * A subtly "raised" surface: a top-to-bottom gradient from a lightened [base] to [base] itself
@@ -55,9 +55,9 @@ fun pressedSurface(base: Color, pressed: Boolean): Color =
  * compositing on every scroll frame for every visible row, which is the actual cost this rule is
  * guarding against (a raised gradient/border alone is cheap; a shadow layer isn't).
  *
- * Only three places in the app may additionally glow (accent shadow/spotColor beyond this soft
- * neutral shadow): the play button, the current-programme progress indicator, and the live
- * indicator - see docs/DESIGN_SYSTEM.md "§D Depth". This modifier itself never glows; a glowing
+ * Only four places in the app may additionally glow (accent shadow/spotColor beyond this soft
+ * neutral shadow): the play button, current-programme progress indicator, live indicator, and
+ * selected bottom-navigation pill - see docs/DESIGN_SYSTEM.md "§D Depth". This modifier itself never glows; a glowing
  * control layers its own `.shadow(spotColor = ...)` on top separately (see GradientPlayButton).
  */
 @Composable
@@ -68,13 +68,14 @@ fun Modifier.raisedSurface(
     shadow: Boolean = false,
 ): Modifier {
     val liftAmount = UaTheme.palette.surfaceLiftAmount
+    val reduced = LocalReducedEffects.current
     val shadowColor = UaTheme.palette.shadowSoft
     val brush = remember(base, liftAmount) {
         Brush.verticalGradient(listOf(lighten(base, liftAmount), base))
     }
     return this
         .let { modifier ->
-            if (shadow) {
+            if (shadow && !reduced) {
                 modifier.shadow(RaisedShadowElevation, shape, ambientColor = shadowColor, spotColor = shadowColor)
             } else {
                 modifier
@@ -99,10 +100,11 @@ fun Modifier.raisedSurface(
     edgeColor: Color = UaTheme.palette.edgeHighlightAccent,
     shadow: Boolean = false,
 ): Modifier {
+    val reduced = LocalReducedEffects.current
     val shadowColor = UaTheme.palette.shadowSoft
     return this
         .let { modifier ->
-            if (shadow) {
+            if (shadow && !reduced) {
                 modifier.shadow(RaisedShadowElevation, shape, ambientColor = shadowColor, spotColor = shadowColor)
             } else {
                 modifier

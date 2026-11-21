@@ -1,14 +1,18 @@
 package com.uacastplayer.app
 
+import com.uacastplayer.core.concurrent.LatestValueWriter
 import com.uacastplayer.playlist.GroupVisibilityEntry
 import com.uacastplayer.playlist.GroupVisibilityStorage
 import com.uacastplayer.playlist.GroupVisibilityState
 import com.uacastplayer.playlist.LEGACY_SOURCE_ID
+import com.uacastplayer.log.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+private const val TAG = "GroupVisibilityController"
 
 /**
  * Owns per-playlist-source group pin/hide overrides (see [GroupVisibilityStorage]) - moved out of
@@ -21,8 +25,13 @@ class GroupVisibilityController(
     private val store: GroupVisibilityStorage,
     private val scope: CoroutineScope,
 ) {
+    private val writer = LatestValueWriter(scope, store::save) { error ->
+        AppLog.w(TAG) { "Group visibility persistence failed: ${error.javaClass.simpleName}" }
+    }
     private var allEntries: List<GroupVisibilityEntry> = emptyList()
     private var activeSourceId: String? = null
+    private var initialLoadFinished = false
+    private val pendingOverrides = linkedMapOf<Pair<String, String>, GroupVisibilityEntry?>()
 
     private val _pinnedKeys = MutableStateFlow<Set<String>>(emptySet())
     val pinnedKeys: StateFlow<Set<String>> = _pinnedKeys.asStateFlow()
@@ -32,7 +41,21 @@ class GroupVisibilityController(
 
     fun loadInitial() {
         scope.launch {
-            allEntries = store.load()
+            val loaded = store.load()
+            val hadPendingMutation = pendingOverrides.isNotEmpty()
+            val merged = loaded.associateByTo(linkedMapOf()) { it.sourceId to it.groupKey }
+            for ((key, override) in pendingOverrides) {
+                if (override == null) merged.remove(key) else merged[key] = override
+            }
+            pendingOverrides.clear()
+            allEntries = merged.values.toList()
+            initialLoadFinished = true
+            val sourceId = activeSourceId
+            if (sourceId != null && allEntries.any { it.sourceId == LEGACY_SOURCE_ID }) {
+                migrateLegacyEntries(sourceId)
+            } else if (hadPendingMutation) {
+                writer.submit(allEntries)
+            }
             refreshActiveSource()
         }
     }
@@ -51,7 +74,7 @@ class GroupVisibilityController(
     private fun migrateLegacyEntries(targetSourceId: String) {
         if (allEntries.none { it.sourceId == LEGACY_SOURCE_ID }) return
         allEntries = allEntries.map { if (it.sourceId == LEGACY_SOURCE_ID) it.copy(sourceId = targetSourceId) else it }
-        scope.launch { store.save(allEntries) }
+        if (initialLoadFinished) writer.submit(allEntries)
     }
 
     fun pinGroup(groupKey: String) = setState(groupKey, GroupVisibilityState.PINNED)
@@ -63,19 +86,21 @@ class GroupVisibilityController(
     fun clearOverride(groupKey: String) {
         val sourceId = activeSourceId ?: return
         allEntries = allEntries.filterNot { it.sourceId == sourceId && it.groupKey == groupKey }
+        if (!initialLoadFinished) pendingOverrides[sourceId to groupKey] = null
         persistAndRefresh()
     }
 
     private fun setState(groupKey: String, state: GroupVisibilityState) {
         val sourceId = activeSourceId ?: return
-        allEntries = allEntries.filterNot { it.sourceId == sourceId && it.groupKey == groupKey } +
-            GroupVisibilityEntry(sourceId, groupKey, state)
+        val updatedEntry = GroupVisibilityEntry(sourceId, groupKey, state)
+        allEntries = allEntries.filterNot { it.sourceId == sourceId && it.groupKey == groupKey } + updatedEntry
+        if (!initialLoadFinished) pendingOverrides[sourceId to groupKey] = updatedEntry
         persistAndRefresh()
     }
 
     private fun persistAndRefresh() {
         refreshActiveSource()
-        scope.launch { store.save(allEntries) }
+        if (initialLoadFinished) writer.submit(allEntries)
     }
 
     private fun refreshActiveSource() {

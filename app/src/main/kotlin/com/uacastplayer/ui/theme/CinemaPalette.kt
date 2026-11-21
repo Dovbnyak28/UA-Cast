@@ -4,38 +4,37 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 
-// Backgrounds - warm charcoal instead of Azure's neutral black.
-private val CinemaVoid = Color(0xFF0B0A08)
-private val CinemaVoidElevated = Color(0xFF121009)
-private val CinemaSurface1 = Color(0xFF171410)
-private val CinemaSurface2 = Color(0xFF1E1A14)
+// Ink-blue surfaces keep the cinema palette aligned with the UA-Cast brand and readable at night.
+private val CinemaVoid = Color(0xFF0C111B)
+private val CinemaVoidElevated = Color(0xFF121C2B)
+private val CinemaSurface1 = Color(0xFF192436)
+private val CinemaSurface2 = Color(0xFF24324A)
 
-// Accent - champagne gold gradient, see docs/DESIGN_SYSTEM.md "Themes".
-private val CinemaGradientTop = Color(0xFFEAD6A4)
-private val CinemaGradientBottom = Color(0xFFC9A96E)
-// The single solid accent hue (icon tints, borders, most accent text) - contrast on CinemaVoid is
-// ~7:1, verified against WCAG AA. Small (<12sp) text uses accentText instead - see UaPalette.
-private val CinemaAccent = Color(0xFFD4B780)
+// Champagne-to-gold accents distinguish primary actions from the cool ink surfaces.
+private val CinemaGradientTop = Color(0xFFFFD777)
+private val CinemaGradientBottom = Color(0xFFE4B65C)
+// The solid accent hue is bright enough for chrome; small text uses the near-white accentText.
+private val CinemaAccent = Color(0xFFFFCF70)
 
-// Text - warm ivory/beige instead of Azure's cool white/gray.
-private val CinemaLabelPrimary = Color(0xFFF2EDE2)
-private val CinemaLabelSecondary = Color(0xFF9C917B)
-private val CinemaLabelTertiary = Color(0xFF6E6555)
+// Text - cool whites and blue-greys separate the reading hierarchy from gold actions.
+private val CinemaLabelPrimary = Color(0xFFF1F4FA)
+private val CinemaLabelSecondary = Color(0xFFBBC7D9)
+private val CinemaLabelTertiary = Color(0xFF93A4BC)
 
 // Route health - danger stays warm/muted; good/warn are left as the universal Azure values since
 // route-health color meaning should stay recognizable across themes.
-private val CinemaDanger = Color(0xFFC9695A)
+private val CinemaDanger = Color(0xFFF38B82)
 
-// Depth - ivory/gold-tinted instead of Azure's neutral white, so raised edges read as warm chrome
-// rather than a cool mismatch against the charcoal background. See ui/theme/Depth.kt.
-private val CinemaEdgeHighlightNeutral = Color(0x1FF2EDE2)
-private val CinemaEdgeHighlightStrong = Color(0x33F2EDE2)
-private val CinemaEdgeHighlightAccent = Color(0x73D4B780)
-private val CinemaShadowSoft = Color(0x66000000)
+// Depth - blue-grey neutral edges sit quietly on ink-blue surfaces; accent edges stay gold.
+// See ui/theme/Depth.kt and PanelSurface.kt for the shared surface treatment.
+private val CinemaEdgeHighlightNeutral = Color(0x355B7498)
+private val CinemaEdgeHighlightStrong = Color(0x596C8AB5)
+private val CinemaEdgeHighlightAccent = Color(0x99FFCF70)
+private val CinemaShadowSoft = Color(0x88000000)
 
 /**
- * Warm, "premium cinema" palette: charcoal background, champagne-gold accent, serif display type,
- * pill-shaped buttons, and a radial vignette background - see docs/DESIGN_SYSTEM.md "Themes".
+ * Warm, "premium cinema" palette: ink-blue background, champagne-to-gold accent, bold sans
+ * display type, rounded rectangular buttons, and an ambient spotlight background.
  */
 val CinemaUaPalette = UaPalette(
     void = CinemaVoid,
@@ -43,22 +42,22 @@ val CinemaUaPalette = UaPalette(
     surface1 = CinemaSurface1,
     surface2 = CinemaSurface2,
     azure = CinemaAccent,
-    azure2 = CinemaGradientTop,
+    azure2 = CinemaGradientBottom,
     accentGradientTop = CinemaGradientTop,
     accentGradientBottom = CinemaGradientBottom,
     accentGradient = Brush.linearGradient(listOf(CinemaGradientTop, CinemaGradientBottom)),
-    accentOnFill = Color(0xFF1A1508),
+    accentOnFill = Color(0xFF2B160E),
     // accentText stays close to labelPrimary rather than gold: thin gold letters at Caption/Micro
     // scale read as washed-out on the warm charcoal background - see UaPalette.accentText doc.
-    accentText = CinemaLabelPrimary,
+    accentText = Color(0xFFFFF2D9),
     routeGreen = RouteGreen,
     routeAmber = RouteAmber,
     routeRed = CinemaDanger,
     labelPrimary = CinemaLabelPrimary,
     labelSecondary = CinemaLabelSecondary,
     labelTertiary = CinemaLabelTertiary,
-    hairline = Color(0x40D4B780),
-    azureGlow = Color(0x80D4B780),
+    hairline = Color(0x404B6485),
+    azureGlow = Color(0x99FFB85F),
     greenGlow = GreenGlow,
     amberGlow = AmberGlow,
     redGlow = Color(0x99C9695A),
@@ -66,21 +65,17 @@ val CinemaUaPalette = UaPalette(
     // content, not chrome, so they don't follow the warm palette.
     scrimBackground = Color(0x66000000),
     overlayHighlight = Color(0x33FFFFFF),
-    glassTone = Color(0xE6141210),
-    // A real bundled OFL font would be more distinctive, but no tool available in this session can
-    // produce an actual font binary, and the downloadable-fonts alternative (Google Play Services
-    // Fonts provider) was confirmed on-device to silently fail on de-Googled ROMs (e.g. LineageOS +
-    // microG) - see docs/DESIGN_SYSTEM.md "Themes". FontFamily.Serif is the generic system serif
-    // alias: no assets, no network, works everywhere, and still reads as distinctly "premium"
-    // against Azure's default sans-serif.
-    displayFontFamily = FontFamily.Serif,
+    glassTone = Color(0xF0192436),
+    // One explicit offline family across body and display text avoids OEM-dependent serif metrics
+    // changing wrapping and golden screenshots. Cinema keeps its identity through palette/depth.
+    displayFontFamily = FontFamily.SansSerif,
     edgeHighlightNeutral = CinemaEdgeHighlightNeutral,
     edgeHighlightStrong = CinemaEdgeHighlightStrong,
     edgeHighlightAccent = CinemaEdgeHighlightAccent,
     shadowSoft = CinemaShadowSoft,
-    surfaceLiftAmount = 0.06f,
+    surfaceLiftAmount = 0.08f,
     vignette = true,
     wallpaperTexture = true,
-    pillButtons = true,
+    pillButtons = false,
     secondaryButtonStyle = SecondaryButtonStyle.GHOST,
 )

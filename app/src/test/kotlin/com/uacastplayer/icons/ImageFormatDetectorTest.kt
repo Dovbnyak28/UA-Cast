@@ -43,6 +43,40 @@ class ImageFormatDetectorTest {
     }
 
     @Test
+    fun `detects AVIF with a major brand`() {
+        val bytes = byteArrayOf(
+            0, 0, 0, 0,
+            'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+            'a'.code.toByte(), 'v'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(),
+            0, 0, 0, 0,
+        )
+        assertEquals(ImageFormat.AVIF, ImageFormatDetector.detect(bytes))
+    }
+
+    @Test
+    fun `detects AVIF when the compatible brand carries the format`() {
+        val bytes = byteArrayOf(
+            0, 0, 0, 0,
+            'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+            'm'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(), '1'.code.toByte(),
+            0, 0, 0, 0,
+            'a'.code.toByte(), 'v'.code.toByte(), 'i'.code.toByte(), 's'.code.toByte(),
+        )
+        assertEquals(ImageFormat.AVIF, ImageFormatDetector.detect(bytes))
+    }
+
+    @Test
+    fun `does not treat an unrelated ISO-BMFF brand as AVIF`() {
+        val bytes = byteArrayOf(
+            0, 0, 0, 0,
+            'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+            'm'.code.toByte(), 'p'.code.toByte(), '4'.code.toByte(), '2'.code.toByte(),
+            0, 0, 0, 0,
+        )
+        assertNull(ImageFormatDetector.detect(bytes))
+    }
+
+    @Test
     fun `does not detect WEBP for a plain RIFF container such as WAV`() {
         val bytes = "RIFF".toByteArray() + byteArrayOf(0, 0, 0, 0) + "WAVE".toByteArray()
         assertNull(ImageFormatDetector.detect(bytes))

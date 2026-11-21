@@ -25,11 +25,27 @@ object HomeContentPolicy {
         lastWatchedChannelKey: String?,
         channels: List<M3uChannel>,
         favorites: List<FavoriteChannel>,
+        checkCancellation: () -> Unit = {},
     ): HomeContent {
-        val continueWatching = lastWatchedChannelKey?.let { key -> channels.firstOrNull { FavoriteKey.of(it) == key } }
+        checkCancellation()
+        val continueWatching = lastWatchedChannelKey?.let { key -> findLastWatched(channels, key, checkCancellation) }
         return HomeContent(
             continueWatching = continueWatching,
             favorites = favorites.take(MAX_FAVORITES_SHOWN),
         )
     }
+
+    private fun findLastWatched(
+        channels: List<M3uChannel>,
+        key: String,
+        checkCancellation: () -> Unit,
+    ): M3uChannel? {
+        for ((index, channel) in channels.withIndex()) {
+            if (index % CANCELLATION_CHECK_INTERVAL_CHANNELS == 0) checkCancellation()
+            if (FavoriteKey.matches(channel, key)) return channel
+        }
+        return null
+    }
+
+    private const val CANCELLATION_CHECK_INTERVAL_CHANNELS = 256
 }

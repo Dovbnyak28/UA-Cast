@@ -1,5 +1,6 @@
 package com.uacastplayer.playlist
 
+import com.uacastplayer.core.concurrent.runCatchingNonFatal
 import java.net.URI
 import java.net.URLEncoder
 
@@ -24,14 +25,23 @@ object XtreamUrlBuilder {
      * at all (a genuinely malformed server address will fail the actual load anyway). */
     fun serverHost(server: String): String {
         val normalized = normalizeServer(server)
-        return runCatching { URI(normalized).host }.getOrNull() ?: server.trim()
+        return runCatchingNonFatal { URI(normalized).host }.getOrNull() ?: server.trim()
     }
 
     /** Adds `http://` when no scheme is present (Xtream panels are commonly quoted as a bare
      * host:port); strips a trailing slash so the path appended above can't end up with `//`. */
     private fun normalizeServer(server: String): String {
         val trimmed = server.trim().trimEnd('/')
-        return if (trimmed.contains("://")) trimmed else "http://$trimmed"
+        val schemeSeparator = trimmed.indexOf("://")
+        if (schemeSeparator <= 0) return "http://$trimmed"
+        val scheme = trimmed.substring(0, schemeSeparator)
+        return if (scheme.equals("http", ignoreCase = true) ||
+            scheme.equals("https", ignoreCase = true)
+        ) {
+            scheme.lowercase() + trimmed.substring(schemeSeparator)
+        } else {
+            trimmed
+        }
     }
 
     private fun credentials(username: String, password: String): String =

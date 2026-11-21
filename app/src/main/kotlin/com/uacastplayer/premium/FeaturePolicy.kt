@@ -36,24 +36,11 @@ object FeaturePolicy {
     /**
      * Features for a given tier.
      *
-     * Every tier above [LicenseTier.FREE] currently unlocks everything, including the trial - a
-     * trial that hides what is being sold does not sell it.
-     *
-     * When a server-backed feature actually ships, this is where it stops being uniform:
-     * [Feature.CLOUD_SYNC] costs money for as long as it runs, so a one-off [LicenseTier.LIFETIME]
-     * funding it forever is a trap worth pricing deliberately rather than inheriting from a table
-     * that says "everything".
+     * Lite keeps the basic player features. Premium includes every capability; existing paid
+     * subscriptions are accepted for restoration, while old trials/tester tiers grant no extra access.
      */
-    fun featuresFor(tier: LicenseTier): Set<Feature> = when (tier) {
-        LicenseTier.FREE -> FREE_FEATURES
-        LicenseTier.TRIAL,
-        LicenseTier.MONTHLY,
-        LicenseTier.YEARLY,
-        LicenseTier.LIFETIME,
-        LicenseTier.BETA,
-        LicenseTier.ADMIN,
-        -> Feature.entries.toSet()
-    }
+    fun featuresFor(tier: LicenseTier): Set<Feature> =
+        if (tier.isPaid) Feature.entries.toSet() else FREE_FEATURES
 
     /** Whether [feature] is one an unpaid install already has - used by the UI to decide whether a
      * lock badge belongs next to something, without it having to know the tier table. */

@@ -1,32 +1,14 @@
 package com.uacastplayer.premium
 
-/**
- * Whether there is anything to sell yet.
+/** Selects the checkout provider. Lite/Premium access is resolved from the licence independently
+ * of this flag.
  *
- * There is not. [com.uacastplayer.data.premium.FakeBillingProvider] reports, truthfully, that this
- * build has no store behind it - so every price is absent, every purchase button would do nothing,
- * and the "upgrade" the section offers leads nowhere. Showing that to a user is worse than showing
- * nothing: it is a promise the app cannot keep, on the one screen where it is asking to be trusted
- * with money.
- *
- * A `const val`, deliberately. R8 folds the branch and strips the unreachable surface out of a
- * release build entirely, so this is not a runtime check that could be flipped by accident - it is
- * the difference between shipping the screen and not shipping it.
- *
- * **What this does not touch.** [FeaturePolicy], [FeatureManager], [Entitlements] and the license
- * storage all stay exactly as they are, and the gates in front of DLNA, extra playlists, Xtream,
- * backups, parental control, custom EPG and custom icon sources are already wired. They simply do
- * not withhold anything while this is false - see [FeatureManager]'s `withholdingIsHonest`, which
- * refuses to lock a feature the build has no way of selling.
- *
- * **Flipping it to true is not the last step, and is not sufficient on its own.** Play Console must
- * first have in-app products under exactly the ids in
- * [com.uacastplayer.premium.billing.PremiumProducts], on a track that has actually gone out. If it
- * does not, the store answers with an empty catalogue and the gates stay open anyway - deliberately,
- * because an app that takes features away and offers nothing to buy them back with is worse than one
- * that never gated them. `docs/RELEASING.md` has the checklist.
- */
+ * Live only in the `play` build type (see `PLAY_BILLING_LIVE` in app/build.gradle.kts): Google
+ * Play can take payment only from a build it installed, so the sideloaded GitHub APK and debug
+ * builds keep [com.uacastplayer.data.premium.FakeBillingProvider]. It is a compile-time constant,
+ * so R8 drops the unused provider from each variant. The `premium_lifetime` product still has to
+ * be active in Play Console and verified by a licence tester on a test track before a production
+ * rollout; see docs/RELEASING.md. */
 object PremiumAvailability {
-
-    const val STORE_IS_LIVE = false
+    const val STORE_IS_LIVE = com.uacastplayer.BuildConfig.PLAY_BILLING_LIVE
 }

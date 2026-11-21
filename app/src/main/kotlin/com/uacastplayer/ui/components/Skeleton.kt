@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -22,7 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.uacastplayer.ui.theme.GlideMs
+import com.uacastplayer.ui.theme.GLIDE_MS
 import com.uacastplayer.ui.theme.UaTheme
 
 /** Width of the travelling highlight, as a fraction of the block it sweeps across. */
@@ -31,6 +33,7 @@ private const val SHIMMER_BAND_FRACTION = 0.45f
 /** How far above the base colour the highlight sits. Kept low on purpose - a skeleton that shines
  * competes with the content it is standing in for. */
 private const val SHIMMER_HIGHLIGHT_ALPHA = 0.06f
+private const val STATIC_SHIMMER_POSITION = 0.5f
 
 val SkeletonRadius = 8.dp
 
@@ -43,11 +46,12 @@ val SkeletonRadius = 8.dp
  */
 @Composable
 fun rememberShimmer(): State<Float> {
+    if (!animationsAllowed()) return remember { mutableFloatStateOf(STATIC_SHIMMER_POSITION) }
     val transition = rememberInfiniteTransition(label = "shimmer")
     return transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(GlideMs, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(GLIDE_MS, easing = LinearEasing)),
         label = "shimmerSweep",
     )
 }

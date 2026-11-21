@@ -1,32 +1,34 @@
 package com.uacastplayer.cast
 
-sealed class CastDeliveryMode {
-    data object Direct : CastDeliveryMode()
-    data object Proxy : CastDeliveryMode()
+import com.uacastplayer.core.cast.CastCompatibilityVerdict
+import com.uacastplayer.core.cast.TsSourceKind
+
+sealed interface CastDeliveryMode {
+    data object Direct : CastDeliveryMode
+    data object Proxy : CastDeliveryMode
 }
 
 /**
- * What to do the moment [com.uacastplayer.data.cast.TsFirstSegmentDiagnostic] resolves - see
+ * What to do with a current proxy observation or a previously cached observation - see
  * [CastDeliveryStrategy.onDiagnosticResult] and docs/CAST_PLAYBACK_RULES.md's routing table.
  */
-sealed class CastRouteDecision {
+sealed interface CastRouteDecision {
     /** The codec is confirmed incompatible - remuxing the container never fixes a codec problem
      * (see [com.uacastplayer.proxy.RawTsRemuxActivation]'s own doc), so there is nothing left to
      * try; report [verdict] and stop touching the receiver for this attempt. */
-    data class Blocked(val verdict: CastCompatibilityVerdict.IncompatibleVideo) : CastRouteDecision()
+    data class Blocked(val verdict: CastCompatibilityVerdict.IncompatibleVideo) : CastRouteDecision
 
-    /** A receiver never plays a bare MPEG-TS URL directly (it needs HLS/DASH wrapping), so a
-     * direct-mode attempt on confirmed-compatible raw TS is a guaranteed 4s watchdog wait for
-     * nothing - skip straight to the proxy, which remuxes it into playable HLS. */
-    data object ProxyImmediately : CastRouteDecision()
+    /** The application's raw-TS policy uses proxy HLS wrapping rather than repeating the
+     * direct watchdog wait. A cached compatible observation allows that choice before load. */
+    data object ProxyImmediately : CastRouteDecision
 
     /** Nothing to act on yet - let the existing direct-then-watchdog flow continue unchanged. */
-    data object NoAction : CastRouteDecision()
+    data object NoAction : CastRouteDecision
 }
 
 /**
- * Decides direct-vs-proxy delivery. Direct is always tried first unless the stream+receiver pair
- * is already known to be incompatible; once on Proxy there's nowhere further to fall back to, so
+ * Decides direct-vs-proxy delivery. Direct is tried first unless cached source/codec information
+ * or the stream+receiver's proven proxy history says otherwise; once on Proxy there's no further fallback, so
  * a subsequent failure there is terminal.
  */
 object CastDeliveryStrategy {

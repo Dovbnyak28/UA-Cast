@@ -1,0 +1,21 @@
+{
+  "url": "https://api.github.com/repos/Dovbnyak28/UA-Cast/releases/370102431",
+  "assets_url": "https://api.github.com/repos/Dovbnyak28/UA-Cast/releases/370102431/assets",
+  "upload_url": "https://uploads.github.com/repos/Dovbnyak28/UA-Cast/releases/370102431/assets{?name,label}",
+  "html_url": "https://github.com/Dovbnyak28/UA-Cast/releases/tag/v0.9.1",
+  "id": 370102431,
+  "node_id": "RE_kwDOTrkKYc4WD1Cf",
+  "tag_name": "v0.9.1",
+  "target_commitish": "master",
+  "name": "v0.9.1 — тестова перевірка оновлень",
+  "draft": false,
+  "immutable": false,
+  "prerelease": false,
+  "created_at": "2026-08-10T18:44:37Z",
+  "updated_at": "2026-08-13T17:50:58Z",
+  "published_at": "2026-08-13T17:50:58Z",
+  "assets": [],
+  "tarball_url": "https://api.github.com/repos/Dovbnyak28/UA-Cast/tarball/v0.9.1",
+  "zipball_url": "https://api.github.com/repos/Dovbnyak28/UA-Cast/zipball/v0.9.1",
+  "body": "Тестовий реліз для перевірки механізму оновлень у застосунку.\r\n\r\nФайлів навмисно не прикріплено — встановлювати нічого. Перевірка оновлень нічого не завантажує: вона читає лише назву тега й адресу цієї сторінки.\r\n\r\nЦей реліз буде видалено після перевірки."
+}

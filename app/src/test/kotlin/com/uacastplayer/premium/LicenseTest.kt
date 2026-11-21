@@ -52,19 +52,23 @@ class LicenseTest {
     }
 
     @Test
-    fun theTrialLastsFourteenDaysFromWhenItWasGranted() {
-        val trial = License.trialStartingAt(now)
-
-        assertEquals(LicenseTier.TRIAL, trial.tier)
-        assertEquals(now + License.TRIAL_DURATION_MILLIS, trial.expiresAtMillis)
-        assertTrue(trial.isActive(now + License.TRIAL_DURATION_MILLIS - 1))
-        assertFalse(trial.isActive(now + License.TRIAL_DURATION_MILLIS))
-        assertTrue(trial.hasLapsed(now + License.TRIAL_DURATION_MILLIS))
-        assertEquals(14L * 24 * 60 * 60 * 1000, License.TRIAL_DURATION_MILLIS)
+    fun legacyPromotionalLicencesResolveToLite() {
+        for (tier in listOf(LicenseTier.TRIAL, LicenseTier.BETA, LicenseTier.ADMIN)) {
+            assertEquals(License.FREE, License(tier, now + 1000, "legacy").currentModel())
+        }
     }
 
     @Test
-    fun paidTiersAreTheThreePurchasableOnes() {
+    fun legacyPaidLicencesKeepTheirSourceAndExpiryWhenMigratedToPremium() {
+        for (tier in listOf(LicenseTier.MONTHLY, LicenseTier.YEARLY)) {
+            val legacy = License(tier, now + 1000, "legacy_$tier")
+            assertEquals(legacy.copy(tier = LicenseTier.LIFETIME), legacy.currentModel())
+            assertEquals(LicenseTier.FREE, legacy.currentModel().effectiveTier(now + 1000))
+        }
+    }
+
+    @Test
+    fun paidTiersIncludeCurrentPremiumAndTheTwoLegacyPurchaseTypes() {
         assertTrue(LicenseTier.MONTHLY.isPaid)
         assertTrue(LicenseTier.YEARLY.isPaid)
         assertTrue(LicenseTier.LIFETIME.isPaid)

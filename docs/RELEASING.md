@@ -41,12 +41,24 @@ half the size of the universal one. Hand out the universal APK for a plain downl
 the three per-ABI APKs together if a store accepts multiple APKs per release. 32-bit x86 is not
 built at all (see `ndk.abiFilters`).
 
-For Play Store specifically, prefer `./gradlew :app:bundleRelease` - Play performs the same split
-server-side from a single `.aab` and none of the above needs thinking about.
+For Play Store specifically, use `./gradlew :app:bundlePlay` - Play performs the same split
+server-side from a single `.aab`. The app has no self-updater in any build (removed 2026-11-21):
+it never downloads or installs APKs and declares neither `REQUEST_INSTALL_PACKAGES` nor
+`UPDATE_PACKAGES_WITHOUT_USER_ACTION`. `scripts/check-play-distribution.sh` verifies the merged
+Play manifest after packaging, so a library cannot bring those permissions back unnoticed.
 
-Each per-ABI APK gets its own `versionCode` (base × 10 + an ABI digit, see `androidComponents` in
-`app/build.gradle.kts`); the universal APK keeps the plain base code. A store rejects multiple APKs
-sharing one `versionCode`.
+Every APK of a release gets its own `versionCode` - base × 10 plus a per-ABI digit, see
+`abiVersionCodeOffsets` in `app/build.gradle.kts`. A store rejects multiple APKs sharing one
+`versionCode`, and it has no way to tell which one to serve an upgrading device.
+
+**The universal APK is the highest of the four, not the lowest** (offset 4, above `x86_64`'s 3).
+This paragraph used to say it kept the plain base code, which is what the build actually did until
+an off-by-one was found: that put universal *below* all three per-ABI APKs, and a `versionCode` that
+goes down is not an update - Android refuses the install and tells the user only "App not
+installed". Universal is the build that runs everywhere, so it is the one every other install must
+be able to move *to*. `scripts/check-version-code-ordering.sh` reads the ordering back out of
+`output-metadata.json` after a release build, because a comment cannot be wrong about what was
+actually built and a check can only be wrong about nothing.
 
 ## Versioning
 
@@ -67,28 +79,43 @@ Marking a new version touches **three** files, and they have to move together:
 `versionCode` only has to increase monotonically; CI derives its own from the run number, so the
 default in `build.gradle.kts` matters only for locally built APKs.
 
-### Publishing the release, and why the tag is now load-bearing
+### Publishing the release
 
-The app checks for updates itself: once a week when it is opened, and on demand from Settings ->
-Updates. It asks
-`https://api.github.com/repos/Dovbnyak28/UA-Cast/releases/latest` and compares that release's
-`tag_name` against its own `versionName` (see `com.uacastplayer.update`). Two consequences for
-this runbook:
+The app does not check for updates itself. Users of the GitHub APK update by installing the next
+release over the old one; Play users get updates from Play. Tag releases with a version number
+(`v0.9.8`) and attach the universal APK to the published GitHub Release.
 
-1. **A version only exists to installed apps once there is a published GitHub Release for it.**
-   Pushing a tag is not enough, and neither is a draft or a pre-release - `/releases/latest` skips
-   both, and the parser re-checks the flags anyway. Until the release is published, every installed
-   copy is correctly told it is up to date.
-2. **The tag has to be a version number**, with or without a leading `v`: `v0.10.0`, `0.10.0` and
-   `1.0.0-rc1` all parse; `nightly` or `release-2026` do not, and a release tagged that way is
-   ignored rather than guessed at. Comparison is numeric per component, so `v0.10.0` is correctly
-   newer than `v0.9.0` - and a CI build reporting `0.9.0.147` is newer than the `v0.9.0` release it
-   came from, so it is not offered an "update" back to itself.
+Every release APK must be signed with the *same* key as the one it is replacing. Android refuses an
+APK signed with a different one, and the only way out for the user is to uninstall - taking their
+playlist, their guide and their licence with it. `scripts/verify-release-upgrade.sh` checks this.
 
-The check never downloads or installs anything: the banner and the Settings row open the release
-page in a browser. Every release APK must therefore be signed with the *same* key as the one it is
-replacing - Android refuses an APK signed with a different one, and the user sees an install
-failure rather than an update.
+Local diagnostic builds may still use the normal Gradle fallback signing configuration. For a
+production release, make the requirement explicit:
+
+```bash
+./gradlew :app:bundlePlay -Puacast.requireSigning=true
+```
+
+With that flag the build fails before packaging when the `UACAST_*` signing properties are absent.
+The ordinary `android-ci.yml` release job is deliberately an **unsigned packaging diagnostic** and
+names its artifacts accordingly. It is not a distribution source.
+
+For a signed Play artifact, manually dispatch `.github/workflows/signed-release.yml` with an
+explicit monotonically increasing `version_code` and the release `version_name`. Its `production`
+environment needs these protected secrets:
+
+- `UACAST_KEYSTORE_BASE64` - base64 of the PKCS#12 keystore;
+- `UACAST_STORE_PASSWORD`;
+- `UACAST_KEY_ALIAS`;
+- `UACAST_KEY_PASSWORD`.
+
+The workflow materializes the key only under the runner's temporary directory, passes
+`-Puacast.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
+the AAB and universal APK signatures, then uploads separate signed Play AAB and GitHub APK
+artifacts. Attach the **universal APK** artifact to a published GitHub Release with the matching
+version tag; an Actions artifact alone is not a download users can find. The workflow does not
+publish to Play Console or GitHub Releases; those remain explicit human release steps. Never commit the keystore, passwords, generated
+`gradle.properties`, or a base64 copy of the key.
 
 ### Which digit moves
 
@@ -110,7 +137,7 @@ means nothing about content.
 
 ### What 1.0.0 waits for
 
-The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
+The current version is 0.9.7 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
 
 1. **The app has run on hardware nobody here chose.** Every device it has been verified on - one
    Xiaomi phone, one Samsung UE40KU6000, one Chromecast 4th gen - belongs to its author. A first
@@ -120,26 +147,39 @@ The version is 0.9.0 and deliberately not 1.0.0. The gap is not a feature list; 
    four `UACAST_*` properties in `~/.gradle/gradle.properties` - never in the project. Losing that
    file means the app can never be updated again, so its backup is the release process, not a step
    in it.
-3. **The instrumented tests cover more than the launch path.** They now genuinely run - on an
-   emulator in CI's `instrumented` job, and by hand through `scripts/run-instrumented-tests.sh`
-   (last: `OK (6 tests)` on a Mi A2). But six tests over app launch, the player's lifecycle and the
-   empty-playlist state is not coverage of this app: the whole Cast/DLNA/proxy path is still held
-   up by unit tests over pure policy objects plus one person trying it on one phone.
+3. ~~**The instrumented tests cover more than the launch path.**~~ Done (2026-08-16):
+   `OK (49 tests)` on a Mi A2 through `scripts/run-instrumented-tests.sh`, up from nine. The
+   sentence this used to end on - "the whole Cast/DLNA/proxy path is still held up by unit tests
+   over pure policy objects" - is what changed. On the device now: the proxy over a real socket
+   (Range forwarding, CORS preflight, method refusal, session-token expiry, wrapper unwrap,
+   rewritten segment URLs, concurrency), both stream-rewriting routes (HLS→TS flattening and
+   raw-TS→HLS remux), the DLNA control stack against a fake UPnP renderer (relative control URLs,
+   a `701` retried through, a `716` refused at once, volume, an unreachable renderer) and the
+   player's video-fit setting end to end.
 
-None of the three is a code change, which is exactly why none of them gets closer by writing more
-code.
+   What is still missing is point 1, and no test replaces it: a report from hardware nobody here
+   chose.
+
+Point 1 is not a code change, which is exactly why it does not get closer by writing more code.
 
 ## Regenerating the baseline profile
 
 **Current status: successfully run once (2026-07-30), on a Pixel 10 Pro emulator (API 37,
-x86_64)** - `app/src/main/baseline-prof.txt` now leads with 24,973 lines of real per-method entries
+x86_64)** - `app/src/main/baseline-prof.txt` now leads with roughly 25,000 lines of real per-method entries
 from that run (1,667 `com.uacastplayer` methods covering the language picker -> Terms -> first-run
-walkthrough -> Home flow), followed by the previous hand-authored wildcard block as a safety net for what that
-scripted flow doesn't reach (see below - mainly playback/media3).
+walkthrough -> Home flow), followed by the previous hand-authored wildcard block as a safety net.
+The generator now continues through a credential-free variant-only fixture into Channels, first
+player launch, fullscreen and EPG; regenerate the profile to replace the older Home-only capture.
 
 ```bash
 ./gradlew :app:generateReleaseBaselineProfile
 ```
+
+Run this only on an emulator or device dedicated to profiling. The generator force-stops the target
+app and replaces the fixture-owned playlist/EPG state with synthetic data before entering the
+player. The benchmark driver no longer runs a blanket `pm clear` by default, but Gradle may still
+uninstall the target package when the run finishes; real app data on that package is not a
+benchmark input and is not guaranteed to be preserved.
 
 This requires a **connected device or running emulator** (there's no Gradle-managed emulator
 configured in this project - `useConnectedDevices = true` in `baselineprofile/build.gradle.kts`).
@@ -148,10 +188,30 @@ It builds a throwaway `nonMinifiedRelease` variant of `:app` (applicationId `com
 `connectedNonMinifiedReleaseAndroidTest`, which should overwrite `app/src/main/baseline-prof.txt`
 with the result on success.
 
-**Earlier attempt** (Xiaomi Mi A2, Android 11 / API 30, rooted with Magisk): hung 25+ minutes with
-no crash/ANR/dialog after `ProfileInstaller: Installing profile for
-com.uacastplayer.baselineprofile` - a known category of `BaselineProfileRule` flakiness on
-non-stock-AOSP/modified-ROM devices. Killed via `./gradlew --stop`; never produced a profile.
+**The Mi A2 cannot do this at all, and it is not flakiness.** Android 11 / API 30, LineageOS,
+rooted with Magisk. Run without a rooted adb session it fails in seconds and says why:
+
+    java.lang.IllegalArgumentException: Baseline Profile collection requires API 33+, or a
+    rooted device running API 28 or higher and rooted adb session (via `adb root`).
+
+`adb root` does succeed on this ROM - adbd comes back as uid 0. The run then gets further, logs
+`ProfileInstaller: Installing profile`, sits for nine minutes, and fails with:
+
+    java.lang.ExceptionInInitializerError
+    Caused by: java.lang.IllegalStateException: UiAutomation not connected, UiAutomation@…[id=-1]
+
+which is UiAutomator refusing to attach to an instrumentation whose adbd is running as root. So the
+two requirements exclude each other here: without `adb root` the collection refuses to start, with
+it the automation driving the app cannot connect. This is what the previous note recorded as "hung
+25+ minutes with no crash" - the same dead end, seen before the timeout was waited out.
+
+Two side effects worth knowing: `adb root` also brings adbd up on TCP/IP, so `adb devices` starts
+showing the phone twice and every later command needs `-s` or an `adb disconnect`; and `adb unroot`
+puts it back.
+
+**So: use an API 33+ device or emulator, where no root is involved at all.** Below API 33 this needs
+a device whose adb can be rooted *and* whose UiAutomation survives it, which a Magisk-rooted user
+build is not.
 
 **What worked**: a Pixel 10 Pro emulator (`emulator -avd Pixel_10_Pro`, AVD image
 `google_apis_playstore_ps16k`/android-37.1) doesn't hang, but hits a *different*, environment-specific
@@ -177,17 +237,44 @@ adb pull "/storage/emulated/0/Android/media/com.uacastplayer.baselineprofile/Bas
 ```
 
 Running the instrumentation directly like this skips Gradle's uninstall-on-completion behavior, so
-the output file is still on the device afterward to pull. The pulled file only covers what the
-generator's scripted UI flow actually reached (language picker/Terms/guided tour/Home) - it contains
-almost no `androidx/media3` or `com.uacastplayer.player` entries, since the generator never opens a
-channel. Append the previous wildcard block (`HSPLcom/uacastplayer/**->**(**)**` +
+the output file is still on the device afterward to pull. The scripted flow now covers the language
+picker, Terms, guided tour, Home, a synthetic playlist restore, Channels, player, fullscreen and
+EPG. The synthetic state is prepared by activities compiled only into `benchmarkRelease` and
+`nonMinifiedRelease`; `debug` and shipping `release` do not contain them. Append the previous
+wildcard block (`HSPLcom/uacastplayer/**->**(**)**` +
 `HSPLandroidx/media3/exoplayer/**->**(**)**`/`common/**`) to the end rather than replacing it
-outright, so playback still gets AOT coverage the scripted flow doesn't exercise. Verify the merged
+outright, as a safety net for decoder/recovery paths one short invalid-local stream cannot exercise. Verify the merged
 file compiles before committing: `./gradlew :app:compileNonMinifiedReleaseArtProfile`.
 
 Once a run succeeds, review the diff before committing - a profile that shrank a lot usually means
 the generator's UI automation didn't get as far as it used to (see the next paragraph), not that
 the app suddenly needs less warm code.
+
+## Running Macrobenchmarks
+
+Use an emulator or a device dedicated to measurements. Every benchmark owns its precondition and
+force-stops `com.uacastplayer` before writing a credential-free fixture. The driver does not clear
+the whole package by default, but the Gradle task can still uninstall the target during setup or
+cleanup; do not point it at an install whose app-private playlist/EPG data matters. No provider
+credentials or external server are involved.
+
+```bash
+# deterministic 400-channel cold/warm startup
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark
+
+# 40,000-channel restore/open, first player, fullscreen and EPG guide
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.CriticalJourneysBenchmark
+
+# production SAX + retention + heap budget + index build over 350,000 XMLTV programmes
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.EpgParseBenchmark
+```
+
+The critical journeys report frame timing and peak memory; the XMLTV benchmark reports peak memory
+plus the `UaCastEpgParseAndIndex` trace-section duration. The parser uses the target device's actual
+`Runtime.maxMemory()` budget, so a 128MB device measures the same capped path production runs.
 
 **The same UTP failure hits the ordinary instrumented tests**, not only the profile generator:
 `./gradlew :app:connectedDebugAndroidTest` reports FAILURE with `Failed to receive the UTP test
@@ -201,11 +288,24 @@ scripts/run-instrumented-tests.sh
 That script is the whole route - build both APKs, install with `-r`, run through `am instrument` -
 and it is what CI's `instrumented` job runs too, so a local pass and a CI pass mean the same thing.
 
+The Bash helper requires GNU `timeout`. Device setup commands are bounded at 30 seconds,
+each APK installation at 180 seconds, and instrumentation at 900 seconds, with a five-second
+termination grace. `INSTRUMENTED_ADB_TIMEOUT_SECONDS`, `INSTRUMENTED_INSTALL_TIMEOUT_SECONDS`
+and `INSTRUMENTED_RUNNER_TIMEOUT_SECONDS` accept positive integer seconds up to 3600 for an
+explicitly slower disposable test device. CI's outer step/job deadlines still apply; increasing
+these values does not bypass failing assertions or grant a passing result.
+`app/build/reports/instrumented/setup.txt` records phase names before installation, and
+`runner.txt` streams per-method progress. The helper resets only its own generated reports at
+the start, so an early setup failure cannot retain a previous passing summary. A timeout fails the run. Failure diagnostics are
+bounded too, and crash buffers are captured only for positively identified disposable emulators,
+never physical handsets. For phones with real data, use `scripts/run-preserved-device-tests.ps1`;
+the Bash helper refuses fixture replacement on a physical device unless explicitly overridden.
+
 It also inspects the runner's output rather than its exit code, because **`am instrument` exits 0
 whether the tests passed or failed**: pointed at a class that does not exist it prints
 `FAILURES!!!` and still returns 0. A check that trusted the exit code would be green forever.
 
-Last run: `OK (6 tests)` in 32s on a Mi A2 (Android 11). Note that `connectedDebugAndroidTest`
+Last run: `OK (49 tests)` in about 74s on a Mi A2 (Android 11; 73,657 ms in the latest run). Note that `connectedDebugAndroidTest`
 **uninstalls the app under test when it finishes**, taking the imported playlist, the EPG snapshot
 and the icon cache with it - so on a phone carrying real data, use the script above, which does
 not.
@@ -217,75 +317,78 @@ sat there. `:baselineprofile`'s `build` is now bound to compiling and packaging 
 plus `check`; generating a profile stays an explicit request, exactly as described above. A full
 `./gradlew build` takes about two minutes on this machine.
 
-**Why the generator clicks by accessibility role/tree-order instead of text**: none of the three
+**Why the first-run part clicks by accessibility role/tree-order instead of text**: none of the three
 gate screens have `testTag`s, and `:baselineprofile` is a black-box `com.android.test` module (no
 Compose semantics access across the process/APK boundary), so button labels would render in
 whatever language the connected device's system locale resolves to - text matching would make the
 script device-dependent. Tree order happens to disambiguate every gate correctly instead (see the
 generator's own doc comment) - if a gate screen's layout order ever changes, the generator's click
-targets need to move with it.
+targets need to move with it. After the fixture is installed it explicitly selects English, so the
+player/EPG journey can use stable accessibility text without depending on the device locale.
 
-## Turning premium on
+## Measured performance before release
 
-The premium layer is complete in code and off by one constant. `PremiumAvailability.STORE_IS_LIVE`
-is `false`, so `AppViewModel` builds `FakeBillingProvider` instead of `PlayBillingProvider` and
-`FeatureManager` refuses to lock anything at all. Flipping it is one line, but the order matters,
-and doing it first is the way to ship an app that has taken features away and cannot sell them
-back.
+Before a release, also run **Measured performance gate** and review its complete eight-journey
+artifact. The scheduled/manual workflow and initial budgets are documented in `PERFORMANCE.md`.
+A compiled benchmark APK or an emulator-free host test is not a measured pass. Do not raise a
+budget to hide a regression; investigate the trace and validate on a low-end physical device.
 
-### 1. Create the products in Play Console, spelled exactly
+## Lite and one-time Premium
 
-`com.uacastplayer.premium.billing.PremiumProducts` is the whole catalogue, and Play has no concept
-of a typo here: an id the console does not know is simply **absent from an otherwise successful
-response**. Nothing is logged, nothing fails, the price never appears and the buy button does
-nothing.
+A fresh install starts in Lite. Premium unlocks every implemented feature with one non-expiring
+purchase. There are no new trials, subscriptions, add-on packages or recurring plans.
 
-| Id | Where in Console | Type |
-| --- | --- | --- |
-| `premium_monthly` | Monetise → Subscriptions | subscription, monthly base plan |
-| `premium_yearly` | Monetise → Subscriptions | subscription, yearly base plan |
-| `premium_lifetime` | Monetise → In-app products | one-time purchase |
+`PremiumAvailability.STORE_IS_LIVE` follows `BuildConfig.PLAY_BILLING_LIVE`: it is `true` only in
+the `play` build type (`bundlePlay`), because Google Play can take payment only from a build it
+installed. The sideloaded GitHub APK (`release`) and `debug` keep the no-store provider, which
+explains Lite/Premium and never shows an unpriced checkout button. A cached paid licence continues
+to work offline; an unavailable store never grants unpaid Premium access. Checkout passes the
+token of the exact offer whose price the catalogue showed, so a product with several purchase
+options or a discount is charged at the displayed price.
 
-`premium_lifetime` must **not** be created as a subscription. Subscriptions and one-time purchases
-are separate catalogues in Play, queried separately and owned separately, so it would be asked for
-in the wrong one and never found. `PremiumProductsTest` holds all of this still from the app's
-side; only the console can confirm the other half.
+### Configure the single product
 
-Each subscription needs an active base plan with a price in at least one country, and each product
-needs to be **activated** - a draft product is not returned to the app.
+| Id | Type | Access | Price |
+| --- | --- | --- | --- |
+| `premium_lifetime` | one-time in-app product (`inapp`) | every feature, without expiry | **3.99 EUR** base price |
 
-### 2. Get a build onto a track
+The price lives only in Play Console (*Monetize → In-app products → premium_lifetime → Set price*):
+enter 3.99 in the merchant account's currency (EUR for the Spanish publisher account) and let Play
+convert it for other countries, or adjust specific countries there. The app never hardcodes a
+price; it shows `formattedPrice` returned by Play in the buyer's currency, so changing the price
+needs no new build.
 
-Products are not queryable until a build containing the `com.android.vending.BILLING` permission
-has been published on some track (internal testing is enough) and processed. Testing purchases
-without being charged also requires the accounts to be added under **Setup → License testing**;
-licence testers see "(test)" prices and are not billed.
+Keep this existing ID exactly. Activate it and its price in Play Console, upload the signed
+`bundlePlay` AAB to an internal testing track, add the tester accounts under *License testing*, and
+verify checkout/restore from a build installed by Play before promoting to production. Prices are
+read from the store in the user's currency.
 
-### 3. Only then flip the constant
+### Licence-tester checklist (internal testing track)
 
-```kotlin
-// app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt
-const val STORE_IS_LIVE = true
-```
+1. Install from the track's opt-in link with a licence-tester account (not a sideload).
+2. Settings → Premium shows the localized price of `premium_lifetime` (3,99 € in a euro country).
+3. Buy with the "Test card, always approves" → every Premium feature unlocks immediately;
+   reopen the app → still Premium (acknowledged; Play does not auto-refund after 3 days).
+4. Buy with "Test card, always declines" / close the sheet → stays Lite, no error for cancel.
+5. "Slow test card" (pending) → stays Lite until approval, then unlocks without restart.
+6. Clear app data → Restore → Premium returns; a second account → "nothing to restore".
+7. Refund in Play Console (Order management) → next launch returns to Lite.
+8. Airplane mode after purchase → cached licence keeps Premium.
 
-It is a `const val` deliberately: R8 folds the branch, so a build with it off carries no billing
-code path and a build with it on carries no fake. Verified by unzipping
-`app/build/outputs/apk/release/app-universal-release.apk` and reading `classes.dex` - with the flag
-off, `premium_monthly` is not in the APK at all; with it on, the product ids, the billing client
-and `ProxyBillingActivity` all survive minification, and `com.android.vending.BILLING` is in the
-merged release manifest.
+`premium_monthly` and `premium_yearly` are recognised only for ownership restoration. They are
+excluded from the sale catalogue and checkout rejects attempts to buy them. Do not rename or
+delete owned product IDs while migrating; stop offering their new sales in Console. Existing
+paid rights retain their original expiry/store ownership. The app does not cancel existing
+subscriptions or extend their paid term.
 
-`FeatureManagerTest.aBuildWithNothingToSellUnlocksEverything` asserts the flag is still `false`, so
-flipping it turns that test red. That is the reminder to read it, not a failure - it describes the
-pre-store build and must be updated in the same commit.
+### Verification before enabling payment
 
-### What happens if step 1 or 2 was missed anyway
-
-Nothing locks. `PremiumRepository` asks the store for its catalogue once it connects - on its own,
-without waiting for anyone to open the premium screen - and if the answer is empty, `storeCanSell`
-stays false and `FeatureManager` keeps every gate open. The rule is `mayWithhold`: *only a build
-that can also grant is allowed to withhold*, and a store with an empty catalogue cannot grant.
-
-The flag latches once a real price has been seen, and is persisted
-(`LicenseStorage.storeHasEverOfferedProducts`). It has to be, or the first offline launch would
-hand the app out for free.
+- Lite keeps local playback, one playlist, EPG, favourites, themes, Chromecast/remux and PiP.
+- One Premium purchase unlocks all capabilities; no additional purchase is required.
+- Pending/cancelled/failed attempts do not grant Premium.
+- Purchase and restore controls reject concurrent attempts.
+- Refund/authoritative ownership removal returns to Lite; a failed query preserves cached access.
+- Restore remains reachable with an empty catalogue and reports an actionable outcome.
+- Legacy paid signed records retain their source and expiry. Legacy trial/tester records become Lite.
+- Real charge, acknowledgement and restore must be verified on a Play track; host/debug tests
+  exercise the app's state changes without taking payment.

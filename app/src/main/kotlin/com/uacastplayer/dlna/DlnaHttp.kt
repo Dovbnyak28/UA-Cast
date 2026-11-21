@@ -1,6 +1,15 @@
 package com.uacastplayer.dlna
 
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+
+/** A redirected SOAP POST is not the action the renderer advertised. OkHttp may turn a 302 POST
+ * into a GET, then report an unrelated 200 page as success. Never follow a device-supplied
+ * control redirect, including one that leaves the renderer's host. */
+internal fun OkHttpClient.forUpnpControl(): OkHttpClient = newBuilder()
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .build()
 
 /**
  * Some renderers reject a SOAP POST that does not announce a user agent, and the DLNA convention is

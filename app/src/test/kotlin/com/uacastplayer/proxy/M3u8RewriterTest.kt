@@ -69,6 +69,15 @@ class M3u8RewriterTest {
     }
 
     @Test
+    fun `normalizes a UTF-8 BOM instead of rewriting the playlist header as a URI`() {
+        val playlist = "\uFEFF#EXTM3U\n#EXTINF:10,\nsegment1.ts"
+
+        val result = M3u8Rewriter.rewrite(playlist, "http://example.com/live/playlist.m3u8", identityMap)
+
+        assertEquals("#EXTM3U\n#EXTINF:10,\nLOCAL(http://example.com/live/segment1.ts)", result)
+    }
+
+    @Test
     fun `master playlist variant stream URIs are rewritten relative to the final URL after redirects`() {
         val playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nvariant/low.m3u8"
         // Base URL simulates the final URL after a redirect to a different path.
@@ -90,6 +99,15 @@ class M3u8RewriterTest {
     @Test
     fun `resolveUrl returns null for a malformed reference`() {
         assertNull(M3u8Rewriter.resolveUrl("http://example.com/live/playlist.m3u8", "http://[::badipv6"))
+    }
+
+    @Test
+    fun `resolveUrl rejects unsupported and non-fetchable absolute references`() {
+        val base = "http://example.com/live/playlist.m3u8"
+
+        for (reference in listOf("file:///tmp/segment.ts", "skd://key-id", "http:opaque", "http://host:99999/bad")) {
+            assertNull("accepted non-fetchable reference: $reference", M3u8Rewriter.resolveUrl(base, reference))
+        }
     }
 
     @Test

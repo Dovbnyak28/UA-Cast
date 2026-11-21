@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="icon_pack_check_action">Comprobar</string>
+    <string name="icon_pack_check_title">Comprobar paquete de logos</string>
+    <string name="icon_pack_check_summary">Encontrados: %1$d de %2$d muestras\nCanales sin tvg-id: %3$d</string>
+    <string name="icon_pack_check_hint">Se comprueban hasta seis ID únicos, no todo el paquete. Los archivos deben llamarse tvg-id.png. Un 404 puede indicar otro ID o nombre; sin ID no hay coincidencia.</string>
+    <string name="icon_pack_check_no_channels">Primero añade o selecciona una lista.</string>
+    <string name="icon_pack_check_found">Imagen recibida</string>
+    <string name="icon_pack_check_missing">No existe el archivo (404)</string>
+    <string name="icon_pack_check_network">Servidor o red no disponibles</string>
+    <string name="icon_pack_check_invalid">Imagen no compatible</string>
+    <string name="icon_pack_check_large">Supera el límite de comprobación de 256 KiB</string>
+</resources>
