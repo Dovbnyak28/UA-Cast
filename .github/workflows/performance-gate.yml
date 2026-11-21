@@ -13,6 +13,7 @@ on:
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'scripts/check-performance-budgets.py'
+      - 'scripts/run-performance-benchmarks.sh'
       - 'scripts/tests/test_performance_budgets.py'
       - 'scripts/prepare-software-decoder.py'
       - 'scripts/build-ffmpeg-android.sh'
@@ -78,17 +79,8 @@ jobs:
           # API30 uses the standard UI/RenderThread CPU metric without synthetic frame samples.
           # Both independent API30 probes returned all eight journeys; limits stay unchanged.
           emulator-options: -no-window -gpu lavapipe -no-snapshot -noaudio -no-boot-anim
-          script: |
-            python3 scripts/sample-process-memory.py --serial "$(adb get-serialno)" --output baselineprofile/build/outputs/process-memory.json &
-            memory_pid=$!
-            trap 'kill -TERM "$memory_pid" 2>/dev/null || true; wait "$memory_pid" || true' EXIT
-            ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark,com.uacastplayer.baselineprofile.CriticalJourneysBenchmark,com.uacastplayer.baselineprofile.MediumCatalogBenchmark,com.uacastplayer.baselineprofile.EpgParseBenchmark,com.uacastplayer.baselineprofile.BenchmarkFixtureReadinessTest \
-              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
-              --stacktrace
-            kill -TERM "$memory_pid"
-            wait "$memory_pid"
-            trap - EXIT
+          # One line on purpose: the emulator runner executes each line as a separate shell.
+          script: bash scripts/run-performance-benchmarks.sh
       - name: Enforce complete measured budgets
         run: python3 scripts/check-performance-budgets.py baselineprofile/build/outputs
       - name: Preserve measurements, traces and failures
