@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.first
 
 val LocalTvBrowseActive = compositionLocalOf { true }
 
+private const val FOCUS_RETRY_FRAMES = 10
+
 internal fun resolveTvFocusIndex(channels: List<M3uChannel>, key: String?, previousIndex: Int): Int {
     if (channels.isEmpty() || key == null) return 0
     val nearby = previousIndex.coerceIn(channels.indices)
@@ -58,8 +60,14 @@ internal fun rememberTvBrowseFocus(channels: List<M3uChannel>, query: String, gr
         if (shouldFocus && channels.isNotEmpty()) {
             if (grid.layoutInfo.visibleItemsInfo.none { it.index == target }) grid.scrollToItem(target)
             snapshotFlow { grid.layoutInfo.visibleItemsInfo.any { it.index == target } }.first { it }
-            withFrameNanos { }
-            request()
+            // requestFocus() returns false while the focus owner is still handing focus back from
+            // the player overlay that is leaving; one attempt then left the grid unfocused for good
+            // (seen on a slow CI runner). Retry on the next few frames, bounded, until it takes.
+            repeat(FOCUS_RETRY_FRAMES) {
+                withFrameNanos { }
+                request()
+                if (!pending) return@LaunchedEffect
+            }
         }
     }
     return TvBrowseFocus(target, requester, request) { channel, selectedIndex ->
