@@ -48,7 +48,9 @@ class PlaylistRecoveryTest {
         Fingerprint.of("https://x/$name.m3u"), PlaylistSourceType.URL, "https://x/$name.m3u", name, 0,
     )
 
-    private suspend fun awaitFinished() = withTimeout(5_000) {
+    // Real repository IO (AtomicFile snapshot write and parse) behind this; 5s was the limit of a slow
+    // shared CI runner, not of the code, and timed out there once while passing everywhere else.
+    private suspend fun awaitFinished() = withTimeout(15_000) {
         controller.playlistState.first { !it.isLoading && (it.hasChannels || it.error != null) }
     }
 
