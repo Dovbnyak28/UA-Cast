@@ -10,13 +10,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * The provider a released build uses until this app is actually published: it reports that there is
- * no store, offers nothing, and owns nothing.
+ * The provider the sideloaded GitHub release and debug builds use: it reports that there is no
+ * store, offers nothing, and owns nothing.
  *
- * This is the honest state of the world right now, not a placeholder that pretends. Nothing is for
- * sale, so the Premium screen shows what premium *is* and no prices, and every paid feature stays
- * locked unless a paid licence is already cached. Once Google Play sales are enabled, this class is replaced
- * at one construction site and deleted; nothing else changes.
+ * Google Play can only charge for a build it installed, so outside the `play` build type this is
+ * the honest state of the world, not a placeholder that pretends. Nothing is for sale, so the
+ * Premium screen shows what premium *is* and no prices, and every paid feature stays locked unless
+ * a paid licence is already cached. The `play` build uses [PlayBillingProvider] instead - see
+ * [com.uacastplayer.premium.PremiumAvailability].
  *
  * It is deliberately not the developer menu. That one grants licenses, lives in `src/debug`, and is
  * not compiled into a release build at all.

@@ -76,6 +76,9 @@ android {
         versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 16
         versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.7"
         buildConfigField("boolean", "SELF_UPDATER_ENABLED", "true")
+        // Real Google Play checkout. Only a build installed from Play can be paid for, so only the
+        // play variant turns it on; the GitHub APK and debug keep the honest "no store" provider.
+        buildConfigField("boolean", "PLAY_BILLING_LIVE", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -177,6 +180,7 @@ android {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             buildConfigField("boolean", "SELF_UPDATER_ENABLED", "false")
+            buildConfigField("boolean", "PLAY_BILLING_LIVE", "true")
         }
         debug {
             isMinifyEnabled = false

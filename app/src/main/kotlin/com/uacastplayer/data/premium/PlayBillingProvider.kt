@@ -89,6 +89,11 @@ class PlayBillingProvider(
      * of the app.
      */
     private val productDetails = ConcurrentHashMap<String, ProductDetails>()
+
+    /** The offer whose price the catalogue showed, per product. Billing 8 lets one product carry
+     * several purchase options and discounts; checkout must ask for the same one, or the sheet can
+     * charge a different price than the one the user tapped. */
+    private val offerTokens = ConcurrentHashMap<String, String>()
     private val purchaseTokens = ConcurrentHashMap<String, String>()
 
     /** Completed by [purchasesUpdatedListener]; Play reports the outcome of a purchase through the
@@ -211,8 +216,9 @@ class PlayBillingProvider(
     private fun toProduct(details: ProductDetails): BillingProduct? {
         if (!PremiumProducts.isForSale(details.productId)) return null
         val tier = PremiumProducts.tierFor(details.productId) ?: return null
-        val price = details.oneTimePurchaseOfferDetails?.formattedPrice
-            ?: return null
+        val offer = details.oneTimePurchaseOfferDetails ?: return null
+        val price = offer.formattedPrice
+        offer.offerToken?.takeIf(String::isNotBlank)?.let { offerTokens[details.productId] = it }
         return BillingProduct(
             id = details.productId,
             tier = tier,
@@ -226,6 +232,7 @@ class PlayBillingProvider(
         val activity = launchContext as? Activity ?: return PurchaseResult.Failed("no activity")
         val details = productDetails[product.id] ?: return PurchaseResult.Unavailable
         val paramsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details)
+        offerTokens[product.id]?.let(paramsBuilder::setOfferToken)
         val flow = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(paramsBuilder.build()))
             .build()

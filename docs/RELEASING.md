@@ -368,20 +368,42 @@ budget to hide a regression; investigate the trace and validate on a low-end phy
 A fresh install starts in Lite. Premium unlocks every implemented feature with one non-expiring
 purchase. There are no new trials, subscriptions, add-on packages or recurring plans.
 
-The current checkout flag `PremiumAvailability.STORE_IS_LIVE` remains `false`: the release
-provider cannot take payment yet. Settings still explains Lite/Premium, and an unavailable
-catalogue displays an explanation rather than an unpriced checkout button. A cached paid licence
-continues to work offline; an unavailable store never grants unpaid Premium access.
+`PremiumAvailability.STORE_IS_LIVE` follows `BuildConfig.PLAY_BILLING_LIVE`: it is `true` only in
+the `play` build type (`bundlePlay`), because Google Play can take payment only from a build it
+installed. The sideloaded GitHub APK (`release`) and `debug` keep the no-store provider, which
+explains Lite/Premium and never shows an unpriced checkout button. A cached paid licence continues
+to work offline; an unavailable store never grants unpaid Premium access. Checkout passes the
+token of the exact offer whose price the catalogue showed, so a product with several purchase
+options or a discount is charged at the displayed price.
 
 ### Configure the single product
 
-| Id | Type | Access |
-| --- | --- | --- |
-| `premium_lifetime` | one-time in-app product (`inapp`) | every feature, without expiry |
+| Id | Type | Access | Price |
+| --- | --- | --- | --- |
+| `premium_lifetime` | one-time in-app product (`inapp`) | every feature, without expiry | **3.99 EUR** base price |
 
-Keep this existing ID exactly. Activate it and its price in Play Console, publish a compatible
-signed build on a testing track, and verify checkout/restore with a licence tester before enabling
-`STORE_IS_LIVE`. Prices are read from the store in the user's currency.
+The price lives only in Play Console (*Monetize → In-app products → premium_lifetime → Set price*):
+enter 3.99 in the merchant account's currency (EUR for the Spanish publisher account) and let Play
+convert it for other countries, or adjust specific countries there. The app never hardcodes a
+price; it shows `formattedPrice` returned by Play in the buyer's currency, so changing the price
+needs no new build.
+
+Keep this existing ID exactly. Activate it and its price in Play Console, upload the signed
+`bundlePlay` AAB to an internal testing track, add the tester accounts under *License testing*, and
+verify checkout/restore from a build installed by Play before promoting to production. Prices are
+read from the store in the user's currency.
+
+### Licence-tester checklist (internal testing track)
+
+1. Install from the track's opt-in link with a licence-tester account (not a sideload).
+2. Settings → Premium shows the localized price of `premium_lifetime` (3,99 € in a euro country).
+3. Buy with the "Test card, always approves" → every Premium feature unlocks immediately;
+   reopen the app → still Premium (acknowledged; Play does not auto-refund after 3 days).
+4. Buy with "Test card, always declines" / close the sheet → stays Lite, no error for cancel.
+5. "Slow test card" (pending) → stays Lite until approval, then unlocks without restart.
+6. Clear app data → Restore → Premium returns; a second account → "nothing to restore".
+7. Refund in Play Console (Order management) → next launch returns to Lite.
+8. Airplane mode after purchase → cached licence keeps Premium.
 
 `premium_monthly` and `premium_yearly` are recognised only for ownership restoration. They are
 excluded from the sale catalogue and checkout rejects attempts to buy them. Do not rename or
