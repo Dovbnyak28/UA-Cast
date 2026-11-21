@@ -3,14 +3,13 @@
 Єдина точка входу «де ми зараз». Датовані звіти лежать у [`archive/`](archive/); цей файл
 посилається на останні з них і оновлюється разом з кожним етапом.
 
-Оновлено: 2026-11-21 (release hardening + Google Play Billing, гілка `codex/release-0.9.6`).
+Оновлено: 2026-11-21 (release hardening, Google Play Billing і видалення self-updater злито в `master`, PR #5; версія 0.9.8).
 
 ## Версія
 
-- `versionName` 0.9.7, `versionCode` 16 (`app/build.gradle.kts`; CI може перевизначити через
+- `versionName` 0.9.8, `versionCode` 17 (`app/build.gradle.kts`; CI може перевизначити через
   `-Puacast.versionCode` / `-Puacast.versionName`).
-- Робоча гілка: `codex/release-0.9.6`. Злиття в `master` — після зеленого CI (фаза F плану
-  [`archive/CODEX_PROMPT_RELEASE_HARDENING_2026-11-20.md`](archive/CODEX_PROMPT_RELEASE_HARDENING_2026-11-20.md)).
+- `codex/release-0.9.6` злито в `master` (5522ac7); підняття версії — гілка `codex/release-0.9.8`.
 
 ## Що перевірено
 
@@ -68,7 +67,7 @@
   зв'язок не доведений.
 - Підписаний реліз з HEAD і оновлення на API 30 не виконані (фаза C);
   оновлення 0.9.3 → 0.9.7 на API 36 пройдено.
-- Версія 0.9.7 уже опублікована на GitHub (24.09) — перед релізом підняти до 0.9.8 / versionCode 17.
+- Версію піднято до 0.9.8 / versionCode 17 (0.9.7 уже опублікована на GitHub 24.09).
 - Реальна покупка Premium (3,99 €), acknowledge, restore і refund перевіряються лише на тестовому треку Play
   з ліцензованим тестувальником.
 - Два інструментальні тести на API 36 (`UiPolishInstrumentedTest.landscapeNavigation…`,
@@ -79,7 +78,7 @@
 ## Наступні кроки
 
 1. Власнику: підписати й завантажити `bundlePlay` на internal testing, пройти чекліст покупок з
-   `RELEASING.md`, підняти версію.
+   `RELEASING.md`.
 2. Ручні перевірки на реальному обладнанні (розділ «Ручні перевірки» плану): Chromecast, DLNA
    (Hisense VIDAA), Android TV / Mi TV, PiP і повороти на бюджетних Xiaomi, встановлення
    підписаного релізу поверх попереднього.
