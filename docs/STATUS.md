@@ -3,7 +3,7 @@
 Єдина точка входу «де ми зараз». Датовані звіти лежать у [`archive/`](archive/); цей файл
 посилається на останні з них і оновлюється разом з кожним етапом.
 
-Оновлено: 2026-11-20 (release hardening, гілка `codex/release-0.9.6`).
+Оновлено: 2026-11-21 (release hardening + Google Play Billing, гілка `codex/release-0.9.6`).
 
 ## Версія
 
@@ -14,18 +14,18 @@
 
 ## Що перевірено
 
-Автоматичні gates (локально, 2026-11-20, до змін фази A):
+Автоматичні gates (локально, 2026-11-21, після фаз A–E і білінгу):
 
 | Gate | Результат |
 | --- | --- |
-| `testDebugUnitTest` | 3149 тестів, 0 падінь |
-| `testReleaseUnitTest` | 2476 тестів, 0 падінь |
-| `testPlayUnitTest` | 2476 тестів, 0 падінь |
+| `testDebugUnitTest` | 3186 тестів, 0 падінь (до змін — 3149) |
+| `testReleaseUnitTest` / `testPlayUnitTest` | 2476 / 2476, 0 падінь (play — з живим Play Billing) |
 | `:core:test` | 133 тести, 0 падінь |
-| `verifyRoborazziDebug` | 115 еталонів, зелено |
+| `verifyRoborazziDebug` | 151 еталон (до змін — 115), зелено |
 | `lintDebug`, `lintRelease`, `detekt` | OK |
 | `check-architecture-boundaries.sh`, `check-doc-references.sh` | OK |
-| `check-max-file-lines.sh` | 13 файлів > 500 рядків (див. «Release hardening») |
+| `check-max-file-lines.sh` | 3 файли > 500 рядків (див. нижче) |
+| 16 KB page size (Play) | усі `.so`: zip-align і ELF `p_align` = 16384 |
 
 Останні звіти перевірок на пристроях:
 
@@ -37,10 +37,20 @@
   [завершення релізу](archive/RELEASE_COMPLETION_2026-10-26.md),
   [стабілізація CI](archive/CI_STABILIZATION_2026-10-27.md).
 
-## Release hardening (2026-11-20)
+## Release hardening (2026-11-20/21)
 
-Хід фаз A–F фіксується маркерами в кінці
+Маркери фаз A–F з цифрами — у кінці
 [`archive/CODEX_PROMPT_RELEASE_HARDENING_2026-11-20.md`](archive/CODEX_PROMPT_RELEASE_HARDENING_2026-11-20.md).
+
+- A: 10 з 13 великих файлів розбито; `CastSessionRepository`, `PlayerViewModel`, `ProxyServer` — потрібне
+  дизайн-рішення (lifecycle-оркестрація).
+- B: ця сторінка; 106 звітів у `archive/`.
+- C: [оновлення 0.9.3 → 0.9.7 без втрати даних](archive/RELEASE_UPGRADE_VERIFICATION_2026-11-20.md) (API 36);
+  підписаний реліз з HEAD і API 30 — за власником.
+- D: [базова лінія продуктивності](archive/PERFORMANCE_BASELINE_2026-11-20.md), бюджети 10k/40k.
+- E: матриця 320dp / 200% / 48dp; виправлено обрізані заголовки налаштувань.
+- Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),
+  `premium_lifetime` = 3,99 EUR (ціна — у Play Console).
 
 ## Відкриті ризики
 
@@ -55,14 +65,22 @@
   пошуку не мають надійного вимірювання (фаза D).
 - Одноразовий збій перевірки паузи під час буферизації на Samsung (системне вікно); причинний
   зв'язок не доведений.
-- Релізний підпис, оновлення 0.9.6 → 0.9.7 без втрати даних і приймальне тестування реального
-  медіаконтенту не виконані (фаза C).
+- Підписаний реліз з HEAD, оновлення на API 30 і перевірка in-app updater не виконані (фаза C);
+  оновлення 0.9.3 → 0.9.7 на API 36 пройдено.
+- Версія 0.9.7 уже опублікована на GitHub (24.09) — перед релізом підняти до 0.9.8 / versionCode 17.
+- Реальна покупка Premium (3,99 €), acknowledge, restore і refund перевіряються лише на тестовому треку Play
+  з ліцензованим тестувальником.
+- Код self-updater (завантаження APK з GitHub) лишається в play-бінарнику, хоч і вимкнений прапором —
+  ризик для політики Play «Device and Network Abuse»; краще винести з play-варіанта.
+- Два інструментальні тести на API 36 (`UiPolishInstrumentedTest.landscapeNavigation…`,
+  `CinemaPlayerInstrumentedTest.everyThemeKeepsTransport…`) падають на емуляторі й у CI ще з базового коміту.
 - Мережеві тести проксі (`ProxyHttpServerTest`, `ProxyRendererProfileTest`) зрідка падають за
   таймаутом сокета, коли debug/release/play тести йдуть паралельно; ізольовано проходять.
 
 ## Наступні кроки
 
-1. Фази C–F плану release hardening.
+1. Власнику: підписати й завантажити `bundlePlay` на internal testing, пройти чекліст покупок з
+   `RELEASING.md`, підняти версію, виправити/прибрати self-updater з play-варіанта.
 2. Ручні перевірки на реальному обладнанні (розділ «Ручні перевірки» плану): Chromecast, DLNA
    (Hisense VIDAA), Android TV / Mi TV, PiP і повороти на бюджетних Xiaomi, встановлення
    підписаного релізу поверх попереднього.

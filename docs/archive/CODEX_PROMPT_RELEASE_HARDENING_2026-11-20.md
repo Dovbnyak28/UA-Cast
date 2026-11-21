@@ -152,3 +152,17 @@ UX-ризик: на 320dp/200% у формі додавання плейлист
 завантаження/помилки видно лише після прокрутки (досяжно; змінювати порядок блоків — рішення дизайну).
 Також у цій фазі виправлено CI: часовий пояс у CinemaV2PlayerScreenshotTest (11 знімків падали в UTC) і
 PixelCopy-паркан на API < 26 (14 тестів API 24 з NoSuchMethodError). -->
+
+<!-- PHASE-F DONE (PR створено; злиття — після зеленого CI і рішення власника): PR codex/release-0.9.6 → master.
+Гейти перед PR (HEAD): testDebugUnitTest 3186/0, testReleaseUnitTest 2476/0, testPlayUnitTest 2476/0 (живий
+Play Billing), :core:test 133/0, verifyRoborazziDebug 151, lintDebug/lintRelease/detekt OK, boundaries/doc-refs OK.
+CI базового коміту 209cad3 був червоний: виправлено часовий пояс знімків і PixelCopy на API 24; lint-джоб падав на
+транзієнтному резолві gson для foojay-resolver, API 30 — збій GPU емулятора CI; 2 тести API 36 падають і локально
+(відкритий ризик). Master містить лише доданий і видалений diary web app — конфліктів немає.
+Застарілі гілки НЕ видалялись (список для власника): ci/verify-polished-state-20260829 (PR #2 draft),
+codex/release-0.9.3, codex/release-0.9.4 (PR #3 open), feature/dlna, feat/update-check-and-premium-layer
+(PR #1 merged), codex/secure-backup-performance-gate (PR #4 draft) + worktree
+C:/Users/Dovbn/.codex/worktrees/secure-backup-performance, локальна гілка з назвою «origin» (плутає git),
+віддалені origin/codex/legal-pages, origin/codex/performance-renderer-probe.
+Додатково в цьому етапі: Google Play Billing увімкнено в play-збірці (premium_lifetime, 3,99 EUR у Play Console),
+звіт docs/archive/PLAY_BILLING_VERIFICATION_2026-11-21.md. -->
