@@ -115,8 +115,22 @@ fi
 
 # The debug variant is split per ABI (see the splits block in app/build.gradle.kts), so there is no
 # plain app-debug.apk - the universal one is the only build that fits any device.
-run_adb "$install_timeout_seconds" "app installation" -s "$DEVICE_SERIAL" install -r "$APP_APK"
-run_adb "$install_timeout_seconds" "test installation" -s "$DEVICE_SERIAL" install -r "$TEST_APK"
+# Some hosted API-24 emulator instances hang in the package manager during install (seven
+# minutes without finishing, while a sibling job on the same commit installs in under two).
+# On an emulator only, give a timed-out install one more attempt after the device answers again;
+# on a phone a hang is reported, not repeated.
+install_apk() {
+    local phase=$1 apk=$2 install_status=0
+    run_adb "$install_timeout_seconds" "$phase" -s "$DEVICE_SERIAL" install -r "$apk" || install_status=$?
+    if [ "$install_status" -eq 124 ] && [ "$device_is_emulator" = "1" ]; then
+        run_adb "$adb_timeout_seconds" "$phase device wait" -s "$DEVICE_SERIAL" wait-for-device || true
+        install_status=0
+        run_adb "$install_timeout_seconds" "$phase retry" -s "$DEVICE_SERIAL" install -r "$apk" || install_status=$?
+    fi
+    return "$install_status"
+}
+install_apk "app installation" "$APP_APK"
+install_apk "test installation" "$TEST_APK"
 
 # A locked or sleeping OEM handset can keep MainActivity resumed while hiding its window. That
 # makes Compose tests time out without telling us anything about the app. Wake the display and
