@@ -41,6 +41,19 @@ def assess(readiness, dependencies, store_live=False):
     return failures
 
 
+def checkout_is_live(root):
+    """True when any build can take payment.
+
+    `PremiumAvailability.STORE_IS_LIVE` used to be a literal; it now follows the
+    `PLAY_BILLING_LIVE` BuildConfig field, which the `play` build type sets to true. Reading only
+    the Kotlin literal made a live Play checkout look disabled and skipped the commerce review.
+    """
+    kotlin = (root / "app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt").read_text(encoding="utf-8")
+    gradle = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
+    return bool(re.search(r"STORE_IS_LIVE\s*=\s*true", kotlin) or
+                re.search(r'buildConfigField\(\s*"boolean"\s*,\s*"PLAY_BILLING_LIVE"\s*,\s*"true"\s*\)', gradle))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dependency-report", required=True, type=Path)
@@ -49,8 +62,7 @@ def main():
     try:
         readiness = json.loads((args.root / "config/legal/release-readiness.json").read_text(encoding="utf-8"))
         dependencies = args.dependency_report.read_text(encoding="utf-8-sig")
-        store_source = (args.root / "app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt")
-        store_live = bool(re.search(r"STORE_IS_LIVE\s*=\s*true", store_source.read_text(encoding="utf-8")))
+        store_live = checkout_is_live(args.root)
         failures = assess(readiness, dependencies, store_live)
     except (OSError, ValueError, TypeError) as error:
         failures = [f"Cannot verify legal release inputs: {type(error).__name__}"]

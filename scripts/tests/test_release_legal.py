@@ -35,6 +35,25 @@ class ReleaseLegalTests(unittest.TestCase):
     def test_live_checkout_needs_commercial_review(self):
         self.assertTrue(LEGAL.assess(self.ready(), "releaseRuntimeClasspath\nBUILD SUCCESSFUL", True))
 
+    def test_play_billing_buildconfig_counts_as_live_checkout(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            kotlin = root / "app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt"
+            kotlin.parent.mkdir(parents=True)
+            kotlin.write_text("const val STORE_IS_LIVE = com.uacastplayer.BuildConfig.PLAY_BILLING_LIVE",
+                              encoding="utf-8")
+            gradle = root / "app/build.gradle.kts"
+            gradle.write_text('buildConfigField("boolean", "PLAY_BILLING_LIVE", "false")', encoding="utf-8")
+            self.assertFalse(LEGAL.checkout_is_live(root))
+            gradle.write_text('buildConfigField("boolean", "PLAY_BILLING_LIVE", "false")\n'
+                              'create("play") { buildConfigField("boolean", "PLAY_BILLING_LIVE", "true") }',
+                              encoding="utf-8")
+            self.assertTrue(LEGAL.checkout_is_live(root))
+
+    def test_this_repository_is_detected_as_live(self):
+        self.assertTrue(LEGAL.checkout_is_live(ROOT))
+
     def test_verified_free_fixture_can_pass(self):
         self.assertEqual([], LEGAL.assess(self.ready(), "releaseRuntimeClasspath\nBUILD SUCCESSFUL"))
 
