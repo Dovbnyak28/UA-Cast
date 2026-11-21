@@ -69,7 +69,11 @@ class TvBrowseFocusTest {
         rule.onNodeWithTag("tv_channel_25").performKeyInput { pressKey(Key.DirectionCenter) }
         rule.runOnIdle { dataset.value = channels.take(10) }
         rule.onNodeWithText("Exit player").performKeyInput { pressKey(Key.DirectionCenter) }
-        rule.waitUntil { rule.onAllNodesWithTag("tv_channel_9").fetchSemanticsNodes().isNotEmpty() }
+        // Focus is restored by an effect after the shorter grid lays out, one frame after the card
+        // appears; asserting in the same frame raced it on a slow CI runner. Wait for the outcome.
+        rule.waitUntil(5_000) {
+            runCatching { rule.onNodeWithTag("tv_channel_9").assertIsFocused() }.isSuccess
+        }
         rule.onNodeWithTag("tv_channel_9").assertIsFocused()
     }
 
