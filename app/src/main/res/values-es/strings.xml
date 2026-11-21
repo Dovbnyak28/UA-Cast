@@ -162,7 +162,7 @@
     <string name="settings_page_data_storage">Datos y almacenamiento</string>
     <string name="settings_page_data_summary">Caché, copia de seguridad, importación y exportación</string>
     <string name="settings_page_help_about">Ayuda y acerca de</string>
-    <string name="settings_page_help_summary">Actualizaciones, tutorial, diagnóstico e información legal</string>
+    <string name="settings_page_help_summary">Tutorial, diagnóstico e información legal</string>
     <string name="settings_section_playlist">Lista de reproducción</string>
     <string name="settings_theme_label">Tema</string>
     <string name="theme_name_azure">Clásico</string>
@@ -431,7 +431,7 @@
     <string name="guided_tour_cast_title">Transmitir a un televisor</string>
     <string name="guided_tour_cast_body">Este botón envía la imagen a un Chromecast. Los televisores sin él (Samsung, LG, Sony) se alcanzan por DLNA desde el reproductor.</string>
     <string name="guided_tour_settings_title">Ajustes</string>
-    <string name="guided_tour_settings_body">Idioma y tema, tamaño del búfer, iconos de canales, control parental, copia de seguridad y actualizaciones. El tutorial también vive aquí, por si quieres repetirlo.</string>
+    <string name="guided_tour_settings_body">Idioma y tema, tamaño del búfer, iconos de canales, control parental y copia de seguridad. El tutorial también vive aquí, por si quieres repetirlo.</string>
 
     <string name="settings_section_tutorial">Tutorial</string>
     <string name="settings_search_hint">Buscar en ajustes</string>

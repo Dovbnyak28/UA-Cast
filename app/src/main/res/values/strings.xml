@@ -161,7 +161,7 @@
     <string name="settings_page_data_storage">Data &amp; storage</string>
     <string name="settings_page_data_summary">Cache, backup, import, and export</string>
     <string name="settings_page_help_about">Help &amp; about</string>
-    <string name="settings_page_help_summary">Updates, tutorial, diagnostics, and legal information</string>
+    <string name="settings_page_help_summary">Tutorial, diagnostics, and legal information</string>
     <string name="settings_section_playlist">Playlist</string>
     <string name="settings_theme_label">Theme</string>
     <string name="theme_name_azure">Classic</string>
@@ -432,7 +432,7 @@
     <string name="guided_tour_cast_title">Cast to a TV</string>
     <string name="guided_tour_cast_body">This button sends the picture to a Chromecast. TVs without one — Samsung, LG, Sony — are reachable over DLNA from the player.</string>
     <string name="guided_tour_settings_title">Settings</string>
-    <string name="guided_tour_settings_body">Language and theme, buffer size, channel icons, parental control, backup and updates. The tutorial lives here too, if you want it again.</string>
+    <string name="guided_tour_settings_body">Language and theme, buffer size, channel icons, parental control and backup. The tutorial lives here too, if you want it again.</string>
 
     <string name="settings_section_tutorial">Tutorial</string>
     <string name="settings_search_hint">Search settings</string>

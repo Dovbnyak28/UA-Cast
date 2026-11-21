@@ -3,6 +3,7 @@ package com.uacastplayer.ui.player
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.unit.dp
@@ -18,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.uacastplayer.R
 import com.uacastplayer.ui.theme.Caption
+import com.uacastplayer.ui.theme.IconButtonSize
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.UaTheme
 import com.uacastplayer.ui.theme.AppIcons
@@ -34,8 +36,10 @@ internal fun OtherTvButton(connected: Boolean, onClick: () -> Unit) {
             background = UaTheme.palette.scrimBackground)
         return
     }
-    TextButton(onClick = onClick, modifier = Modifier.widthIn(max = 88.dp).tvFocus()
-        .semantics { contentDescription = description }) {
+    // M3's TextButton is only 40dp tall; every other control in the player chrome is 48dp, and the
+    // touch target must be too (CinemaPlayerInstrumentedTest asserts it on a device).
+    TextButton(onClick = onClick, modifier = Modifier.widthIn(max = 88.dp).heightIn(min = IconButtonSize)
+        .tvFocus().semantics { contentDescription = description }) {
         Text(stringResource(R.string.player_other_tvs), maxLines = 2, overflow = TextOverflow.Ellipsis,
             color = if (connected) UaTheme.palette.azure else UaTheme.palette.labelPrimary)
     }
@@ -51,7 +55,7 @@ internal fun ConnectedReceiverRow(content: PlayerScreenContent, actions: PlayerS
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(name, style = Caption, color = UaTheme.palette.labelSecondary,
             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        TextButton(onClick = {
+        TextButton(modifier = Modifier.heightIn(min = IconButtonSize), onClick = {
             if (dlna != null) actions.viewModel.dlna.stop() else actions.viewModel.castControls.stop()
         }) {
             Text(stringResource(R.string.player_stop_casting))

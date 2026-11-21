@@ -167,7 +167,7 @@
     <string name="settings_page_data_storage">Данные и хранилище</string>
     <string name="settings_page_data_summary">Кэш, резервная копия, импорт и экспорт</string>
     <string name="settings_page_help_about">Помощь и о приложении</string>
-    <string name="settings_page_help_summary">Обновления, обучение, диагностика и правовая информация</string>
+    <string name="settings_page_help_summary">Обучение, диагностика и правовая информация</string>
     <string name="settings_section_playlist">Плейлист</string>
     <string name="settings_theme_label">Тема</string>
     <string name="theme_name_azure">Классическая</string>
@@ -438,7 +438,7 @@
     <string name="guided_tour_cast_title">Трансляция на телевизор</string>
     <string name="guided_tour_cast_body">Эта кнопка передаёт изображение на Chromecast. Телевизоры без него — Samsung, LG, Sony — доступны через DLNA из плеера.</string>
     <string name="guided_tour_settings_title">Настройки</string>
-    <string name="guided_tour_settings_body">Язык и тема, размер буфера, иконки каналов, родительский контроль, резервная копия и обновления. Здесь же живёт и это обучение, если захотите пройти ещё раз.</string>
+    <string name="guided_tour_settings_body">Язык и тема, размер буфера, иконки каналов, родительский контроль и резервная копия. Здесь же живёт и это обучение, если захотите пройти ещё раз.</string>
 
     <string name="settings_section_tutorial">Обучение</string>
     <string name="settings_search_hint">Поиск в настройках</string>

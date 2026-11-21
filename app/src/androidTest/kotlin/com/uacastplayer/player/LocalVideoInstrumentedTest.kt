@@ -9,9 +9,6 @@ import com.uacastplayer.ui.player.VideoSurface
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
-import androidx.test.uiautomator.UiDevice
-import org.junit.Assert.assertNotNull
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -112,20 +109,21 @@ class LocalVideoInstrumentedTest {
         assertTrue(playerModel.uiState.value.isPlaying)
         rule.waitUntil(15_000) { playerModel.uiState.value.hasRenderedVideoFrame }
         val frameDisplayed = app.getString(R.string.player_frame_displayed)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            assertNotNull(device.wait(Until.findObject(By.desc(frameDisplayed)), 15_000))
-        } else {
-            // On API 24 UiAutomator can keep a stale accessibility-node cache and never see the
-            // updated description although the view carries it (failed twice in CI, even with 15s).
-            // What the app is responsible for is the description on the exported PlayerView.
-            rule.waitUntil(15_000) {
-                var description: CharSequence? = null
-                rule.runOnUiThread {
-                    description = findPlayerView(rule.activity.window.decorView)?.contentDescription
+        // What the app is responsible for is the description TalkBack receives from the exported
+        // PlayerView, so read that view's own AccessibilityNodeInfo. UiAutomator's By.desc lookup
+        // was the check before, but its node cache can stay stale and never see the update: twice in
+        // CI on API 24 and on a LineageOS API 30 phone, each time with the view already carrying it.
+        rule.waitUntil(15_000) {
+            var description: CharSequence? = null
+            rule.runOnUiThread {
+                val view = findPlayerView(rule.activity.window.decorView)
+                if (view != null) {
+                    val info = view.createAccessibilityNodeInfo()
+                    description = info.contentDescription
+                    @Suppress("DEPRECATION") info.recycle()
                 }
-                description?.toString() == frameDisplayed
             }
+            description?.toString() == frameDisplayed
         }
         assertTrue(playerModel.uiState.value.canSeek)
         assertEquals(previousKey, preferences.lastWatchedChannelKey)

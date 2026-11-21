@@ -101,7 +101,9 @@ class ModernShellScreenshotTest {
 
     private fun capture(name: String) {
         // Finish tap feedback before pinning an image; a pressed ripple is not the destination design.
-        rule.mainClock.advanceTimeBy(400)
+        // 400ms left the Settings tab's ripple mid-fade on some runs, so the favourites reference
+        // flipped between two images; a full second is past every press animation in the shell.
+        rule.mainClock.advanceTimeBy(1_000)
         rule.waitForIdle()
         rule.onRoot().captureRoboImage("src/test/screenshots/$name.png")
     }
