@@ -44,7 +44,7 @@ Coil and Compose ship their own profiles inside their AARs and are merged automa
 ./gradlew :app:lintDebug            # lint
 ./gradlew :app:assembleDebug        # debug APK
 ./gradlew :app:assembleRelease      # release APK (unsigned unless signing env vars are set)
-./gradlew :app:bundlePlay           # Play-specific AAB; self-updater permissions/code disabled
+./gradlew :app:bundlePlay           # Play-specific AAB (live Google Play Billing)
 ```
 
 Release signing is read only from environment variables / Gradle properties, never committed:
@@ -99,6 +99,6 @@ See `docs/` for the design rules behind the trickier subsystems:
 unsigned packaging diagnostics, plus API 24/30/36 instrumentation on every push/PR. Those unsigned
 artifacts are explicitly named as diagnostics and must not be published. A separate manually
 dispatched `.github/workflows/signed-release.yml` builds the production-key-signed Play AAB behind
-the protected `production` environment and fails if signing secrets, updater exclusions or legal
+the protected `production` environment and fails if signing secrets, APK-install permission exclusions or legal
 assets are missing. `versionCode`/`versionName` for ordinary CI diagnostics come from the workflow
 run number, not the hand-edited defaults in `app/build.gradle.kts`.

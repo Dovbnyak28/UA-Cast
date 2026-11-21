@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.uacastplayer.BuildConfig
 import com.uacastplayer.R
 import com.uacastplayer.backup.BackupExportResult
 import com.uacastplayer.backup.BackupImportSummary
@@ -40,12 +39,10 @@ import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.PremiumSectionState
 import com.uacastplayer.settings.CacheKind
 import com.uacastplayer.settings.SettingsUiState
-import com.uacastplayer.ui.theme.AppIcons
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.theme.ScreenHPadding
 import com.uacastplayer.ui.theme.Title
 import com.uacastplayer.ui.theme.UaTheme
-import com.uacastplayer.update.UpdateSectionState
 
 
 @Composable
@@ -92,7 +89,6 @@ fun SettingsScreen(
     onOpenPrivacyPolicy: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     remuxEffectiveness: RemuxEffectivenessCounts,
-    updateSection: UpdateSectionState,
     premiumSection: PremiumSectionState,
     guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
@@ -218,14 +214,6 @@ fun SettingsScreen(
                                 remuxEffectiveness,
                             )
                             TutorialSettingsSection(guidedTourSection)
-                            if (BuildConfig.SELF_UPDATER_ENABLED) {
-                                SettingsSection(
-                                    title = stringResource(R.string.settings_section_updates),
-                                    icon = AppIcons.Refresh,
-                                ) {
-                                    UpdateCheckRow(updateSection)
-                                }
-                            }
                             PremiumSettingsSection(premiumSection)
                         }
                     }

@@ -6,6 +6,14 @@ changelog. CI appends its run number to both build values (see `docs/RELEASING.m
 artifact reads `0.9.7.<run>` with a `versionCode` of the run number - the values below are what a
 local build produces.
 
+## Unreleased
+
+- Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
+  installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
+  `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the
+  old one; Play users update from Play. An APK the old updater left in the cache is deleted once.
+- Google Play Billing is live in the `play` build (`premium_lifetime`, one-time purchase).
+
 ## 0.9.7
 
 `versionCode` 16. Stabilization release and first end-to-end test of the in-app GitHub update offer.

@@ -16,10 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
-import com.uacastplayer.log.AppLog
 import com.uacastplayer.core.ui.findActivity
 import com.uacastplayer.ui.platform.launchOrLogAbsence
 import com.uacastplayer.ui.settings.LocalIconPackCheck
@@ -35,14 +33,12 @@ import com.uacastplayer.ui.nav.AdaptiveRootLayout
 import com.uacastplayer.ui.tv.LocalTvMode
 import com.uacastplayer.ads.BannerAdAudience
 import com.uacastplayer.ui.ads.LocalBannerAdAudience
-import com.uacastplayer.ui.components.UpdateOfferDialog
 import com.uacastplayer.ui.components.RetainedUnderlay
 import com.uacastplayer.ui.premium.LocalFeatureGate
 import com.uacastplayer.ui.premium.LocalPremiumNotice
 import com.uacastplayer.ui.premium.rememberFeatureGate
 import com.uacastplayer.ui.theme.AppTheme
 import com.uacastplayer.ui.player.PlayerRequestViewModel
-import com.uacastplayer.update.GitHubRelease
 
 /**
  * Everything past the onboarding gate: the main scaffold (Home/Channels/Favorites/Settings tabs),
@@ -135,7 +131,6 @@ internal fun MainAppContent(
     var showAddPlaylist by remember { mutableStateOf(false) }
     val guidedTourState by viewModel.guidedTourState.collectAsStateWithLifecycle()
     val hasSeenGuidedTour by viewModel.hasSeenGuidedTour.collectAsStateWithLifecycle()
-    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
 
     // Offered here rather than from AppViewModel's init, so it happens *after* the language and
     // terms gates rather than behind them.
@@ -331,65 +326,11 @@ internal fun MainAppContent(
 
                 BatteryHintZone(viewModel = viewModel)
 
-                // Wait until first-run guidance and the player are out of the way. The controller
-                // spaces reminders by release tag and time; "Later" leaves the persistent banner.
-                UpdateOfferOverlay(
-                    viewModel = viewModel,
-                    hasSeenGuidedTour = hasSeenGuidedTour,
-                    guidedTourVisible = guidedTourState.isVisible,
-                    playerRequest = playerRequest,
-                    showHelp = showHelp,
-                    showTerms = showTerms,
-                    showPrivacyPolicy = showPrivacyPolicy,
-                    showAddPlaylist = showAddPlaylist,
-                    release = updateState.promptRelease,
-                )
-
                 // Last, so the unlock dialog and the premium sheet sit over the screen that raised them -
                 // including over the player, which is itself an overlay.
                 premiumUi.overlays()
             }
         }
     }
-    }
-}
-
-@Composable
-private fun UpdateOfferOverlay(
-    viewModel: AppViewModel,
-    hasSeenGuidedTour: Boolean,
-    guidedTourVisible: Boolean,
-    playerRequest: PlayerRequest?,
-    showHelp: Boolean,
-    showTerms: Boolean,
-    showPrivacyPolicy: Boolean,
-    showAddPlaylist: Boolean,
-    release: GitHubRelease?,
-) {
-    val blocked = when {
-        !hasSeenGuidedTour -> true
-        guidedTourVisible || playerRequest != null -> true
-        showHelp || showTerms || showPrivacyPolicy -> true
-        showAddPlaylist -> true
-        else -> false
-    }
-    val apk = release?.apk
-    if (!blocked && release != null && apk != null) {
-        val uriHandler = LocalUriHandler.current
-        UpdateOfferDialog(
-            release = release,
-            onInstall = {
-                viewModel.acknowledgeUpdatePrompt()
-                viewModel.downloadAndInstallUpdate(apk)
-            },
-            onLater = viewModel::acknowledgeUpdatePrompt,
-            onOpenRelease = { url ->
-                try {
-                    uriHandler.openUri(url)
-                } catch (e: IllegalArgumentException) {
-                    AppLog.w("MainActivity") { "no app can open release notes: ${e.javaClass.simpleName}" }
-                }
-            },
-        )
     }
 }

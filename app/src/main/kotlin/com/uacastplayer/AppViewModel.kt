@@ -14,14 +14,9 @@ import com.uacastplayer.app.ParentalControlController
 import com.uacastplayer.app.PlaylistController
 import com.uacastplayer.app.SettingsController
 import com.uacastplayer.app.GuidedTourController
-import com.uacastplayer.app.UpdateController
-import com.uacastplayer.app.UpdateInstallController
 import com.uacastplayer.guidedtour.GuidedTourState
 import com.uacastplayer.data.premium.FakeBillingProvider
 import com.uacastplayer.data.premium.PremiumRepository
-import com.uacastplayer.data.update.ApkInstaller
-import com.uacastplayer.data.update.UpdateDownloader
-import com.uacastplayer.data.update.UpdateRepository
 import com.uacastplayer.premium.DeveloperMode
 import com.uacastplayer.premium.Entitlements
 import com.uacastplayer.data.premium.PlayBillingProvider
@@ -31,8 +26,6 @@ import com.uacastplayer.premium.FeatureManager
 import com.uacastplayer.premium.billing.BillingConnectionState
 import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
-import com.uacastplayer.update.UpdateInstallState
-import com.uacastplayer.update.UpdateUiState
 import com.uacastplayer.backup.BackupData
 import com.uacastplayer.backup.BackupExportResult
 import com.uacastplayer.backup.BackupImportSummary
@@ -138,25 +131,6 @@ class AppViewModel @JvmOverloads constructor(
     internal val groupVisibilityController = GroupVisibilityController(groupVisibilityStore, viewModelScope)
     val pinnedGroupKeys: StateFlow<Set<String>> = groupVisibilityController.pinnedKeys
     val hiddenGroupKeys: StateFlow<Set<String>> = groupVisibilityController.hiddenKeys
-
-    internal val updateController = UpdateController(
-        releaseSource = UpdateRepository(ioDispatcher = ioDispatcher),
-        storage = preferences,
-        scope = viewModelScope,
-        installedVersionName = BuildConfig.VERSION_NAME,
-    )
-    val updateState: StateFlow<UpdateUiState> = updateController.state
-
-    private val updateDownloader = UpdateDownloader(application, ioDispatcher = ioDispatcher)
-
-    /** The two Android halves of installing an update are handed in as functions - see
-     * [UpdateInstallController] for why. This is the only place they are named. */
-    internal val updateInstallController = UpdateInstallController(
-        scope = viewModelScope,
-        download = { apk, onProgress -> updateDownloader.download(apk, onProgress) },
-        install = { file -> ApkInstaller.install(application, file) },
-    )
-    val updateInstallState: StateFlow<UpdateInstallState> = updateInstallController.state
 
     internal val guidedTourController = GuidedTourController(storage = preferences)
     val guidedTourState: StateFlow<GuidedTourState> = guidedTourController.state
@@ -300,10 +274,9 @@ class AppViewModel @JvmOverloads constructor(
         epgController.startTicking()
         groupVisibilityController.loadInitial()
         parentalControlController.loadInitial()
-        // Sideload builds may check GitHub for updates; the Play variant deliberately has no
-        // self-updater permission or UI (see build.gradle.kts and src/play/AndroidManifest.xml).
         // Starts in Lite or restores the stored paid licence, then listens for ownership changes.
         premiumRepository.loadInitial()
+        viewModelScope.launch(ioDispatcher) { AppCacheFiles.deleteRetiredUpdateDownloads(application.cacheDir) }
         viewModelScope.launch {
             activePlaylistSourceId.collect { groupVisibilityController.setActiveSource(it) }
         }

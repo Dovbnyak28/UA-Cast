@@ -2,7 +2,7 @@ package com.uacastplayer.guidedtour
 
 /**
  * What Settings needs to offer the tour again, bundled the way
- * [com.uacastplayer.update.UpdateSectionState] is - one parameter through `RootScaffold` rather
+ * [com.uacastplayer.premium.PremiumSectionState] is - one parameter through `RootScaffold` rather
  * than two, on a signature that is already long enough.
  */
 data class GuidedTourSectionState(

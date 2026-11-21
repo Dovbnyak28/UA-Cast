@@ -455,34 +455,6 @@
     <string name="home_make_it_yours_title">Make Home yours</string>
     <string name="home_make_it_yours_body">Star channels you watch often and they will appear here for one-tap access.</string>
 
-    <string name="update_banner_title">A new version is available</string>
-    <string name="update_banner_message">Version %1$s is ready to download.</string>
-    <string name="update_banner_message_page_only">Version %1$s was published without an APK - the release page will open.</string>
-    <string name="update_banner_action">Open release</string>
-    <string name="update_offer_title">A new version is available</string>
-    <string name="update_offer_message">Version %1$s is ready. Your playlists and settings will stay on this device.</string>
-    <string name="update_offer_whats_new">What’s new</string>
-    <string name="update_offer_no_notes">No release notes were provided.</string>
-    <string name="update_offer_full_notes">View release on GitHub</string>
-    <string name="update_offer_install">Update</string>
-    <string name="update_offer_later">Remind me later</string>
-    <string name="settings_section_updates">Updates</string>
-    <string name="settings_update_hint">The app checks for a new version once a day when you open it. If a release has an APK attached, it can download and install it for you — the file is checked against the release and must be signed by the same developer as the copy you have, or it is refused. You can always open the release page in your browser instead.</string>
-    <string name="settings_update_check_button">Check for updates</string>
-    <string name="settings_update_checking">Checking…</string>
-    <string name="settings_update_up_to_date">You have the latest version.</string>
-    <string name="settings_update_available">Version %1$s is available.</string>
-    <string name="settings_update_failed">Could not check. Try again later.</string>
-    <string name="settings_update_install_button">Download and install</string>
-    <string name="settings_update_downloading">Downloading…</string>
-    <string name="settings_update_downloading_percent">Downloading… %1$d%%</string>
-    <string name="settings_update_launching">Ready. Confirm the installation on screen.</string>
-    <string name="settings_update_needs_permission">To install from here, allow UA Cast to install apps.</string>
-    <string name="settings_update_grant_permission_button">Open settings</string>
-    <string name="settings_update_untrusted">This file was not signed by the same developer as your copy, so it was not installed. Download it from the release page instead.</string>
-    <string name="settings_update_corrupt">The download is damaged. Try again.</string>
-    <string name="settings_update_install_failed">Could not install. Try again.</string>
-
     <string name="settings_section_premium">Premium</string>
     <string name="premium_status_free">Lite — free version</string>
     <string name="premium_status_active">Premium — all features unlocked</string>

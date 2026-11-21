@@ -1,23 +1,17 @@
 #!/usr/bin/env bash
-# Verify that the Play build cannot expose the sideload updater or its restricted permissions.
+# Verify that the Play build does not declare APK-install permissions or an install receiver.
+# The self-updater was removed from the app (2026-11-21); this guards against a library or a
+# future change bringing those declarations back into the shipping Play artifact.
 #
-# Run after :app:bundlePlay (or processPlayMainManifest + generatePlayBuildConfig). Inspecting the
-# merged output rather than only src/play/AndroidManifest.xml catches a future library/source-set
-# merge that silently puts one of these declarations back into the shipping Play artifact.
+# Run after :app:bundlePlay (or processPlayMainManifest). It inspects the merged output, so a
+# permission contributed by a library is caught too.
 
 set -euo pipefail
 
 MANIFEST="${1:-app/build/intermediates/merged_manifest/play/processPlayMainManifest/AndroidManifest.xml}"
-BUILD_CONFIG="${2:-app/build/generated/source/buildConfig/play/com/uacastplayer/BuildConfig.java}"
 
 if [ ! -f "$MANIFEST" ]; then
     echo "check-play-distribution: merged Play manifest not found: $MANIFEST" >&2
-    echo "Run :app:bundlePlay first." >&2
-    exit 1
-fi
-
-if [ ! -f "$BUILD_CONFIG" ]; then
-    echo "check-play-distribution: Play BuildConfig not found: $BUILD_CONFIG" >&2
     echo "Run :app:bundlePlay first." >&2
     exit 1
 fi
@@ -32,9 +26,4 @@ for forbidden in \
     fi
 done
 
-if ! grep -E 'SELF_UPDATER_ENABLED[[:space:]]*=[[:space:]]*false;' "$BUILD_CONFIG" >/dev/null; then
-    echo "check-play-distribution: Play BuildConfig must set SELF_UPDATER_ENABLED=false" >&2
-    exit 1
-fi
-
-echo "check-play-distribution: OK - updater code and restricted install permissions are absent"
+echo "check-play-distribution: OK - no APK-install permissions or install receiver in the Play manifest"

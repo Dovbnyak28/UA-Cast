@@ -20,7 +20,6 @@ import com.uacastplayer.log.AppLog
 import com.uacastplayer.premium.License
 import com.uacastplayer.premium.LicenseStorage
 import com.uacastplayer.premium.LicenseTier
-import com.uacastplayer.update.UpdateCheckStorage
 
 private const val TAG = "AppPreferences"
 
@@ -45,7 +44,6 @@ class AppPreferences(
      */
     private val maxHeapBytes: () -> Long = { Runtime.getRuntime().maxMemory() },
 ) : ParentalControlPinStorage,
-    UpdateCheckStorage,
     LicenseStorage,
     GuidedTourStorage {
 
@@ -270,43 +268,6 @@ class AppPreferences(
         }
     }
 
-    /** Wall clock of the last update check of either kind, so the automatic one can hold itself to
-     * once a day (see [com.uacastplayer.update.UpdateCheckSchedule]). Null means never checked. */
-    override var lastUpdateCheckAtMillis: Long?
-        get() = if (prefs.contains(KEY_LAST_UPDATE_CHECK)) prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L) else null
-        set(value) {
-            if (value == null) {
-                prefs.edit { remove(KEY_LAST_UPDATE_CHECK) }
-            } else {
-                prefs.edit { putLong(KEY_LAST_UPDATE_CHECK, value) }
-            }
-        }
-
-    override var lastUpdateCheckFailed: Boolean
-        get() = prefs.getBoolean(KEY_LAST_UPDATE_CHECK_FAILED, false)
-        set(value) = prefs.edit { putBoolean(KEY_LAST_UPDATE_CHECK_FAILED, value) }
-
-    /** Release tag whose update banner the user closed, so it stays closed - for that version only.
-     * Stored as the tag rather than a boolean: the next release has a different tag and so gets to
-     * announce itself, which a "banner dismissed" flag would have to remember to reset. */
-    override var dismissedUpdateTag: String?
-        get() = prefs.getString(KEY_DISMISSED_UPDATE_TAG, null)
-        set(value) = prefs.edit { putString(KEY_DISMISSED_UPDATE_TAG, value) }
-
-    override var promptedUpdateTag: String?
-        get() = prefs.getString(KEY_PROMPTED_UPDATE_TAG, null)
-        set(value) = prefs.edit { putString(KEY_PROMPTED_UPDATE_TAG, value) }
-
-    override var lastUpdatePromptAtMillis: Long?
-        get() = if (prefs.contains(KEY_LAST_UPDATE_PROMPT)) prefs.getLong(KEY_LAST_UPDATE_PROMPT, 0L) else null
-        set(value) {
-            if (value == null) {
-                prefs.edit { remove(KEY_LAST_UPDATE_PROMPT) }
-            } else {
-                prefs.edit { putLong(KEY_LAST_UPDATE_PROMPT, value) }
-            }
-        }
-
     /**
      * The last licence this device saw. Null means nothing has been stored. Unknown or corrupted
      * records resolve to Lite; valid legacy tier names are decoded before the repository migrates
@@ -436,11 +397,6 @@ class AppPreferences(
         const val KEY_RAW_TS_REMUX_ENABLED = "raw_ts_remux_enabled"
         const val KEY_PARENTAL_CONTROL_PIN_HASH = "parental_control_pin_hash"
         const val KEY_PARENTAL_CONTROL_PIN_SALT = "parental_control_pin_salt"
-        const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
-        const val KEY_LAST_UPDATE_CHECK_FAILED = "last_update_check_failed"
-        const val KEY_DISMISSED_UPDATE_TAG = "dismissed_update_tag"
-        const val KEY_PROMPTED_UPDATE_TAG = "prompted_update_tag"
-        const val KEY_LAST_UPDATE_PROMPT = "last_update_prompt_at"
         const val KEY_LICENSE_TIER = "license_tier"
         const val KEY_LICENSE_EXPIRY = "license_expires_at"
         const val KEY_LICENSE_SOURCE = "license_source"

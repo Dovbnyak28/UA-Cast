@@ -50,7 +50,6 @@ import com.uacastplayer.settings.SettingsUiState
 import com.uacastplayer.ui.channels.ChannelsScreen
 import com.uacastplayer.ui.components.animationsAllowed
 import com.uacastplayer.premium.PremiumSectionState
-import com.uacastplayer.update.UpdateSectionState
 import com.uacastplayer.ui.components.GlassTabBar
 import com.uacastplayer.ui.components.GlassNavigationRail
 import com.uacastplayer.ui.components.TabBarItem
@@ -144,7 +143,6 @@ fun RootScaffold(
     onOpenPrivacyPolicy: () -> Unit,
     onBuildDiagnosticsReport: () -> String,
     remuxEffectiveness: RemuxEffectivenessCounts,
-    updateSection: UpdateSectionState,
     premiumSection: PremiumSectionState,
     guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
@@ -227,7 +225,6 @@ fun RootScaffold(
                     showTitle = navState.current != BottomDestination.SETTINGS,
                     labelRemote = homeRemoteLabelVisible(navState.current == BottomDestination.HOME,
                         widthDp, LocalDensity.current.fontScale),
-                    updateSection = updateSection,
                 )
             },
             bottomBar = {
@@ -391,7 +388,6 @@ fun RootScaffold(
                     onOpenPrivacyPolicy = onOpenPrivacyPolicy,
                     onBuildDiagnosticsReport = onBuildDiagnosticsReport,
                     remuxEffectiveness = remuxEffectiveness,
-                    updateSection = updateSection,
                     premiumSection = premiumSection,
                     guidedTourSection = guidedTourSection,
                     playlistState = playlistState,

@@ -111,7 +111,7 @@ internal fun stepStreamVolume(audioManager: AudioManager, increase: Boolean): Fl
  * retains sub-step travel until completion, then reads the platform value back too.
  *
  * Taking [setVolume] as a function rather than the manager is what makes the refusal testable at
- * all - the same seam, for the same reason, as `UpdateInstallController`'s downloader and installer.
+ * all.
  */
 internal fun applyStreamVolume(max: Int, level: Float, setVolume: (Int) -> Unit) {
     val target = (level * max).toInt().coerceIn(0, max)

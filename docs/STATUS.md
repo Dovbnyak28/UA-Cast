@@ -49,6 +49,7 @@
   підписаний реліз з HEAD і API 30 — за власником.
 - D: [базова лінія продуктивності](archive/PERFORMANCE_BASELINE_2026-11-20.md), бюджети 10k/40k.
 - E: матриця 320dp / 200% / 48dp; виправлено обрізані заголовки налаштувань.
+- Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),
   `premium_lifetime` = 3,99 EUR (ціна — у Play Console).
 
@@ -65,13 +66,11 @@
   пошуку не мають надійного вимірювання (фаза D).
 - Одноразовий збій перевірки паузи під час буферизації на Samsung (системне вікно); причинний
   зв'язок не доведений.
-- Підписаний реліз з HEAD, оновлення на API 30 і перевірка in-app updater не виконані (фаза C);
+- Підписаний реліз з HEAD і оновлення на API 30 не виконані (фаза C);
   оновлення 0.9.3 → 0.9.7 на API 36 пройдено.
 - Версія 0.9.7 уже опублікована на GitHub (24.09) — перед релізом підняти до 0.9.8 / versionCode 17.
 - Реальна покупка Premium (3,99 €), acknowledge, restore і refund перевіряються лише на тестовому треку Play
   з ліцензованим тестувальником.
-- Код self-updater (завантаження APK з GitHub) лишається в play-бінарнику, хоч і вимкнений прапором —
-  ризик для політики Play «Device and Network Abuse»; краще винести з play-варіанта.
 - Два інструментальні тести на API 36 (`UiPolishInstrumentedTest.landscapeNavigation…`,
   `CinemaPlayerInstrumentedTest.everyThemeKeepsTransport…`) падають на емуляторі й у CI ще з базового коміту.
 - Мережеві тести проксі (`ProxyHttpServerTest`, `ProxyRendererProfileTest`) зрідка падають за
@@ -80,7 +79,7 @@
 ## Наступні кроки
 
 1. Власнику: підписати й завантажити `bundlePlay` на internal testing, пройти чекліст покупок з
-   `RELEASING.md`, підняти версію, виправити/прибрати self-updater з play-варіанта.
+   `RELEASING.md`, підняти версію.
 2. Ручні перевірки на реальному обладнанні (розділ «Ручні перевірки» плану): Chromecast, DLNA
    (Hisense VIDAA), Android TV / Mi TV, PiP і повороти на бюджетних Xiaomi, встановлення
    підписаного релізу поверх попереднього.

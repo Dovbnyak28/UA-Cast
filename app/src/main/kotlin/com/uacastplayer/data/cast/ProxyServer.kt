@@ -42,7 +42,7 @@ private const val DLNA_CONTENT_FEATURES =
 class ProxyServer(
     private val httpClient: OkHttpClient,
     /** Injected so the serve rollup's windows can be driven by a test rather than by the clock -
-     * the same seam [com.uacastplayer.app.UpdateController] uses. Declared before
+     * the usual clock seam. Declared before
      * [onRouteAttempted] so that stays the trailing parameter its call site passes as a lambda. */
     now: () -> Long = System::currentTimeMillis,
     /** Observational only: consumers must recheck ownership after dispatching to another thread. */

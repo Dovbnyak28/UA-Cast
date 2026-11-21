@@ -7,14 +7,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uacastplayer.core.i18n.AppLanguage
 import com.uacastplayer.core.nav.BottomDestination
 import com.uacastplayer.favorites.FavoriteKey
 import com.uacastplayer.guidedtour.GuidedTourSectionState
-import com.uacastplayer.log.AppLog
 import com.uacastplayer.playlist.M3uChannel
 import com.uacastplayer.playlist.PlaylistUiState
 import com.uacastplayer.premium.PremiumSectionState
@@ -25,7 +22,6 @@ import com.uacastplayer.ui.nav.RootScaffold
 import com.uacastplayer.ui.permissions.NotificationPermissionGate
 import com.uacastplayer.ui.playlist.AddPlaylistScreen
 import com.uacastplayer.ui.theme.AppTheme
-import com.uacastplayer.update.UpdateSectionState
 
 /** The main tab scaffold (Home/Channels/Favorites/Settings) plus the Help/Terms/AddPlaylist
  * full-screen overlays that temporarily replace it - collects every [RootScaffold] dependency
@@ -80,43 +76,11 @@ internal fun ScaffoldZone(
     val lastWatchedChannelKey by viewModel.lastWatchedChannelKey.collectAsStateWithLifecycle()
     val backupImportSummary by viewModel.backupImportSummary.collectAsStateWithLifecycle()
     val backupExportResult by viewModel.backupExportResult.collectAsStateWithLifecycle()
-    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
-    val updateInstallState by viewModel.updateInstallState.collectAsStateWithLifecycle()
     // Same reason as premiumSection - this reaches SettingsScreen, and a fresh instance on
     // every pass would stop it skipping.
     val hasSeenGuidedTour by viewModel.hasSeenGuidedTour.collectAsStateWithLifecycle()
     val guidedTourSection = remember(hasSeenGuidedTour) {
         GuidedTourSectionState(hasSeenTour = hasSeenGuidedTour, onStartTour = viewModel::startGuidedTour)
-    }
-
-    // LocalUriHandler rather than a raw ACTION_VIEW intent: it needs no queries entry in the
-    // manifest, and it is the one place a device with no browser at all - a TV box, say - would
-    // otherwise throw on what is meant to be an optional convenience.
-    val uriHandler = LocalUriHandler.current
-    // remembered for the same reason as premiumSection above: rebuilt on every pass it would be a
-    // new instance each time, and this one reaches the top bar, so it would also re-invalidate the
-    // update banner twice a minute for nothing.
-    val context = LocalContext.current
-    val updateSection = remember(updateState, updateInstallState, uriHandler, context) {
-        UpdateSectionState(
-            state = updateState,
-            installState = updateInstallState,
-            onCheckNow = viewModel::checkForUpdatesNow,
-            onOpenRelease = { url ->
-                try {
-                    uriHandler.openUri(url)
-                } catch (e: IllegalArgumentException) {
-                    AppLog.w("MainActivity") { "no app can open the release page: ${e.javaClass.simpleName}" }
-                }
-            },
-            onDownloadAndInstall = viewModel::downloadAndInstallUpdate,
-            onGrantInstallPermission = { openInstallPermissionSettings(context) },
-            onDismissBanner = viewModel::dismissUpdateBanner,
-            onOutcomeShown = {
-                viewModel.clearUpdateCheckOutcome()
-                viewModel.clearUpdateInstallOutcome()
-            },
-        )
     }
 
     // Derived from the flows collected right above rather than delegated to viewModel::isFavorite /
@@ -266,7 +230,6 @@ internal fun ScaffoldZone(
                     onOpenPrivacyPolicy = onOpenPrivacyPolicy,
                     onBuildDiagnosticsReport = onBuildDiagnosticsReport,
                     remuxEffectiveness = remuxEffectiveness,
-                    updateSection = updateSection,
                     premiumSection = premiumSection,
                     guidedTourSection = guidedTourSection,
                     guidedTourDestination = guidedTourDestination,

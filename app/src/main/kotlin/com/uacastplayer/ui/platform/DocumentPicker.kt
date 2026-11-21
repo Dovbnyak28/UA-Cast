@@ -21,7 +21,7 @@ private const val TAG = "DocumentPicker"
  * resolving means an unchecked `ActivityNotFoundException`, thrown from the tap handler on the main
  * thread, taking the app down.
  *
- * The same guard, and the same reasoning, as `BatteryOptimizationDialog`, `openInstallPermissionSettings`
+ * The same guard, and the same reasoning, as `BatteryOptimizationDialog`
  * and `sendDiagnostics` already carry: a screen that cannot be opened is a screen not opened, never
  * a crash. Returns availability so callers can report a blocked action; backup uses a visible
  * message. The playlist screen also offers URL and Xtream sources without a document picker.

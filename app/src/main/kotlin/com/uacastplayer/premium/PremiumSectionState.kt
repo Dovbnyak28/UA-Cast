@@ -5,7 +5,7 @@ import com.uacastplayer.premium.billing.BillingProduct
 import com.uacastplayer.premium.billing.PurchaseResult
 
 /**
- * Everything the premium UI needs, bundled the way [com.uacastplayer.update.UpdateSectionState] is:
+ * Everything the premium UI needs, bundled into one value:
  * the Settings section, the full screen, the sheet and the banner are four views of one thing, and
  * threading a dozen parameters for it through `RootScaffold` would only lengthen a signature that
  * is already long.

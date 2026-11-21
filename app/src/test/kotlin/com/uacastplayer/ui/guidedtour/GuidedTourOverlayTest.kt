@@ -35,7 +35,7 @@ import org.robolectric.annotation.Config
  * `AppViewModel`, so these assert what the overlay renders for a given state - the state machine
  * itself is `GuidedTourControllerTest`'s job.
  *
- * The narrow viewport is deliberate, and the same one `UpdateBannerTest` uses: a 4.5" phone, which
+ * The narrow viewport is deliberate: a 4.5" phone, which
  * is also what any phone becomes at the largest Display Size setting.
  */
 @RunWith(RobolectricTestRunner::class)

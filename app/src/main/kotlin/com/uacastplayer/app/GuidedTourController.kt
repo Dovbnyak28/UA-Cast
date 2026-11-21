@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * Runs the guided tour: which step is showing, what Next/Back/Skip do, and when the tour stops
  * offering itself.
  *
- * A plain class holding a [StateFlow], like `UpdateController` next to it, rather than a ViewModel
+ * A plain class holding a [StateFlow], like the other controllers next to it, rather than a ViewModel
  * of its own - `AppViewModel` owns it and exposes its state, which is how every other controller in
  * this package is wired.
  *

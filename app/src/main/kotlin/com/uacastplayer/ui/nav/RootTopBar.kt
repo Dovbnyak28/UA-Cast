@@ -17,12 +17,10 @@ import androidx.compose.ui.Modifier
 import com.uacastplayer.epg.EpgUiState
 import com.uacastplayer.icons.IconPrefetchUiState
 import com.uacastplayer.ui.components.DownloadStatusBanner
-import com.uacastplayer.ui.components.UpdateBanner
-import com.uacastplayer.update.UpdateSectionState
 
 
 /**
- * The screen title and background-download/update banners.
+ * The screen title and the background-download banner.
  *
  * The banner belongs *here*, as part of the measured top bar, and not in an overlay Box stacked on
  * top of the whole scaffold, which is where it used to live. As an overlay it was simply drawn over
@@ -53,7 +51,6 @@ internal fun RootTopBar(
     iconPrefetchState: IconPrefetchUiState,
     epgState: EpgUiState,
     showDownloadStatus: Boolean,
-    updateSection: UpdateSectionState,
     modifier: Modifier = Modifier,
     showTitle: Boolean = true,
     labelRemote: Boolean = false,
@@ -67,14 +64,6 @@ internal fun RootTopBar(
         if (showDownloadStatus) {
             DownloadStatusBanner(iconPrefetchState = iconPrefetchState, epgState = epgState, compact = true)
         }
-        UpdateBanner(
-            release = updateSection.state.availableRelease,
-            installState = updateSection.installState,
-            onInstall = updateSection.onDownloadAndInstall,
-            onGrantInstallPermission = updateSection.onGrantInstallPermission,
-            onOpen = updateSection.onOpenRelease,
-            onDismiss = updateSection.onDismissBanner,
-        )
         if (showTitle) com.uacastplayer.ui.components.ScreenHeader(title, labelRemote = labelRemote)
     }
 }

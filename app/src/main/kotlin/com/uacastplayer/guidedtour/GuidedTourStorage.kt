@@ -4,7 +4,7 @@ package com.uacastplayer.guidedtour
  * The two values the tour remembers, as an interface so
  * [com.uacastplayer.app.GuidedTourController] can be tested without Android's SharedPreferences.
  * Implemented by [com.uacastplayer.data.prefs.AppPreferences], the same way
- * [com.uacastplayer.update.UpdateCheckStorage] and [com.uacastplayer.premium.LicenseStorage] are.
+ * [com.uacastplayer.premium.LicenseStorage] is.
  */
 interface GuidedTourStorage {
 

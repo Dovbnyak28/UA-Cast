@@ -42,11 +42,10 @@ the three per-ABI APKs together if a store accepts multiple APKs per release. 32
 built at all (see `ndk.abiFilters`).
 
 For Play Store specifically, use `./gradlew :app:bundlePlay` - Play performs the same split
-server-side from a single `.aab`, while the `play` build type removes the sideload updater,
-`REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION`, and its install-result receiver.
-Never upload `bundleRelease`: that is the sideload distribution and intentionally keeps those
-capabilities. `scripts/check-play-distribution.sh` verifies the merged Play manifest and
-`BuildConfig` after packaging.
+server-side from a single `.aab`. The app has no self-updater in any build (removed 2026-11-21):
+it never downloads or installs APKs and declares neither `REQUEST_INSTALL_PACKAGES` nor
+`UPDATE_PACKAGES_WITHOUT_USER_ACTION`. `scripts/check-play-distribution.sh` verifies the merged
+Play manifest after packaging, so a library cannot bring those permissions back unnoticed.
 
 Every APK of a release gets its own `versionCode` - base × 10 plus a per-ABI digit, see
 `abiVersionCodeOffsets` in `app/build.gradle.kts`. A store rejects multiple APKs sharing one
@@ -80,43 +79,15 @@ Marking a new version touches **three** files, and they have to move together:
 `versionCode` only has to increase monotonically; CI derives its own from the run number, so the
 default in `build.gradle.kts` matters only for locally built APKs.
 
-### Publishing the release, and why the tag is now load-bearing
+### Publishing the release
 
-The app checks for updates itself: once a day when it enters the foreground (one-hour retry after
-a failed check), and on demand from Settings ->
-Updates. It asks
-`https://api.github.com/repos/Dovbnyak28/UA-Cast/releases/latest` and compares that release's
-`tag_name` against its own `versionName` (see `com.uacastplayer.update`). Two consequences for
-this runbook:
-
-1. **A version only exists to installed apps once there is a published GitHub Release for it.**
-   Pushing a tag is not enough, and neither is a draft or a pre-release - `/releases/latest` skips
-   both, and the parser re-checks the flags anyway. Until the release is published, every installed
-   copy is correctly told it is up to date.
-2. **The tag has to be a version number**, with or without a leading `v`: `v0.10.0`, `0.10.0` and
-   `1.0.0-rc1` all parse; `nightly` or `release-2026` do not, and a release tagged that way is
-   ignored rather than guessed at. Comparison is numeric per component, so `v0.10.0` is correctly
-   newer than `v0.9.0` - and a CI build reporting `0.9.0.147` is newer than the `v0.9.0` release it
-   came from, so it is not offered an "update" back to itself.
-
-3. **Attach the APKs to the release, or the install path never engages.** A newly found release
-   with an installable APK raises an install invitation showing a bounded plain-text preview
-   of the GitHub Release body; write useful, user-facing release notes. The user must choose to download.
-   Choosing "Remind me later" retains the banner and offers the dialog again after at least three days.
-   The app can now download
-   and install an update itself - it did not always, and this paragraph used to say so. It picks an
-   attached asset via `ReleaseApkPolicy` (universal wins when present), verifies size and any
-   published `sha256`, and refuses anything not signed by whoever signed the running copy
-   (`ApkSignatureGate`). With **no assets attached** every one of those steps is skipped and the
-   only thing the banner can offer is the release page in a browser - whose most prominent
-   downloads are GitHub's own source archives, which are not installable. That is the state a
-   release with no APK puts every user in, and it looks like the feature is broken.
+The app does not check for updates itself. Users of the GitHub APK update by installing the next
+release over the old one; Play users get updates from Play. Tag releases with a version number
+(`v0.9.8`) and attach the universal APK to the published GitHub Release.
 
 Every release APK must be signed with the *same* key as the one it is replacing. Android refuses an
 APK signed with a different one, and the only way out for the user is to uninstall - taking their
-playlist, their guide and their licence with it. `ApkSignatureGate` refuses such a file before the
-system dialog can, which is verified on a real device by
-`UpdateInstallChainInstrumentedTest`.
+playlist, their guide and their licence with it. `scripts/verify-release-upgrade.sh` checks this.
 
 Local diagnostic builds may still use the normal Gradle fallback signing configuration. For a
 production release, make the requirement explicit:
@@ -142,7 +113,7 @@ The workflow materializes the key only under the runner's temporary directory, p
 `-Puacast.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
 the AAB and universal APK signatures, then uploads separate signed Play AAB and GitHub APK
 artifacts. Attach the **universal APK** artifact to a published GitHub Release with the matching
-version tag; an Actions artifact alone is not visible to the app's updater. The workflow does not
+version tag; an Actions artifact alone is not a download users can find. The workflow does not
 publish to Play Console or GitHub Releases; those remain explicit human release steps. Never commit the keystore, passwords, generated
 `gradle.properties`, or a base64 copy of the key.
 
@@ -183,8 +154,7 @@ The current version is 0.9.7 and deliberately not 1.0.0. The gap is not a featur
    (Range forwarding, CORS preflight, method refusal, session-token expiry, wrapper unwrap,
    rewritten segment URLs, concurrency), both stream-rewriting routes (HLS→TS flattening and
    raw-TS→HLS remux), the DLNA control stack against a fake UPnP renderer (relative control URLs,
-   a `701` retried through, a `716` refused at once, volume, an unreachable renderer), the update
-   chain including `ApkSignatureGate` - which cannot be tested off a device at all - and the
+   a `701` retried through, a `716` refused at once, volume, an unreachable renderer) and the
    player's video-fit setting end to end.
 
    What is still missing is point 1, and no test replaces it: a report from hardware nobody here

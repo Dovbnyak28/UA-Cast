@@ -3,7 +3,7 @@ package com.uacastplayer.premium
 /**
  * Where the last known license is kept between launches, as an interface so the premium domain
  * never has to know that the answer is `SharedPreferences` - the same shape
- * [com.uacastplayer.update.UpdateCheckStorage] uses.
+ * [com.uacastplayer.guidedtour.GuidedTourStorage] uses.
  *
  * This is what makes the app usable on a plane. A store cannot always be reached, and treating
  * "cannot ask" as "has not paid" would take a paid feature away from someone in an aeroplane seat.
