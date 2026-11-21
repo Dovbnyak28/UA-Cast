@@ -147,7 +147,9 @@ internal fun SettingsNavigationRow(
                 title,
                 style = CardTitle,
                 color = UaTheme.palette.labelPrimary,
-                maxLines = 2,
+                // The section name is the whole affordance: at 320dp and 200% font two lines cut
+                // "Плейлисти й телепрограма" to "...телепрогра…". The summary below may truncate.
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle.isNotBlank() && !subtitle.equals(title, ignoreCase = true)) {
