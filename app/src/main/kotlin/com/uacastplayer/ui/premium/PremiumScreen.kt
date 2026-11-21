@@ -9,10 +9,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.uacastplayer.R
 import com.uacastplayer.premium.Feature
@@ -108,10 +115,18 @@ fun PremiumContent(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
         outcomeLine(section.lastOutcome)?.let { message ->
+            // The answer to a tap on Restore/Buy lands below that button - on a phone usually below
+            // the fold and under the navigation dock, where it was easy to miss entirely. Scroll it
+            // into view when it changes and let TalkBack announce it.
+            val bringIntoView = remember { BringIntoViewRequester() }
+            LaunchedEffect(message) { bringIntoView.bringIntoView() }
             Text(
                 text = message,
                 style = Caption,
                 color = UaTheme.palette.labelSecondary,
+                modifier = Modifier
+                    .bringIntoViewRequester(bringIntoView)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
     }

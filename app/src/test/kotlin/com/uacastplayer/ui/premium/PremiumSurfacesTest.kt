@@ -1,6 +1,16 @@
 package com.uacastplayer.ui.premium
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -190,6 +200,22 @@ class PremiumSurfacesTest {
         composeRule.onNodeWithText("Відновити покупки").performClick()
         assertEquals(1, restored)
         composeRule.onNodeWithText("На цьому акаунті Google немає що відновлювати.").assertIsDisplayed()
+    }
+
+    /** The answer to Restore lands below the button; on a phone it used to sit under the fold and the
+     * navigation dock. It must scroll itself into view and be announced by TalkBack. */
+    @Test
+    fun theOutcomeIsScrolledIntoViewAndAnnounced() {
+        composeRule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                Column(Modifier.height(240.dp).verticalScroll(rememberScrollState())) {
+                    PremiumContent(section = section(License.FREE, outcome = PurchaseResult.Unavailable))
+                }
+            }
+        }
+        composeRule.onNodeWithText("Не вдалося звʼязатися з Google Play. Перевірте зʼєднання та спробуйте ще раз.")
+            .assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
     }
 
     private fun showOutcome(outcome: PurchaseResult?) {
