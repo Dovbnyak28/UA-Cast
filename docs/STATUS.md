@@ -48,6 +48,9 @@
   підписаний реліз з HEAD і API 30 — за власником.
 - D: [базова лінія продуктивності](archive/PERFORMANCE_BASELINE_2026-11-20.md), бюджети 10k/40k.
 - E: матриця 320dp / 200% / 48dp; виправлено обрізані заголовки налаштувань.
+- Логотип перероблено 2026-11-22: прибрано дуги в куті екрана (це значок Google Cast, який Google не дозволяє
+  в чужих логотипах); `design/brand/mark.svg` → іконка, заставка, TV-банер. В умовах додано рядок про торговельні
+  марки Google Cast/Chromecast/Google TV та інших виробників. Пошук зареєстрованих знаків «UA Cast» не проводився.
 - Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),
   `premium_lifetime` = 3,99 EUR (ціна — у Play Console).

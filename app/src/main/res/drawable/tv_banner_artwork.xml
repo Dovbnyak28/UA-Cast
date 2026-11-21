@@ -11,11 +11,10 @@
         </aapt:attr>
     </path>
     <group android:translateX="-9" android:translateY="6" android:scaleX="1.45" android:scaleY="1.45">
-        <path android:pathData="M28 52V40Q28 34 34 34H74Q80 34 80 40V68Q80 74 74 74H57" android:fillColor="#00000000" android:strokeColor="#F5F8FF" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" />
-        <path android:pathData="M51 45.5C51 44.3 52.3 43.5 53.4 44.2L66.6 52.6C67.7 53.3 67.7 54.8 66.6 55.5L53.4 63.8C52.3 64.5 51 63.7 51 62.5Z" android:fillColor="#FFD65A" />
-        <path android:pathData="M31 54C42 54 51 63 51 74M31 64C36.5 64 41 68.5 41 74" android:fillColor="#00000000" android:strokeColor="#40DCFF" android:strokeWidth="4" android:strokeLineCap="round" />
-        <path android:pathData="M33.25 74A2.25 2.25 0 1 1 28.75 74A2.25 2.25 0 1 1 33.25 74Z" android:fillColor="#FFD65A" />
-        <path android:pathData="M54 82H64" android:fillColor="#00000000" android:strokeColor="#F5F8FF" android:strokeWidth="4" android:strokeLineCap="round" />
+        <path android:pathData="M34 34H74Q80 34 80 40V68Q80 74 74 74H34Q28 74 28 68V40Q28 34 34 34Z" android:fillColor="#00000000" android:strokeColor="#F5F8FF" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" />
+        <path android:pathData="M49.5 45.5C49.5 44.3 50.8 43.5 51.9 44.2L65.1 52.6C66.2 53.3 66.2 54.8 65.1 55.5L51.9 63.8C50.8 64.5 49.5 63.7 49.5 62.5Z" android:fillColor="#FFD65A" />
+        <path android:pathData="M44 82H54" android:fillColor="#00000000" android:strokeColor="#40DCFF" android:strokeWidth="4" android:strokeLineCap="round" />
+        <path android:pathData="M54 82H64" android:fillColor="#00000000" android:strokeColor="#FFD65A" android:strokeWidth="4" android:strokeLineCap="round" />
     </group>
     <group android:translateX="-1">
         <path android:fillColor="#FFD65A" android:pathData="M140.34,72.09L147.60,72.09L147.60,96.68Q147.60,102.91 144.28,105.67Q140.96,108.42 135.81,108.42Q130.60,108.42 127.30,105.67Q124.00,102.91 124.00,96.68L124.00,72.09L131.26,72.09L131.26,96.68Q131.26,100.20 132.43,101.31Q133.60,102.42 135.81,102.42Q138.05,102.42 139.20,101.31Q140.34,100.20 140.34,96.68L140.34,72.09ZM150.47,107.93L161.67,72.09L168.29,72.09L179.56,107.93L171.86,107.93L169.94,100.60L160.07,100.60L158.15,107.93L150.47,107.93ZM161.65,94.57L168.37,94.57L164.99,81.77L161.65,94.57Z" />
