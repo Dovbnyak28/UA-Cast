@@ -93,6 +93,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
+    // The androidTest APK carries the native decoder; on the API-24 CI emulator its install-time
+    // ahead-of-time compilation outlasted ddmlib's default and failed the job after every test of
+    // the app itself had passed. Give `connectedDebugAndroidTest` installs ten minutes.
+    installation {
+        timeOutInMs = 10 * 60 * 1000
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
