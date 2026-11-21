@@ -32,6 +32,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
@@ -125,6 +127,16 @@ internal fun GroupsOverviewGrid(
     val gridCells = if (layout == ChannelLayout.LIST) GridCells.Fixed(1) else GridCells.Adaptive(categoryWidth)
 
     var query by rememberSaveable { mutableStateOf("") }
+    // Opening a result must also release the search field. It used to keep focus behind the
+    // player, so the soft keyboard stayed up over the video, swallowed the first system Back, and
+    // after a rotation re-opened over a landscape screen it shrank to almost nothing.
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val openSearchResult: (M3uChannel) -> Unit = { channel ->
+        keyboard?.hide()
+        focusManager.clearFocus(force = true)
+        onChannelClick(channel)
+    }
     // Debounced so a burst of keystrokes costs one search rather than one per character - this
     // searches the whole playlist, not just one group.
     val trimmedQuery = rememberDebounced(query.trim())
@@ -231,7 +243,7 @@ internal fun GroupsOverviewGrid(
                     resolveIcon = resolveIcon,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
-                    onChannelClick = onChannelClick,
+                    onChannelClick = openSearchResult,
                     onGuide = onGuide,
                     epgState = epgState,
                 )
@@ -250,7 +262,7 @@ internal fun GroupsOverviewGrid(
                     resolveIcon = resolveIcon,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
-                    onChannelClick = onChannelClick,
+                    onChannelClick = openSearchResult,
                     onGuide = onGuide,
                     epgState = epgState,
                 )

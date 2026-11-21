@@ -131,6 +131,12 @@ class UiPolishInstrumentedTest {
     @Test fun landscapeNavigationKeepsAllDestinationsReachableAboveTheMiniPlayer() {
         val originalOrientation = rule.activity.requestedOrientation
         try {
+            // Collapse the player first. Leaving the expanded player releases its fullscreen
+            // orientation request (FullscreenController sets UNSPECIFIED), so a landscape request
+            // made before Back is undone by it: on a device that follows the sensor - every CI
+            // emulator - the window returns to portrait and the rail is replaced by the dock.
+            rule.onNodeWithContentDescription(label(R.string.common_back)).performClick()
+            rule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertIsDisplayed()
             rule.activityRule.scenario.onActivity {
                 it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             }
@@ -138,7 +144,7 @@ class UiPolishInstrumentedTest {
                 rule.activity.resources.configuration.orientation ==
                     android.content.res.Configuration.ORIENTATION_LANDSCAPE
             }
-            rule.onNodeWithContentDescription(label(R.string.common_back)).performClick()
+            rule.waitForIdle()
             val miniBounds = rule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR)
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             val railBounds = rule.onNodeWithTag(UiTestTags.NAVIGATION_RAIL)
@@ -154,7 +160,7 @@ class UiPolishInstrumentedTest {
             rule.onNodeWithContentDescription(label(R.string.nav_settings)).performClick()
             rule.onNodeWithTag(UiTestTags.SETTINGS_SEARCH).assertIsDisplayed()
             rule.onNodeWithContentDescription(label(R.string.nav_settings)).assertIsSelected()
-            InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(500, 5_000)
+            rule.waitForIdle()
             screenshot("landscape-rail-mini")
         } finally {
             rule.activityRule.scenario.onActivity { it.requestedOrientation = originalOrientation }
@@ -428,7 +434,12 @@ class UiPolishInstrumentedTest {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             rule.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap().recycle()
         }
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        // Evidence only, never an assertion. After an orientation change on API 34+ the system can
+        // refuse a fresh UiAutomation connection ("UiAutomationService ... already registered")
+        // although every check above has passed; losing the picture must not fail the test.
+        val bitmap = runCatching { instrumentation.uiAutomation.takeScreenshot() }
+            .onFailure { android.util.Log.w("UiPolishEvidence", "No screenshot for $name: ${it.javaClass.simpleName}") }
+            .getOrNull() ?: return
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }

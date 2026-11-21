@@ -9,6 +9,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -130,6 +132,30 @@ class PhoneChannelSearchUiTest {
         rule.onNodeWithContentDescription("Layout").assertIsDisplayed().performClick()
         rule.onNodeWithText("Grid").performClick()
         rule.runOnIdle { org.junit.Assert.assertEquals(ChannelLayout.GRID, chosen) }
+    }
+
+    /** A result opens the player; the search field must let go. Left focused behind the player it
+     * kept the soft keyboard over the video, ate the first Back and, after a rotation, re-opened
+     * over a landscape screen until the navigation rail had no height left. */
+    @Test fun openingASearchResultReleasesTheSearchField() {
+        val match = M3uChannel("First", "https://unused.example.test/one")
+        var selected: M3uChannel? = null
+        rule.setContent {
+            UaCastTheme(AppTheme.CINEMA) {
+                GroupsOverviewGrid(
+                    listOf(GroupedChannels(ChannelGroup.Custom("Visible"), listOf(match))),
+                    rememberLazyGridState(), ChannelLayout.LIST, {}, {}, 0, { null }, { false }, {},
+                    { selected = it }, emptySet(), emptySet(), {}, {}, {},
+                )
+            }
+        }
+        val field = rule.onNode(hasSetTextAction())
+        field.performTextInput("Fir")
+        field.assertIsFocused()
+        awaitText("First")
+        rule.onNodeWithText("First").performClick()
+        rule.runOnIdle { assertSame(match, selected) }
+        rule.onNode(hasSetTextAction()).assertIsNotFocused()
     }
 
     private fun awaitText(text: String) {
