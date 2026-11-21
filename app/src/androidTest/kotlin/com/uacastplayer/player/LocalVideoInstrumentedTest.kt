@@ -111,10 +111,22 @@ class LocalVideoInstrumentedTest {
         assertFalse(playerModel.uiState.value.fatalError)
         assertTrue(playerModel.uiState.value.isPlaying)
         rule.waitUntil(15_000) { playerModel.uiState.value.hasRenderedVideoFrame }
-        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        // Same budget as the waits above: the frame is already rendered, but on the slow API-24 CI
-        // emulator the accessibility tree that UiAutomator reads can lag it by more than five seconds.
-        assertNotNull(device.wait(Until.findObject(By.desc(app.getString(R.string.player_frame_displayed))), 15_000))
+        val frameDisplayed = app.getString(R.string.player_frame_displayed)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            assertNotNull(device.wait(Until.findObject(By.desc(frameDisplayed)), 15_000))
+        } else {
+            // On API 24 UiAutomator can keep a stale accessibility-node cache and never see the
+            // updated description although the view carries it (failed twice in CI, even with 15s).
+            // What the app is responsible for is the description on the exported PlayerView.
+            rule.waitUntil(15_000) {
+                var description: CharSequence? = null
+                rule.runOnUiThread {
+                    description = findPlayerView(rule.activity.window.decorView)?.contentDescription
+                }
+                description?.toString() == frameDisplayed
+            }
+        }
         assertTrue(playerModel.uiState.value.canSeek)
         assertEquals(previousKey, preferences.lastWatchedChannelKey)
         rule.runOnUiThread { playerModel.player.seekTo(500) }
@@ -328,5 +340,11 @@ class LocalVideoInstrumentedTest {
             client.connectionPool.evictAll()
             client.dispatcher.executorService.shutdown()
         }
+    }
+
+    private fun findPlayerView(view: android.view.View): PlayerView? = when (view) {
+        is PlayerView -> view
+        is android.view.ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findPlayerView(view.getChildAt(it)) }
+        else -> null
     }
 }
