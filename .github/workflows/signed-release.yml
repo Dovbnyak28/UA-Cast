@@ -90,10 +90,10 @@ jobs:
     env:
       RELEASE_VERSION_CODE: ${{ inputs.version_code }}
       RELEASE_VERSION_NAME: ${{ inputs.version_name }}
-      ZORIK_KEYSTORE_BASE64: ${{ secrets.ZORIK_KEYSTORE_BASE64 || secrets.UACAST_KEYSTORE_BASE64 }}
-      ZORIK_STORE_PASSWORD: ${{ secrets.ZORIK_STORE_PASSWORD || secrets.UACAST_STORE_PASSWORD }}
-      ZORIK_KEY_ALIAS: ${{ secrets.ZORIK_KEY_ALIAS || secrets.UACAST_KEY_ALIAS }}
-      ZORIK_KEY_PASSWORD: ${{ secrets.ZORIK_KEY_PASSWORD || secrets.UACAST_KEY_PASSWORD }}
+      ZORIK_KEYSTORE_BASE64: ${{ secrets.ZORIK_KEYSTORE_BASE64 }}
+      ZORIK_STORE_PASSWORD: ${{ secrets.ZORIK_STORE_PASSWORD }}
+      ZORIK_KEY_ALIAS: ${{ secrets.ZORIK_KEY_ALIAS }}
+      ZORIK_KEY_PASSWORD: ${{ secrets.ZORIK_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
 

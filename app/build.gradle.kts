@@ -129,9 +129,10 @@ android {
 
     signingConfigs {
         create("release") {
-            // ZORIK_* since the rename; the pre-rename UACAST_* names still work until the
-            // production secrets and local gradle.properties are moved over. One prefix is used as a
-            // whole, so a half-migrated setup cannot pair one keystore's file with another's password.
+            // ZORIK_* since the rename (the signed-release workflow passes these); the pre-rename
+            // UACAST_* names are still read for an existing local ~/.gradle/gradle.properties.
+            // One prefix is used as a whole, so a half-migrated setup cannot pair one keystore's
+            // file with another's password.
             fun lookup(key: String): String? =
                 System.getenv(key)?.takeIf(String::isNotBlank) ?: (project.findProperty(key) as String?)?.takeIf(String::isNotBlank)
             val prefix = if (lookup("ZORIK_STORE_FILE") != null) "ZORIK_" else "UACAST_"

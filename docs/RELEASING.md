@@ -115,9 +115,11 @@ environment needs these protected secrets:
 - `ZORIK_KEY_ALIAS`;
 - `ZORIK_KEY_PASSWORD`.
 
-Until these exist, the workflow falls back to the pre-rename `UACAST_*` secrets with the same
-values. Create the `ZORIK_*` secrets in the `production` environment, run one signed build, then
-delete the `UACAST_*` ones; after that the fallback can be removed from the workflow and Gradle.
+The `production` environment exists (created 2026-11-22) but holds no secrets yet, and there never
+were `UACAST_*` repository secrets, so the workflow stops at its secret check until the owner adds
+the four values (Settings > Environments > production, or `gh secret set NAME --env production`).
+Only a local `~/.gradle/gradle.properties` may still use the pre-rename `UACAST_*` names; Gradle reads
+them when no `ZORIK_STORE_FILE` is set, and that fallback can go once the local file is renamed.
 
 The workflow materializes the key only under the runner's temporary directory, passes
 `-Pzorik.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
