@@ -1,0 +1,134 @@
+package app.zorik.player.ui.channels
+import app.zorik.player.ui.theme.UaTheme
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import app.zorik.player.R
+import app.zorik.player.playlist.ChannelListKeys
+import app.zorik.player.playlist.ChannelRowShape
+import app.zorik.player.playlist.ChannelSearchResult
+import app.zorik.player.playlist.M3uChannel
+import app.zorik.player.ui.components.SecondaryButton
+import app.zorik.player.ui.components.animationsAllowed
+import app.zorik.player.ui.theme.AppIcons
+import app.zorik.player.ui.theme.BodyText
+import app.zorik.player.ui.theme.GapM
+import app.zorik.player.ui.theme.HairlineInsetChannels
+import app.zorik.player.ui.theme.RadiusList
+import java.io.File
+
+@Composable
+internal fun NoSearchResults(query: String, onClearSearch: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.widthIn(max = 480.dp).verticalScroll(rememberScrollState()).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(AppIcons.Search, contentDescription = null, tint = UaTheme.palette.azure)
+            Text(
+                text = stringResource(R.string.channels_no_search_results, query),
+                style = BodyText,
+                color = UaTheme.palette.labelSecondary,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            SecondaryButton(
+                text = stringResource(R.string.channels_clear_search),
+                onClick = onClearSearch,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
+    }
+}
+
+/** Flat, cross-group results for a whole-playlist [app.zorik.player.playlist.ChannelSearch] - each
+ * row shows which group a match came from, since it's no longer implied by an already-open group
+ * screen. */
+@Composable
+internal fun ChannelSearchResultsList(
+    results: List<ChannelSearchResult>,
+    iconRefreshKey: Any,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    onChannelClick: (M3uChannel) -> Unit,
+    onGuide: (M3uChannel) -> Unit = {},
+    epgState: app.zorik.player.epg.EpgUiState = app.zorik.player.epg.EpgUiState(),
+) {
+    val animateItems = animationsAllowed()
+    // One LazyColumn item per result - see the itemsIndexed usage in SingleGroupChannelList for
+    // why this must not collapse back into a single item wrapping a forEachIndexed Column.
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(top = GapM)) {
+        itemsIndexed(
+            results,
+            key = { index, result -> ChannelListKeys.keyFor(index, result.channel.streamUrl) },
+        ) { index, result ->
+            val rounding = ChannelRowShape.roundingFor(index, results.lastIndex)
+            val shape = RoundedCornerShape(
+                topStart = if (rounding.top) RadiusList else 0.dp,
+                topEnd = if (rounding.top) RadiusList else 0.dp,
+                bottomStart = if (rounding.bottom) RadiusList else 0.dp,
+                bottomEnd = if (rounding.bottom) RadiusList else 0.dp,
+            )
+            // flat by design: each row's own rounding varies (see ChannelRowShape) so adjacent
+            // rows read as one continuous card with hairline dividers between them - a per-row
+            // raisedSurface border would draw a seam at every row instead.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (animateItems) Modifier.animateItem() else Modifier)
+                    .clip(shape)
+                    .background(UaTheme.palette.surface1),
+            ) {
+                ChannelRow(
+                    channel = result.channel,
+                    programme = rememberChannelProgramme(result.channel, epgState),
+                    nowMillis = epgState.nowMillis,
+                    density = app.zorik.player.core.settings.ListDensity.FULL,
+                    isLocked = false,
+                    supportingText = groupLabel(result.group),
+                    onLongClick = {},
+                    onGuide = { onGuide(result.channel) },
+                    iconRefreshKey = iconRefreshKey,
+                    resolveIcon = resolveIcon,
+                    isFavorite = isFavorite(result.channel),
+                    onToggleFavorite = { onToggleFavorite(result.channel) },
+                    onClick = { onChannelClick(result.channel) },
+                )
+                if (!rounding.bottom) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = HairlineInsetChannels)
+                            .height(1.dp)
+                            .background(UaTheme.palette.hairline),
+                    )
+                }
+            }
+        }
+    }
+}
+

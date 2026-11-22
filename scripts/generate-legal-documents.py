@@ -9,7 +9,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-DATE = "2026-10-26"
+DATE = "2026-11-21"
 LOCALES = {"en": "values", "uk": "values-uk", "ru": "values-ru", "es": "values-es"}
 STYLE = """body{font-family:system-ui,sans-serif;max-width:760px;margin:auto;padding:24px 20px 64px;
 line-height:1.65;color:#171717;background:#fff}h1{font-size:1.6rem}h2{font-size:1.15rem;margin-top:2em}
@@ -52,10 +52,10 @@ def generated_documents():
                     for index in range(1, 9)]
         sections.append(("FFmpeg / LGPL", strings["legal_ffmpeg_notice"] +
                          " https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html — " +
-                         "https://github.com/Dovbnyak28/UA-Cast/releases"))
+                         "https://github.com/Dovbnyak28/Zorik/releases"))
         terms.append((language, names[language], strings["terms_title"], strings["terms_intro"], sections))
-    return {"privacy-policy.html": render("UA Cast Player — Privacy Policy", privacy),
-            "terms-of-use.html": render("UA Cast Player — Terms of Use", terms)}
+    return {"privacy-policy.html": render("Zorik Player — Privacy Policy", privacy),
+            "terms-of-use.html": render("Zorik Player — Terms of Use", terms)}
 
 
 def main():

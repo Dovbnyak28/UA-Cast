@@ -15,8 +15,8 @@
 
 set -euo pipefail
 
-LABELS="app/src/main/kotlin/com/uacastplayer/ui/premium/PremiumLabels.kt"
-UI_SOURCES="app/src/main/kotlin/com/uacastplayer"
+LABELS="app/src/main/kotlin/app/zorik/player/ui/premium/PremiumLabels.kt"
+UI_SOURCES="app/src/main/kotlin/app/zorik/player"
 
 if [ ! -f "$LABELS" ]; then
     echo "check-sold-features-are-gated: $LABELS not found" >&2

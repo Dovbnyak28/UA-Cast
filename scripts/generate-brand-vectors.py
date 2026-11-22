@@ -1,6 +1,6 @@
 """Export the editable brand geometry to Android XML and legacy SVG render inputs.
 
-Existing attributed TV wordmark contours remain intact. No external artwork is introduced.
+The TV banner's ZORIK wordmark is hand-drawn strokes and stays as it is. No external artwork.
 Render candidates with render-brand-icons.cjs, review them before copying to resources.
 """
 from pathlib import Path
@@ -53,7 +53,7 @@ mark(group)
 banner.insert(1, group)
 ET.indent(banner, space='    ')
 banner_path.write_text('<?xml version="1.0" encoding="utf-8"?>\n'
-    '<!-- Shared brand mark; existing wordmark uses attributed Roboto contours. -->\n'
+    '<!-- Shared brand mark and the ZORIK wordmark (original strokes). -->\n'
     + ET.tostring(banner, encoding='unicode') + '\n', encoding='utf-8')
 
 output = ROOT / 'build/branding'

@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-/** Standalone synthetic TCP control. No UA Cast/Android dependencies or real stream URLs. */
+/** Standalone synthetic TCP control. No Zorik/Android dependencies or real stream URLs. */
 public class SocketTransferProbe {
     private static final byte[] BODY = new byte[256 * 1024];
     private static final byte[] HEADER = ("HTTP/1.1 200 OK\r\nContent-Length: " + BODY.length +

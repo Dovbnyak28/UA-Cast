@@ -1,10 +1,10 @@
 {
-  "updated": "2026-10-26",
+  "updated": "2026-11-21",
   "languages": {
     "en": {
       "name": "English",
-      "title": "UA Cast Player — Privacy Policy",
-      "intro": "Publisher: ROMAN DOVBNYAK (Dovbnyak28), individual developer. Legal and privacy contact: dovbnyak@gmail.com. UA-Cast plays sources and files you select. This document explains local processing and transfers, not a promise that every third-party SDK is telemetry-free.",
+      "title": "Zorik Player — Privacy Policy",
+      "intro": "Publisher: ROMAN DOVBNYAK (Dovbnyak28), individual developer. Legal and privacy contact: dovbnyak@gmail.com. Zorik plays sources and files you select. This document explains local processing and transfers, not a promise that every third-party SDK is telemetry-free.",
       "sections": [
         [
           "Local data and document access",
@@ -19,8 +19,8 @@
           "When you request casting, your receiver receives the media/temporary relay URL and relevant metadata; a local-file or relayed session also transmits media bytes. Pairing shares session information, displayed media/channel names, playback state and commands between your devices. These local connections may use unencrypted HTTP for receiver compatibility. A session token authorises access but does not encrypt traffic. Use a trusted network and receiver; provider restrictions still apply."
         ],
         [
-          "Google SDKs and updates",
-          "The developer operates no analytics backend or automatic crash-upload service, and no advertising SDK is integrated. Google Cast can transmit anonymised discovery/session events, SDK/app metadata and device information to Google for SDK improvement; the developer does not control that SDK retention or opt-out. Read https://developers.google.com/cast/docs/android_sender/data_disclosure and https://policies.google.com/privacy. If Google Play checkout is enabled, Google processes purchase information under its policies. GitHub update checks/downloads expose normal network metadata to GitHub, not your playlist or viewing history."
+          "Google SDKs",
+          "The developer operates no analytics backend or automatic crash-upload service, and no advertising SDK is integrated. Google Cast can transmit anonymised discovery/session events, SDK/app metadata and device information to Google for SDK improvement; the developer does not control that SDK retention or opt-out. Read https://developers.google.com/cast/docs/android_sender/data_disclosure and https://policies.google.com/privacy. If Google Play checkout is enabled, Google processes purchase information under its policies."
         ],
         [
           "Backup and external copies",
@@ -46,8 +46,8 @@
     },
     "uk": {
       "name": "Українська",
-      "title": "UA Cast Player — Політика конфіденційності",
-      "intro": "Видавець: ROMAN DOVBNYAK (Dovbnyak28), індивідуальний розробник. Правові питання та конфіденційність: dovbnyak@gmail.com. UA-Cast відтворює вибрані вами джерела й файли. Документ описує локальну обробку та передачу даних, а не обіцяє відсутності телеметрії в кожному сторонньому SDK.",
+      "title": "Zorik Player — Політика конфіденційності",
+      "intro": "Видавець: ROMAN DOVBNYAK (Dovbnyak28), індивідуальний розробник. Правові питання та конфіденційність: dovbnyak@gmail.com. Zorik відтворює вибрані вами джерела й файли. Документ описує локальну обробку та передачу даних, а не обіцяє відсутності телеметрії в кожному сторонньому SDK.",
       "sections": [
         [
           "Локальні дані й доступ до документів",
@@ -62,8 +62,8 @@
           "За вашим запитом приймач отримує медіапосилання або тимчасове посилання ретранслятора й відповідні метадані; локальний файл чи ретрансляція також передають медіабайти. Сполучення передає між вашими пристроями відомості про сеанс, відображувані назви медіа/каналів, стан і команди. Для сумісності приймачів ці з’єднання можуть використовувати незашифрований HTTP. Токен дозволяє доступ, але не шифрує трафік. Використовуйте довірену мережу й приймач; обмеження провайдера зберігаються."
         ],
         [
-          "Google SDK та оновлення",
-          "Розробник не має власного сервера аналітики чи автоматичного надсилання звітів про збої; рекламний SDK не інтегровано. Google Cast може передавати Google анонімізовані події пошуку/сеансів, метадані SDK/програми та дані пристрою для покращення SDK; розробник не керує строком зберігання чи відмовою від цієї телеметрії. Опис: https://developers.google.com/cast/docs/android_sender/data_disclosure та https://policies.google.com/privacy. Якщо продажі Google Play увімкнено, Google обробляє покупки за власною політикою. Перевірки/завантаження оновлень GitHub передають звичайні мережеві метадані, а не ваш плейлист чи історію перегляду."
+          "Google SDK",
+          "Розробник не має власного сервера аналітики чи автоматичного надсилання звітів про збої; рекламний SDK не інтегровано. Google Cast може передавати Google анонімізовані події пошуку/сеансів, метадані SDK/програми та дані пристрою для покращення SDK; розробник не керує строком зберігання чи відмовою від цієї телеметрії. Опис: https://developers.google.com/cast/docs/android_sender/data_disclosure та https://policies.google.com/privacy. Якщо продажі Google Play увімкнено, Google обробляє покупки за власною політикою."
         ],
         [
           "Резервні копії та зовнішні файли",
@@ -89,8 +89,8 @@
     },
     "ru": {
       "name": "Русский",
-      "title": "UA Cast Player — Политика конфиденциальности",
-      "intro": "Издатель: ROMAN DOVBNYAK (Dovbnyak28), индивидуальный разработчик. Правовые вопросы и конфиденциальность: dovbnyak@gmail.com. UA-Cast воспроизводит выбранные вами источники и файлы. Документ описывает локальную обработку и передачу, а не обещает отсутствия телеметрии в каждом стороннем SDK.",
+      "title": "Zorik Player — Политика конфиденциальности",
+      "intro": "Издатель: ROMAN DOVBNYAK (Dovbnyak28), индивидуальный разработчик. Правовые вопросы и конфиденциальность: dovbnyak@gmail.com. Zorik воспроизводит выбранные вами источники и файлы. Документ описывает локальную обработку и передачу, а не обещает отсутствия телеметрии в каждом стороннем SDK.",
       "sections": [
         [
           "Локальные данные и документы",
@@ -105,8 +105,8 @@
           "По вашему запросу приёмник получает медиассылку или временную ссылку ретранслятора и метаданные; локальный файл или ретрансляция также передают медиабайты. Сопряжение передаёт между вашими устройствами данные сеанса, отображаемые названия медиа/каналов, состояние и команды. Для совместимости возможен незашифрованный HTTP. Токен разрешает доступ, но не шифрует трафик. Используйте доверенную сеть и приёмник; ограничения провайдера сохраняются."
         ],
         [
-          "Google SDK и обновления",
-          "У разработчика нет собственного сервера аналитики или автоматической отправки отчётов о сбоях; рекламный SDK не интегрирован. Google Cast может передавать Google анонимизированные события обнаружения/сеансов, метаданные SDK/программы и данные устройства для улучшения SDK; разработчик не управляет сроком хранения или отказом от этой телеметрии. Описание: https://developers.google.com/cast/docs/android_sender/data_disclosure и https://policies.google.com/privacy. Если продажи Google Play включены, Google обрабатывает покупки по своим правилам. Проверки/загрузки обновлений GitHub передают обычные сетевые метаданные, а не плейлист или историю просмотра."
+          "Google SDK",
+          "У разработчика нет собственного сервера аналитики или автоматической отправки отчётов о сбоях; рекламный SDK не интегрирован. Google Cast может передавать Google анонимизированные события обнаружения/сеансов, метаданные SDK/программы и данные устройства для улучшения SDK; разработчик не управляет сроком хранения или отказом от этой телеметрии. Описание: https://developers.google.com/cast/docs/android_sender/data_disclosure и https://policies.google.com/privacy. Если продажи Google Play включены, Google обрабатывает покупки по своим правилам."
         ],
         [
           "Резервные копии",
@@ -132,8 +132,8 @@
     },
     "es": {
       "name": "Español",
-      "title": "UA Cast Player — Política de privacidad",
-      "intro": "Editor: ROMAN DOVBNYAK (Dovbnyak28), desarrollador individual. Contacto legal y de privacidad: dovbnyak@gmail.com. UA-Cast reproduce las fuentes y los archivos que elijas. Este documento describe el tratamiento local y las transferencias; no promete que todos los SDK de terceros carezcan de telemetría.",
+      "title": "Zorik Player — Política de privacidad",
+      "intro": "Editor: ROMAN DOVBNYAK (Dovbnyak28), desarrollador individual. Contacto legal y de privacidad: dovbnyak@gmail.com. Zorik reproduce las fuentes y los archivos que elijas. Este documento describe el tratamiento local y las transferencias; no promete que todos los SDK de terceros carezcan de telemetría.",
       "sections": [
         [
           "Datos locales y acceso a documentos",
@@ -148,8 +148,8 @@
           "Cuando solicitas una transmisión, el receptor recibe la URL multimedia o temporal de retransmisión y metadatos relevantes; los archivos locales o retransmisiones también envían contenido. El emparejamiento intercambia información de sesión, nombres de medios/canales, estado y órdenes entre tus dispositivos. Estas conexiones locales pueden usar HTTP sin cifrar por compatibilidad. El token de sesión autoriza el acceso, pero no cifra el tráfico. Utiliza una red y un receptor de confianza; siguen aplicándose las restricciones del proveedor."
         ],
         [
-          "SDK de Google y actualizaciones",
-          "El desarrollador no opera un servicio de analítica ni envío automático de fallos, y no hay SDK publicitario integrado. Google Cast puede transmitir eventos anónimos de descubrimiento/sesión, metadatos del SDK/app e información del dispositivo para mejorar el SDK; el desarrollador no controla su retención ni exclusión. Consulta https://developers.google.com/cast/docs/android_sender/data_disclosure y https://policies.google.com/privacy. Si se habilitan compras de Google Play, Google tratará los datos de compra según sus políticas. GitHub recibe metadatos normales al buscar o descargar actualizaciones, no tu lista ni historial de reproducción."
+          "SDK de Google",
+          "El desarrollador no opera un servicio de analítica ni envío automático de fallos, y no hay SDK publicitario integrado. Google Cast puede transmitir eventos anónimos de descubrimiento/sesión, metadatos del SDK/app e información del dispositivo para mejorar el SDK; el desarrollador no controla su retención ni exclusión. Consulta https://developers.google.com/cast/docs/android_sender/data_disclosure y https://policies.google.com/privacy. Si se habilitan compras de Google Play, Google tratará los datos de compra según sus políticas."
         ],
         [
           "Copias de seguridad y archivos externos",

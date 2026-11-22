@@ -1,4 +1,4 @@
-UA-Cast software decoder module — independently built audio/video extensions.
+Zorik Player software decoder module — independently built audio/video extensions.
 
 Java/JNI bridge derived from AndroidX Media contribution #1591 (Apache-2.0),
 commit ddf578a27a97e6296062d1997ba41784b0dcf497, AOSP copyright 2016/2019/2020.

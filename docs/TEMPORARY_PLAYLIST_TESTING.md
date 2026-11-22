@@ -1,6 +1,6 @@
 # Private temporary playlist test
 
-The optional Gradle property `uacast.temporaryPlaylist` embeds a local M3U file
+The optional Gradle property `zorik.temporaryPlaylist` embeds a local M3U file
 as `assets/temporary-playlist.m3u8` **only in debug APKs**. It never registers the
 asset with release, Play or benchmark variants. The source file remains outside
 the repository; generated copies are under ignored `app/build/`. Do not share
@@ -9,10 +9,10 @@ these debug APKs: embedded playlists can contain private stream credentials.
 Example (use an absolute local path):
 
 ```powershell
-.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest "-Puacast.temporaryPlaylist=C:/private/playlist.m3u8"
+.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest "-Pzorik.temporaryPlaylist=C:/private/playlist.m3u8"
 adb install -r app/build/outputs/apk/debug/app-universal-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w -e class com.uacastplayer.playlist.TemporaryPlaylistInstrumentedTest -e temporaryPlaylist true com.uacastplayer.debug.test/androidx.test.runner.AndroidJUnitRunner
+adb shell am instrument -w -e class app.zorik.player.playlist.TemporaryPlaylistInstrumentedTest -e temporaryPlaylist true app.zorik.player.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 The opt-in test imports through the real file/controller/repository pipeline,

@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-PACKAGE="com.uacastplayer.debug"
+PACKAGE="app.zorik.player.debug"
 RUNNER="$PACKAGE.test/androidx.test.runner.AndroidJUnitRunner"
 APP_APK="app/build/outputs/apk/debug/app-universal-debug.apk"
 TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
@@ -32,7 +32,7 @@ setup_log="$report_dir/setup.txt"
 # This directory is generated test output, not application data. A failed setup must not upload
 # the previous invocation's passing summary or crash buffer as evidence for the current run.
 : > "$report_dir/runner.txt"
-rm -f -- "$report_dir/crash-logcat.txt"
+rm -f -- "$report_dir/crash-logcat.txt" "$report_dir/process-death-logcat.txt"
 device_is_emulator=0
 adb_timeout_seconds=${INSTRUMENTED_ADB_TIMEOUT_SECONDS:-30}
 install_timeout_seconds=${INSTRUMENTED_INSTALL_TIMEOUT_SECONDS:-180}
@@ -71,6 +71,13 @@ capture_failed_emulator_crash() {
     if [ "$exit_status" -ne 0 ] && [ "$device_is_emulator" = "1" ]; then
         run_adb "$adb_timeout_seconds" "emulator crash diagnostics" -s "$DEVICE_SERIAL" logcat -b crash -d -v threadtime \
             > "$report_dir/crash-logcat.txt" 2>&1 || true
+        # "Process crashed" with an empty crash buffer means the process was killed rather than
+        # threw: low-memory killer, an ANR, or a native signal. Keep only those system lines (API 30
+        # did this twice inside backup tests with nothing else to go on).
+        run_adb "$adb_timeout_seconds" "emulator process-death diagnostics" -s "$DEVICE_SERIAL" \
+            logcat -b events -b main -b system -d -v threadtime 2>/dev/null \
+            | grep -E 'am_kill|am_proc_died|am_anr|lowmemorykiller|lmkd|ANR in|Fatal signal|Low on memory|has died' \
+            > "$report_dir/process-death-logcat.txt" 2>&1 || true
     fi
     return "$exit_status"
 }

@@ -9,13 +9,13 @@ serial="${ANDROID_SERIAL:-emulator-5554}"
 }
 sdk="${ANDROID_HOME:?Android SDK required}"
 tools="$(find "$sdk/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-work="$(mktemp -d "${RUNNER_TEMP:-/tmp}/uacast-relink.XXXXXX")"
+work="$(mktemp -d "${RUNNER_TEMP:-/tmp}/zorik-relink.XXXXXX")"
 reports=app/build/reports/relink
 mkdir -p "$reports"
 # Contains only a disposable self-generated signing key and intermediate unsigned test APKs.
 trap 'rm -rf -- "$work"' EXIT
 keytool -genkeypair -keystore "$work/recipient.p12" -storetype PKCS12 -alias recipient \
-  -storepass relink-test-only -keypass relink-test-only -dname 'CN=UA-Cast recipient relink test' \
+  -storepass relink-test-only -keypass relink-test-only -dname 'CN=Zorik Player recipient relink test' \
   -keyalg RSA -keysize 2048 -validity 2 > "$reports/key-generation.log" 2>&1
 sign_apk() {
   "$tools/zipalign" -P 16 -f 4 "$1" "$work/aligned.apk"
@@ -41,13 +41,13 @@ probe_apk "$app_apk" "$work/app-unsigned.apk" > "$reports/app-repack.txt"
 sign_apk "$work/app-unsigned.apk" "$work/app.apk"
 sign_apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk "$work/app-test.apk"
 # Newly generated recipient signatures intentionally cannot update the publisher-signed packages.
-adb -s "$serial" uninstall com.uacastplayer.debug.test > /dev/null 2>&1 || true
-adb -s "$serial" uninstall com.uacastplayer.debug > /dev/null 2>&1 || true
+adb -s "$serial" uninstall app.zorik.player.debug.test > /dev/null 2>&1 || true
+adb -s "$serial" uninstall app.zorik.player.debug > /dev/null 2>&1 || true
 adb -s "$serial" install "$work/app.apk"
 adb -s "$serial" install "$work/app-test.apk"
 timeout --kill-after=5s 180s adb -s "$serial" shell am instrument -w -r \
-  -e uacast.relinkProbe true -e class com.uacastplayer.player.SoftwareDecoderWiringInstrumentedTest \
-  com.uacastplayer.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$reports/app-runner.txt"
+  -e zorik.relinkProbe true -e class app.zorik.player.player.SoftwareDecoderWiringInstrumentedTest \
+  app.zorik.player.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$reports/app-runner.txt"
 grep -Eq 'OK \(1 test\)' "$reports/app-runner.txt"
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|Process crashed' "$reports/app-runner.txt"
 probe_apk ffmpegdecoder/build/outputs/apk/androidTest/debug/ffmpegdecoder-debug-androidTest.apk "$work/decoder-unsigned.apk" \
@@ -55,7 +55,7 @@ probe_apk ffmpegdecoder/build/outputs/apk/androidTest/debug/ffmpegdecoder-debug-
 sign_apk "$work/decoder-unsigned.apk" "$work/decoder.apk"
 adb -s "$serial" uninstall androidx.media3.decoder.ffmpeg.test > /dev/null 2>&1 || true
 adb -s "$serial" install "$work/decoder.apk"
-timeout --kill-after=5s 300s adb -s "$serial" shell am instrument -w -r -e uacast.relinkProbe true \
+timeout --kill-after=5s 300s adb -s "$serial" shell am instrument -w -r -e zorik.relinkProbe true \
   androidx.media3.decoder.ffmpeg.test/androidx.test.runner.AndroidJUnitRunner | tee "$reports/decoder-runner.txt"
 grep -Eq 'OK \([1-9][0-9]* tests?\)' "$reports/decoder-runner.txt"
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|Process crashed' "$reports/decoder-runner.txt"

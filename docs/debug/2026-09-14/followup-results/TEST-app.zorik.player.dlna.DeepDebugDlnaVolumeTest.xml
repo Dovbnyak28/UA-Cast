@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.zorik.player.dlna.DeepDebugDlnaVolumeTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-14T19:31:17.605Z" hostname="PC-ROMARIO" time="0.335">
+  <properties/>
+  <testcase name="two rejected volume commands must retain last confirmed renderer volume" classname="app.zorik.player.dlna.DeepDebugDlnaVolumeTest" time="0.335"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

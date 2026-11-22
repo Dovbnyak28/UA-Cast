@@ -7,7 +7,7 @@ pattern='BenchmarkFixtureActivity|EpgParseBenchmarkActivity'
 # playlists and settings when someone runs Macrobenchmark on a real phone. Keep destructive reset
 # available only as an explicit call-site opt-in (`clearPackage = true`).
 if grep -Eq 'fun prepareFixture\(mode: String, clearPackage: Boolean = true\)' \
-  baselineprofile/src/main/kotlin/com/uacastplayer/baselineprofile/BenchmarkAppDriver.kt; then
+  baselineprofile/src/main/kotlin/app/zorik/player/baselineprofile/BenchmarkAppDriver.kt; then
   echo 'Benchmark fixture preparation must not clear the target package by default' >&2
   exit 1
 fi

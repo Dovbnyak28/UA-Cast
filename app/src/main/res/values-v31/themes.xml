@@ -3,10 +3,10 @@
 
     <!-- Transparent vector artwork fits the plain splash 192/288dp safe circle. No bitmap enlargement is needed. -->
     <!-- See themes.xml's base style for the non-v31 fallback, kept in sync. -->
-    <style name="Theme.UaCastPlayer.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/uacast_background</item>
+    <style name="Theme.ZorikPlayer.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/zorik_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
-        <item name="postSplashScreenTheme">@style/Theme.UaCastPlayer</item>
+        <item name="postSplashScreenTheme">@style/Theme.ZorikPlayer</item>
     </style>
 
 </resources>

@@ -3,14 +3,13 @@
 Єдина точка входу «де ми зараз». Датовані звіти лежать у [`archive/`](archive/); цей файл
 посилається на останні з них і оновлюється разом з кожним етапом.
 
-Оновлено: 2026-11-21 (release hardening + Google Play Billing, гілка `codex/release-0.9.6`).
+Оновлено: 2026-11-21 (release hardening, Google Play Billing і видалення self-updater злито в `master`, PR #5; версія 0.9.8).
 
 ## Версія
 
-- `versionName` 0.9.7, `versionCode` 16 (`app/build.gradle.kts`; CI може перевизначити через
-  `-Puacast.versionCode` / `-Puacast.versionName`).
-- Робоча гілка: `codex/release-0.9.6`. Злиття в `master` — після зеленого CI (фаза F плану
-  [`archive/CODEX_PROMPT_RELEASE_HARDENING_2026-11-20.md`](archive/CODEX_PROMPT_RELEASE_HARDENING_2026-11-20.md)).
+- `applicationId` `app.zorik.player`; `versionName` 0.9.8, `versionCode` 17 (`app/build.gradle.kts`; CI може перевизначити через
+  `-Pzorik.versionCode` / `-Pzorik.versionName`).
+- `codex/release-0.9.6` злито в `master` (5522ac7); підняття версії — гілка `codex/release-0.9.8`.
 
 ## Що перевірено
 
@@ -49,6 +48,15 @@
   підписаний реліз з HEAD і API 30 — за власником.
 - D: [базова лінія продуктивності](archive/PERFORMANCE_BASELINE_2026-11-20.md), бюджети 10k/40k.
 - E: матриця 320dp / 200% / 48dp; виправлено обрізані заголовки налаштувань.
+- Логотип перероблено 2026-11-22: прибрано дуги в куті екрана (це значок Google Cast, який Google не дозволяє
+  в чужих логотипах); `design/brand/mark.svg` → іконка, заставка, TV-банер. В умовах додано рядок про торговельні
+  марки Google Cast/Chromecast/Google TV та інших виробників.
+- Назву змінено на **Zorik Player** 2026-11-22: словесна марка ЄС «UA CAST» (EUTM 018773428, UAVIA) покриває
+  класи 9 і 38. «ZORIK» у WIPO Global Brand Database у класах 9/38/41/42 не знайдено (попередній пошук, не
+  юридичний висновок). `applicationId` і пакети коду — `app.zorik.player`: 0.9.8 ставиться як новий
+  застосунок поруч зі старим, дані переносяться резервною копією (старі `.uacast` відновлюються).
+  Свідомо лишились: сигнатура формату копії `UACASTBK` (сумісність), секрети підпису `UACAST_*` у GitHub,
+  `CMakeLists.txt`/`ffmpeg_jni.cc`/`prepare-software-decoder.py` (хешовані входи native-збірки).
 - Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),
   `premium_lifetime` = 3,99 EUR (ціна — у Play Console).
@@ -67,8 +75,12 @@
 - Одноразовий збій перевірки паузи під час буферизації на Samsung (системне вікно); причинний
   зв'язок не доведений.
 - Підписаний реліз з HEAD і оновлення на API 30 не виконані (фаза C);
-  оновлення 0.9.3 → 0.9.7 на API 36 пройдено.
-- Версія 0.9.7 уже опублікована на GitHub (24.09) — перед релізом підняти до 0.9.8 / versionCode 17.
+  оновлення 0.9.3 → 0.9.7 на API 36 пройдено. 0.9.8 має новий ID (`app.zorik.player`) і ставиться поруч зі
+  старою версією; перенесення даних з 0.9.x — резервною копією (перевірити вручну на пристрої).
+- Версію піднято до 0.9.8 / versionCode 17 (0.9.7 уже опублікована на GitHub 24.09).
+- Політика конфіденційності оновлена 2026-11-21 (прибрано перевірки оновлень з GitHub): опубліковані сторінки
+  треба передеплоїти з `legal/`, а хеші в `config/legal/release-readiness.json` (`public_privacy_deployment`)
+  оновити; `signed-release` також чекає на записане схвалення продажів (`commerce`).
 - Реальна покупка Premium (3,99 €), acknowledge, restore і refund перевіряються лише на тестовому треку Play
   з ліцензованим тестувальником.
 - Два інструментальні тести на API 36 (`UiPolishInstrumentedTest.landscapeNavigation…`,
@@ -79,7 +91,7 @@
 ## Наступні кроки
 
 1. Власнику: підписати й завантажити `bundlePlay` на internal testing, пройти чекліст покупок з
-   `RELEASING.md`, підняти версію.
+   `RELEASING.md`.
 2. Ручні перевірки на реальному обладнанні (розділ «Ручні перевірки» плану): Chromecast, DLNA
    (Hisense VIDAA), Android TV / Mi TV, PiP і повороти на бюджетних Xiaomi, встановлення
    підписаного релізу поверх попереднього.

@@ -38,7 +38,7 @@ abstract class GenerateTemporaryPlaylistAssets : DefaultTask() {
 }
 
 val temporaryPlaylistAssets = tasks.register<GenerateTemporaryPlaylistAssets>("generateTemporaryPlaylistAssets") {
-    val localPath = providers.gradleProperty("uacast.temporaryPlaylist")
+    val localPath = providers.gradleProperty("zorik.temporaryPlaylist")
     if (localPath.isPresent) playlistFile.set(layout.projectDirectory.file(localPath.get()))
     outputDirectory.set(layout.buildDirectory.dir("generated/temporaryPlaylistAssets/debug"))
 }
@@ -64,17 +64,17 @@ detekt {
 }
 
 android {
-    namespace = "com.uacastplayer"
+    namespace = "app.zorik.player"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.uacastplayer"
+        applicationId = "app.zorik.player"
         minSdk = 24
         targetSdk = 36
-        // CI overrides these via -Puacast.versionCode/-Puacast.versionName; the defaults below
+        // CI overrides these via -Pzorik.versionCode/-Pzorik.versionName; the defaults below
         // are what local (non-CI) builds get.
-        versionCode = (project.findProperty("uacast.versionCode") as String?)?.toInt() ?: 16
-        versionName = (project.findProperty("uacast.versionName") as String?) ?: "0.9.7"
+        versionCode = (project.findProperty("zorik.versionCode") as String?)?.toInt() ?: 17
+        versionName = (project.findProperty("zorik.versionName") as String?) ?: "0.9.8"
         // Real Google Play checkout. Only a build installed from Play can be paid for, so only the
         // play variant turns it on; the GitHub APK and debug keep the honest "no store" provider.
         buildConfigField("boolean", "PLAY_BILLING_LIVE", "false")
@@ -167,7 +167,7 @@ android {
                 releaseSigning.keyAlias.isNullOrBlank() ||
                 releaseSigning.keyPassword.isNullOrBlank()
             if (
-                (project.findProperty("uacast.requireSigning") as String?)?.toBoolean() == true &&
+                (project.findProperty("zorik.requireSigning") as String?)?.toBoolean() == true &&
                     signingMissing
             ) {
                 throw GradleException(
@@ -186,7 +186,7 @@ android {
         }
         // Local opt-in minified regression package: never replace the release/debug user's data.
         // Disabled in normal builds so it cannot silently add a distribution variant.
-        if (providers.gradleProperty("uacast.minifiedRegression").orNull == "true") {
+        if (providers.gradleProperty("zorik.minifiedRegression").orNull == "true") {
             create("minifiedRegression") {
                 initWith(getByName("release"))
                 matchingFallbacks += listOf("release")
@@ -197,10 +197,10 @@ android {
             }
         }
     }
-    if (providers.gradleProperty("uacast.minifiedRegression").orNull == "true") {
+    if (providers.gradleProperty("zorik.minifiedRegression").orNull == "true") {
         testBuildType = "minifiedRegression"
         // SDK-only probe avoids AndroidJUnitRunner's shared classpath assumptions after R8.
-        defaultConfig.testInstrumentationRunner = "com.uacastplayer.player.MinifiedNativeProbeRunner"
+        defaultConfig.testInstrumentationRunner = "app.zorik.player.player.MinifiedNativeProbeRunner"
     }
 
     compileOptions {
@@ -437,9 +437,9 @@ dependencies {
  * uncovered by excluding them from either release-like task.
  *
  * By category rather than class-name pattern so renaming or moving a test cannot quietly drop it
- * back into the release run - see [com.uacastplayer.testing.RequiresComposeTestManifest].
+ * back into the release run - see [app.zorik.player.testing.RequiresComposeTestManifest].
  */
-private val composeTestManifestCategory = "com.uacastplayer.testing.RequiresComposeTestManifest"
+private val composeTestManifestCategory = "app.zorik.player.testing.RequiresComposeTestManifest"
 
 tasks.withType<Test>().configureEach {
     // Matched by name inside this lazy block rather than tasks.named("testReleaseUnitTest"): AGP

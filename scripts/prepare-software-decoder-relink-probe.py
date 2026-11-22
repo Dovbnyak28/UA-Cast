@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('builder', ROOT / 'scripts/prepare-software-decoder.py')
 NATIVE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(NATIVE)
-MARKER = ' (UA-Cast relink probe)'
+MARKER = ' (Zorik Player relink probe)'
 
 
 def marked_source(source):

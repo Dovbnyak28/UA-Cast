@@ -21,7 +21,7 @@ exactly the shape of a composition-root concern, not a reusable one.
 
 ## Cross-package dependencies that block this today
 
-Found by grepping `^import com.uacastplayer\.` per top-level package and keeping only edges that
+Found by grepping `^import app.zorik.player\.` per top-level package and keeping only edges that
 cross a proposed module boundary in the *wrong* direction (a lower-layer module importing from a
 higher one) or that create a cycle. Everything else (e.g. `ui -> playlist`, `data -> log`) already
 respects the proposed dependency direction and needs no work.

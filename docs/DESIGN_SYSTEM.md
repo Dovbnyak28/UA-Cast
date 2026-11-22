@@ -241,13 +241,13 @@ Status remains separately encoded by `routeGreen`, `routeAmber` and `routeRed`.
   `staticCompositionLocalOf` is deliberate, not an oversight - a theme switch is meant to force the
   *entire* subtree to recompose immediately, which is the opposite of what `compositionLocalOf`'s
   finer-grained invalidation would give you.
-- **`UaCastTheme(theme: AppTheme, content)`** (in `Theme.kt`) is the actual root: it picks the
+- **`ZorikTheme(theme: AppTheme, content)`** (in `Theme.kt`) is the actual root: it picks the
   palette for `theme`, provides it via `LocalUaPalette`, and builds the Material3 `ColorScheme`
   from it too (so Material internals - ripples, `OutlinedTextField`, etc. - track the theme as
   well, even though new UI code shouldn't be reading `MaterialTheme.colorScheme.*` directly).
 - **`AppPreferences.appTheme`** (default `AppTheme.CINEMA`) persists the choice.
   `AppViewModel.selectAppTheme` writes it and updates `AppUiState.appTheme`; `MainActivity` passes
-  that straight into `UaCastTheme(theme = uiState.appTheme)`, so picking a theme in Settings
+  that straight into `ZorikTheme(theme = uiState.appTheme)`, so picking a theme in Settings
   recomposes the whole app on the spot - no restart.
 
 ### Rules for adding a new theme
@@ -256,7 +256,7 @@ Status remains separately encoded by `routeGreen`, `routeAmber` and `routeRed`.
 2. Write a new `UaPalette` value (see `CinemaPalette.kt` for the shape: a handful of `private val`
    base colors, then the full `UaPalette(...)` constructor call). Every field needs a real value -
    there's no "inherit from Azure" shortcut, so a half-finished theme won't compile.
-3. Wire it into `UaCastTheme`'s `when (theme)` branch in `Theme.kt`.
+3. Wire it into `ZorikTheme`'s `when (theme)` branch in `Theme.kt`.
 4. Add its name string to all 4 locales and a `SegmentedControl` option in Settings' theme picker
    (`SettingsScreen.kt`) if it should be user-selectable yet.
 5. **Never introduce a `Color(0x...)` literal or a hardcoded shape/font choice inside a screen or

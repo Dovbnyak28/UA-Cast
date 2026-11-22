@@ -1,18 +1,31 @@
 # Changelog
 
 Versions are marked in three places, which must move together: the local defaults in
-`app/build.gradle.kts`, `UACAST_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
+`app/build.gradle.kts`, `ZORIK_VERSION_NAME` in `.github/workflows/android-ci.yml`, and this
 changelog. CI appends its run number to both build values (see `docs/RELEASING.md`), so a CI
-artifact reads `0.9.7.<run>` with a `versionCode` of the run number - the values below are what a
+artifact reads `0.9.8.<run>` with a `versionCode` of the run number - the values below are what a
 local build produces.
 
-## Unreleased
+## 0.9.8
 
+`versionCode` 17. Release hardening, Google Play checkout and removal of the in-app updater.
+
+- **Renamed to Zorik Player.** "UA CAST" is a registered EU trade mark of another company
+  (classes 9 and 38). The name, TV banner wordmark, terms, privacy policy and diagnostics now say
+  Zorik. The application ID is now `app.zorik.player` (code packages too), so 0.9.8 installs as a
+  new app next to 0.9.x: move playlists and settings with Settings → Data → backup (old `.uacast`
+  backups restore as before; new ones are saved as `.zorik`).
+- New logo without the Google Cast motif (screen, centred play, blue/yellow stand); the TV banner
+  wordmark is drawn from original strokes instead of Roboto outlines.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the
   old one; Play users update from Play. An APK the old updater left in the cache is deleted once.
-- Google Play Billing is live in the `play` build (`premium_lifetime`, one-time purchase).
+- Google Play Billing is live in the `play` build (`premium_lifetime`, one-time purchase); the
+  purchase/restore outcome scrolls into view and is announced by TalkBack.
+- Opening a channel from search now closes the keyboard and releases the search field.
+- Settings section titles no longer clip at 320dp / 200% font; 10 oversized source files split
+  without behaviour change.
 
 ## 0.9.7
 
@@ -439,7 +452,7 @@ See `docs/RELEASING.md` for what has to be true before the major version moves.
   the last being a console that is not ready, which somebody can actually fix.
 
   **A stored licence now carries a tag that says this app wrote it.** Editing
-  `uacast_prefs.xml` on a rooted phone - `license_tier=LIFETIME`, no expiry - used to be the whole
+  `zorik_prefs.xml` on a rooted phone - `license_tier=LIFETIME`, no expiry - used to be the whole
   attack. The licence and its HMAC are one value now, keyed from the Android Keystore where the key
   cannot be read out, so the file can still be changed but not re-tagged, and a record that does not
   verify resolves to the free tier exactly as an unrecognised tier already did. One value rather
@@ -1291,7 +1304,7 @@ Prompted by a field logcat of a failing cast that turned out to be unreadable:
     still had focus behind the player and **the IME swallows the back key to dismiss itself** before
     the app's `BackHandler` ever runs. The helper now closes the keyboard after opening a channel.
 - **The suite no longer destroys the data of whoever it runs against.** `EmptyPlaylistInstrumentedTest`
-  clears `uacast_prefs` and every playlist file to get a genuinely fresh start, and never put any of
+  clears `zorik_prefs` and every playlist file to get a genuinely fresh start, and never put any of
   it back - on a developer's phone that is the same install they actually watch TV on, so it deleted
   their configured playlist, EPG source and settings for real. It happened twice during this suite's
   own repair. The state is now captured before the wipe and restored in `@After`, pass or fail, using

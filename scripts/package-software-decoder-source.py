@@ -11,7 +11,7 @@ SPEC = importlib.util.spec_from_file_location("native_builder", ROOT / "scripts/
 NATIVE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(NATIVE)
 
-README = """UA-Cast software decoder corresponding source
+README = """Zorik Player software decoder corresponding source
 
 Scope: only the Apache-2.0 wrapper, LGPL FFmpeg, BSD libyuv and their build inputs.
 This bundle does not grant a GPL licence to the application's own code. All component
@@ -43,7 +43,7 @@ in distribution-evidence. Build paths differ between machines; bit-identical bin
 are not promised, but source, tool versions, configuration and native ABI are documented.
 
 Replacing/relinking libraries for personal use:
-1. Obtain the corresponding UA-Cast universal APK and back up app data from its UI.
+1. Obtain the corresponding Zorik Player universal APK and back up app data from its UI.
 2. Keep its compiled Java/Dex code/resources. Replace lib/<ABI>/libavcodec.so,
    libavutil.so, libswresample.so, libswscale.so and/or libffmpegJNI.so with the rebuilt
    compatible libraries; preserve names and all three ABI layouts as appropriate.
@@ -126,4 +126,4 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     root = args.root.resolve()
-    create_bundle(root, args.output or root / "build/software-decoder-dist/uacast-software-decoder-source.zip")
+    create_bundle(root, args.output or root / "build/software-decoder-dist/zorik-software-decoder-source.zip")

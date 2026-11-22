@@ -12,9 +12,9 @@ app-private storage; Android backup is disabled and the privacy policy discloses
 | Playlist snapshot | `filesDir/playlist_snapshot_<sourceId>.bin` | Versioned binary (`PlaylistSnapshotCodec`), including source and stream URLs | 8MB source-document cap | Whole-file replace on next successful load |
 | EPG snapshot | `filesDir/epg_snapshot.bin` | Versioned parsed guide (`EpgSnapshotCodec` v2); v1 raw XMLTV remains migration-readable | 96MB source-document cap | Whole-file replace on next successful load |
 | Channel icons | `filesDir/icon_cache/` | Raw validated bytes, one file per `SHA-256(url)` | 256MB / 20,000 files, 5MB per icon | LRU by file `lastModified`, via `IconCacheTrimmer` |
-| Icon failure memory (permanent) | SharedPreferences `uacast_icon_failures` | key → timestamp | - | 7-day TTL (`IconFailurePolicy`) |
+| Icon failure memory (permanent) | SharedPreferences `zorik_icon_failures` | key → timestamp | - | 7-day TTL (`IconFailurePolicy`) |
 | Icon failure memory (transient) | In-memory `ConcurrentHashMap` | key → timestamp | - | 1-hour TTL, process lifetime only |
-| Cast incompatibility memory | SharedPreferences `uacast_cast_incompatibility` | key → timestamp | - | 30-day TTL (`core/cast/IncompatibilityMemoryPolicy`), debounced writes |
+| Cast incompatibility memory | SharedPreferences `zorik_cast_incompatibility` | key → timestamp | - | 30-day TTL (`core/cast/IncompatibilityMemoryPolicy`), debounced writes |
 | Favorites | `filesDir/favorites.json` | JSON array (hand-rolled `MiniJson`, not `org.json`) | - | User-driven (add/remove) |
 | Coil image cache | `filesDir/coil_cache/` | Coil's own disk cache | 128MB | Coil's own LRU |
 

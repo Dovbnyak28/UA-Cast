@@ -1,5 +1,5 @@
 # Cast SDK looks up the options provider by reflection.
--keep class com.uacastplayer.cast.CastOptionsProvider { *; }
+-keep class app.zorik.player.cast.CastOptionsProvider { *; }
 
 # No -keep needed for cache/snapshot models: every codec (EpgSnapshotCodec,
 # PlaylistSnapshotCodec, favorites/MiniJson, etc.) reads/writes fields by hand,

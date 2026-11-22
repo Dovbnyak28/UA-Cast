@@ -1,0 +1,198 @@
+package app.zorik.player.ui.home
+import app.zorik.player.ui.theme.UaTheme
+
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import app.zorik.player.ui.tv.tvFocus
+import app.zorik.player.ui.tv.TvDialogInputRegistration
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import app.zorik.player.R
+import app.zorik.player.playlist.PlaylistSource
+import app.zorik.player.playlist.PlaylistSourceLabel
+import app.zorik.player.playlist.PlaylistSourceType
+import app.zorik.player.playlist.PlaylistSourceSaveState
+import app.zorik.player.playlist.PlaylistSourcePolicy
+import app.zorik.player.ui.playlist.PlaylistPersistenceStatus
+import app.zorik.player.ui.components.PrimaryButton
+import app.zorik.player.ui.theme.AppIcons
+import app.zorik.player.ui.theme.BodyText
+import app.zorik.player.ui.theme.Caption
+import app.zorik.player.ui.theme.GapM
+import app.zorik.player.ui.theme.RadiusItem
+import app.zorik.player.ui.theme.ScreenHPadding
+import app.zorik.player.ui.theme.Title
+
+/**
+ * Reached by tapping Home's active-playlist card - lists every saved source (see
+ * [PlaylistSource]/`PlaylistSourceStore`) with a radio selection for the active one, a delete
+ * action per row, and a way to add another.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistSourceSheet(
+    sources: List<PlaylistSource>,
+    activeId: String?,
+    onSelect: (PlaylistSource) -> Unit,
+    onRemove: (PlaylistSource) -> Unit,
+    onAddNew: () -> Unit,
+    onDismiss: () -> Unit,
+    saveState: PlaylistSourceSaveState = PlaylistSourceSaveState.IDLE,
+    onRetrySave: () -> Unit = {},
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var pendingRemovalId by rememberSaveable { mutableStateOf<String?>(null) }
+    val pendingRemoval = sources.firstOrNull { it.id == pendingRemovalId }
+    pendingRemoval?.let { source ->
+        PlaylistSourceRemovalDialog(
+            name = source.displayName ?: stringResource(R.string.playlist_unnamed),
+            isActive = source.id == activeId,
+            onConfirm = { pendingRemovalId = null; onRemove(source) },
+            onDismiss = { pendingRemovalId = null },
+        )
+    }
+    val orderedSources = remember(sources) { sources.sortedByDescending { it.addedAtEpochMillis } }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = UaTheme.palette.surface2,
+    ) {
+        TvDialogInputRegistration()
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding).padding(bottom = GapM)) {
+            Text(
+                text = stringResource(R.string.home_playlist_sources_title),
+                style = Title,
+                color = UaTheme.palette.labelPrimary,
+                modifier = Modifier.padding(bottom = GapM),
+            )
+            PlaylistPersistenceStatus(saveState, onRetrySave)
+            val atCapacity = sources.size >= PlaylistSourcePolicy.MAX_SOURCES
+            if (atCapacity) {
+                Text(stringResource(R.string.playlist_sources_limit, PlaylistSourcePolicy.MAX_SOURCES))
+            }
+            LazyColumn(modifier = Modifier.weight(1f, fill = false).selectableGroup().testTag("playlist-source-list")) {
+                items(orderedSources, key = { it.id }) { source ->
+                    PlaylistSourceRow(
+                        source = source,
+                        isActive = source.id == activeId,
+                        onSelect = { onSelect(source) },
+                        onRemove = { pendingRemovalId = source.id },
+                    )
+                }
+            }
+            PrimaryButton(
+                text = stringResource(R.string.home_add_playlist_button),
+                onClick = onAddNew,
+                enabled = !atCapacity && saveState != PlaylistSourceSaveState.SAVING,
+                leadingIcon = AppIcons.Plus,
+                modifier = Modifier.fillMaxWidth().padding(top = GapM),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun PlaylistSourceRemovalDialog(
+    name: String,
+    isActive: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.home_playlist_source_remove)) },
+        text = {
+            TvDialogInputRegistration()
+            Text(stringResource(
+                if (isActive) R.string.playlist_remove_active_confirmation else R.string.playlist_remove_confirmation,
+                name,
+            ))
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, modifier = Modifier.tvFocus()) {
+                Text(stringResource(R.string.home_playlist_source_remove))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+    )
+}
+
+@Composable
+private fun PlaylistSourceRow(source: PlaylistSource, isActive: Boolean, onSelect: () -> Unit, onRemove: () -> Unit) {
+    val shape = RoundedCornerShape(RadiusItem)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                if (isActive) UaTheme.palette.accentGradientTop.copy(alpha = 0.10f)
+                else UaTheme.palette.surface1,
+            )
+            .tvFocus(shape)
+            .selectable(selected = isActive, role = Role.RadioButton, onClick = onSelect)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = isActive,
+            onClick = null,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = UaTheme.palette.azure,
+                unselectedColor = UaTheme.palette.labelSecondary,
+            ),
+        )
+        Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+            Text(
+                text = source.displayName
+                    ?: PlaylistSourceLabel.forLocation(source.type, source.location)
+                    ?: stringResource(R.string.playlist_unnamed),
+                style = BodyText,
+                color = UaTheme.palette.labelPrimary,
+                maxLines = 1,
+            )
+            Text(text = stringResource(source.type.labelRes()), style = Caption, color = UaTheme.palette.labelSecondary)
+        }
+        IconButton(onClick = onRemove, modifier = Modifier.tvFocus()) {
+            Icon(
+                AppIcons.Delete,
+                contentDescription = stringResource(R.string.home_playlist_source_remove),
+                tint = UaTheme.palette.routeRed,
+            )
+        }
+    }
+}
+
+private fun PlaylistSourceType.labelRes(): Int = when (this) {
+    PlaylistSourceType.URL -> R.string.add_playlist_type_url
+    PlaylistSourceType.FILE -> R.string.add_playlist_type_file
+    PlaylistSourceType.XTREAM -> R.string.add_playlist_type_xtream
+}

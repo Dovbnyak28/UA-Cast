@@ -3,7 +3,7 @@
     <string name="player_remote_controls_notice">Во время трансляции настройками воспроизведения управляет телевизор. Используйте управление устройством.</string>
     <string name="playlist_error_storage">Не удалось сохранить плейлист. Предыдущая копия сохранена. Освободите место и повторите попытку.</string>
     <string name="player_levels">Яркость и громкость</string>
-    <string name="app_name">UA Cast Player</string>
+    <string name="app_name">Zorik Player</string>
 
     <!-- Language picker (first run) -->
     <string name="language_picker_title">Выберите язык</string>
@@ -70,7 +70,7 @@
     <string name="add_playlist_save_button">Загрузить и сохранить</string>
     <string name="add_playlist_file_button">Загрузить из файла</string>
     <string name="add_playlist_source_title">Каналы не входят в приложение</string>
-    <string name="add_playlist_tip">Получите ссылку M3U/M3U8, файл плейлиста или данные Xtream у ТВ-провайдера. UA Cast — плеер, а не ТВ-сервис.</string>
+    <string name="add_playlist_tip">Получите ссылку M3U/M3U8, файл плейлиста или данные Xtream у ТВ-провайдера. Zorik — плеер, а не ТВ-сервис.</string>
     <string name="add_playlist_type_url">Ссылка</string>
     <string name="add_playlist_type_file">Файл</string>
     <string name="add_playlist_type_xtream">Xtream</string>
@@ -88,7 +88,7 @@
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Пока нет каналов</string>
-    <string name="channels_empty_subtitle">Добавьте плейлист от ТВ-провайдера. В UA Cast нет каналов.</string>
+    <string name="channels_empty_subtitle">Добавьте плейлист от ТВ-провайдера. В Zorik нет каналов.</string>
     <string name="channels_error_subtitle">Проверьте источник и соединение, затем повторите</string>
     <string name="common_retry">Попробовать снова</string>
     <string name="channels_search_hint">Поиск каналов</string>
@@ -167,7 +167,7 @@
     <string name="settings_page_data_storage">Данные и хранилище</string>
     <string name="settings_page_data_summary">Кэш, резервная копия, импорт и экспорт</string>
     <string name="settings_page_help_about">Помощь и о приложении</string>
-    <string name="settings_page_help_summary">Обновления, обучение, диагностика и правовая информация</string>
+    <string name="settings_page_help_summary">Обучение, диагностика и правовая информация</string>
     <string name="settings_section_playlist">Плейлист</string>
     <string name="settings_theme_label">Тема</string>
     <string name="theme_name_azure">Классическая</string>
@@ -220,16 +220,16 @@
     <string name="settings_section_playback">Воспроизведение</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="settings_section_data">Данные</string>
-    <string name="settings_data_hint">Сохраните защищённый паролем файл .uacast на телефоне или компьютере. Содержит источники, локальные M3U, избранное и основные настройки. Максимум данных — 8 МБ. Старые JSON-копии также восстанавливаются после просмотра.</string>
+    <string name="settings_data_hint">Сохраните защищённый паролем файл .zorik на телефоне или компьютере. Содержит источники, локальные M3U, избранное и основные настройки. Максимум данных — 8 МБ. Старые JSON-копии также восстанавливаются после просмотра.</string>
     <string name="settings_data_export">Сохранить в файл</string>
     <string name="settings_data_export_warning_title">Экспортировать конфиденциальные данные?</string>
-    <string name="settings_data_export_warning_message">Копия может содержать пароли провайдера и приватные ссылки. Файл будет зашифрован вашей парольной фразой. Сохраните её: UA-Cast не может восстановить забытый пароль.</string>
+    <string name="settings_data_export_warning_message">Копия может содержать пароли провайдера и приватные ссылки. Файл будет зашифрован вашей парольной фразой. Сохраните её: Zorik не может восстановить забытый пароль.</string>
     <string name="settings_data_export_confirm">Продолжить</string>
     <string name="settings_data_import">Восстановить из файла</string>
     <string name="settings_data_import_summary">Импортировано: %1$d плейлиста, %2$d избранных</string>
     <string name="settings_data_export_success">Резервная копия успешно экспортирована</string>
     <string name="settings_data_export_failure">Не удалось сохранить копию. Проверьте хранилище, доступ ко всем локальным плейлистам и ограничение файла 8 МБ. Не используйте незавершённый файл.</string>
-    <string name="settings_data_import_failure">Не удалось восстановить файл. Проверьте, что это исправная копия UA-Cast размером до 8 МБ и что хранилище доступно. Текущие плейлисты, избранное и настройки не изменены.</string>
+    <string name="settings_data_import_failure">Не удалось восстановить файл. Проверьте, что это исправная копия Zorik размером до 8 МБ и что хранилище доступно. Текущие плейлисты, избранное и настройки не изменены.</string>
     <string name="settings_data_import_limit">Не добавлено: %1$d плейлистов — достигнут лимит 10 сохранённых источников.</string>
     <string name="settings_data_picker_unavailable">На этом устройстве системный выбор файлов отсутствует или заблокирован. Сохраните или восстановите копию на телефоне с файловым менеджером.</string>
     <string name="cache_playlist_label">Кеш плейлиста</string>
@@ -244,7 +244,7 @@
     <string name="device_tier_high_end">Высокопроизводительный</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="settings_help">Справка</string>
-    <string name="settings_help_body">UA Cast Player — это личный IPTV-плеер. Добавьте плейлист на вкладке «Каналы» (по ссылке или файлом), выберите источник телепрограммы и коснитесь любого канала. Кнопка Cast транслирует на Chromecast или Google TV; соседняя кнопка добирается до телевизоров, работающих через DLNA. Если поток не воспроизводится на устройстве напрямую, приложение повторяет попытку через промежуточный сервер на вашем телефоне.</string>
+    <string name="settings_help_body">Zorik Player — это личный IPTV-плеер. Добавьте плейлист на вкладке «Каналы» (по ссылке или файлом), выберите источник телепрограммы и коснитесь любого канала. Кнопка Cast транслирует на Chromecast или Google TV; соседняя кнопка добирается до телевизоров, работающих через DLNA. Если поток не воспроизводится на устройстве напрямую, приложение повторяет попытку через промежуточный сервер на вашем телефоне.</string>
     <string name="settings_open_help">Подробная справка</string>
     <string name="settings_open_terms">Условия использования</string>
     <string name="settings_open_privacy_policy">Политика конфиденциальности</string>
@@ -277,7 +277,7 @@
     <string name="help_q8_title">Где хранятся мои данные?</string>
     <string name="help_q8_body">Всё — плейлист, телепрограмма, избранное и загруженные иконки — хранится только в приватном хранилище приложения на вашем устройстве. Подробности — в Условиях использования и Политике конфиденциальности.</string>
     <string name="help_dlna_title">Как транслировать на телевизор без Chromecast?</string>
-    <string name="help_dlna_body">В плеере есть кнопка с экраном и волнами рядом с кнопкой Cast. Она ищет телевизоры с поддержкой DLNA — это большинство Samsung, LG, Sony и Philips, а также многие медиаплееры. Выберите свой телевизор из списка — канал запустится на нём. Если список пуст: проверьте, включён ли телевизор и в той ли сети он, что и телефон (телевизор по кабелю и телефон по Wi-Fi — нормально, если роутер один). И учтите: часть телевизоров выпуска после примерно 2019 года идёт с отключённым DLNA и таким способом недоступна вообще.</string>
+    <string name="help_dlna_body">В плеере рядом с кнопкой Cast есть кнопка «Другие ТВ» (на узком экране — значок телевизора). Она ищет телевизоры с поддержкой DLNA — это большинство Samsung, LG, Sony и Philips, а также многие медиаплееры. Выберите свой телевизор из списка — канал запустится на нём. Если список пуст: проверьте, включён ли телевизор и в той ли сети он, что и телефон (телевизор по кабелю и телефон по Wi-Fi — нормально, если роутер один). И учтите: часть телевизоров выпуска после примерно 2019 года идёт с отключённым DLNA и таким способом недоступна вообще.</string>
     <string name="help_playlist_errors_title">Плейлист не загружается — что означают сообщения?</string>
     <string name="help_playlist_errors_body">«Ошибка сети» — телефон вообще не добрался до сервера: нет интернета, ошибка в адресе или провайдер не работает. «Ошибка сервера (код …)» — сервер ответил и отказал: 401 или 403 почти всегда значит, что закончилась подписка или ссылка, 404 — что адреса больше нет. «Плейлист превышает лимит 8 МБ» — список слишком большой; попросите у провайдера короче или добавьте тот же сервис через логин Xtream. Проверьте, что ссылка начинается с http:// или https:// и ведёт на файл M3U, M3U8 или TXT — страница, которая открывается в браузере, не обязательно является плейлистом.</string>
     <string name="help_channel_unavailable_title">Канал пишет, что недоступен</string>
@@ -294,9 +294,9 @@
     <!-- Terms of Use screen -->
     <string name="terms_title">Условия использования</string>
     <string name="privacy_policy_title">Политика конфиденциальности</string>
-    <string name="terms_intro">Устанавливая или используя UA Cast Player («приложение»), вы соглашаетесь с этими Условиями использования. Если вы не согласны — не используйте приложение.</string>
+    <string name="terms_intro">Устанавливая или используя Zorik Player («приложение»), вы соглашаетесь с этими Условиями использования. Если вы не согласны — не используйте приложение.</string>
     <string name="terms_s1_title">1. Что такое это приложение</string>
-    <string name="terms_s1_body">UA Cast Player — это универсальный плеер для M3U/M3U8 плейлистов, которые вы добавляете самостоятельно, и отправитель для Google Cast. Приложение не предоставляет, не продаёт, не подбирает и не проверяет никакой собственный канал, фильм или медиаконтент — каждый поток происходит из ссылки или файла, который вы указали сами.</string>
+    <string name="terms_s1_body">Zorik Player — это универсальный плеер для M3U/M3U8 плейлистов, которые вы добавляете самостоятельно, и отправитель для Google Cast. Приложение не предоставляет, не продаёт, не подбирает и не проверяет никакой собственный канал, фильм или медиаконтент — каждый поток происходит из ссылки или файла, который вы указали сами.</string>
     <string name="terms_s2_title">2. Вы отвечаете за свой контент</string>
     <string name="terms_s2_body">Добавляйте только контент и источники, которые имеете право использовать. Просмотр, копирование и трансляция могут требовать разных разрешений по авторскому праву и договору провайдера. Программа не предоставляет прав на телеканалы, логотипы или данные телегида и не предназначена для обхода ограничений доступа. Ваши обязанности не отменяют обязанностей разработчика в отношении программы, безопасности и неотчуждаемых прав потребителя.</string>
     <string name="terms_s3_title">3. Совместимость и платный доступ</string>
@@ -304,7 +304,7 @@
     <string name="terms_s4_title">4. Ограничение ответственности</string>
     <string name="terms_s4_body">Сторонние источники и устройства работают независимо от разработчика. Ни один пункт не исключает и не ограничивает ответственность, гарантии, возврат средств или права потребителя, которые нельзя законно исключить в вашей юрисдикции. Технические ограничения программы и эти условия не отменяют таких обязательных прав.</string>
     <string name="terms_s5_title">5. Сторонние сервисы</string>
-    <string name="terms_s5_body">Трансляция использует Google Cast SDK и выбранное вами Cast-устройство; запросы плейлиста, телепрограммы и иконок отправляются напрямую на источники, которые вы настроили. Эти третьи стороны действуют согласно собственным условиям, вне контроля разработчика.</string>
+    <string name="terms_s5_body">Трансляция использует Google Cast SDK и выбранное вами Cast-устройство; запросы плейлиста, телепрограммы и иконок отправляются напрямую на источники, которые вы настроили. Эти третьи стороны действуют согласно собственным условиям, вне контроля разработчика. Google Cast, Chromecast и Google TV являются товарными знаками Google LLC; Samsung, LG, Sony, Philips, DLNA и другие названия принадлежат их владельцам. Они упомянуты только для описания совместимости; приложение не связано с ними и не одобрено ими.</string>
     <string name="terms_s6_title">6. Интеллектуальная собственность</string>
     <string name="terms_s6_body">Оригинальный вклад и бренд разработчика остаются объектами его прав. Сторонний код, шрифты и другие материалы принадлежат соответствующим правообладателям и сохраняют свои лицензии; эти лицензии имеют приоритет для охваченных ими частей. Ничто здесь не ограничивает изменение, повторное компонование или обратный анализ, разрешённые или необходимые по применимой открытой лицензии. Медиа и знаки каналов принадлежат их владельцам. Программа не предоставляет прав на распространение этого контента.</string>
     <string name="terms_s7_title">7. Изменения и прекращение</string>
@@ -385,7 +385,7 @@
 
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Не останавливать трансляцию в фоне</string>
-    <string name="battery_hint_body">Некоторые производители телефонов (например, Xiaomi) агрессивно останавливают приложения в фоне, из-за чего трансляция на TV может прерваться. Откройте настройки батареи, найдите UA Cast Player в списке и отключите для него оптимизацию батареи, чтобы воспроизведение не прерывалось.</string>
+    <string name="battery_hint_body">Некоторые производители телефонов (например, Xiaomi) агрессивно останавливают приложения в фоне, из-за чего трансляция на TV может прерваться. Откройте настройки батареи, найдите Zorik Player в списке и отключите для него оптимизацию батареи, чтобы воспроизведение не прерывалось.</string>
     <string name="battery_hint_allow">Открыть настройки</string>
     <string name="battery_hint_later">Позже</string>
     <string name="settings_battery_optimization_label">Оптимизация батареи в фоне</string>
@@ -413,7 +413,7 @@
     <string name="dlna_stop_casting">Остановить</string>
     <string name="dlna_status_unverified">Состояние воспроизведения неизвестно</string>
     <!-- Guided tour -->
-    <string name="guided_tour_welcome_title">Добро пожаловать в UA Cast IPTV</string>
+    <string name="guided_tour_welcome_title">Добро пожаловать в Zorik Player</string>
     <string name="guided_tour_welcome_body">Каналы не включены. Добавьте плейлист или аккаунт ТВ-провайдера.</string>
     <string name="guided_tour_add_playlist">Добавить плейлист</string>
     <string name="guided_tour_start">Показать обзор</string>
@@ -423,7 +423,7 @@
     <string name="guided_tour_next">Далее</string>
     <string name="guided_tour_progress">%1$d / %2$d</string>
     <string name="guided_tour_done_title">Готово!</string>
-    <string name="guided_tour_done_body">Теперь вы знаете основные возможности UA Cast IPTV.</string>
+    <string name="guided_tour_done_body">Теперь вы знаете основные возможности Zorik Player.</string>
     <string name="guided_tour_finish">Начать пользоваться</string>
     <string name="guided_tour_playlist_title">Добавьте плейлист</string>
     <string name="guided_tour_playlist_body">Каналы берутся из вашего плейлиста — файл M3U или ссылка от провайдера. Здесь его добавляют и здесь переключаются между несколькими.</string>
@@ -438,7 +438,7 @@
     <string name="guided_tour_cast_title">Трансляция на телевизор</string>
     <string name="guided_tour_cast_body">Эта кнопка передаёт изображение на Chromecast. Телевизоры без него — Samsung, LG, Sony — доступны через DLNA из плеера.</string>
     <string name="guided_tour_settings_title">Настройки</string>
-    <string name="guided_tour_settings_body">Язык и тема, размер буфера, иконки каналов, родительский контроль, резервная копия и обновления. Здесь же живёт и это обучение, если захотите пройти ещё раз.</string>
+    <string name="guided_tour_settings_body">Язык и тема, размер буфера, иконки каналов, родительский контроль и резервная копия. Здесь же живёт и это обучение, если захотите пройти ещё раз.</string>
 
     <string name="settings_section_tutorial">Обучение</string>
     <string name="settings_search_hint">Поиск в настройках</string>

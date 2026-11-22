@@ -1,0 +1,105 @@
+package app.zorik.player.data.epg
+
+import android.content.Context
+import androidx.annotation.VisibleForTesting
+import androidx.core.util.AtomicFile
+import app.zorik.player.core.concurrent.AppDispatchers
+import app.zorik.player.core.concurrent.runCatchingNonFatal
+import app.zorik.player.data.writeSafely
+import app.zorik.player.log.AppLog
+import app.zorik.player.epg.DecodedEpgSnapshot
+import app.zorik.player.epg.EpgData
+import app.zorik.player.epg.EpgSnapshotCodec
+import app.zorik.player.epg.EpgSnapshotHeader
+import app.zorik.player.performance.HeapBudget
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
+
+private const val TAG = "EpgSnapshotStore"
+
+class EpgSnapshotStore(
+    context: Context,
+    private val ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    private val maxProgrammes: Int = HeapBudget.maxProgrammes(Runtime.getRuntime().maxMemory()),
+) {
+
+    private val atomicFile = AtomicFile(File(context.filesDir, "epg_snapshot.bin"))
+
+    /** Writes the *parsed* guide, not the XMLTV document it came from - see [EpgSnapshotCodec] for
+     * why that changed and what it cost to keep the document. */
+    suspend fun save(sourceFingerprint: String, savedAtEpochMillis: Long, data: EpgData) = withContext(ioDispatcher) {
+        atomicFile.writeSafely(TAG, "EPG snapshot") { stream ->
+            EpgSnapshotCodec.encode(EpgSnapshotHeader(sourceFingerprint, savedAtEpochMillis), data, stream)
+        }
+        Unit
+    }
+
+    /** Deletes both the committed snapshot and AtomicFile's unfinished side file, if present. */
+    suspend fun delete() = withContext(ioDispatcher) {
+        atomicFile.delete()
+    }
+
+    /**
+     * Opens the cached snapshot, or null if there is none or what is on disk does not decode.
+     *
+     * A [DecodedEpgSnapshot.Document] result (a v1 snapshot written by an older version) stays
+     * attached to the underlying stream for its payload, so **the caller must close it**; a
+     * [DecodedEpgSnapshot.Parsed] result has already consumed everything it needs and this closes
+     * the stream itself.
+     */
+    suspend fun open(): DecodedEpgSnapshot? = readEpgSnapshotOnIo(ioDispatcher) {
+        val stream = try {
+            atomicFile.openRead()
+        } catch (_: FileNotFoundException) {
+            return@readEpgSnapshotOnIo null
+        } catch (e: IOException) {
+            // Cache only - a null here means "parse from the network instead", which is exactly
+            // what an unreadable snapshot calls for. Escaping would take the EPG load down with it.
+            AppLog.w(TAG) { "EPG snapshot read failed, will refetch: ${e.javaClass.simpleName}" }
+            return@readEpgSnapshotOnIo null
+        }
+        if (atomicFile.baseFile.length() > MAX_SNAPSHOT_BYTES) {
+            // The parser caps the decompressed source at 64 MiB and the binary snapshot adds
+            // bounded record framing. A substantially larger file cannot be one this build
+            // writes; decoding it would only spend startup time and allocations on corrupt data.
+            runCatchingNonFatal { stream.close() }
+            atomicFile.delete()
+            AppLog.w(TAG) { "EPG snapshot exceeds the supported size; discarded and will refetch" }
+            return@readEpgSnapshotOnIo null
+        }
+        val decoded = EpgSnapshotCodec.decode(stream, maxProgrammes)
+        if (decoded == null || decoded is DecodedEpgSnapshot.Parsed) {
+            stream.close()
+        }
+        decoded
+    }
+
+    companion object {
+        /** Twice the decompressed XML cap, leaving headroom for binary framing and text encoding. */
+        @VisibleForTesting
+        internal const val MAX_SNAPSHOT_BYTES = 128L * 1024 * 1024
+    }
+}
+
+/** Dispatcher boundary where ownership of a legacy document stream passes to the caller. */
+internal suspend fun readEpgSnapshotOnIo(
+    dispatcher: CoroutineDispatcher,
+    read: () -> DecodedEpgSnapshot?,
+): DecodedEpgSnapshot? {
+    // Prompt cancellation can discard the IO result before the caller enters its use{} block.
+    // Retain ownership here until that dispatcher handoff has completed successfully.
+    var unclaimed: DecodedEpgSnapshot.Document? = null
+    return try {
+        withContext(dispatcher) {
+            read().also { unclaimed = it as? DecodedEpgSnapshot.Document }
+        }
+    } catch (cancelled: CancellationException) {
+        runCatchingNonFatal { unclaimed?.documentStream?.close() }
+            .onFailure(cancelled::addSuppressed)
+        throw cancelled
+    }
+}

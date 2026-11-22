@@ -62,15 +62,15 @@ actually built and a check can only be wrong about nothing.
 
 ## Versioning
 
-`versionCode`/`versionName` are supplied at build time via `-Puacast.versionCode` /
-`-Puacast.versionName` (see `android-ci.yml` for how CI derives them from the run number) rather
+`versionCode`/`versionName` are supplied at build time via `-Pzorik.versionCode` /
+`-Pzorik.versionName` (see `android-ci.yml` for how CI derives them from the run number) rather
 than hardcoded in `build.gradle.kts` - a local `./gradlew :app:assembleRelease` without these
 properties falls back to the defaults in `app/build.gradle.kts`.
 
 Marking a new version touches **three** files, and they have to move together:
 
 1. `app/build.gradle.kts` - the `versionCode`/`versionName` defaults a local build falls back to.
-2. `.github/workflows/android-ci.yml` - `UACAST_VERSION_NAME`, which carries the same
+2. `.github/workflows/android-ci.yml` - `ZORIK_VERSION_NAME`, which carries the same
    `major.minor.patch` with the run number appended. Leaving this behind makes CI artifacts claim
    the previous version, which is worse than no version at all since it looks authoritative.
 3. `CHANGELOG.md` - a new section at the top. A version number with no record of what is in it
@@ -85,6 +85,12 @@ The app does not check for updates itself. Users of the GitHub APK update by ins
 release over the old one; Play users get updates from Play. Tag releases with a version number
 (`v0.9.8`) and attach the universal APK to the published GitHub Release.
 
+**0.9.8 is the exception.** The application ID changed from `com.uacastplayer` (UA Cast) to
+`app.zorik.player` (Zorik Player), so 0.9.8 installs as a new app next to 0.9.x and cannot update
+it. Say so in the release notes: export a backup in the old app (Settings → Data → Save to file),
+restore it in Zorik Player. Old `.uacast` backups restore normally. From 0.9.8 on, upgrades work in
+place again.
+
 Every release APK must be signed with the *same* key as the one it is replacing. Android refuses an
 APK signed with a different one, and the only way out for the user is to uninstall - taking their
 playlist, their guide and their licence with it. `scripts/verify-release-upgrade.sh` checks this.
@@ -93,7 +99,7 @@ Local diagnostic builds may still use the normal Gradle fallback signing configu
 production release, make the requirement explicit:
 
 ```bash
-./gradlew :app:bundlePlay -Puacast.requireSigning=true
+./gradlew :app:bundlePlay -Pzorik.requireSigning=true
 ```
 
 With that flag the build fails before packaging when the `UACAST_*` signing properties are absent.
@@ -110,7 +116,7 @@ environment needs these protected secrets:
 - `UACAST_KEY_PASSWORD`.
 
 The workflow materializes the key only under the runner's temporary directory, passes
-`-Puacast.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
+`-Pzorik.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
 the AAB and universal APK signatures, then uploads separate signed Play AAB and GitHub APK
 artifacts. Attach the **universal APK** artifact to a published GitHub Release with the matching
 version tag; an Actions artifact alone is not a download users can find. The workflow does not
@@ -137,7 +143,7 @@ means nothing about content.
 
 ### What 1.0.0 waits for
 
-The current version is 0.9.7 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
+The current version is 0.9.8 and deliberately not 1.0.0. The gap is not a feature list; it is evidence:
 
 1. **The app has run on hardware nobody here chose.** Every device it has been verified on - one
    Xiaomi phone, one Samsung UE40KU6000, one Chromecast 4th gen - belongs to its author. A first
@@ -166,7 +172,7 @@ Point 1 is not a code change, which is exactly why it does not get closer by wri
 
 **Current status: successfully run once (2026-07-30), on a Pixel 10 Pro emulator (API 37,
 x86_64)** - `app/src/main/baseline-prof.txt` now leads with roughly 25,000 lines of real per-method entries
-from that run (1,667 `com.uacastplayer` methods covering the language picker -> Terms -> first-run
+from that run (1,667 `app.zorik.player` methods covering the language picker -> Terms -> first-run
 walkthrough -> Home flow), followed by the previous hand-authored wildcard block as a safety net.
 The generator now continues through a credential-free variant-only fixture into Channels, first
 player launch, fullscreen and EPG; regenerate the profile to replace the older Home-only capture.
@@ -183,7 +189,7 @@ benchmark input and is not guaranteed to be preserved.
 
 This requires a **connected device or running emulator** (there's no Gradle-managed emulator
 configured in this project - `useConnectedDevices = true` in `baselineprofile/build.gradle.kts`).
-It builds a throwaway `nonMinifiedRelease` variant of `:app` (applicationId `com.uacastplayer`, no
+It builds a throwaway `nonMinifiedRelease` variant of `:app` (applicationId `app.zorik.player`, no
 `.debug` suffix) plus the `:baselineprofile` instrumentation APK, installs both, and runs
 `connectedNonMinifiedReleaseAndroidTest`, which should overwrite `app/src/main/baseline-prof.txt`
 with the result on success.
@@ -218,7 +224,7 @@ build is not.
 snag - `./gradlew :app:generateReleaseBaselineProfile` still fails, every time, at
 `:baselineprofile:connectedNonMinifiedReleaseAndroidTest` with `Failed to receive the UTP test
 results`. The on-device test itself is not the problem: its own logcat shows `OK (1 test)` and
-`Benchmark: Baseline profile for com.uacastplayer is stable` (stable after 5 iterations) every
+`Benchmark: Baseline profile for app.zorik.player is stable` (stable after 5 iterations) every
 time - only Gradle's Unified Test Platform result-collection channel back from the emulator fails
 in this sandboxed environment, so the task still reports FAILURE and never copies the profile back.
 Gradle's own post-task cleanup then uninstalls both APKs regardless, so there's nothing left on the
@@ -231,9 +237,9 @@ from the failed Gradle run above):
 ```bash
 adb install -r app/build/outputs/apk/nonMinifiedRelease/app-nonMinifiedRelease.apk
 adb install -r baselineprofile/build/outputs/apk/nonMinifiedRelease/baselineprofile-nonMinifiedRelease.apk
-adb shell am instrument -w -e class com.uacastplayer.baselineprofile.BaselineProfileGenerator#generate \
-    com.uacastplayer.baselineprofile/androidx.test.runner.AndroidJUnitRunner
-adb pull "/storage/emulated/0/Android/media/com.uacastplayer.baselineprofile/BaselineProfileGenerator_generate-baseline-prof.txt" .
+adb shell am instrument -w -e class app.zorik.player.baselineprofile.BaselineProfileGenerator#generate \
+    app.zorik.player.baselineprofile/androidx.test.runner.AndroidJUnitRunner
+adb pull "/storage/emulated/0/Android/media/app.zorik.player.baselineprofile/BaselineProfileGenerator_generate-baseline-prof.txt" .
 ```
 
 Running the instrumentation directly like this skips Gradle's uninstall-on-completion behavior, so
@@ -241,7 +247,7 @@ the output file is still on the device afterward to pull. The scripted flow now 
 picker, Terms, guided tour, Home, a synthetic playlist restore, Channels, player, fullscreen and
 EPG. The synthetic state is prepared by activities compiled only into `benchmarkRelease` and
 `nonMinifiedRelease`; `debug` and shipping `release` do not contain them. Append the previous
-wildcard block (`HSPLcom/uacastplayer/**->**(**)**` +
+wildcard block (`HSPLapp/zorik/player/**->**(**)**` +
 `HSPLandroidx/media3/exoplayer/**->**(**)**`/`common/**`) to the end rather than replacing it
 outright, as a safety net for decoder/recovery paths one short invalid-local stream cannot exercise. Verify the merged
 file compiles before committing: `./gradlew :app:compileNonMinifiedReleaseArtProfile`.
@@ -253,7 +259,7 @@ the app suddenly needs less warm code.
 ## Running Macrobenchmarks
 
 Use an emulator or a device dedicated to measurements. Every benchmark owns its precondition and
-force-stops `com.uacastplayer` before writing a credential-free fixture. The driver does not clear
+force-stops `app.zorik.player` before writing a credential-free fixture. The driver does not clear
 the whole package by default, but the Gradle task can still uninstall the target during setup or
 cleanup; do not point it at an install whose app-private playlist/EPG data matters. No provider
 credentials or external server are involved.
@@ -261,19 +267,19 @@ credentials or external server are involved.
 ```bash
 # deterministic 400-channel cold/warm startup
 ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark
+  -Pandroid.testInstrumentationRunnerArguments.class=app.zorik.player.baselineprofile.StartupBenchmark
 
 # 40,000-channel restore/open, first player, fullscreen and EPG guide
 ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.CriticalJourneysBenchmark
+  -Pandroid.testInstrumentationRunnerArguments.class=app.zorik.player.baselineprofile.CriticalJourneysBenchmark
 
 # production SAX + retention + heap budget + index build over 350,000 XMLTV programmes
 ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.EpgParseBenchmark
+  -Pandroid.testInstrumentationRunnerArguments.class=app.zorik.player.baselineprofile.EpgParseBenchmark
 ```
 
 The critical journeys report frame timing and peak memory; the XMLTV benchmark reports peak memory
-plus the `UaCastEpgParseAndIndex` trace-section duration. The parser uses the target device's actual
+plus the `ZorikEpgParseAndIndex` trace-section duration. The parser uses the target device's actual
 `Runtime.maxMemory()` budget, so a 128MB device measures the same capped path production runs.
 
 **The same UTP failure hits the ordinary instrumented tests**, not only the profile generator:

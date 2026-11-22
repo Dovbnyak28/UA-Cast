@@ -73,7 +73,7 @@
     <!-- Standard for a View inflated into a Compose AndroidView factory: there is no parent to
          measure against at inflation time, and PlayerView's own modifier drives its size. -->
     <issue id="InflateParams" severity="ignore">
-        <ignore path="src/main/kotlin/com/uacastplayer/ui/player/VideoSurface.kt" />
+        <ignore path="src/main/kotlin/app/zorik/player/ui/player/VideoSurface.kt" />
     </issue>
 
     <!-- Obeying this would ship the broken TV experience docs/TV_SUPPORT.md exists to prevent: the

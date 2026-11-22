@@ -22,15 +22,15 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-/** Separate library-test package; no UA-Cast app data or providers are accessed. */
+/** Separate library-test package; no Zorik Player app data or providers are accessed. */
 @UnstableApi
 @RunWith(AndroidJUnit4.class)
 public class SoftwareDecoderInstrumentedTest {
   @Test public void independentNativeLibraryPreservesRequiredSoftwareCapabilities() {
     assertTrue("Independent FFmpeg JNI must load", FfmpegLibrary.isAvailable());
     assertTrue(FfmpegLibrary.getVersion(), FfmpegLibrary.getVersion().startsWith("Lavc60."));
-    boolean relinkProbe = "true".equals(InstrumentationRegistry.getArguments().getString("uacast.relinkProbe"));
-    assertEquals("LGPL version 2.1 or later" + (relinkProbe ? " (UA-Cast relink probe)" : ""),
+    boolean relinkProbe = "true".equals(InstrumentationRegistry.getArguments().getString("zorik.relinkProbe"));
+    assertEquals("LGPL version 2.1 or later" + (relinkProbe ? " (Zorik Player relink probe)" : ""),
         FfmpegLibrary.getNativeLicense());
     for (String mime : new String[] {MimeTypes.AUDIO_MPEG_L2, MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3,
         MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_OPUS, MimeTypes.AUDIO_VORBIS, MimeTypes.AUDIO_FLAC,
@@ -81,7 +81,7 @@ public class SoftwareDecoderInstrumentedTest {
   private static int decoderThreads() {
     int count = 0;
     for (Thread thread : Thread.getAllStackTraces().keySet()) {
-      if (thread.isAlive() && (thread.getName().equals("UA-Cast:FfmpegVideo") ||
+      if (thread.isAlive() && (thread.getName().equals("Zorik:FfmpegVideo") ||
           thread.getName().equals("ExoPlayer:SimpleDecoder"))) count++;
     }
     return count;

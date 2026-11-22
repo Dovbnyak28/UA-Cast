@@ -1,6 +1,6 @@
 # Screenshot testing (Roborazzi)
 
-Working. `app/src/test/kotlin/com/uacastplayer/ui/screenshot/` holds the tests, and the golden
+Working. `app/src/test/kotlin/app/zorik/player/ui/screenshot/` holds the tests, and the golden
 images live in `app/src/test/screenshots/` and are committed.
 
 ```bash

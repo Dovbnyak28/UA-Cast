@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails the build on a hardcoded Color(0x...) literal anywhere under ui/ outside ui/theme/. Every
 # color a screen or component draws must come from UaTheme.palette (see
-# app/src/main/kotlin/com/uacastplayer/ui/theme/UaPalette.kt and docs/DESIGN_SYSTEM.md "Themes"),
+# app/src/main/kotlin/app/zorik/player/ui/theme/UaPalette.kt and docs/DESIGN_SYSTEM.md "Themes"),
 # so that a second theme (Cinema) - or any future one - only ever means a new UaPalette value, not
 # a hunt through every screen for a color that forgot to go through the palette. ui/theme/ itself
 # is exempt: that's where the actual palette values (Color.kt, CinemaPalette.kt, UaPalette.kt's
@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-SRC_DIR="app/src/main/kotlin/com/uacastplayer/ui"
+SRC_DIR="app/src/main/kotlin/app/zorik/player/ui"
 PATTERN='Color\(0x'
 
 matches=$(grep -RPn --include='*.kt' "$PATTERN" "$SRC_DIR" || true)

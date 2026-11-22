@@ -42,7 +42,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adb", default="adb")
     parser.add_argument("--serial", required=True)
-    parser.add_argument("--package", default="com.uacastplayer")
+    parser.add_argument("--package", default="app.zorik.player")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--interval-ms", type=int, default=1000)
     parser.add_argument("--duration", type=int, default=2700)

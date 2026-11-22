@@ -7,7 +7,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
- * Modified for UA-Cast: bounded multi-output decoding, generation-based flush and EOS draining.
+ * Modified for Zorik: bounded multi-output decoding, generation-based flush and EOS draining.
  */
 package androidx.media3.decoder.ffmpeg;
 
@@ -68,7 +68,7 @@ final class ExperimentalFfmpegVideoDecoder
     nativeContext = ffmpegInitialize(codecName, extra.length == 0 ? null : extra,
         Math.max(1, Math.min(threads, 4)), format.rotationDegrees, format.width, format.height);
     if (nativeContext == 0) throw new FfmpegDecoderException("Native video initialization failed");
-    worker = new Thread(this::runWorker, "UA-Cast:FfmpegVideo");
+    worker = new Thread(this::runWorker, "Zorik:FfmpegVideo");
     try { worker.start(); } catch (RuntimeException | OutOfMemoryError error) {
       ffmpegRelease(nativeContext); nativeContext = 0; throw error;
     }

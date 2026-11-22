@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.view.SurfaceView;
 
-/** Dedicated test-only display target, unrelated to the installed UA-Cast Activity. */
+/** Dedicated test-only display target, unrelated to the installed Zorik Player Activity. */
 public final class DecoderHarnessActivity extends Activity {
   SurfaceView videoSurface;
   @Override public void onCreate(Bundle state) {

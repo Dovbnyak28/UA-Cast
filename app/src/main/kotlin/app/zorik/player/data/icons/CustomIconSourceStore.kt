@@ -1,0 +1,46 @@
+package app.zorik.player.data.icons
+
+import android.content.Context
+import androidx.core.content.edit
+import app.zorik.player.core.concurrent.runCatchingNonFatal
+import app.zorik.player.icons.CustomIconSourcePolicy
+import org.json.JSONArray
+
+/**
+ * User-added base-URL icon packs (e.g. `https://mycdn.com/logos/`), the only channel-logo sources
+ * used by [IconRepository]/[app.zorik.player.icons.IconResolver]. Small, non-critical,
+ * editable list, so a plain JSON-array-in-one-SharedPreferences-value is enough - unlike
+ * [app.zorik.player.data.favorites.FavoritesStore] this doesn't need AtomicFile crash-safety;
+ * losing this list in a rare write race just means re-adding a couple of URLs, not losing user data.
+ */
+class CustomIconSourceStore(context: Context) {
+    private val preferences = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getBaseUrls(): List<String> {
+        val raw = preferences.getString(KEY_BASE_URLS, null) ?: return emptyList()
+        return runCatchingNonFatal {
+            val array = JSONArray(raw)
+            (0 until array.length())
+                .mapNotNull { index ->
+                    CustomIconSourcePolicy.canonicalize(array.getString(index))
+                }
+                .distinct()
+                .take(CustomIconSourcePolicy.MAX_SOURCES)
+        }.getOrDefault(emptyList())
+    }
+
+    fun saveBaseUrls(urls: List<String>) {
+        val safeUrls = urls.asSequence()
+            .mapNotNull(CustomIconSourcePolicy::canonicalize)
+            .distinct()
+            .take(CustomIconSourcePolicy.MAX_SOURCES)
+            .toList()
+        val array = JSONArray().apply { safeUrls.forEach(::put) }
+        preferences.edit { putString(KEY_BASE_URLS, array.toString()) }
+    }
+
+    private companion object {
+        const val PREFS_NAME = "custom_icon_sources"
+        const val KEY_BASE_URLS = "base_urls"
+    }
+}

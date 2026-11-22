@@ -1,0 +1,67 @@
+package app.zorik.player.ui.theme
+
+import androidx.compose.ui.unit.dp
+
+// Spacing
+val ScreenHPadding = 20.dp
+val CardPadding = 20.dp
+val ItemPadding = 14.dp
+val GapS = 8.dp
+val GapM = 14.dp
+val GapL = 20.dp
+
+// Radii
+val RadiusList = 20.dp
+val RadiusCard = 24.dp
+val RadiusField = 14.dp
+val RadiusItem = 16.dp
+val RadiusSeg = 12.dp
+val RadiusSegInner = 9.dp
+
+// Buttons
+val PlayButtonSize = 66.dp
+val RoundButtonSize = 48.dp
+val IconButtonSize = 48.dp
+val TouchTargetMin = 48.dp
+
+/** 4/8dp rhythm for new foundations. Existing screen spacing aliases remain compatible. */
+object AppSpacing {
+    val xxs = 4.dp
+    val xs = 8.dp
+    val small = 12.dp
+    val medium = 16.dp
+    val large = 24.dp
+    val extraLarge = 32.dp
+}
+
+/** Fixed height for a [app.zorik.player.ui.player.QuickSettingsRow] item's label - some labels
+ * (translated, in the longer locales) wrap to 2 lines while others fit on 1, and without a shared
+ * fixed height each item's Column ends up a different height, breaking the row's rhythm. Sized for
+ * 2 lines of [Caption] plus its top padding; a 1-line label just sits top-aligned within the extra
+ * space instead of stretching to fill it. */
+val QuickSettingLabelHeight = 32.dp
+
+// Adaptive grids
+val GroupTileMinWidth = 160.dp
+val ChannelTileMinWidth = 110.dp
+val ChannelTileMinWidthLarge = 150.dp
+
+// Lists
+val ChannelLogoSize = 44.dp
+val ChannelLogoRadius = 13.dp
+val MiniPlayerBarHeight = 64.dp
+
+/** [GlassTabBar][app.zorik.player.ui.components.GlassTabBar]'s own content height/vertical
+ * padding - named (not just literals inside GlassTabBar.kt) so
+ * [MiniPlayerBar][app.zorik.player.ui.player.MiniPlayerBar] positioning code, which floats above
+ * the tab bar from outside RootScaffold's own Scaffold layout, can stay in sync with it. */
+val GlassTabBarHeight = 64.dp
+val GlassTabBarVerticalPadding = 0.dp
+val NpLogoSize = 54.dp
+val ProgressHeightThin = 3.dp
+val ProgressHeightBold = 5.dp
+val StatusDotSize = 7.dp
+val HairlineInsetChannels = 66.dp
+
+// Entry motion (see ui/components/EntryStagger.kt)
+val EntryLift = 12.dp

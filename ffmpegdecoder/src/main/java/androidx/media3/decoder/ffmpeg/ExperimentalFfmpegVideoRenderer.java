@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Modified for UA-Cast: AndroidX annotations, pinned Media3 MIME compatibility and trace cleanup.
+ * Modified for Zorik: AndroidX annotations, pinned Media3 MIME compatibility and trace cleanup.
  * See ORIGIN.md for provenance and the local modification history.
  */
 package androidx.media3.decoder.ffmpeg;

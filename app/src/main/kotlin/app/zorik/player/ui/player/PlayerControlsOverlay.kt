@@ -1,0 +1,241 @@
+package app.zorik.player.ui.player
+
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.UnstableApi
+import app.zorik.player.R
+import app.zorik.player.player.IndexedChannel
+import app.zorik.player.player.PlayerUiState
+import app.zorik.player.player.SleepTimerFormatter
+import app.zorik.player.epg.EpgProgramme
+import app.zorik.player.ui.components.SmallRoundIconButton
+import app.zorik.player.ui.theme.AppIcons
+import app.zorik.player.ui.theme.BREATHE_MS
+import app.zorik.player.ui.theme.Caption
+import app.zorik.player.ui.theme.IconButtonSize
+import app.zorik.player.ui.theme.LiveText
+import app.zorik.player.ui.theme.RadiusItem
+import app.zorik.player.ui.theme.ScreenHPadding
+import app.zorik.player.ui.theme.UaTheme
+
+private const val LIVE_LABEL_MIN_ALPHA = 0.6f
+private const val TOP_SCRIM_END = 0.22f
+private const val BOTTOM_SCRIM_START = 0.70f
+private val SHORT_PLAYER_HEIGHT = 320.dp
+
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
+@Composable
+@Suppress("LongParameterList") // Stateless overlay callbacks; platform level controls live in PlayerLevelsSheet.
+internal fun PlayerControlsOverlay(
+    uiState: PlayerUiState,
+    isFullscreen: Boolean,
+    // State, not a plain Long? - see SleepTimerState's doc. Kept unread until SleepTimerButton's
+    // own body so the once-a-second tick only recomposes that small pill, not this whole overlay.
+    sleepTimerRemainingMillis: State<Long?>,
+    onExit: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onEnterPip: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
+    isDlnaCasting: Boolean,
+    onOpenDlnaSheet: () -> Unit,
+    onSelectPreview: (IndexedChannel) -> Unit,
+    onOpenActions: () -> Unit = {},
+    fileProgress: (@Composable () -> Unit)? = null,
+    programme: EpgProgramme? = null,
+    programmeNowMillis: Long = 0L,
+    onOpenGuide: (() -> Unit)? = null,
+    receiverControls: (@Composable () -> Unit)? = null,
+) {
+    val isFile = uiState.currentChannel?.localVideo != null
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            // Keep controls readable over bright live video without dimming the centre of the
+            // picture. The scrim is theme-owned because it is an overlay tone, not app chrome.
+            .background(
+                Brush.verticalGradient(
+                    0f to UaTheme.palette.scrimBackground.copy(alpha = 0.90f),
+                    TOP_SCRIM_END to Color.Transparent,
+                    BOTTOM_SCRIM_START to Color.Transparent,
+                    1f to UaTheme.palette.scrimBackground.copy(alpha = 0.94f),
+                ),
+            ),
+    ) {
+        val compact = maxWidth >= PLAYER_WIDE_CONTROLS_WIDTH && maxHeight <= SHORT_PLAYER_HEIGHT
+        CompositionLocalProvider(LocalCompactPlayerControls provides compact) {
+            Column(Modifier.fillMaxSize()) {
+                PlayerOverlayHeader(uiState, onExit, isDlnaCasting, onOpenDlnaSheet, onOpenActions)
+                Box(modifier = Modifier.weight(1f))
+                if (!compact && uiState.nextChannelsPreview.isNotEmpty() && programme == null) {
+                    PlayerChannelPreviews(uiState.nextChannelsPreview, onSelectPreview)
+                }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(UaTheme.palette.scrimBackground.copy(alpha = 0.88f))
+                    .border(1.dp, UaTheme.palette.overlayHighlight, RoundedCornerShape(24.dp))) {
+                    if (!isFile && programme != null) PlayerProgrammePanel(programme, programmeNowMillis)
+                    receiverControls?.invoke()
+                    if (isFile || uiState.canSeek) fileProgress?.invoke()
+                    PlayerOverlayFooter(uiState, isFullscreen, sleepTimerRemainingMillis,
+                        PlayerOverlayFooterActions(
+                            onPlayPause, onNext, onPrevious, onToggleFullscreen, onEnterPip, onOpenSleepTimer,
+                            guide = onOpenGuide.takeUnless { isFile },
+                        ))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerChannelPreviews(channels: List<IndexedChannel>, onSelect: (IndexedChannel) -> Unit) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = ScreenHPadding),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(channels, key = { it.index }) { indexed ->
+            Text(
+                text = indexed.channel.displayName, color = UaTheme.palette.labelPrimary,
+                style = Caption, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp, maxWidth = 180.dp)
+                    .clip(RoundedCornerShape(RadiusItem))
+                    .background(UaTheme.palette.scrimBackground)
+                    .border(1.dp, UaTheme.palette.overlayHighlight, RoundedCornerShape(RadiusItem))
+                    .clickable(role = Role.Button, onClickLabel = indexed.channel.displayName,
+                        onClick = { onSelect(indexed) })
+                    .padding(horizontal = 12.dp, vertical = 8.dp).wrapContentHeight(Alignment.CenterVertically),
+            )
+        }
+    }
+}
+
+/**
+ * Opens the sleep timer dialog. Shows a plain icon when idle; once a timer is running, widens into
+ * a pill showing the live countdown instead, so the remaining time is visible without opening the
+ * dialog.
+ */
+@Composable
+internal fun SleepTimerButton(remainingMillis: State<Long?>, onClick: () -> Unit) {
+    val remaining = remainingMillis.value
+    if (remaining == null) {
+        SmallRoundIconButton(
+            icon = AppIcons.Timer,
+            onClick = onClick,
+            contentDescription = stringResource(R.string.player_sleep_timer),
+            background = UaTheme.palette.scrimBackground,
+        )
+    } else {
+        Row(
+            modifier = Modifier
+                .height(IconButtonSize)
+                .clip(RoundedCornerShape(IconButtonSize / 2))
+                .background(UaTheme.palette.scrimBackground)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.player_sleep_timer),
+                    onClick = onClick,
+                )
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                AppIcons.Timer,
+                contentDescription = stringResource(R.string.player_sleep_timer),
+                tint = UaTheme.palette.azure,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = SleepTimerFormatter.formatRemaining(remaining),
+                color = UaTheme.palette.labelPrimary,
+                style = Caption,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+    }
+}
+
+/** §4 rule 3 - LIVE dot breathing between alpha/scale 1 and 0.3/0.8, reversed, on an infinite loop. */
+@Composable
+internal fun LiveIndicator() {
+    if (!app.zorik.player.ui.components.animationsAllowed()) {
+        LiveIndicatorContent(1f, 1f)
+        return
+    }
+    val transition = rememberInfiniteTransition(label = "liveBreathe")
+    val alpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(tween(BREATHE_MS), repeatMode = RepeatMode.Reverse),
+        label = "liveAlpha",
+    )
+    val dotScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(tween(BREATHE_MS), repeatMode = RepeatMode.Reverse),
+        label = "liveScale",
+    )
+    LiveIndicatorContent(alpha, dotScale)
+}
+
+@Composable
+private fun LiveIndicatorContent(alpha: Float, dotScale: Float) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .scale(dotScale)
+                .background(UaTheme.palette.routeRed.copy(alpha = alpha), CircleShape)
+                .background(UaTheme.palette.redGlow.copy(alpha = alpha * 0.4f), CircleShape),
+        )
+        Text(
+            text = stringResource(R.string.player_live_indicator),
+            style = LiveText,
+            color = UaTheme.palette.routeRed.copy(alpha = alpha.coerceAtLeast(LIVE_LABEL_MIN_ALPHA)),
+            modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}

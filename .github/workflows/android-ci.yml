@@ -17,8 +17,8 @@ permissions:
   actions: read
 
 env:
-  UACAST_VERSION_CODE: ${{ github.run_number }}
-  UACAST_VERSION_NAME: 0.9.7.${{ github.run_number }}
+  ZORIK_VERSION_CODE: ${{ github.run_number }}
+  ZORIK_VERSION_NAME: 0.9.8.${{ github.run_number }}
 
 jobs:
   native:
@@ -57,7 +57,7 @@ jobs:
         run: python3 scripts/prepare-software-decoder.py --verify-only
 
       - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+        run: ./gradlew :app:assembleDebug --stacktrace -Pzorik.versionCode=$ZORIK_VERSION_CODE -Pzorik.versionName=$ZORIK_VERSION_NAME
 
       - name: Verify legal documents are packaged
         run: bash scripts/check-legal-assets.sh app/build/outputs/apk/debug
@@ -239,7 +239,7 @@ jobs:
         run: python3 scripts/prepare-software-decoder.py --verify-only
 
       - name: Assemble release APKs
-        run: ./gradlew :app:assembleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+        run: ./gradlew :app:assembleRelease --stacktrace -Pzorik.versionCode=$ZORIK_VERSION_CODE -Pzorik.versionName=$ZORIK_VERSION_NAME
 
       - name: Verify legal documents are packaged
         run: bash scripts/check-legal-assets.sh app/build/outputs/apk/release
@@ -248,10 +248,10 @@ jobs:
         run: bash scripts/check-version-code-ordering.sh
 
       - name: Bundle release
-        run: ./gradlew :app:bundleRelease --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+        run: ./gradlew :app:bundleRelease --stacktrace -Pzorik.versionCode=$ZORIK_VERSION_CODE -Pzorik.versionName=$ZORIK_VERSION_NAME
 
       - name: Bundle Play distribution
-        run: ./gradlew :app:bundlePlay --stacktrace -Puacast.versionCode=$UACAST_VERSION_CODE -Puacast.versionName=$UACAST_VERSION_NAME
+        run: ./gradlew :app:bundlePlay --stacktrace -Pzorik.versionCode=$ZORIK_VERSION_CODE -Pzorik.versionName=$ZORIK_VERSION_NAME
 
       - name: Verify Play distribution policy surface
         run: bash scripts/check-play-distribution.sh

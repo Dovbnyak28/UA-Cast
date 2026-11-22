@@ -161,7 +161,7 @@
           "limit": 65536
         },
         {
-          "name": "UaCastFirstVideoFrameSumMs",
+          "name": "ZorikFirstVideoFrameSumMs",
           "statistic": "median",
           "limit": 1500
         }
@@ -183,7 +183,7 @@
           "limit": 65536
         },
         {
-          "name": "UaCastFirstVideoFrameSumMs",
+          "name": "ZorikFirstVideoFrameSumMs",
           "statistic": "median",
           "limit": 600
         }
