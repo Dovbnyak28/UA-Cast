@@ -42,16 +42,21 @@ def assess(readiness, dependencies, store_live=False):
 
 
 def checkout_is_live(root):
-    """True when any build can take payment.
+    """True when any build can take payment; fails closed when that cannot be read.
 
-    `PremiumAvailability.STORE_IS_LIVE` used to be a literal; it now follows the
-    `PLAY_BILLING_LIVE` BuildConfig field, which the `play` build type sets to true. Reading only
-    the Kotlin literal made a live Play checkout look disabled and skipped the commerce review.
+    `PremiumAvailability.STORE_IS_LIVE` follows the `PLAY_BILLING_LIVE` BuildConfig field, which the
+    `play` build type sets to true. Every value given to that field counts: a literal "false" is the
+    only thing that says "no", so a variable or an unfamiliar form is treated as live rather than
+    silently skipping the commerce review - which is how a live checkout once passed as disabled.
     """
     kotlin = (root / "app/src/main/kotlin/app/zorik/player/premium/PremiumAvailability.kt").read_text(encoding="utf-8")
     gradle = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
-    return bool(re.search(r"STORE_IS_LIVE\s*=\s*true", kotlin) or
-                re.search(r'buildConfigField\(\s*"boolean"\s*,\s*"PLAY_BILLING_LIVE"\s*,\s*"true"\s*\)', gradle))
+    if re.search(r"STORE_IS_LIVE\s*=\s*true", kotlin):
+        return True
+    if re.search(r"STORE_IS_LIVE\s*=\s*false", kotlin):
+        return False
+    values = re.findall(r'buildConfigField\(\s*"boolean"\s*,\s*"PLAY_BILLING_LIVE"\s*,\s*([^)]*?)\s*\)', gradle)
+    return not values or any(value.strip() != '"false"' for value in values)
 
 
 def main():

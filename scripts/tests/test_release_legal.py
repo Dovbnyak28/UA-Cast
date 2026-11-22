@@ -51,6 +51,21 @@ class ReleaseLegalTests(unittest.TestCase):
                               encoding="utf-8")
             self.assertTrue(LEGAL.checkout_is_live(root))
 
+    def test_unreadable_or_variable_flag_counts_as_live(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            kotlin = root / "app/src/main/kotlin/app/zorik/player/premium/PremiumAvailability.kt"
+            kotlin.parent.mkdir(parents=True)
+            kotlin.write_text("const val STORE_IS_LIVE = BuildConfig.PLAY_BILLING_LIVE", encoding="utf-8")
+            gradle = root / "app/build.gradle.kts"
+            gradle.write_text('buildConfigField("boolean", "PLAY_BILLING_LIVE", liveFlag)', encoding="utf-8")
+            self.assertTrue(LEGAL.checkout_is_live(root))
+            gradle.write_text("// no billing flag at all", encoding="utf-8")
+            self.assertTrue(LEGAL.checkout_is_live(root))
+            kotlin.write_text("const val STORE_IS_LIVE = false", encoding="utf-8")
+            self.assertFalse(LEGAL.checkout_is_live(root))
+
     def test_this_repository_is_detected_as_live(self):
         self.assertTrue(LEGAL.checkout_is_live(ROOT))
 

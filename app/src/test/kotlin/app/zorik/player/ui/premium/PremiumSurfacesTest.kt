@@ -1,6 +1,8 @@
 package app.zorik.player.ui.premium
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -206,16 +208,34 @@ class PremiumSurfacesTest {
      * navigation dock. It must scroll itself into view and be announced by TalkBack. */
     @Test
     fun theOutcomeIsScrolledIntoViewAndAnnounced() {
+        val outcome = mutableStateOf<PurchaseResult?>(null)
         composeRule.setContent {
             ZorikTheme(AppTheme.CINEMA) {
                 Column(Modifier.height(240.dp).verticalScroll(rememberScrollState())) {
+                    PremiumContent(section = section(License.FREE, outcome = outcome.value))
+                }
+            }
+        }
+        composeRule.runOnIdle { outcome.value = PurchaseResult.Unavailable }
+        composeRule.onNodeWithText(UNREACHABLE)
+            .assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+    }
+
+    /** The outcome is kept until the next attempt, so it is still there when the screen is opened
+     * again later. Opening the screen must not scroll the page down to that old message. */
+    @Test
+    fun anOutcomeAlreadyThereWhenTheScreenOpensDoesNotScrollThePage() {
+        val scroll = ScrollState(0)
+        composeRule.setContent {
+            ZorikTheme(AppTheme.CINEMA) {
+                Column(Modifier.height(240.dp).verticalScroll(scroll)) {
                     PremiumContent(section = section(License.FREE, outcome = PurchaseResult.Unavailable))
                 }
             }
         }
-        composeRule.onNodeWithText("Не вдалося звʼязатися з Google Play. Перевірте зʼєднання та спробуйте ще раз.")
-            .assertIsDisplayed()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+        composeRule.waitForIdle()
+        assertEquals(0, scroll.value)
     }
 
     private fun showOutcome(outcome: PurchaseResult?) {
@@ -239,6 +259,18 @@ class PremiumSurfacesTest {
         showOutcome(PurchaseResult.NothingToRestore)
 
         composeRule.onNodeWithText("На цьому акаунті Google немає що відновлювати.").assertIsDisplayed()
+    }
+
+    /** Cash or parental approval: Play took the order but not the money yet. Telling that user the
+     * purchase failed invites a second payment. */
+    @Test
+    fun aPendingPaymentIsNotReportedAsAFailure() {
+        showOutcome(PurchaseResult.Pending)
+
+        composeRule.onNodeWithText(
+            "Оплата очікується. Premium відкриється, щойно Google Play її підтвердить, — платити вдруге не потрібно.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Не вдалося підтвердити", substring = true).assertDoesNotExist()
     }
 
     @Test
@@ -289,3 +321,5 @@ private fun androidx.compose.ui.test.junit4.ComposeTestRule.onAllNodesWithConten
     ).fetchSemanticsNodes().size
     assertEquals("badges carrying \"$description\"", expected, count)
 }
+
+private const val UNREACHABLE = "Не вдалося звʼязатися з Google Play. Перевірте зʼєднання та спробуйте ще раз."

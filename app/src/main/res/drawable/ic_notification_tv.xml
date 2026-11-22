@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon for a DLNA session: a plain TV. The Google Cast glyph (ic_notification_cast) is
+     reserved for Google Cast sessions under Google's Cast brand rules. Same outline as AppIcons.Tv. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M3,5 L21,5 L21,16 L3,16 Z M5,7 L5,14 L19,14 L19,7 Z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M9,18 L15,18 L15,20 L9,20 Z" />
+</vector>

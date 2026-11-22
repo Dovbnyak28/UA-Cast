@@ -480,6 +480,7 @@
     <string name="premium_already_owned">Это уже куплено. Нажмите «Восстановить покупки».</string>
     <string name="premium_store_unreachable">Не удалось связаться с Google Play. Проверьте соединение и попробуйте снова.</string>
     <string name="premium_purchase_failed">Не удалось подтвердить покупку. Восстановите покупки и проверьте Google Play перед повторной оплатой.</string>
+    <string name="premium_purchase_pending">Оплата ожидается. Premium откроется, как только Google Play её подтвердит, — платить повторно не нужно.</string>
     <string name="premium_upgrade_lapsed">Прежний доступ Premium закончился. Пользуйтесь Lite, восстановите покупку или приобретите Premium один раз.</string>
     <string name="feature_dlna">Трансляция на телевизор через DLNA</string>
     <string name="feature_multi_playlist">Больше одного плейлиста</string>

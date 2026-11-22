@@ -2,6 +2,8 @@ package app.zorik.player.media
 
 import java.net.URI
 
+private val LOCAL_VIDEO_MIME_TYPE = Regex("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")
+
 /** Metadata only; file bytes and Android permission/descriptor ownership stay in data/media. */
 data class LocalVideo(
     val uri: String,
@@ -15,7 +17,7 @@ data class LocalVideo(
         require(parsed.scheme.equals("content", true) && !parsed.authority.isNullOrBlank())
         require(parsed.userInfo == null && parsed.fragment == null)
         require(displayName.isNotBlank() && displayName.length <= MAX_NAME_LENGTH)
-        require(mimeType.matches(Regex("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")))
+        require(mimeType.matches(LOCAL_VIDEO_MIME_TYPE))
     }
 
     companion object {

@@ -107,7 +107,13 @@ class PlayBillingProvider(
                 purchaseSnapshots.notePurchases(records)
                 onReconnected()
             }
-            pendingPurchase.complete(records) { outcomeOf(result, it) }
+            // A PENDING purchase is dropped by toRecord (nothing is owned yet), which would make an OK
+            // result look like "no purchase" and report a failure for a payment that is under way.
+            val awaitingPayment = result.responseCode == BillingClient.BillingResponseCode.OK &&
+                purchases.orEmpty().any { it.purchaseState == Purchase.PurchaseState.PENDING }
+            pendingPurchase.complete(records) { record ->
+                if (record == null && awaitingPayment) PurchaseResult.Pending else outcomeOf(result, record)
+            }
         }
     }
 

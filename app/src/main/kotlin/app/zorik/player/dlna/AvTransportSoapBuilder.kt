@@ -1,5 +1,7 @@
 package app.zorik.player.dlna
 
+private val MIME_TYPE = Regex("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")
+
 private const val AV_TRANSPORT_SERVICE_TYPE = "urn:schemas-upnp-org:service:AVTransport:1"
 
 /**
@@ -53,7 +55,7 @@ object AvTransportSoapBuilder {
     fun soapAction(action: String): String = "\"$AV_TRANSPORT_SERVICE_TYPE#$action\""
 
     fun didlLite(mediaUrl: String, title: String, contentType: String? = null): String {
-        require(contentType == null || contentType.matches(Regex("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")))
+        require(contentType == null || contentType.matches(MIME_TYPE))
         val mediaClass = if (contentType == null) "object.item.videoItem.videoBroadcast" else "object.item.videoItem"
         val protocolInfo = contentType?.let { "http-get:*:$it:DLNA.ORG_OP=01;DLNA.ORG_CI=0" }
             ?: LIVE_STREAM_PROTOCOL_INFO

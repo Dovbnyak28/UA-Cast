@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private val PAIRING_CODE = Regex("[0-9]{8}")
+
 data class PhoneRemoteState(val endpoint: RemoteEndpoint? = null, val connecting: Boolean = false,
     val connected: Boolean = false, val failed: Boolean = false)
 
@@ -32,7 +34,7 @@ class PhoneRemoteViewModel : ViewModel() {
     fun connect(address: String, code: String) {
         disconnect()
         val endpoint = RemoteEndpoint.parse(address)
-        if (endpoint == null || !code.matches(Regex("[0-9]{8}"))) {
+        if (endpoint == null || !code.matches(PAIRING_CODE)) {
             mutableState.value = PhoneRemoteState(failed = true)
             return
         }
