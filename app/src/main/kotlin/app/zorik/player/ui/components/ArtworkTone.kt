@@ -1,0 +1,159 @@
+package app.zorik.player.ui.components
+
+import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import app.zorik.player.core.concurrent.AppDispatchers
+import app.zorik.player.log.AppLog
+import app.zorik.player.icons.ArtworkTonePolicy
+import app.zorik.player.playlist.M3uChannel
+import java.io.File
+import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
+
+/** Longest edge the logo is decoded down to before its pixels are counted. */
+private const val TONE_SAMPLE_EDGE = 24
+
+/** Value the extracted hue is rebuilt at - a tint, not the logo's own brightness. */
+private const val TONE_VALUE = 0.62f
+
+/** Ceiling on saturation, so a fluorescent logo cannot paint a fluorescent card. */
+private const val TONE_MAX_SATURATION = 0.55f
+
+/**
+ * The colour a channel's logo is "about", or null when it has no opinion (a white wordmark) or is
+ * not on disk yet.
+ *
+ * Decoded at [TONE_SAMPLE_EDGE] rather than full size: a channel logo is up to a few hundred pixels
+ * square, and the mean colour of a 24px thumbnail is the mean colour of the original to well within
+ * what the eye can tell at this alpha - while costing a fraction of the memory and time, on a
+ * screen that is simultaneously decoding video.
+ *
+ * The value and saturation of the result are the app's, not the logo's: only the *hue* is borrowed.
+ * A logo's own lightness varies wildly between providers, and honouring it would make the same card
+ * near-black for one channel and glaring for the next.
+ */
+@Composable
+fun rememberArtworkTone(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    ioDispatcher: CoroutineDispatcher = AppDispatchers.io,
+    enabled: Boolean = true,
+    refreshKey: Any = Unit,
+): Color? {
+    if (!enabled) return null
+    // The selected-pack revision retires a previous result after pack edits; completed prefetch
+    // retires a "no artwork" result after a matching user-pack logo reaches the cache.
+    // Restarting the producer alone retains the old colour while the next resolver suspends.
+    return key(channel, refreshKey) {
+        val tone by produceState<Color?>(initialValue = null) {
+            value = withContext(ioDispatcher) {
+                val file = resolveArtworkToneFile(channel, resolveIcon) ?: return@withContext null
+                sampleTone(file)
+            }
+        }
+        tone
+    }
+}
+
+/**
+ * Resolves the file without turning coroutine cancellation into "there is no colour".
+ *
+ * `runCatching` used to sit here, but it catches every [Throwable], including
+ * `CancellationException`. When Compose replaced the producer on a quick channel switch, the old
+ * producer could therefore continue into bitmap decoding and publish a stale result. The icon
+ * repository already converts expected network failures to null; this last boundary only keeps a
+ * defensive [IOException] from an alternative resolver from taking down the player UI.
+ */
+internal suspend fun resolveArtworkToneFile(
+    channel: M3uChannel,
+    resolveIcon: suspend (M3uChannel) -> File?,
+): File? = try {
+    resolveIcon(channel)
+} catch (e: IOException) {
+    AppLog.w(TAG) { "Artwork file resolution failed: ${e.javaClass.simpleName}" }
+    null
+}
+
+private fun sampleTone(file: File): Color? {
+    val tone = samplePixels(file)?.let(ArtworkTonePolicy::of) ?: return null
+    return Color.hsv(
+        hue = tone.hue,
+        saturation = tone.saturation.coerceAtMost(TONE_MAX_SATURATION),
+        value = TONE_VALUE,
+    )
+}
+
+/**
+ * A corrupt or half-written cache file throws out of the decoder rather than returning null, and
+ * this runs on every channel change - one bad file must not take the player down with it.
+ */
+private fun samplePixels(file: File): IntArray? = try {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    val longestEdge = maxOf(bounds.outWidth, bounds.outHeight)
+    if (longestEdge <= 0) {
+        null
+    } else {
+        decodeSampledBitmap(file, longestEdge)?.let(::copyPixelsAndRecycle)
+    }
+} catch (e: IllegalArgumentException) {
+    AppLog.w(TAG) { "Artwork bitmap sampling failed: ${e.javaClass.simpleName}" }
+    null
+}
+
+private fun decodeSampledBitmap(file: File, longestEdge: Int): Bitmap? {
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = maxOf(1, longestEdge / TONE_SAMPLE_EDGE)
+    }
+    return BitmapFactory.decodeFile(file.path, options)
+}
+
+private fun copyPixelsAndRecycle(bitmap: Bitmap): IntArray = try {
+    IntArray(bitmap.width * bitmap.height).also { pixels ->
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+    }
+} finally {
+    bitmap.recycle()
+}
+
+private const val TAG = "ArtworkTone"
+
+/** Strongest the wash ever gets, at the edge the logo sits against. */
+private const val WASH_MAX_ALPHA = 0.16f
+
+/** Where along the card the wash has faded to nothing. */
+private const val WASH_END_FRACTION = 0.75f
+
+/**
+ * Lays a [tone] over a surface as a horizontal fade, strongest at the leading edge and gone before
+ * the far side.
+ *
+ * A flat fill would be a coloured card - too much, and it fights every text colour on top of it.
+ * A gradient anchored where the logo is reads as light coming *off* the logo, which is the effect
+ * worth having; and because it ends well before the right edge, the text sits on the card's own
+ * surface colour and its contrast is unchanged. A null [tone] adds nothing at all.
+ */
+fun Modifier.artworkWash(tone: Color?, shape: Shape): Modifier {
+    if (tone == null) return this
+    return this
+        .clip(shape)
+        .drawWithCache {
+            val brush = Brush.horizontalGradient(
+                colors = listOf(tone.copy(alpha = WASH_MAX_ALPHA), Color.Transparent),
+                startX = 0f,
+                endX = size.width * WASH_END_FRACTION,
+            )
+            onDrawBehind { drawRect(brush) }
+        }
+}

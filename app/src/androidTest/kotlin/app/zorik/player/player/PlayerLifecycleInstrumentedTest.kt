@@ -1,0 +1,609 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+
+package app.zorik.player.player
+
+import android.view.TextureView
+import android.view.View
+import android.view.ViewGroup
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.test.espresso.Espresso
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import app.zorik.player.MainActivity
+import app.zorik.player.R
+import app.zorik.player.testsupport.FakeOriginServer
+import app.zorik.player.testsupport.loadTestPlaylist
+import app.zorik.player.testsupport.openChannelViaSearch
+import app.zorik.player.testsupport.setAutoSkipDeadChannels
+import app.zorik.player.testsupport.skipOnboarding
+import app.zorik.player.testsupport.tapChannelRow
+import app.zorik.player.testsupport.waitForChannelsLoaded
+import app.zorik.player.ui.UiTestTags
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import kotlin.time.Duration.Companion.seconds
+
+/**
+ * Instrumented regression coverage for the double-ExoPlayer leak (see the Session A fix in
+ * [PlayerViewModel] and [app.zorik.player.ui.player.PlayerHost]): every scenario here is a
+ * lifecycle transition that used to be able to spin up a second [PlayerViewModel] - and therefore
+ * a second ExoPlayer - while the first was still alive. [PlayerViewModel.liveInstanceCountForTest]
+ * is the same counter that guards this in production; these tests just assert it never exceeds 1.
+ *
+ * Compiled by the fast CI job and actually run by its `instrumented` job on an emulator, the
+ * same way scripts/run-instrumented-tests.sh runs them by hand - see android-ci.yml.
+ */
+@RunWith(AndroidJUnit4::class)
+class PlayerLifecycleInstrumentedTest {
+    @Test fun liveWindowRecoveryHonorsBackgroundAndExplicitPause() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            val listener = PlayerViewModel::class.java.getDeclaredField("listener").let {
+                it.isAccessible = true
+                it.get(model) as androidx.media3.common.Player.Listener
+            }
+            val failure = androidx.media3.common.PlaybackException(
+                "Controlled live-window failure", null,
+                androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+            )
+            model.start(listOf(checkNotNull(model.uiState.value.currentChannel)), 0)
+            model.onEnterBackground(false)
+            // Stop models Media3's idle error state before the real callback handler runs.
+            model.player.stop()
+            listener.onPlayerError(failure)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertTrue(!model.player.playWhenReady)
+
+            model.onReturnToForeground()
+            assertEquals(androidx.media3.common.Player.STATE_BUFFERING, model.player.playbackState)
+            assertTrue(model.player.playWhenReady)
+
+            model.togglePlayback()
+            model.player.stop()
+            listener.onPlayerError(failure)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertTrue(!model.player.playWhenReady)
+            model.togglePlayback()
+            assertEquals(androidx.media3.common.Player.STATE_BUFFERING, model.player.playbackState)
+            assertTrue(model.player.playWhenReady)
+        }
+    }
+
+    @Test fun sleepExpiryCancelsDeferredForegroundResumeUntilExplicitPlay() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            // The empty synthetic HLS may have already reached its terminal error screen.
+            // Expire during a fresh preparation; terminal errors correctly require Retry, not Play.
+            model.start(listOf(checkNotNull(model.uiState.value.currentChannel)), 0)
+            assertTrue(!model.uiState.value.fatalError)
+            model.onEnterBackground(false)
+            model.sleepTimer.start(kotlin.time.Duration.ZERO)
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            model.onReturnToForeground()
+            assertTrue(!model.player.playWhenReady)
+            assertEquals(androidx.media3.common.Player.STATE_IDLE, model.player.playbackState)
+            assertEquals(null, model.sleepTimer.remainingMillis.value)
+            model.togglePlayback()
+            assertTrue(model.player.playWhenReady)
+        }
+    }
+
+    @Test fun existingPlayerObservesNavigationPreferenceChanges() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val preferences = app.zorik.player.data.prefs.AppPreferences(activity)
+            val originalWrap = preferences.wrapAroundEnabled
+            val originalSkip = preferences.autoSkipDeadEnabled
+            try {
+                val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                preferences.wrapAroundEnabled = false
+                assertTrue(!model.uiState.value.canGoPrevious)
+                preferences.wrapAroundEnabled = true
+                assertTrue(model.uiState.value.canGoPrevious)
+                preferences.autoSkipDeadEnabled = !originalSkip
+                assertEquals(!originalSkip, model.autoSkipDeadEnabled)
+                val first = checkNotNull(model.uiState.value.currentChannel)
+                model.start(listOf(first, first.copy(displayName = "Last")), 1)
+                assertTrue(model.uiState.value.nextChannelsPreview.isNotEmpty())
+                preferences.wrapAroundEnabled = false
+                assertTrue(model.uiState.value.nextChannelsPreview.isEmpty())
+                assertTrue(!model.uiState.value.canGoNext)
+            } finally {
+                preferences.wrapAroundEnabled = originalWrap
+                preferences.autoSkipDeadEnabled = originalSkip
+            }
+        }
+    }
+    @Test fun bufferingPauseAndRapidTogglesFollowEngineIntent() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            model.player.playWhenReady = true
+            model.start(listOf(app.zorik.player.playlist.M3uChannel("Preparing", server.playlistUrl())), 0)
+            // The playback thread cannot finish preparation inside this Main-thread transaction.
+            assertTrue(model.player.playWhenReady)
+            assertTrue(!model.player.isPlaying)
+            assertTrue(model.uiState.value.wantsToPlay)
+            assertTrue(PlaybackActivity.isActive.value)
+            model.togglePlayback()
+            assertTrue(!model.player.playWhenReady)
+            assertTrue(!model.uiState.value.wantsToPlay)
+            assertTrue(!PlaybackActivity.isActive.value)
+            repeat(30) { model.togglePlayback() }
+            assertTrue(!model.player.playWhenReady)
+            model.releasePlayback()
+            model.togglePlayback()
+            assertTrue(!model.uiState.value.canControlPlayback)
+            assertTrue(!PlaybackActivity.isActive.value)
+        }
+    }
+
+    @Test fun localToggleCannotStealPlaybackFromEitherRemoteProtocol() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            model.player.pause()
+            model.setRemoteCastingForLifecycleTest(chromecast = false, dlna = true)
+            repeat(5) { model.togglePlayback() }
+            assertTrue(!model.player.playWhenReady)
+            assertTrue(!model.uiState.value.canControlPlayback)
+            assertTrue(PlaybackActivity.isActive.value)
+            model.setRemoteCastingForLifecycleTest(chromecast = true, dlna = false)
+            model.togglePlayback()
+            assertTrue(!model.player.playWhenReady)
+            model.setRemoteCastingForLifecycleTest(chromecast = false, dlna = false)
+        }
+    }
+
+    @get:Rule
+    val composeTestRule = createAndroidComposeRule<MainActivity>()
+
+    private lateinit var server: FakeOriginServer
+    private var previousAutoSkip: Boolean = true
+
+    @Before
+    fun setUp() {
+        // Before the player is ever opened - see setAutoSkipDeadChannels for why these tests cannot
+        // run with auto-skip on, and why PlayerViewModel has to be constructed after this.
+        previousAutoSkip = setAutoSkipDeadChannels(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            enabled = false,
+        )
+        server = FakeOriginServer.startWithChannels(channelCount = 3)
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            skipOnboarding(activity)
+            loadTestPlaylist(activity, server)
+        }
+        composeTestRule.waitForChannelsLoaded(server)
+        composeTestRule.openChannelViaSearch("Channel 1")
+    }
+
+    @After
+    fun tearDown() {
+        server.shutdown()
+        // A real, persisted setting on whatever device this ran against - put it back.
+        setAutoSkipDeadChannels(InstrumentationRegistry.getInstrumentation().targetContext, previousAutoSkip)
+    }
+
+    private fun backButton(): SemanticsNodeInteraction =
+        composeTestRule.onNodeWithContentDescription(composeTestRule.activity.getString(R.string.common_back))
+
+    private fun closePlayerFromScreen() {
+        backButton().performClick()
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        composeTestRule.onNodeWithContentDescription(
+            composeTestRule.activity.getString(R.string.player_mini_close),
+        ).performClick()
+        // A click schedules composition; PlayerHost releases playback from its disposal effect.
+        // Wait for actual removal before asserting engine cleanup on the Activity thread.
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertDoesNotExist()
+        composeTestRule.waitForIdle()
+    }
+
+    @Test
+    fun onScreenBackCollapsesJustLikeSystemBack_andCloseReleasesPlayback() {
+        var original: PlayerViewModel? = null
+        composeTestRule.activityRule.scenario.onActivity { original = ViewModelProvider(it)[PlayerViewModel::class.java] }
+        backButton().performClick()
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        composeTestRule.activityRule.scenario.onActivity {
+            val current = ViewModelProvider(it)[PlayerViewModel::class.java]
+            assertTrue(original === current)
+            assertEquals("Channel 1", current.uiState.value.currentChannel?.displayName)
+        }
+        composeTestRule.onNodeWithContentDescription(
+            composeTestRule.activity.getString(R.string.player_mini_close),
+        ).performClick()
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertDoesNotExist()
+        composeTestRule.activityRule.scenario.onActivity {
+            assertEquals(null, ViewModelProvider(it)[PlayerViewModel::class.java].uiState.value.currentChannel)
+        }
+    }
+
+    /** Scenario 1: open -> close, 10 times. Checked after every cycle, not just at the end - a
+     * regression that only shows up on, say, the 7th reopen must not be missed. */
+    @Test
+    fun openCloseTenCycles_neverLeaksASecondInstance() {
+        assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
+        closePlayerFromScreen()
+        composeTestRule.waitForIdle()
+
+        repeat(9) {
+            composeTestRule.tapChannelRow("Channel 1") // reopen (Event.Open)
+            assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
+            closePlayerFromScreen()
+            composeTestRule.waitForIdle()
+        }
+    }
+
+    /**
+     * Whether the player intends to play, which is what [BackgroundPlaybackPolicy] acts on.
+     *
+     * Deliberately not `isPlaying`. [FakeOriginServer] serves a valid but empty HLS VOD - enough for
+     * a data source to complete cleanly, with no frame a decoder could ever render - so `isPlaying`
+     * is false throughout this suite no matter what the app does. Asserting on it made these tests
+     * unpassable by construction. `playWhenReady` is the flag pause() and play() move, so it is both
+     * the honest signal here and the one production reads.
+     *
+     * One `onActivity` per read, never nested: it posts to the main thread and blocks until it
+     * returns, so calling it from inside another one deadlocks - which is precisely what happened.
+     */
+    private fun wantsToPlay(): Boolean {
+        var wants = false
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            wants = ViewModelProvider(activity)[PlayerViewModel::class.java].player.playWhenReady
+        }
+        return wants
+    }
+
+    @Test
+    fun sleepTimerSurvivesCollapsingThePlayer() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val viewModel = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            viewModel.player.play()
+            viewModel.sleepTimer.start(3.seconds)
+        }
+        Espresso.pressBack()
+        // System Back is dispatched outside Compose's idling resources. Observe its result;
+        // do not treat Espresso returning as proof that the collapsed tree is already mounted.
+        composeTestRule.waitUntil(8_000) {
+            composeTestRule.onAllNodes(androidx.compose.ui.test.hasTestTag(UiTestTags.MINI_PLAYER_BAR))
+                .fetchSemanticsNodes().size == 1
+        }
+        composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).assertExists()
+        // A synthetic stream can stop independently of the timer. Wait for the actual expiry,
+        // then assert its playback effect, rather than mistaking an unrelated stop for expiry.
+        composeTestRule.waitUntil(8_000) {
+            var expired = false
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                expired = ViewModelProvider(activity)[PlayerViewModel::class.java].sleepTimer.remainingMillis.value == null
+            }
+            expired
+        }
+        assertTrue(!wantsToPlay())
+    }
+
+    /**
+     * Leaving the app stops local playback, and coming back starts it again.
+     *
+     * This is the wiring half of [BackgroundPlaybackPolicy] - the policy's own tests say what the
+     * answer should be, and only this says that anything is asking. Without the observer in
+     * [app.zorik.player.ui.player.PlayerHost] the policy is a correct function nobody calls, which
+     * is exactly the state the app shipped in: Home left an IPTV stream running from a stopped
+     * activity, holding a wake lock, with no notification to stop it.
+     *
+     * `moveToState(CREATED)` is what the framework does for Home, Recent Apps, an app switch and a
+     * screen lock alike - all four arrive as ON_STOP.
+     */
+    @Test
+    fun leavingAndReturningPausesAndResumesPlayback() {
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeTestRule.waitForIdle()
+        assertTrue("playback must not continue from a stopped activity", !wantsToPlay())
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
+    }
+
+    /**
+     * A rotation must not be mistaken for leaving the app.
+     *
+     * It reaches ON_STOP on its way to rebuilding the Activity, so a background-pause that did not
+     * exclude it would stall a live channel every time the phone turned - the same reason
+     * `releasePlayback()` is guarded on `isChangingConfigurations`. Asserted by never observing a
+     * paused player across the recreate, not merely by checking the end state, which would be
+     * identical either way.
+     */
+    @Test
+    fun rotatingDoesNotPausePlayback() {
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
+
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+
+        assertTrue("a rotation is not the app leaving the screen", wantsToPlay())
+    }
+
+    /** And the other half of the rule: a channel the user paused themselves stays paused. Getting
+     * this wrong would be worse than the bug, because it would fire on every return to the app
+     * rather than only on backgrounding. */
+    @Test
+    fun aChannelPausedByTheUserIsNotResumedOnReturn() {
+        composeTestRule.waitUntil(timeoutMillis = 10_000) { wantsToPlay() }
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            ViewModelProvider(activity)[PlayerViewModel::class.java].player.pause()
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        assertTrue("returning to the app must not undo the user's pause", !wantsToPlay())
+    }
+
+    /** Scenario 2: mini <-> fullscreen, 10 times, via the system back gesture (collapses) and a
+     * tap on the mini bar (expands) - the actual affordances a user has, not a direct state-machine
+     * call. ASSERT: same [PlayerViewModel] identity throughout, never more than one live instance. */
+    @Test
+    fun miniFullscreenToggleTenTimes_sameInstanceThroughout() {
+        val initialInstance = composeTestRule.activityRule.scenario.let { scenario ->
+            var vm: PlayerViewModel? = null
+            scenario.onActivity { vm = ViewModelProvider(it)[PlayerViewModel::class.java] }
+            checkNotNull(vm)
+        }
+
+        repeat(10) {
+            Espresso.pressBack() // collapse to mini (Event.Back: EXPANDED -> COLLAPSED)
+            composeTestRule.waitForIdle()
+            assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
+
+            composeTestRule.onNodeWithTag(UiTestTags.MINI_PLAYER_BAR).performClick() // expand (Event.Tap)
+            composeTestRule.waitForIdle()
+
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                assertTrue(
+                    "PlayerViewModel identity changed across a mini/fullscreen toggle - this is the leak",
+                    ViewModelProvider(activity)[PlayerViewModel::class.java] === initialInstance,
+                )
+            }
+        }
+    }
+
+    @Test fun fullscreenKeepsNativeViewsAndRendersAfterSurfaceRecreation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val clip = java.io.File(context.cacheDir, "diagnostics/surface-${java.util.UUID.randomUUID()}.mp4")
+        check(clip.parentFile!!.isDirectory || clip.parentFile!!.mkdirs())
+        val frames = java.util.concurrent.atomic.AtomicInteger()
+        val frameListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { _, _, _, _ ->
+            frames.incrementAndGet()
+        }
+        var renderingPlayer: androidx.media3.exoplayer.ExoPlayer? = null
+        try {
+            // A gray frame distinguishes actual decoded pixels from a black/cleared surface.
+            SyntheticVideoEncoder.encode(clip, luma = 96)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.diagnostics", clip,
+            )
+            val video = kotlinx.coroutines.runBlocking {
+                app.zorik.player.data.media.AndroidLocalVideoReader(context).read(uri.toString(), persist = false)
+            }
+            lateinit var model: PlayerViewModel
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                model = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                renderingPlayer = (model.player as androidx.media3.exoplayer.ExoPlayer).also {
+                    it.setVideoFrameMetadataListener(frameListener)
+                }
+                model.start(PlayerRequest.forLocalVideo(video).channels, 0)
+            }
+            composeTestRule.waitUntil(15_000) { frames.get() > 0 || model.uiState.value.fatalError }
+            assertTrue("The generated clip must produce real video frames", frames.get() > 0)
+            composeTestRule.activityRule.scenario.onActivity {
+                model.player.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
+                model.togglePlayback()
+            }
+            composeTestRule.waitUntil(5_000) { !model.uiState.value.isPlaying }
+            composeTestRule.waitForIdle()
+            lateinit var original: androidx.media3.ui.PlayerView
+            lateinit var textureView: TextureView
+            composeTestRule.activityRule.scenario.onActivity { activity ->
+                original = nativePlayerViews(activity.window.decorView).single()
+                textureView = original.videoSurfaceView as TextureView
+            }
+            repeat(3) { round ->
+                println("fullscreen-repro: round=$round entering")
+                composeTestRule.onNodeWithContentDescription(
+                    composeTestRule.activity.getString(R.string.player_fullscreen),
+                ).performClick()
+                composeTestRule.waitForIdle()
+                println("fullscreen-repro: round=$round entered")
+                composeTestRule.activityRule.scenario.onActivity { activity ->
+                    assertSame(original, nativePlayerViews(activity.window.decorView).single())
+                    assertSame(textureView, original.videoSurfaceView)
+                    assertSame(model.player, original.player)
+                }
+                try {
+                    composeTestRule.onNodeWithContentDescription(
+                        composeTestRule.activity.getString(R.string.player_exit_fullscreen),
+                    ).performClick()
+                    println("fullscreen-repro: round=$round exited")
+                } catch (failure: AssertionError) {
+                    runCatching {
+                        composeTestRule.activityRule.scenario.onActivity { activity ->
+                            val state = model.uiState.value
+                            println("fullscreen-repro: playing=${state.isPlaying} wantsPlay=${state.wantsToPlay} " +
+                                "fatal=${state.fatalError} buffering=${state.isBuffering} " +
+                                "localFile=${state.currentChannel?.localVideo != null} " +
+                                "playerState=${model.player.playbackState} " +
+                                "requestedOrientation=${activity.requestedOrientation}")
+                        }
+                        val instrumentation = InstrumentationRegistry.getInstrumentation()
+                        val directory = java.io.File(context.cacheDir, "diagnostics/fullscreen-repro")
+                        directory.mkdirs()
+                        instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                            try {
+                                java.io.File(directory, "failure.png").outputStream().use {
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                                }
+                            } finally { bitmap.recycle() }
+                        }
+                        androidx.test.uiautomator.UiDevice.getInstance(instrumentation)
+                            .dumpWindowHierarchy(java.io.File(directory, "failure.xml"))
+                    }.onFailure { println("fullscreen-repro: diagnostics unavailable: ${it.javaClass.simpleName}") }
+                    throw failure
+                }
+                composeTestRule.waitForIdle()
+                composeTestRule.activityRule.scenario.onActivity { activity ->
+                    assertSame(original, nativePlayerViews(activity.window.decorView).single())
+                    assertSame(textureView, original.videoSurfaceView)
+                }
+            }
+            // Android can replace SurfaceTexture when a retained native view is detached/moved.
+            // The contract is continued rendering, not identity of that platform-owned resource.
+            val beforeResume = frames.get()
+            composeTestRule.activityRule.scenario.onActivity { model.togglePlayback() }
+            composeTestRule.waitUntil(5_000) { frames.get() >= beforeResume + 2 && model.uiState.value.isPlaying }
+            composeTestRule.waitUntil(5_000) {
+                var decodedPixels = false
+                composeTestRule.activityRule.scenario.onActivity {
+                    val bitmap = textureView.getBitmap(16, 16)
+                    try {
+                        val pixel = bitmap?.getPixel(8, 8) ?: 0
+                        decodedPixels = android.graphics.Color.red(pixel) > 24 &&
+                            android.graphics.Color.green(pixel) > 24 && android.graphics.Color.blue(pixel) > 24
+                    } finally { bitmap?.recycle() }
+                }
+                decodedPixels
+            }
+            closePlayerFromScreen()
+            composeTestRule.activityRule.scenario.onActivity {
+                assertNull(original.player)
+                assertTrue(!model.player.isPlaying)
+                assertEquals(0, model.player.mediaItemCount)
+            }
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                renderingPlayer?.clearVideoFrameMetadataListener(frameListener)
+            }
+            clip.delete()
+        }
+    }
+
+    private fun nativePlayerViews(view: View): List<androidx.media3.ui.PlayerView> = when (view) {
+        is androidx.media3.ui.PlayerView -> listOf(view)
+        is ViewGroup -> (0 until view.childCount).flatMap { nativePlayerViews(view.getChildAt(it)) }
+        else -> emptyList()
+    }
+
+    /** Scenario 3: a configuration change (rotation) while playing must retain both the
+     * [PlayerViewModel] instance and the channel that was loaded - it must NOT be the trigger that
+     * creates a second one, which is exactly how the original OOM leak manifested. */
+    @Test
+    fun configurationChange_retainsInstanceAndChannel() {
+        var instanceBeforeRecreate: PlayerViewModel? = null
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            instanceBeforeRecreate = ViewModelProvider(activity)[PlayerViewModel::class.java]
+        }
+
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+
+        // A retained VM alone is insufficient: the old saved-state mirror erased the player
+        // request on recreation, leaving the engine alive with no PlayerHost/video surface. The
+        // fixture intentionally serves an empty HLS stream, which puts the player into its
+        // terminal-error card and hides the ordinary fullscreen toggle. Match the stable exit
+        // affordance instead; it proves that PlayerHost is mounted in both success and error UI.
+        val playerExit = composeTestRule.activity.getString(R.string.player_back_to_channels)
+        composeTestRule.waitUntil(10_000) {
+            composeTestRule.onAllNodes(hasText(playerExit)).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            val instanceAfterRecreate = ViewModelProvider(activity)[PlayerViewModel::class.java]
+            assertTrue(
+                "A configuration change must retain the same PlayerViewModel, not create a new one",
+                instanceAfterRecreate === instanceBeforeRecreate,
+            )
+            assertEquals("Channel 1", instanceAfterRecreate.uiState.value.currentChannel?.displayName)
+        }
+        assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
+    }
+
+    /** The persisted restore key must follow a Next/Previous switch, not only the channel that
+     * originally opened the player. This catches a subtle rotation/process-death regression that
+     * is invisible when the first channel is still current. */
+    @Test
+    fun configurationChange_retainsMostRecentlySwitchedChannel() {
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            ViewModelProvider(activity)[PlayerViewModel::class.java].navigation.requestSwitch(1)
+        }
+        composeTestRule.waitUntil(10_000) {
+            composeTestRule.activityRule.scenario.run {
+                var current: String? = null
+                onActivity { activity ->
+                    current = ViewModelProvider(activity)[PlayerViewModel::class.java]
+                        .uiState.value.currentChannel?.displayName
+                }
+                current == "Channel 2"
+            }
+        }
+
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+        val playerExit = composeTestRule.activity.getString(R.string.player_back_to_channels)
+        composeTestRule.waitUntil(10_000) {
+            composeTestRule.onAllNodes(hasText(playerExit)).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.activityRule.scenario.onActivity { activity ->
+            assertEquals(
+                "Channel 2",
+                ViewModelProvider(activity)[PlayerViewModel::class.java]
+                    .uiState.value.currentChannel?.displayName,
+            )
+        }
+    }
+
+    /**
+     * Scenario 4: rapid channel switching must reuse the one player, never spin up another one,
+     * and never throw.
+     *
+     * Matched by *text*, not by content description: the player opens inline, and the inline
+     * transport row is a `PillButton` whose label is a Text with `contentDescription = null` on its
+     * icons. Only the fullscreen overlay's `RoundIconButton` carries "Next" as a content
+     * description, so the original lookup could never have matched from this state - it failed with
+     * "could not find any node", which reads like the player being gone rather than like the wrong
+     * matcher.
+     */
+    @Test
+    fun tenChannelSwitches_reuseSingleInstanceWithoutThrowing() {
+        val nextLabel = composeTestRule.activity.getString(R.string.player_next)
+        repeat(10) {
+            composeTestRule.onNodeWithText(nextLabel).performClick()
+            composeTestRule.waitForIdle()
+            Thread.sleep(SWITCH_SETTLE_MILLIS) // let PlayerViewModel's switch debounce (220ms) resolve
+        }
+        assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
+    }
+
+    private companion object {
+        const val SWITCH_SETTLE_MILLIS = 300L
+    }
+}

@@ -11,25 +11,25 @@
          no-ops from targetSdk 35, and MainActivity's enableEdgeToEdge() sets the bars transparent
          on every API level anyway (see its own comment). Leaving them here would have read as the
          thing controlling the bars while controlling nothing. -->
-    <style name="Theme.UaCastPlayer" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:windowBackground">@color/uacast_background</item>
+    <style name="Theme.ZorikPlayer" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/zorik_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
     </style>
 
-    <style name="Theme.UaCastPlayer.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/uacast_background</item>
+    <style name="Theme.ZorikPlayer.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/zorik_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
-        <item name="postSplashScreenTheme">@style/Theme.UaCastPlayer</item>
+        <item name="postSplashScreenTheme">@style/Theme.ZorikPlayer</item>
     </style>
 
     <!-- AppCompat's mediaRouteButtonStyle tints the icon from colorControlNormal - explicit here as
          defense-in-depth alongside the base theme's now-forced-dark resolution above. Only
          override the tint attributes; CastButton wraps its context with this style instead of
          changing the app theme, so it doesn't affect anything else. -->
-    <style name="Theme.UaCastPlayer.CastButton" parent="Theme.UaCastPlayer">
-        <item name="colorControlNormal">@color/uacast_label_primary</item>
-        <item name="colorControlActivated">@color/uacast_azure</item>
+    <style name="Theme.ZorikPlayer.CastButton" parent="Theme.ZorikPlayer">
+        <item name="colorControlNormal">@color/zorik_label_primary</item>
+        <item name="colorControlActivated">@color/zorik_azure</item>
     </style>
 
 </resources>

@@ -126,4 +126,4 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     root = args.root.resolve()
-    create_bundle(root, args.output or root / "build/software-decoder-dist/uacast-software-decoder-source.zip")
+    create_bundle(root, args.output or root / "build/software-decoder-dist/zorik-software-decoder-source.zip")

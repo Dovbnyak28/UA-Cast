@@ -39,7 +39,7 @@
 Приклад використання:
 
 ```kotlin
-UaCastTheme(theme) {
+ZorikTheme(theme) {
     UaCard(selected = selected, onClick = onSelect) {
         Text(title, style = MaterialTheme.typography.titleLarge)
     }
@@ -54,7 +54,7 @@ UaCastTheme(theme) {
 
 Натискання використовує 120ms easing і масштаб 0.97/0.96 лише під час малювання. Геометрія click/focus/semantics не змінюється. Немає нового постійного animation clock, blur чи відеопрев'ю. App reduced effects та системний animator scale 0 вимикають цей рух; вибір і натискання продовжують працювати.
 
-Один lifecycle-owned ContentObserver на корені `UaCastTheme` обслуговує всі вкладені компоненти, включно з `UaPlayerTheme`; після видалення композиції він знімається. Для standalone-компонентів без кореневої теми зберігається локальний fallback. Додавання motion-provider не замінює native child при перемиканні теми.
+Один lifecycle-owned ContentObserver на корені `ZorikTheme` обслуговує всі вкладені компоненти, включно з `UaPlayerTheme`; після видалення композиції він знімається. Для standalone-компонентів без кореневої теми зберігається локальний fallback. Додавання motion-provider не замінює native child при перемиканні теми.
 
 TV-фокус малюється 3dp обводкою поверх 6dp роздільника. Він додається до наявного clickable/selectable target, а не створює ще один focusable. DPAD пропускає disabled-елементи; OK викликає callback один раз. Чинні TV-навігація, density policy та registry не змінені.
 

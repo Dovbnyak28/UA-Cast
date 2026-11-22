@@ -5,11 +5,11 @@
          outside Compose has to read it (a theme attribute, a drawable). The surface/primary/cyan/
          border/on-surface/error entries that used to sit here were a stale mirror of an older
          palette that nothing referenced. -->
-    <color name="uacast_background">#070A12</color>
+    <color name="zorik_background">#070A12</color>
 
     <!-- Mirrors ui/theme/Color.kt's LabelPrimary/Azure so the platform MediaRouteButton (which
          can only be tinted via theme attributes, not Compose) matches the rest of the design
          system instead of AppCompat's default dark-on-light colorControlNormal. -->
-    <color name="uacast_label_primary">#F5F5F7</color>
-    <color name="uacast_azure">#0A84FF</color>
+    <color name="zorik_label_primary">#F5F5F7</color>
+    <color name="zorik_azure">#0A84FF</color>
 </resources>

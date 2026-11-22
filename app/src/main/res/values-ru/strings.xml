@@ -220,7 +220,7 @@
     <string name="settings_section_playback">Воспроизведение</string>
     <string name="settings_section_cache">Кеш</string>
     <string name="settings_section_data">Данные</string>
-    <string name="settings_data_hint">Сохраните защищённый паролем файл .uacast на телефоне или компьютере. Содержит источники, локальные M3U, избранное и основные настройки. Максимум данных — 8 МБ. Старые JSON-копии также восстанавливаются после просмотра.</string>
+    <string name="settings_data_hint">Сохраните защищённый паролем файл .zorik на телефоне или компьютере. Содержит источники, локальные M3U, избранное и основные настройки. Максимум данных — 8 МБ. Старые JSON-копии также восстанавливаются после просмотра.</string>
     <string name="settings_data_export">Сохранить в файл</string>
     <string name="settings_data_export_warning_title">Экспортировать конфиденциальные данные?</string>
     <string name="settings_data_export_warning_message">Копия может содержать пароли провайдера и приватные ссылки. Файл будет зашифрован вашей парольной фразой. Сохраните её: Zorik не может восстановить забытый пароль.</string>

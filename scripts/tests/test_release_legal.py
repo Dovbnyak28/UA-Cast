@@ -39,9 +39,9 @@ class ReleaseLegalTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            kotlin = root / "app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt"
+            kotlin = root / "app/src/main/kotlin/app/zorik/player/premium/PremiumAvailability.kt"
             kotlin.parent.mkdir(parents=True)
-            kotlin.write_text("const val STORE_IS_LIVE = com.uacastplayer.BuildConfig.PLAY_BILLING_LIVE",
+            kotlin.write_text("const val STORE_IS_LIVE = app.zorik.player.BuildConfig.PLAY_BILLING_LIVE",
                               encoding="utf-8")
             gradle = root / "app/build.gradle.kts"
             gradle.write_text('buildConfigField("boolean", "PLAY_BILLING_LIVE", "false")', encoding="utf-8")

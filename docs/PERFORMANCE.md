@@ -40,7 +40,7 @@ the UI-jank fix pass; see the git log for the exact commits.
 
 ## The rule
 
-`AppViewModel` hands every controller under `com.uacastplayer.app` its `viewModelScope`, which runs
+`AppViewModel` hands every controller under `app.zorik.player.app` its `viewModelScope`, which runs
 on `Dispatchers.Main.immediate` by default. That means **`scope.launch { ... }` alone puts you on the
 main thread**, not "somewhere in the background" - `viewModelScope` is not itself a signal that work
 is off the UI thread. Every controller and repository in this codebase follows one rule instead:
@@ -113,7 +113,7 @@ Macrobenchmarks. They require an API 33+ connected device or emulator:
 
 ```bash
 ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.uacastplayer.baselineprofile.StartupBenchmark
+  -Pandroid.testInstrumentationRunnerArguments.class=app.zorik.player.baselineprofile.StartupBenchmark
 ```
 
 Startup results belong in release evidence rather than unit-test timing: Macrobenchmark controls
@@ -121,7 +121,7 @@ process state and compilation mode on the target device, which a desktop JVM tes
 `CriticalJourneysBenchmark` adds peak-memory/frame measurements for a 40,000-channel restore/open,
 first player launch, fullscreen and EPG guide. `EpgParseBenchmark` runs the production SAX +
 retention + heap-budget + index pipeline over 350,000 synthetic programmes and reports both peak
-memory and the `UaCastEpgParseAndIndex` trace duration. The fixture is credential-free and compiled
+memory and the `ZorikEpgParseAndIndex` trace duration. The fixture is credential-free and compiled
 only into `benchmarkRelease`/`nonMinifiedRelease`; exact commands and the destructive-data warning
 are in `docs/RELEASING.md`.
 

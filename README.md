@@ -55,12 +55,12 @@ Release signing is read only from environment variables / Gradle properties, nev
 needed to exercise casting end-to-end; unit tests and lint don't touch that path.
 
 To package the source tree without `.git`/`.gradle`/`build` (a checkout can run ~450 MB; the
-tracked source is a couple MB): `git archive --format=zip -o uacast-source.zip HEAD`.
+tracked source is a couple MB): `git archive --format=zip -o zorik-source.zip HEAD`.
 
 ## Project layout
 
 Business logic is organized by feature as plain Kotlin (no Android/Compose types), each paired
-with unit tests, under `app/src/main/kotlin/com/uacastplayer/`:
+with unit tests, under `app/src/main/kotlin/app/zorik/player/`:
 
 - `playlist/`, `epg/`, `icons/`, `player/`, `cast/`, `proxy/`, `favorites/`, `performance/` — pure
   parsers, reducers, and policy objects.

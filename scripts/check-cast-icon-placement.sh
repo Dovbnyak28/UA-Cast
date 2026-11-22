@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Chromecast belongs beside the live player controls only. Keep the design rule executable so a
 # future navigation/menu change cannot quietly reintroduce a cast action into global UI surfaces.
-readonly UI_ROOT="${1:-app/src/main/kotlin/com/uacastplayer/ui}"
+readonly UI_ROOT="${1:-app/src/main/kotlin/app/zorik/player/ui}"
 if ! command -v grep >/dev/null 2>&1 || [[ ! -d "$UI_ROOT" ]]; then
   echo 'check-cast-icon-placement: grep and an existing UI source directory are required' >&2
   exit 1

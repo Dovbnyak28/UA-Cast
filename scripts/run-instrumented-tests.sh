@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-PACKAGE="com.uacastplayer.debug"
+PACKAGE="app.zorik.player.debug"
 RUNNER="$PACKAGE.test/androidx.test.runner.AndroidJUnitRunner"
 APP_APK="app/build/outputs/apk/debug/app-universal-debug.apk"
 TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"

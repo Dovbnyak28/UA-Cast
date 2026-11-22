@@ -1,0 +1,456 @@
+package app.zorik.player.ui.player
+import app.zorik.player.ui.tv.LocalTvMode
+
+import android.content.Context
+import android.media.AudioManager
+import android.os.Build
+import androidx.annotation.OptIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import app.zorik.player.R
+import app.zorik.player.core.ui.findActivity
+import app.zorik.player.epg.EpgUiState
+import app.zorik.player.icons.IconPrefetchUiState
+import app.zorik.player.player.AudioChannelLayout
+import app.zorik.player.player.PlaybackBadgesState
+import app.zorik.player.player.PlayerViewModel
+import app.zorik.player.player.ResizeModeCycle
+import app.zorik.player.player.StallRetryPolicy
+import app.zorik.player.player.AutoSkipRecoveryState
+import app.zorik.player.ui.components.SecondaryButton
+import app.zorik.player.ui.components.PrimaryButton
+import app.zorik.player.playlist.M3uChannel
+import app.zorik.player.ui.cast.CastButton
+import app.zorik.player.ui.components.liveRing
+import app.zorik.player.ui.dlna.DlnaDeviceSheet
+import app.zorik.player.ui.theme.Caption
+import app.zorik.player.ui.theme.BodyText
+import app.zorik.player.ui.theme.DUR_PRESS
+import app.zorik.player.ui.theme.EaseSpring
+import app.zorik.player.ui.theme.PRESS_SCALE_ICON
+import app.zorik.player.ui.theme.RadiusCard
+import app.zorik.player.ui.theme.UaTheme
+import app.zorik.player.ui.theme.raisedSurface
+import java.io.File
+
+@OptIn(markerClass = [UnstableApi::class])
+@Composable
+fun PlayerScreen(
+    viewModel: PlayerViewModel,
+    onExit: () -> Unit,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    epgState: EpgUiState,
+    iconPrefetchState: IconPrefetchUiState,
+    modifier: Modifier = Modifier,
+    channels: List<M3uChannel> = emptyList(),
+) {
+    app.zorik.player.ui.theme.UaPlayerTheme {
+        ThemedPlayerScreen(viewModel, onExit, isFavorite, onToggleFavorite, resolveIcon,
+            epgState, iconPrefetchState, modifier, channels)
+    }
+}
+
+@OptIn(markerClass = [UnstableApi::class])
+@Composable
+private fun ThemedPlayerScreen(
+    viewModel: PlayerViewModel,
+    onExit: () -> Unit,
+    isFavorite: (M3uChannel) -> Boolean,
+    onToggleFavorite: (M3uChannel) -> Unit,
+    resolveIcon: suspend (M3uChannel) -> File?,
+    epgState: EpgUiState,
+    iconPrefetchState: IconPrefetchUiState,
+    modifier: Modifier = Modifier,
+    channels: List<M3uChannel> = emptyList(),
+) {
+    if (LocalTvMode.current) {
+        TvPlayerScreen(viewModel, onExit, isFavorite, onToggleFavorite, epgState, modifier)
+        return
+    }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val dlnaState by viewModel.dlnaState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    val audioManager = remember(context) {
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }
+    val environment = PlayerScreenEnvironment(
+        activity = activity,
+        audioManager = audioManager,
+        haptics = LocalHapticFeedback.current,
+    )
+    val transientState = remember(activity, audioManager) {
+        PlayerScreenTransientState(activity, audioManager)
+    }
+    var isFullscreen by rememberSaveable { mutableStateOf(false) }
+    val content = PlayerScreenContent(
+        uiState = uiState,
+        dlnaState = dlnaState,
+        iconRefreshKey = iconPrefetchState.refreshKey,
+        videoResizeMode = ResizeModeCycle.toMedia3ResizeMode(uiState.resizeMode),
+        epgState = epgState,
+    )
+    val actions = PlayerScreenActions(
+        viewModel = viewModel,
+        onExit = onExit,
+        isFavorite = isFavorite,
+        onToggleFavorite = onToggleFavorite,
+        resolveIcon = resolveIcon,
+        onFullscreenChanged = { isFullscreen = it },
+    )
+    val sleepTimer = rememberSleepTimerState(viewModel.sleepTimer)
+    val configuration = LocalConfiguration.current
+    val isInPip = remember(configuration, activity) {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
+    }
+
+    // Inline/fullscreen share one native view/texture. Recreating it on every transition
+    // inflates Media3 UI and detaches the decoder output while the window is also resizing.
+    val videoSurface = remember(viewModel) {
+        movableContentOf<Int, Modifier> { resizeMode, surfaceModifier ->
+            VideoSurface(viewModel, resizeMode, surfaceModifier)
+        }
+    }
+
+    PlayerScreenEffects(environment, isFullscreen, uiState, transientState)
+    if (isInPip) {
+        PipPlayerSurface(viewModel, modifier)
+        return
+    }
+    if (isFullscreen) {
+        FullscreenPlayerContent(
+            content,
+            actions,
+            environment,
+            transientState,
+            sleepTimer,
+            modifier,
+            videoSurface = videoSurface,
+        )
+    } else {
+        InlinePlayerContent(content, actions, transientState, modifier, videoSurface = videoSurface)
+    }
+
+    val isFile = uiState.currentChannel?.localVideo != null
+    PlayerChannelPicker(channels, content, actions, transientState)
+    val isRemote = remotePlaybackOwnsControls(uiState, dlnaState)
+    FilePlaybackDialogEffect(isFile, transientState)
+    RemotePlaybackDialogEffect(isRemote, transientState)
+    if (transientState.showActionsSheet) {
+        PlayerActionsSheet(transientState, actions, uiState.hasPreviousChannel, isRemote, isFile)
+    }
+    if (transientState.showLevelsSheet && !isRemote) PlayerLevelsSheet(transientState, environment)
+    if (transientState.showDlnaSheet) {
+        val volumeDevice = dlnaState.connectedDevice
+        DlnaDeviceSheet(
+            connectionState = dlnaState,
+            discoverDevices = viewModel.dlna::discoverDevices,
+            onDismiss = { transientState.showDlnaSheet = false },
+            onDeviceSelected = viewModel.dlna::connect,
+            onStopCasting = viewModel.dlna::stop,
+            onVolumeChange = { volume -> volumeDevice?.let { viewModel.dlna.setVolume(it, volume) } },
+        )
+    }
+    PlayerDialogs(
+        viewModel = viewModel,
+        uiState = uiState,
+        epgState = epgState,
+        sleepTimer = sleepTimer,
+        currentChannel = uiState.currentChannel,
+        showSleepTimerDialog = transientState.showSleepTimerDialog,
+        onDismissSleepTimerDialog = { transientState.showSleepTimerDialog = false },
+        showAudioDialog = transientState.showAudioDialog && !isRemote,
+        onDismissAudioDialog = { transientState.showAudioDialog = false },
+        showSubtitleDialog = transientState.showSubtitleDialog && !isRemote,
+        onDismissSubtitleDialog = { transientState.showSubtitleDialog = false },
+        showQualityDialog = transientState.showQualityDialog && !isRemote,
+        onDismissQualityDialog = { transientState.showQualityDialog = false },
+        showGuideSheet = transientState.showGuideSheet,
+        onDismissGuideSheet = { transientState.showGuideSheet = false },
+    )
+}
+
+@OptIn(markerClass = [UnstableApi::class])
+@Composable
+private fun PipPlayerSurface(viewModel: PlayerViewModel, modifier: Modifier) {
+    AndroidView(
+        factory = { context ->
+            (android.view.LayoutInflater.from(context).inflate(R.layout.pip_player_view, null) as PlayerView).apply {
+                player = viewModel.player
+                useController = false
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            }
+        },
+        update = { if (it.player !== viewModel.player) it.player = viewModel.player },
+        onRelease = { it.player = null },
+        modifier = modifier.fillMaxSize(),
+    )
+}
+
+/** Playback recovery status shared by fullscreen and inline surfaces. */
+@Composable
+internal fun RecoveringPlaybackIndicator(
+    attempt: Int,
+    onPickAnotherChannel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(RadiusCard))
+            .background(UaTheme.palette.scrimBackground)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = Color.White,
+            )
+            Text(
+                text = stringResource(R.string.player_recovering_playback),
+                color = Color.White,
+                style = Caption,
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        if (attempt >= StallRetryPolicy.CHANNEL_PICKER_HINT_ATTEMPT) {
+            Text(
+                text = stringResource(R.string.player_pick_another_channel),
+                color = UaTheme.palette.azure,
+                style = Caption,
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .minimumInteractiveComponentSize()
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = stringResource(R.string.player_pick_another_channel),
+                        onClick = onPickAnotherChannel,
+                    )
+                    .padding(horizontal = 8.dp),
+            )
+        }
+    }
+}
+
+/** Explains the otherwise surprising automatic channel hop and lets the user stop the sequence. */
+@Composable
+internal fun AutoSkipRecoveryIndicator(
+    state: AutoSkipRecoveryState,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(RadiusCard))
+            .background(UaTheme.palette.scrimBackground)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = Color.White,
+            )
+            Text(
+                text = stringResource(
+                    R.string.player_auto_skip_progress,
+                    state.skippedChannels,
+                    state.totalChannels,
+                ),
+                color = Color.White,
+                style = Caption,
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        Text(
+            text = stringResource(R.string.common_cancel),
+            color = UaTheme.palette.azure,
+            style = Caption,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .minimumInteractiveComponentSize()
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.common_cancel),
+                    onClick = onCancel,
+                )
+                .padding(horizontal = 8.dp),
+        )
+    }
+}
+
+/** Terminal playback error with direct recovery actions, shared by inline and fullscreen video. */
+@Composable
+internal fun PlaybackFailureCard(
+    onRetry: () -> Unit,
+    onNext: () -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier,
+    canGoNext: Boolean = true,
+    localVideo: Boolean = false,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(RadiusCard))
+            .background(UaTheme.palette.scrimBackground)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = stringResource(
+                if (localVideo) R.string.local_video_playback_failed else R.string.player_fatal_error,
+            ),
+            color = Color.White,
+            style = BodyText,
+            textAlign = TextAlign.Center,
+        )
+        PrimaryButton(
+            text = stringResource(R.string.player_retry),
+            onClick = onRetry,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
+        if (!localVideo) {
+            SecondaryButton(
+                text = stringResource(R.string.player_next),
+                onClick = onNext,
+                enabled = canGoNext,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
+        Text(
+            text = stringResource(if (localVideo) R.string.common_back else R.string.player_back_to_channels),
+            color = UaTheme.palette.azure,
+            style = Caption,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .minimumInteractiveComponentSize()
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(
+                        if (localVideo) R.string.common_back else R.string.player_back_to_channels,
+                    ),
+                    onClick = onExit,
+                )
+                .padding(horizontal = 8.dp),
+        )
+    }
+}
+
+@Composable
+internal fun PlayerCastButton(
+    modifier: Modifier = Modifier,
+    background: Color = UaTheme.palette.scrimBackground,
+    isCasting: Boolean = false,
+) {
+    val castDescription = stringResource(
+        if (isCasting) R.string.player_chromecast_connected else R.string.player_chromecast_cast,
+    )
+    val castStateDescription = stringResource(R.string.cast_status_connected)
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) PRESS_SCALE_ICON else 1f,
+        animationSpec = tween(DUR_PRESS, easing = EaseSpring),
+        label = "castButtonScale",
+    )
+    Box(
+        modifier = modifier
+            .size(app.zorik.player.ui.theme.TouchTargetMin)
+            .scale(scale)
+            .liveRing(active = isCasting, color = UaTheme.palette.azure)
+            .semantics(mergeDescendants = true) {
+                contentDescription = castDescription
+                role = Role.Button
+                if (isCasting) stateDescription = castStateDescription
+            }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        pressed = event.changes.any { it.pressed }
+                    }
+                }
+            }
+            .raisedSurface(CircleShape, background, shadow = false),
+        contentAlignment = Alignment.Center,
+    ) {
+        CastButton(modifier = Modifier.size(app.zorik.player.ui.theme.TouchTargetMin))
+    }
+}
+
+@Composable
+internal fun playPauseLabel(isPlaying: Boolean) =
+    stringResource(if (isPlaying) R.string.player_pause else R.string.player_play)
+
+@Composable
+internal fun BadgesRow(badges: PlaybackBadgesState, modifier: Modifier = Modifier) {
+    val parts = buildList {
+        badges.qualityLabel?.let(::add)
+        badges.videoCodecLabel?.let(::add)
+        badges.audioCodecLabel?.let(::add)
+        badges.channelLayout?.let { add(stringResource(it.labelRes())) }
+    }
+    if (parts.isNotEmpty()) {
+        Text(
+            text = parts.joinToString(" · "),
+            color = UaTheme.palette.labelSecondary,
+            style = Caption,
+            modifier = modifier,
+        )
+    }
+}
+
+internal fun AudioChannelLayout.labelRes(): Int = when (this) {
+    AudioChannelLayout.MONO -> R.string.audio_layout_mono
+    AudioChannelLayout.STEREO -> R.string.audio_layout_stereo
+    AudioChannelLayout.SURROUND_5_1 -> R.string.audio_layout_surround_5_1
+    AudioChannelLayout.SURROUND_7_1 -> R.string.audio_layout_surround_7_1
+    AudioChannelLayout.OTHER -> R.string.audio_layout_other
+}

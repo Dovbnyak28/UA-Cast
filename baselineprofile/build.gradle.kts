@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.uacastplayer.baselineprofile"
+    namespace = "app.zorik.player.baselineprofile"
     compileSdk = 36
 
     defaultConfig {

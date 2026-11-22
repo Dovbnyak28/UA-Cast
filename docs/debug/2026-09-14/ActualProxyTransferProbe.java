@@ -22,7 +22,7 @@ public class ActualProxyTransferProbe {
     public static void main(String[] args) throws Exception {
         int rounds = Integer.parseInt(args[0]);
         ClassLoader loader = ActualProxyTransferProbe.class.getClassLoader();
-        Class<?> serverClass = Class.forName("com.uacastplayer.data.cast.ProxyHttpServer");
+        Class<?> serverClass = Class.forName("app.zorik.player.data.cast.ProxyHttpServer");
         Class<?> authType = Class.forName("kotlin.jvm.functions.Function1");
         Class<?> responseType = Class.forName("kotlin.jvm.functions.Function2");
         Object unit = Class.forName("kotlin.Unit").getField("INSTANCE").get(null);

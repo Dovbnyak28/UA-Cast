@@ -29,7 +29,7 @@ public class SoftwareDecoderInstrumentedTest {
   @Test public void independentNativeLibraryPreservesRequiredSoftwareCapabilities() {
     assertTrue("Independent FFmpeg JNI must load", FfmpegLibrary.isAvailable());
     assertTrue(FfmpegLibrary.getVersion(), FfmpegLibrary.getVersion().startsWith("Lavc60."));
-    boolean relinkProbe = "true".equals(InstrumentationRegistry.getArguments().getString("uacast.relinkProbe"));
+    boolean relinkProbe = "true".equals(InstrumentationRegistry.getArguments().getString("zorik.relinkProbe"));
     assertEquals("LGPL version 2.1 or later" + (relinkProbe ? " (Zorik Player relink probe)" : ""),
         FfmpegLibrary.getNativeLicense());
     for (String mime : new String[] {MimeTypes.AUDIO_MPEG_L2, MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3,

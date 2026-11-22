@@ -1,13 +1,13 @@
 param(
     [Parameter(Mandatory = $true)][string]$AdbPath,
     [Parameter(Mandatory = $true)][string]$Serial,
-    [string]$TestClasses = 'com.uacastplayer.player.PlayerLifecycleInstrumentedTest,com.uacastplayer.player.PlayerVideoFitInstrumentedTest'
+    [string]$TestClasses = 'app.zorik.player.player.PlayerLifecycleInstrumentedTest,app.zorik.player.player.PlayerVideoFitInstrumentedTest'
 )
 
 # Instrumented fixtures replace playlists. Preserve the actual debug app's files/preferences,
 # including a host-side emergency archive, instead of treating a developer phone as disposable.
 $ErrorActionPreference = 'Stop'
-$packageName = 'com.uacastplayer.debug'
+$packageName = 'app.zorik.player.debug'
 $repoDirectory = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 function Resolve-UniversalApk([string]$RelativeDirectory, [string]$ExpectedApplicationId) {
@@ -96,7 +96,7 @@ function Assert-PrivateStateRestored {
 }
 
 $actualDirectory = (Invoke-AdbChecked @('shell', 'run-as', $packageName, 'pwd') | Out-String).Trim()
-if ($actualDirectory -notin @('/data/user/0/com.uacastplayer.debug', '/data/data/com.uacastplayer.debug')) {
+if ($actualDirectory -notin @('/data/user/0/app.zorik.player.debug', '/data/data/app.zorik.player.debug')) {
     throw "Unexpected run-as directory: $actualDirectory"
 }
 # All subsequent move targets are literal children of this verified debug-app sandbox.

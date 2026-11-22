@@ -31,7 +31,7 @@ class ProcessMemoryTest(unittest.TestCase):
         self.assertEqual(40, parsed["totalPssKb"])
 
     def test_killed_process_is_unavailable_not_a_zero_memory_success(self):
-        self.assertIsNone(memory.parse_meminfo("No process found for: com.uacastplayer"))
+        self.assertIsNone(memory.parse_meminfo("No process found for: app.zorik.player"))
 
     def test_incomplete_or_zero_evidence_is_rejected(self):
         for output in ["", "App Summary\nTOTAL PSS: 4", "App Summary\nJava Heap: 1\nNative Heap: 2\nGraphics: 3\nTOTAL: 0"]:

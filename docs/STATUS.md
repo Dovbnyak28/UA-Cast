@@ -7,8 +7,8 @@
 
 ## Версія
 
-- `versionName` 0.9.8, `versionCode` 17 (`app/build.gradle.kts`; CI може перевизначити через
-  `-Puacast.versionCode` / `-Puacast.versionName`).
+- `applicationId` `app.zorik.player`; `versionName` 0.9.8, `versionCode` 17 (`app/build.gradle.kts`; CI може перевизначити через
+  `-Pzorik.versionCode` / `-Pzorik.versionName`).
 - `codex/release-0.9.6` злито в `master` (5522ac7); підняття версії — гілка `codex/release-0.9.8`.
 
 ## Що перевірено
@@ -53,7 +53,10 @@
   марки Google Cast/Chromecast/Google TV та інших виробників.
 - Назву змінено на **Zorik Player** 2026-11-22: словесна марка ЄС «UA CAST» (EUTM 018773428, UAVIA) покриває
   класи 9 і 38. «ZORIK» у WIPO Global Brand Database у класах 9/38/41/42 не знайдено (попередній пошук, не
-  юридичний висновок). Внутрішній `applicationId` `com.uacastplayer` лишився, щоб не зламати оновлення.
+  юридичний висновок). `applicationId` і пакети коду — `app.zorik.player`: 0.9.8 ставиться як новий
+  застосунок поруч зі старим, дані переносяться резервною копією (старі `.uacast` відновлюються).
+  Свідомо лишились: сигнатура формату копії `UACASTBK` (сумісність), секрети підпису `UACAST_*` у GitHub,
+  `CMakeLists.txt`/`ffmpeg_jni.cc`/`prepare-software-decoder.py` (хешовані входи native-збірки).
 - Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),
   `premium_lifetime` = 3,99 EUR (ціна — у Play Console).

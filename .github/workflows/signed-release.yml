@@ -152,7 +152,7 @@ jobs:
               exit 1
             }
           done
-          keystore="$RUNNER_TEMP/uacast-release.p12"
+          keystore="$RUNNER_TEMP/zorik-release.p12"
           printf '%s' "$UACAST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           chmod 600 "$keystore"
           [ -s "$keystore" ] || {
@@ -173,9 +173,9 @@ jobs:
           :app:detekt
           :app:bundlePlay
           --stacktrace
-          -Puacast.requireSigning=true
-          -Puacast.versionCode=$RELEASE_VERSION_CODE
-          -Puacast.versionName=$RELEASE_VERSION_NAME
+          -Pzorik.requireSigning=true
+          -Pzorik.versionCode=$RELEASE_VERSION_CODE
+          -Pzorik.versionName=$RELEASE_VERSION_NAME
 
       - name: Verify architecture, premium and Play policy surfaces
         shell: bash
@@ -218,9 +218,9 @@ jobs:
           ./gradlew
           :app:assembleRelease
           --stacktrace
-          -Puacast.requireSigning=true
-          -Puacast.versionCode=$RELEASE_VERSION_CODE
-          -Puacast.versionName=$RELEASE_VERSION_NAME
+          -Pzorik.requireSigning=true
+          -Pzorik.versionCode=$RELEASE_VERSION_CODE
+          -Pzorik.versionName=$RELEASE_VERSION_NAME
 
       - name: Verify universal APK signature
         shell: bash

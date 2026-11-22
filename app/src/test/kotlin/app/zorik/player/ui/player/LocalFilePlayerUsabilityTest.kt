@@ -1,0 +1,191 @@
+package app.zorik.player.ui.player
+
+import app.zorik.player.ui.theme.UaTheme
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onRoot
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.test.core.app.ApplicationProvider
+import com.github.takahirom.roborazzi.captureRoboImage
+import app.zorik.player.dlna.DlnaConnectionState
+import app.zorik.player.media.LocalVideo
+import app.zorik.player.player.PlaybackBadgesState
+import app.zorik.player.player.PlayerUiState
+import app.zorik.player.player.PlayerViewModel
+import app.zorik.player.player.SleepTestApplication
+import app.zorik.player.playlist.M3uChannel
+import app.zorik.player.testing.RequiresComposeTestManifest
+import app.zorik.player.ui.theme.AppTheme
+import app.zorik.player.ui.theme.ZorikTheme
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.experimental.categories.Category
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+@UnstableApi
+@RunWith(RobolectricTestRunner::class)
+@Config(application = SleepTestApplication::class, qualifiers = "en-w360dp-h740dp-xhdpi")
+@Category(RequiresComposeTestManifest::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LocalFilePlayerUsabilityTest {
+    @get:Rule val rule = createComposeRule()
+    private val store = ViewModelStore()
+    private val video = LocalVideo("content://media/video/1",
+        "A long family holiday video name that should stay readable.mp4", "video/mp4")
+    private val channel = M3uChannel(video.displayName, video.uri, localVideo = video)
+    private val state = PlayerUiState(currentChannel = channel, isBuffering = false, canControlPlayback = true)
+    @After fun close() { store.clear() }
+
+    @Test fun fileInlineDoesNotOfferTelevisionNavigation() {
+        val app = ApplicationProvider.getApplicationContext<SleepTestApplication>()
+        val vm = ViewModelProvider(store, ViewModelProvider.AndroidViewModelFactory(app))[PlayerViewModel::class.java]
+        rule.setContent {
+            ZorikTheme(AppTheme.CINEMA) {
+                InlinePlayerContent(
+                    PlayerScreenContent(state, DlnaConnectionState(), 0, AspectRatioFrameLayout.RESIZE_MODE_FIT),
+                    PlayerScreenActions(vm, {}, { false }, {}, { null }, {}),
+                    PlayerScreenTransientState(null, null),
+                )
+            }
+        }
+        rule.onRoot().captureRoboImage("src/test/screenshots/file_player_inline_cinema.png")
+        rule.onNodeWithText("TV guide").assertDoesNotExist()
+        rule.onNodeWithText("Previous channel").assertDoesNotExist()
+        rule.onNodeWithText("Next channel").assertDoesNotExist()
+        rule.onNodeWithText("Back to channels").assertDoesNotExist()
+        rule.onAllNodesWithContentDescription("Back").assertCountEquals(1)
+        rule.onNodeWithText("Back").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "en-w892dp-h411dp-land-xhdpi")
+    fun landscapeWithLargeTextKeepsFullscreenActionVisibleWithoutScrolling() {
+        val app = ApplicationProvider.getApplicationContext<SleepTestApplication>()
+        val vm = ViewModelProvider(store, ViewModelProvider.AndroidViewModelFactory(app))[PlayerViewModel::class.java]
+        var fullscreen = false
+        rule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                ZorikTheme(AppTheme.CINEMA) {
+                    InlinePlayerContent(
+                        PlayerScreenContent(state, DlnaConnectionState(), 0, AspectRatioFrameLayout.RESIZE_MODE_FIT),
+                        PlayerScreenActions(vm, {}, { false }, {}, { null }, { fullscreen = it }),
+                        PlayerScreenTransientState(null, null),
+                        videoSurface = { _, modifier -> Box(modifier) },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithContentDescription("Fullscreen").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(true, fullscreen) }
+    }
+
+    @Test fun fileOverlayIsNotLabeledAsLiveTelevision() {
+        rule.setContent {
+            ZorikTheme(AppTheme.CINEMA) {
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    PlayerControlsOverlay(state, true, remember { mutableStateOf(null) }, {}, {}, {}, {}, {}, {}, {},
+                        false, {}, {}, {}, fileProgress = {
+                            FilePlaybackProgress(FilePlaybackTimeline(65_000, 3_661_000), true, {},
+                                Modifier.padding(horizontal = 20.dp))
+                        })
+                }
+            }
+        }
+        rule.onRoot().captureRoboImage("src/test/screenshots/file_player_overlay_cinema.png")
+        rule.onNodeWithText("LIVE").assertDoesNotExist()
+        rule.onNodeWithText("1:05").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Video position").assertIsDisplayed()
+    }
+
+    @Test fun videoFilesNeverSearchTheChannelLogoPack() {
+        val lookups = AtomicInteger()
+        rule.setContent {
+            ZorikTheme(AppTheme.CINEMA) {
+                ChannelInfoCard(channel, PlaybackBadgesState(), 0) { lookups.incrementAndGet(); null }
+            }
+        }
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(0, lookups.get()) }
+    }
+
+    @Test fun fileFailureOffersRetryAndBackButNotAnotherChannel() {
+        var exits = 0
+        rule.setContent {
+            ZorikTheme(AppTheme.CINEMA) {
+                PlaybackFailureCard({}, {}, { exits++ }, localVideo = true, canGoNext = false)
+            }
+        }
+        rule.onNodeWithText("Next channel").assertDoesNotExist()
+        rule.onNodeWithText("Back").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(1, exits) }
+    }
+
+    @Test fun aLargeTextTimelineIsReadableAndAccessibleSeekingCommitsOnePosition() {
+        var target = -1L
+        rule.setContent {
+            val density = LocalDensity.current
+            ZorikTheme(AppTheme.CINEMA) {
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                    Column(Modifier.fillMaxSize().background(UaTheme.palette.void)
+                        .padding(20.dp)) {
+                        FileInfoCard(video, PlaybackBadgesState())
+                        FilePlaybackProgress(FilePlaybackTimeline(65_000, 3_661_000), true, { target = it })
+                    }
+                }
+            }
+        }
+        rule.onRoot().captureRoboImage("src/test/screenshots/file_player_large_text_cinema.png")
+        rule.onNodeWithText("1:05").assertIsDisplayed()
+        rule.onNodeWithText("1:01:01").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Video position").assertIsEnabled()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        rule.runOnIdle { assertEquals(1_830_500L, target) }
+    }
+    @Test fun tenSecondControlsRespectSeekabilityAndCommitBoundedTargets() {
+        val enabled = androidx.compose.runtime.mutableStateOf(false)
+        var target = -1L
+        rule.setContent { ZorikTheme(AppTheme.DAYLIGHT) {
+            FilePlaybackProgress(FilePlaybackTimeline(5000, 12_000), enabled.value, { target = it })
+        } }
+        rule.onNodeWithText("−10 sec").assertDoesNotExist()
+        rule.onNodeWithText("+10 sec").assertDoesNotExist()
+        rule.runOnIdle { enabled.value = true }
+        rule.onNodeWithText("−10 sec").performClick()
+        rule.runOnIdle { assertEquals(0L, target) }
+        rule.onNodeWithText("+10 sec").performClick()
+        rule.runOnIdle { assertEquals(12_000L, target) }
+    }
+
+}

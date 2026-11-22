@@ -215,7 +215,7 @@
     <string name="settings_section_playback">Reproducción</string>
     <string name="settings_section_cache">Caché</string>
     <string name="settings_section_data">Datos</string>
-    <string name="settings_data_hint">Guarda un archivo .uacast protegido por contraseña en el teléfono o el ordenador. Incluye fuentes, M3U locales, favoritos y ajustes. Máximo de datos: 8 MB. Las copias JSON antiguas se pueden restaurar después de revisarlas.</string>
+    <string name="settings_data_hint">Guarda un archivo .zorik protegido por contraseña en el teléfono o el ordenador. Incluye fuentes, M3U locales, favoritos y ajustes. Máximo de datos: 8 MB. Las copias JSON antiguas se pueden restaurar después de revisarlas.</string>
     <string name="settings_data_export">Guardar en archivo</string>
     <string name="settings_data_export_warning_title">¿Exportar datos confidenciales?</string>
     <string name="settings_data_export_warning_message">La copia puede contener contraseñas del proveedor y enlaces privados. Se cifrará con tu frase de contraseña. Guárdala: Zorik no puede recuperar una contraseña olvidada.</string>

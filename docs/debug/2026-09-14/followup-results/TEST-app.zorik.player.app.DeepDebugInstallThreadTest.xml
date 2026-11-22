@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.zorik.player.app.DeepDebugInstallThreadTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-14T19:31:10.591Z" hostname="PC-ROMARIO" time="6.661">
+  <properties/>
+  <testcase name="blocking installer must not execute on UI thread" classname="app.zorik.player.app.DeepDebugInstallThreadTest" time="6.661"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -48,7 +48,7 @@ def checkout_is_live(root):
     `PLAY_BILLING_LIVE` BuildConfig field, which the `play` build type sets to true. Reading only
     the Kotlin literal made a live Play checkout look disabled and skipped the commerce review.
     """
-    kotlin = (root / "app/src/main/kotlin/com/uacastplayer/premium/PremiumAvailability.kt").read_text(encoding="utf-8")
+    kotlin = (root / "app/src/main/kotlin/app/zorik/player/premium/PremiumAvailability.kt").read_text(encoding="utf-8")
     gradle = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
     return bool(re.search(r"STORE_IS_LIVE\s*=\s*true", kotlin) or
                 re.search(r'buildConfigField\(\s*"boolean"\s*,\s*"PLAY_BILLING_LIVE"\s*,\s*"true"\s*\)', gradle))

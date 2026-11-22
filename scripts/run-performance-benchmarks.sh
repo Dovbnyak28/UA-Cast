@@ -19,7 +19,7 @@ stop_sampler() {
 }
 trap stop_sampler EXIT
 
-package=com.uacastplayer.baselineprofile
+package=app.zorik.player.baselineprofile
 ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
   "-Pandroid.testInstrumentationRunnerArguments.class=$package.StartupBenchmark,$package.CriticalJourneysBenchmark,$package.MediumCatalogBenchmark,$package.EpgParseBenchmark,$package.BenchmarkFixtureReadinessTest" \
   -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \

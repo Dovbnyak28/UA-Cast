@@ -88,7 +88,7 @@ class PerformanceBudgetTest(unittest.TestCase):
         self.assertEqual(14, len(rows))
         self.assertFalse(GATE.evaluate([{"context": {"build": {"version": {"sdk": budgets["apiLevel"]}}},
                                           "benchmarks": rows}], budgets)[1])
-        next(row for row in rows if row["name"] == "parseAndBuildIndex")["metrics"].pop("UaCastEpgParseAndIndexSumMs")
+        next(row for row in rows if row["name"] == "parseAndBuildIndex")["metrics"].pop("ZorikEpgParseAndIndexSumMs")
         with self.assertRaises(ValueError):
             GATE.evaluate([{"context": {"build": {"version": {"sdk": budgets["apiLevel"]}}},
                                           "benchmarks": rows}], budgets)

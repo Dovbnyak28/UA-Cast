@@ -1,0 +1,14 @@
+package app.zorik.player.parentalcontrol
+
+/** Pure rules for the parental-control PIN, kept separate from [app.zorik.player.core.security.PinHasher]
+ * so the format check (what a caller should even bother hashing) doesn't depend on any crypto API. */
+object ParentalControlPinPolicy {
+
+    /** Short enough to type on a TV remote's number pad - the same length convention as a phone's
+     * SIM PIN or a TV's parental-control code. Public so the input dialogs (SetPinDialog etc.) can
+     * cap typing at the same length instead of duplicating the number. */
+    const val PIN_LENGTH = 4
+
+    /** Exactly [PIN_LENGTH] ASCII digits. */
+    fun isValidFormat(pin: String): Boolean = pin.length == PIN_LENGTH && pin.all(Char::isDigit)
+}

@@ -214,7 +214,7 @@
     <string name="settings_section_playback">Playback</string>
     <string name="settings_section_cache">Cache</string>
     <string name="settings_section_data">Data</string>
-    <string name="settings_data_hint">Save a password-protected .uacast file on your phone or copy it to a computer. Includes sources, local M3U files, favorites and key settings. Maximum data size: 8 MB. Old JSON copies can still be restored after reviewing their contents.</string>
+    <string name="settings_data_hint">Save a password-protected .zorik file on your phone or copy it to a computer. Includes sources, local M3U files, favorites and key settings. Maximum data size: 8 MB. Old JSON copies can still be restored after reviewing their contents.</string>
     <string name="settings_data_export">Save to file</string>
     <string name="settings_data_export_warning_title">Export sensitive data?</string>
     <string name="settings_data_export_warning_message">This backup can contain provider passwords and private links. The file will be encrypted with your passphrase. Keep the passphrase safely: Zorik cannot recover it.</string>

@@ -9,6 +9,6 @@
     {"class":"CriticalJourneysBenchmark","test":"firstPlayerLaunch","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
     {"class":"CriticalJourneysBenchmark","test":"enterFullscreen","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
     {"class":"CriticalJourneysBenchmark","test":"openEpgGuide","minIterations":5,"metrics":[{"name":"frameDurationCpuMs","statistic":"p95","limit":100},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]},
-    {"class":"EpgParseBenchmark","test":"parseAndBuildIndex","minIterations":5,"metrics":[{"name":"UaCastEpgParseAndIndexSumMs","statistic":"median","limit":60000},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]}
+    {"class":"EpgParseBenchmark","test":"parseAndBuildIndex","minIterations":5,"metrics":[{"name":"ZorikEpgParseAndIndexSumMs","statistic":"median","limit":60000},{"name":"memoryHeapSizeMaxKb","statistic":"max","limit":262144}]}
   ]
 }

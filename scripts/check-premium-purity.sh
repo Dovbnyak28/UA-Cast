@@ -5,7 +5,7 @@
 # "The premium layer does not depend on UI, on Billing or on Google Play" is the requirement the
 # whole layer exists to satisfy, and a requirement that lives only in a review comment is one that
 # survives exactly until the first hurried afternoon. This turns it into a property: the moment
-# com/uacastplayer/premium/ imports android.*, androidx.*, a billing client, or anything from
+# app/zorik/player/premium/ imports android.*, androidx.*, a billing client, or anything from
 # another package of this app, the build stops.
 #
 # The one deliberate exception is kotlinx.coroutines: StateFlow is how access is published to the
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-PREMIUM_DIR="app/src/main/kotlin/com/uacastplayer/premium"
+PREMIUM_DIR="app/src/main/kotlin/app/zorik/player/premium"
 
 if [ ! -d "$PREMIUM_DIR" ]; then
     echo "check-premium-purity: $PREMIUM_DIR does not exist" >&2
@@ -27,7 +27,7 @@ fi
 violations=$(grep -RHn --include='*.kt' '^import ' "$PREMIUM_DIR" \
     | grep -v 'import kotlin\.' \
     | grep -v 'import kotlinx\.' \
-    | grep -v 'import com\.uacastplayer\.premium\.' \
+    | grep -v 'import com\.zorikplayer\.premium\.' \
     || true)
 
 if [ -n "$violations" ]; then

@@ -1,0 +1,110 @@
+package app.zorik.player.cast
+
+import android.content.Context
+import app.zorik.player.core.cast.CastRouteKind
+import app.zorik.player.data.cast.LocalNetworkAddress
+import app.zorik.player.data.cast.ProxyServer
+import app.zorik.player.data.cast.ProxySourceObservation
+import app.zorik.player.data.prefs.AppPreferences
+import app.zorik.player.diagnostics.RemuxEffectivenessStore
+import app.zorik.player.log.AppLog
+import app.zorik.player.data.media.AndroidLocalVideoSource
+import app.zorik.player.media.LocalVideo
+import java.util.concurrent.atomic.AtomicLong
+import okhttp3.OkHttpClient
+
+/** Sole owner of the Cast proxy's socket/resource and foreground-service lifetime.
+ * Session SDK callbacks supply a token; the repository never operates the server directly. */
+internal class CastProxySession(
+    context: Context,
+    httpClient: OkHttpClient,
+    onSourceObserved: (CastProxyDiagnostic) -> Unit = {},
+) {
+    private val appContext = context.applicationContext
+    private val preferences = AppPreferences(appContext)
+    private val metrics = RemuxEffectivenessStore.getInstance(appContext)
+    private val attemptId = AtomicLong(0)
+    private val server = ProxyServer(httpClient, localVideoSource = AndroidLocalVideoSource(appContext),
+        onSourceObserved = { observation ->
+        onSourceObserved(CastProxyDiagnostic(attemptId.get(), observation))
+    }) { resourceId, route ->
+        metrics.recordProxyRouteAttemptOnce(attemptId.get(), resourceId, route)
+    }
+    private var activeResourceId: String? = null
+    var token: String = ""
+        private set
+
+    fun adoptToken(token: String) {
+        this.token = token
+    }
+
+    fun beginPlaybackAttempt() {
+        attemptId.incrementAndGet()
+        activeResourceId = null
+    }
+
+    /** Main-thread check, performed after the worker's observation has been dispatched. */
+    fun isDiagnosticCurrent(diagnostic: CastProxyDiagnostic): Boolean =
+        diagnostic.attemptId == attemptId.get() && activeResourceId == diagnostic.source.resourceId &&
+            server.isSourceObservationCurrent(diagnostic.source)
+
+    fun startEagerly() {
+        val host = LocalNetworkAddress.currentIpv4Address(appContext) ?: return
+        CastProxyOperation.run { ensureStarted(host) }.onFailure { error ->
+            AppLog.w(TAG) { "Eager Cast proxy startup failed: ${error.javaClass.simpleName}" }
+            stop()
+        }
+    }
+
+    fun prepare(
+        host: String,
+        streamUrl: String,
+        title: String,
+        userAgent: String?,
+        referrer: String?,
+        receiverName: String?,
+        localVideo: LocalVideo? = null,
+    ): Result<PreparedCastProxy> = CastProxyOperation.run {
+        ensureStarted(host)
+        val resourceId = server.registerPlaylist(streamUrl, userAgent, referrer, localVideo)
+        val prepared = PreparedCastProxy(resourceId, server.buildLocalUrl(resourceId))
+        CastProxyService.start(appContext, title, receiverName.orEmpty())
+        activeResourceId = resourceId
+        prepared
+    }.onFailure { stop() }
+
+    fun routeKind(mode: CastDeliveryMode): CastRouteKind = when (mode) {
+        CastDeliveryMode.Direct -> CastRouteKind.DIRECT
+        CastDeliveryMode.Proxy -> if (activeResourceId?.let(server::wasRemuxed) == true) {
+            CastRouteKind.PROXY_REMUX
+        } else {
+            CastRouteKind.PROXY_REWRITE
+        }
+    }
+
+    fun bytesServedToReceiver(): Long = server.bytesServedToReceiver()
+
+    fun confirmActiveSession() = server.confirmActiveSession()
+
+    fun stop() {
+        attemptId.incrementAndGet()
+        activeResourceId = null
+        server.stop()
+        CastProxyService.stop()
+    }
+
+    private fun ensureStarted(host: String) {
+        server.ensureStarted(
+            sessionToken = token,
+            host = host,
+            remuxEnabled = preferences.rawTsRemuxEnabled,
+            unwrapWrapperPlaylists = preferences.rawTsRemuxEnabled,
+        )
+    }
+
+    private companion object {
+        const val TAG = "CastProxySession"
+    }
+}
+
+internal data class CastProxyDiagnostic(val attemptId: Long, val source: ProxySourceObservation)

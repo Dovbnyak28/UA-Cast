@@ -66,7 +66,7 @@ def main():
     spec = importlib.util.spec_from_file_location("native_builder", root / "scripts/prepare-software-decoder.py")
     native = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(native)
-    verify_bundle(args.bundle or root / "build/software-decoder-dist/uacast-software-decoder-source.zip",
+    verify_bundle(args.bundle or root / "build/software-decoder-dist/zorik-software-decoder-source.zip",
                   native.verify_manifest(root), root)
     print("Corresponding-source archive matches this verified native build")
 
