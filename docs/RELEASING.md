@@ -85,6 +85,12 @@ The app does not check for updates itself. Users of the GitHub APK update by ins
 release over the old one; Play users get updates from Play. Tag releases with a version number
 (`v0.9.8`) and attach the universal APK to the published GitHub Release.
 
+**0.9.8 is the exception.** The application ID changed from `com.uacastplayer` (UA Cast) to
+`app.zorik.player` (Zorik Player), so 0.9.8 installs as a new app next to 0.9.x and cannot update
+it. Say so in the release notes: export a backup in the old app (Settings → Data → Save to file),
+restore it in Zorik Player. Old `.uacast` backups restore normally. From 0.9.8 on, upgrades work in
+place again.
+
 Every release APK must be signed with the *same* key as the one it is replacing. Android refuses an
 APK signed with a different one, and the only way out for the user is to uninstall - taking their
 playlist, their guide and their licence with it. `scripts/verify-release-upgrade.sh` checks this.
