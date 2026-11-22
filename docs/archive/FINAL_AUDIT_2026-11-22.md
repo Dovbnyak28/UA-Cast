@@ -132,7 +132,8 @@ internal testing у Play. Публікація для всіх — лише пі
 1. Записати схвалення продажів у `config/legal/release-readiness.json` (`commerce`: продавець, податки, ринки).
 2. ~~Передеплоїти `legal/`~~ (зроблено 2026-11-22) — вказати нову адресу політики в Play Console:
    `https://dovbnyak28.github.io/Zorik-Player/legal/privacy-policy.html`.
-3. Створити секрети `ZORIK_*` у середовищі `production`, запустити `signed-release`, прибрати `UACAST_*`.
+3. Додати чотири секрети `ZORIK_*` у середовище `production` (його створено 2026-11-22, але воно порожнє;
+   старих `UACAST_*` у GitHub не було) і запустити `signed-release`.
 4. ~~Опублікувати архів LGPL-джерел декодера~~ (зроблено 2026-11-22: реліз `decoder-source-2026-11-22`).
    У Play-описі чи на сторінці релізу дати посилання на нього.
 5. Завантажити `bundlePlay` на internal testing, активувати `premium_lifetime` (3,99 €), пройти чекліст

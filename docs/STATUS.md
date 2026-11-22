@@ -59,8 +59,10 @@
   переадресовуються, але сторінки Pages переїхали на `dovbnyak28.github.io/Zorik-Player/` без переадресації
   (стара адреса — 404). `legal/` передеплоєно туди 2026-11-22 (хеші в `release-readiness.json`);
   у Play Console вказувати нову адресу політики.
-  Секрети підпису: `ZORIK_*`, з резервним читанням старих `UACAST_*`, поки нові не створено.
-  Свідомо лишились: сигнатура формату копії `UACASTBK` (сумісність), резервне читання `UACAST_*`,
+  Секрети підпису `ZORIK_*`: середовище `production` створено 2026-11-22, але секретів у ньому ще немає
+  (старих `UACAST_*` у GitHub теж ніколи не було) — `signed-release` до них не збереться.
+  Свідомо лишились: сигнатура формату копії `UACASTBK` (сумісність), читання `UACAST_*` з локального
+  `~/.gradle/gradle.properties`,
   `CMakeLists.txt`/`ffmpeg_jni.cc`/`prepare-software-decoder.py` (хешовані входи native-збірки).
 - Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),

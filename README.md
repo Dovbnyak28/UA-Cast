@@ -48,8 +48,8 @@ Coil and Compose ship their own profiles inside their AARs and are merged automa
 ```
 
 Release signing is read only from environment variables / Gradle properties, never committed:
-`ZORIK_STORE_FILE`, `ZORIK_STORE_PASSWORD`, `ZORIK_KEY_ALIAS`, `ZORIK_KEY_PASSWORD` (the pre-rename
-`UACAST_*` names are still read as a fallback).
+`ZORIK_STORE_FILE`, `ZORIK_STORE_PASSWORD`, `ZORIK_KEY_ALIAS`, `ZORIK_KEY_PASSWORD` (local Gradle properties
+with the pre-rename `UACAST_*` names are still read as a fallback).
 
 `minSdk` is 24 (Android 7.0). The Cast proxy session runs as a `mediaPlayback` foreground service
 (`FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission), so a physical or emulated device/receiver is
