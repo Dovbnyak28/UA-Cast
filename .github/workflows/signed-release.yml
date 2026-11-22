@@ -90,10 +90,10 @@ jobs:
     env:
       RELEASE_VERSION_CODE: ${{ inputs.version_code }}
       RELEASE_VERSION_NAME: ${{ inputs.version_name }}
-      UACAST_KEYSTORE_BASE64: ${{ secrets.UACAST_KEYSTORE_BASE64 }}
-      UACAST_STORE_PASSWORD: ${{ secrets.UACAST_STORE_PASSWORD }}
-      UACAST_KEY_ALIAS: ${{ secrets.UACAST_KEY_ALIAS }}
-      UACAST_KEY_PASSWORD: ${{ secrets.UACAST_KEY_PASSWORD }}
+      ZORIK_KEYSTORE_BASE64: ${{ secrets.ZORIK_KEYSTORE_BASE64 || secrets.UACAST_KEYSTORE_BASE64 }}
+      ZORIK_STORE_PASSWORD: ${{ secrets.ZORIK_STORE_PASSWORD || secrets.UACAST_STORE_PASSWORD }}
+      ZORIK_KEY_ALIAS: ${{ secrets.ZORIK_KEY_ALIAS || secrets.UACAST_KEY_ALIAS }}
+      ZORIK_KEY_PASSWORD: ${{ secrets.ZORIK_KEY_PASSWORD || secrets.UACAST_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
 
@@ -146,20 +146,20 @@ jobs:
             echo "version_name contains unsupported characters" >&2
             exit 1
           }
-          for name in UACAST_KEYSTORE_BASE64 UACAST_STORE_PASSWORD UACAST_KEY_ALIAS UACAST_KEY_PASSWORD; do
+          for name in ZORIK_KEYSTORE_BASE64 ZORIK_STORE_PASSWORD ZORIK_KEY_ALIAS ZORIK_KEY_PASSWORD; do
             [ -n "${!name:-}" ] || {
               echo "Required production secret is missing: $name" >&2
               exit 1
             }
           done
           keystore="$RUNNER_TEMP/zorik-release.p12"
-          printf '%s' "$UACAST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          printf '%s' "$ZORIK_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           chmod 600 "$keystore"
           [ -s "$keystore" ] || {
             echo "Decoded keystore is empty" >&2
             exit 1
           }
-          echo "UACAST_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+          echo "ZORIK_STORE_FILE=$keystore" >> "$GITHUB_ENV"
 
       - name: Run release gate and build signed Play bundle
         run: >-
