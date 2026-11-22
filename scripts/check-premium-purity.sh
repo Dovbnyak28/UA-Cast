@@ -27,7 +27,7 @@ fi
 violations=$(grep -RHn --include='*.kt' '^import ' "$PREMIUM_DIR" \
     | grep -v 'import kotlin\.' \
     | grep -v 'import kotlinx\.' \
-    | grep -v 'import com\.zorikplayer\.premium\.' \
+    | grep -v 'import app\.zorik\.player\.premium\.' \
     || true)
 
 if [ -n "$violations" ]; then

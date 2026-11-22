@@ -43,11 +43,11 @@ report_imports() {
 }
 
 data_to_ui=$(scan_imports -RHn --include='*.kt' \
-    '^import com\.zorikplayer\.ui\.' "$SRC_ROOT/data")
+    '^import app\.zorik\.player\.ui\.' "$SRC_ROOT/data")
 report_imports "data must not import ui:" "$data_to_ui"
 
 core_to_app_or_data=$(scan_imports -RHnE --include='*.kt' \
-    '^import com\.zorikplayer\.(app|data)\.' "$SRC_ROOT/core")
+    '^import app\.zorik\.player\.(app|data)\.' "$SRC_ROOT/core")
 report_imports "core must not import app or data:" "$core_to_app_or_data"
 
 # The production JVM module is a real compile-time boundary as well as a package convention.
@@ -59,7 +59,7 @@ if [ "$#" -eq 0 ]; then
         exit 1
     fi
     core_to_framework=$(scan_imports -RHnE --include='*.kt' \
-        '^import (android\.|androidx\.|okhttp3\.|com\.google\.|com\.zorikplayer\.(app|data|ui|cast|player|dlna|premium)\.)' \
+        '^import (android\.|androidx\.|okhttp3\.|com\.google\.|app\.zorik\.player\.(app|data|ui|cast|player|dlna|premium)\.)' \
         "$CORE_ROOT")
     report_imports "JVM core must not depend on app/features or Android/network frameworks:" "$core_to_framework"
 fi
@@ -68,26 +68,26 @@ fi
 for owner in "$SRC_ROOT/player/PlayerStallRecovery.kt" "$SRC_ROOT/cast/CastRecoveryRuntime.kt" \
     "$SRC_ROOT/cast/CastRouteHistory.kt"; do
     if [ -f "$owner" ]; then
-        runtime_to_framework=$(scan_imports -HnE '^import (android\.|androidx\.|com\.google\.|com\.zorikplayer\.ui\.)' "$owner")
+        runtime_to_framework=$(scan_imports -HnE '^import (android\.|androidx\.|com\.google\.|app\.zorik\.player\.ui\.)' "$owner")
         report_imports "Recovery runtime must not depend on UI/Media3/Cast SDK:" "$runtime_to_framework"
     fi
 done
 
 if [ -f "$SRC_ROOT/cast/CastSessionRepository.kt" ]; then
-    cast_to_proxy=$(scan_imports -Hn 'com\.zorikplayer\.data\.cast\.ProxyServer' "$SRC_ROOT/cast/CastSessionRepository.kt")
+    cast_to_proxy=$(scan_imports -Hn 'app\.zorik\.player\.data\.cast\.ProxyServer' "$SRC_ROOT/cast/CastSessionRepository.kt")
     report_imports "Cast SDK adapter must use CastProxySession as its resource owner:" "$cast_to_proxy"
 fi
 
 player_to_cast=$(scan_imports -RHn --include='*.kt' \
-    '^import com\.zorikplayer\.cast\.' "$SRC_ROOT/player" "$SRC_ROOT/ui/player")
+    '^import app\.zorik\.player\.cast\.' "$SRC_ROOT/player" "$SRC_ROOT/ui/player")
 report_imports "player feature must use PlayerCastPort instead of importing cast:" "$player_to_cast"
 
 cast_to_player=$(scan_imports -RHn --include='*.kt' \
-    '^import com\.zorikplayer\.player\.' "$SRC_ROOT/cast")
+    '^import app\.zorik\.player\.player\.' "$SRC_ROOT/cast")
 report_imports "cast feature must not import player:" "$cast_to_player"
 
 ui_to_proxy_server=$(scan_imports -RHn --include='*.kt' \
-    'com\.zorikplayer\.data\.cast\.ProxyServer' "$SRC_ROOT/ui")
+    'app\.zorik\.player\.data\.cast\.ProxyServer' "$SRC_ROOT/ui")
 report_imports "UI must not import or directly reference ProxyServer:" "$ui_to_proxy_server"
 
 if [ "$failed" -ne 0 ]; then
