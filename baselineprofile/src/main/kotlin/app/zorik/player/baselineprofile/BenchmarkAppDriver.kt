@@ -95,8 +95,20 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         device.waitForIdle()
     }
 
+    /**
+     * Long-presses the first channel until its action sheet shows "Guide".
+     *
+     * The channel row appears while the group screen is still entering; a long press landing in
+     * that window is cancelled by the moving list and no sheet opens (seen on the API 30 emulator
+     * 66 ms after the group click). Waiting for the UI to settle and retrying the press keeps this
+     * setup step reliable; it runs outside the measured journey.
+     */
     fun openFirstChannelActions() {
-        waitForText(FIRST_CHANNEL).longClick()
+        repeat(CHANNEL_ACTION_ATTEMPTS) {
+            device.waitForIdle()
+            waitForText(FIRST_CHANNEL).longClick()
+            if (device.wait(Until.hasObject(By.text(GUIDE_LABEL)), CHANNEL_ACTION_TIMEOUT_MILLIS)) return
+        }
         waitForText(GUIDE_LABEL)
     }
 
@@ -174,6 +186,8 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
         const val EPG_PARSE_TIMEOUT_MILLIS = 180_000L
+        private const val CHANNEL_ACTION_ATTEMPTS = 3
+        private const val CHANNEL_ACTION_TIMEOUT_MILLIS = 5_000L
 
         private const val FIXTURE_COMPONENT = "$PACKAGE_NAME/.benchmark.BenchmarkFixtureActivity"
         private const val FIXTURE_MODE_EXTRA = "app.zorik.player.benchmark.MODE"
