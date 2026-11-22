@@ -52,10 +52,10 @@ def generated_documents():
                     for index in range(1, 9)]
         sections.append(("FFmpeg / LGPL", strings["legal_ffmpeg_notice"] +
                          " https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html — " +
-                         "https://github.com/Dovbnyak28/UA-Cast/releases"))
+                         "https://github.com/Dovbnyak28/Zorik/releases"))
         terms.append((language, names[language], strings["terms_title"], strings["terms_intro"], sections))
-    return {"privacy-policy.html": render("UA Cast Player — Privacy Policy", privacy),
-            "terms-of-use.html": render("UA Cast Player — Terms of Use", terms)}
+    return {"privacy-policy.html": render("Zorik Player — Privacy Policy", privacy),
+            "terms-of-use.html": render("Zorik Player — Terms of Use", terms)}
 
 
 def main():

@@ -1,11 +1,11 @@
-# Android TV and UA-Cast phone remote
+# Android TV and Zorik phone remote
 
 Implemented on 2026-09-30. This is Android TV / Google TV support (Android 7+, the existing
 minSdk 24), **not** a Hisense VIDAA system remote. The same universal APK installs on the phone
 and Android TV. Install it on both devices; the TV uses its own saved playlists.
 
 The TV launcher has a dedicated 16:9 filtered HD bitmap banner, generated from editable
-vector artwork, with a large UA CAST name and unified TV/play/cast mark. Phone icons remain
+vector artwork, with a large ZORIK name and unified TV/play/cast mark. Phone icons remain
 unchanged. HD rendering/native checks are recorded in
 [TV_BANNER_HD_VERIFICATION_2026-09-30.md](archive/TV_BANNER_HD_VERIFICATION_2026-09-30.md).
 Initial design, banner renders, automated
@@ -14,10 +14,10 @@ checks and actual Xiaomi OEM-launcher acceptance are recorded in
 
 ## Connect a phone
 
-1. Open UA-Cast on the TV. Choose the remote icon in the top bar, or **Pair phone** in the player.
+1. Open Zorik on the TV. Choose the remote icon in the top bar, or **Pair phone** in the player.
 2. On the phone, open the remote icon and choose **Remote** or **Touchpad**.
 3. Use the same local network (TV Ethernet + phone Wi-Fi also works). Enter the IPv4 address,
-   port and eight-digit code displayed by UA-Cast on the TV. No automatic device discovery yet.
+   port and eight-digit code displayed by Zorik on the TV. No automatic device discovery yet.
 4. Press **Connect**. The TV pairing dialog closes on successful authentication. The phone can
    switch between remote buttons and touchpad without reconnecting.
 

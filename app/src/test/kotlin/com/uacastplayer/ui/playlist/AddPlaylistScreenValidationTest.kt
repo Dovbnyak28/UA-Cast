@@ -45,7 +45,7 @@ class AddPlaylistScreenValidationTest {
         composeRule.onNodeWithText("Каналів у застосунку немає").assertIsDisplayed()
         composeRule.onNodeWithText(
             "Візьміть посилання M3U/M3U8, файл плейлиста або дані Xtream у свого ТВ-провайдера. " +
-                "UA Cast — плеєр, а не ТВ-сервіс.",
+                "Zorik — плеєр, а не ТВ-сервіс.",
         ).assertIsDisplayed()
         composeRule.onNodeWithText("Вставте посилання на плейлист, яке надав ТВ-провайдер.")
             .assertIsDisplayed()

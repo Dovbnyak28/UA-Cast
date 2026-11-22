@@ -67,12 +67,6 @@ class TvLauncherBannerTest {
         oversized.recycle()
     }
 
-    @Test fun wordmarkAttributionIsPackaged() {
-        val license = context.assets.open("licenses/tv-wordmark-roboto.txt").bufferedReader().use { it.readText() }
-        assertTrue(license.contains("Copyright 2011 Google Inc."))
-        assertTrue(license.contains("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"))
-    }
-
     private fun renderBanner(width: Int, height: Int): Bitmap {
         // Load through PackageManager, as the launcher does, not a separate design mock-up.
         val banner = requireNotNull(context.applicationInfo.loadBanner(context.packageManager))

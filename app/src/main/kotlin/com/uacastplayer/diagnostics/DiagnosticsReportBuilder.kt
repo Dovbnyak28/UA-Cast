@@ -100,7 +100,7 @@ object DiagnosticsReportBuilder {
     private val TIMESTAMP = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     fun build(snapshot: DiagnosticsSnapshot): String = buildString {
-        appendLine("UA Cast diagnostics report")
+        appendLine("Zorik diagnostics report")
         appendLine(
             "Generated: ${snapshot.generatedAtMillis.asTimestamp()} " +
                 "(app running ${snapshot.uptimeMillis.asDuration()})",

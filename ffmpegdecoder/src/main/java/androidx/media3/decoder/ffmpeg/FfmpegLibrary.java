@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * Modified for UA-Cast: decoder capability mappings and native integration. See ORIGIN.md.
+ * Modified for Zorik: decoder capability mappings and native integration. See ORIGIN.md.
  */
 package androidx.media3.decoder.ffmpeg;
 

@@ -43,7 +43,7 @@ class DiagnosticsPreviewDialogTest {
 
     /** The shape of a real report: a short header, then the 500-entry log ring. */
     private fun realisticReport(): String = buildString {
-        appendLine("UA Cast diagnostics report")
+        appendLine("Zorik diagnostics report")
         appendLine("App version: 0.9.0")
         repeat(LOG_RING_ENTRIES) { appendLine("2026-08-12 22:45:0$it [DEBUG] ProxyServer: line number $it") }
     }
@@ -60,7 +60,7 @@ class DiagnosticsPreviewDialogTest {
     fun `the top of the report is on screen`() {
         show(realisticReport())
 
-        composeRule.onNodeWithText("UA Cast diagnostics report").assertIsDisplayed()
+        composeRule.onNodeWithText("Zorik diagnostics report").assertIsDisplayed()
     }
 
     @Test

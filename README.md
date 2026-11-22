@@ -1,4 +1,4 @@
-# UA Cast Player
+# Zorik Player
 
 A personal Android IPTV player: import an M3U playlist, watch channels locally, cast to
 Chromecast/Google TV, and browse a channel guide (XMLTV/EPG) with logos.

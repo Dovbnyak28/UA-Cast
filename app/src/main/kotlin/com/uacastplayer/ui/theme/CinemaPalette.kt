@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 
-// Ink-blue surfaces keep the cinema palette aligned with the UA-Cast brand and readable at night.
+// Ink-blue surfaces keep the cinema palette aligned with the Zorik brand and readable at night.
 private val CinemaVoid = Color(0xFF0C111B)
 private val CinemaVoidElevated = Color(0xFF121C2B)
 private val CinemaSurface1 = Color(0xFF192436)

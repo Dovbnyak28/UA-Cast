@@ -78,7 +78,7 @@ class ProxyRouteSelectorTest {
     private fun topLevelResource() = ResourceEntry(
         type = RESOURCE_TYPE_PLAYLIST,
         originalUrl = "https://origin.example/live",
-        userAgent = "UA Cast Test",
+        userAgent = "Zorik Test",
         referrer = null,
     )
 

@@ -97,7 +97,7 @@ public class Media3SoftwarePlayerInstrumentedTest {
       } finally { scenario.onActivity(activity -> { if (player.get() != null) player.get().release(); }); }
     } finally { assertTrue(clip.delete()); }
     for (Thread thread : Thread.getAllStackTraces().keySet()) {
-      assertFalse("No software video worker may survive player release", thread.isAlive() && thread.getName().equals("UA-Cast:FfmpegVideo"));
+      assertFalse("No software video worker may survive player release", thread.isAlive() && thread.getName().equals("Zorik:FfmpegVideo"));
     }
   }
 }

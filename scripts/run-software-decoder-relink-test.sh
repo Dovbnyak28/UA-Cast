@@ -15,7 +15,7 @@ mkdir -p "$reports"
 # Contains only a disposable self-generated signing key and intermediate unsigned test APKs.
 trap 'rm -rf -- "$work"' EXIT
 keytool -genkeypair -keystore "$work/recipient.p12" -storetype PKCS12 -alias recipient \
-  -storepass relink-test-only -keypass relink-test-only -dname 'CN=UA-Cast recipient relink test' \
+  -storepass relink-test-only -keypass relink-test-only -dname 'CN=Zorik Player recipient relink test' \
   -keyalg RSA -keysize 2048 -validity 2 > "$reports/key-generation.log" 2>&1
 sign_apk() {
   "$tools/zipalign" -P 16 -f 4 "$1" "$work/aligned.apk"

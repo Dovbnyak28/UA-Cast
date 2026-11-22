@@ -45,7 +45,6 @@ internal val thirdPartyLicenseFiles = linkedMapOf(
     "FFmpeg / AndroidX — notices" to "ffmpeg-decoder-notice.txt",
     "AndroidX — Apache 2.0" to "ffmpeg-wrapper-apache-2.0.txt",
     "libyuv — BSD 3-Clause" to "libyuv-bsd.txt",
-    "Roboto — Apache 2.0" to "tv-wordmark-roboto.txt",
     "Android NDK — notices" to "android-ndk-runtime-notices.txt",
 )
 

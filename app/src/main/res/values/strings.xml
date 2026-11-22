@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_brand_short" translatable="false">UA Cast</string>
+    <string name="app_brand_short" translatable="false">Zorik</string>
     <string name="player_remote_controls_notice">Playback settings are controlled by the TV. Use the device controls while casting.</string>
     <string name="playlist_error_storage">Could not save the playlist. Your previous copy is safe. Free up storage and try again.</string>
     <string name="player_levels">Brightness and volume</string>
-    <string name="app_name">UA Cast Player</string>
+    <string name="app_name">Zorik Player</string>
 
     <!-- Language picker (first run) -->
     <string name="language_picker_title">Choose your language</string>
@@ -68,7 +68,7 @@
     <string name="add_playlist_save_button">Download and save</string>
     <string name="add_playlist_file_button">Load from file</string>
     <string name="add_playlist_source_title">Channels aren\'t included</string>
-    <string name="add_playlist_tip">Get an M3U/M3U8 link, playlist file, or Xtream login from your TV provider. UA Cast is a player, not a TV service.</string>
+    <string name="add_playlist_tip">Get an M3U/M3U8 link, playlist file, or Xtream login from your TV provider. Zorik is a player, not a TV service.</string>
     <string name="add_playlist_type_url">Link</string>
     <string name="add_playlist_type_file">File</string>
     <string name="add_playlist_type_xtream">Xtream</string>
@@ -86,7 +86,7 @@
 
     <!-- Channels screen -->
     <string name="channels_empty_message">No channels yet</string>
-    <string name="channels_empty_subtitle">Add a playlist from your TV provider. UA Cast doesn\'t include channels.</string>
+    <string name="channels_empty_subtitle">Add a playlist from your TV provider. Zorik doesn\'t include channels.</string>
     <string name="channels_error_subtitle">Check the source and connection, then try again</string>
     <string name="common_retry">Try again</string>
     <string name="channels_search_hint">Search channels</string>
@@ -217,13 +217,13 @@
     <string name="settings_data_hint">Save a password-protected .uacast file on your phone or copy it to a computer. Includes sources, local M3U files, favorites and key settings. Maximum data size: 8 MB. Old JSON copies can still be restored after reviewing their contents.</string>
     <string name="settings_data_export">Save to file</string>
     <string name="settings_data_export_warning_title">Export sensitive data?</string>
-    <string name="settings_data_export_warning_message">This backup can contain provider passwords and private links. The file will be encrypted with your passphrase. Keep the passphrase safely: UA-Cast cannot recover it.</string>
+    <string name="settings_data_export_warning_message">This backup can contain provider passwords and private links. The file will be encrypted with your passphrase. Keep the passphrase safely: Zorik cannot recover it.</string>
     <string name="settings_data_export_confirm">Continue</string>
     <string name="settings_data_import">Restore from file</string>
     <string name="settings_data_import_summary">Imported: %1$d playlists, %2$d favorites</string>
     <string name="settings_data_export_success">Backup exported successfully</string>
     <string name="settings_data_export_failure">Could not save the backup. Check storage, access to all local playlists and the 8 MB file limit. Do not use the incomplete file.</string>
-    <string name="settings_data_import_failure">Could not restore this file. Check that it is a valid UA-Cast backup, no larger than 8 MB, and that storage is available. Existing playlists, favorites and settings were not changed.</string>
+    <string name="settings_data_import_failure">Could not restore this file. Check that it is a valid Zorik backup, no larger than 8 MB, and that storage is available. Existing playlists, favorites and settings were not changed.</string>
     <string name="settings_data_import_limit">Not added: %1$d playlists — the limit of 10 saved sources was reached.</string>
     <string name="settings_data_picker_unavailable">A system file picker is unavailable or blocked on this device. Save or restore your backup on a phone with a file picker.</string>
     <string name="cache_playlist_label">Playlist cache</string>
@@ -238,7 +238,7 @@
     <string name="device_tier_high_end">High performance</string>
     <string name="settings_app_version">App version</string>
     <string name="settings_help">Help</string>
-    <string name="settings_help_body">UA Cast Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. The Cast button plays on a Chromecast or Google TV; the button beside it reaches TVs that use DLNA instead. If a stream cannot play on the receiver directly, the app retries through a local relay on your phone.</string>
+    <string name="settings_help_body">Zorik Player is a personal IPTV player. Import a playlist from the Channels tab (by URL or file), pick a TV guide source, and tap any channel to start watching. The Cast button plays on a Chromecast or Google TV; the button beside it reaches TVs that use DLNA instead. If a stream cannot play on the receiver directly, the app retries through a local relay on your phone.</string>
     <string name="settings_open_help">Detailed help</string>
     <string name="settings_open_terms">Terms of Use</string>
     <string name="settings_open_privacy_policy">Privacy Policy</string>
@@ -290,9 +290,9 @@
     <!-- Terms of Use screen -->
     <string name="terms_title">Terms of Use</string>
     <string name="privacy_policy_title">Privacy Policy</string>
-    <string name="terms_intro">By installing or using UA Cast Player (\"the app\"), you agree to these Terms of Use. If you do not agree, do not use the app.</string>
+    <string name="terms_intro">By installing or using Zorik Player (\"the app\"), you agree to these Terms of Use. If you do not agree, do not use the app.</string>
     <string name="terms_s1_title">1. What this app is</string>
-    <string name="terms_s1_body">UA Cast Player is a general-purpose player for M3U/M3U8 playlists that you provide, and a Google Cast sender. It does not host, provide, sell, curate, or verify any channel, movie, or media content of its own - every stream comes from a link or file you supply yourself.</string>
+    <string name="terms_s1_body">Zorik Player is a general-purpose player for M3U/M3U8 playlists that you provide, and a Google Cast sender. It does not host, provide, sell, curate, or verify any channel, movie, or media content of its own - every stream comes from a link or file you supply yourself.</string>
     <string name="terms_s2_title">2. You are responsible for your content</string>
     <string name="terms_s2_body">Only add content and sources you are authorised to use. Viewing, copying and casting may require different permissions under copyright law and your provider’s contract. The app does not grant rights to TV channels, logos or programme-guide data and must not be used to bypass access restrictions. Your responsibilities do not remove the developer’s obligations for the app’s software, security or mandatory consumer rights.</string>
     <string name="terms_s3_title">3. Compatibility and paid access</string>
@@ -379,7 +379,7 @@
 
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Keep casting running in the background</string>
-    <string name="battery_hint_body">Some phone makers (like Xiaomi) aggressively stop apps in the background, which can cut off casting to your TV. Open battery settings, find UA Cast Player in the list, and turn off its battery optimization so playback keeps working.</string>
+    <string name="battery_hint_body">Some phone makers (like Xiaomi) aggressively stop apps in the background, which can cut off casting to your TV. Open battery settings, find Zorik Player in the list, and turn off its battery optimization so playback keeps working.</string>
     <string name="battery_hint_allow">Open settings</string>
     <string name="battery_hint_later">Later</string>
     <string name="settings_battery_optimization_label">Background battery optimization</string>
@@ -407,7 +407,7 @@
     <string name="dlna_stop_casting">Stop</string>
     <string name="dlna_status_unverified">Playback status unavailable</string>
     <!-- Guided tour -->
-    <string name="guided_tour_welcome_title">Welcome to UA Cast IPTV</string>
+    <string name="guided_tour_welcome_title">Welcome to Zorik Player</string>
     <string name="guided_tour_welcome_body">Channels aren\'t included. Add your TV provider\'s playlist or account to start watching.</string>
     <string name="guided_tour_add_playlist">Add playlist</string>
     <string name="guided_tour_start">Show me around</string>
@@ -417,7 +417,7 @@
     <string name="guided_tour_next">Next</string>
     <string name="guided_tour_progress">%1$d / %2$d</string>
     <string name="guided_tour_done_title">All done</string>
-    <string name="guided_tour_done_body">You now know your way around UA Cast IPTV.</string>
+    <string name="guided_tour_done_body">You now know your way around Zorik Player.</string>
     <string name="guided_tour_finish">Start using the app</string>
     <string name="guided_tour_playlist_title">Add a playlist</string>
     <string name="guided_tour_playlist_body">Channels come from a playlist you supply — an M3U file or a URL from your provider. This is where you add one, and where you switch between several.</string>

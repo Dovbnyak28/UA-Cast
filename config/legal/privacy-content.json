@@ -3,8 +3,8 @@
   "languages": {
     "en": {
       "name": "English",
-      "title": "UA Cast Player — Privacy Policy",
-      "intro": "Publisher: ROMAN DOVBNYAK (Dovbnyak28), individual developer. Legal and privacy contact: dovbnyak@gmail.com. UA-Cast plays sources and files you select. This document explains local processing and transfers, not a promise that every third-party SDK is telemetry-free.",
+      "title": "Zorik Player — Privacy Policy",
+      "intro": "Publisher: ROMAN DOVBNYAK (Dovbnyak28), individual developer. Legal and privacy contact: dovbnyak@gmail.com. Zorik plays sources and files you select. This document explains local processing and transfers, not a promise that every third-party SDK is telemetry-free.",
       "sections": [
         [
           "Local data and document access",
@@ -46,8 +46,8 @@
     },
     "uk": {
       "name": "Українська",
-      "title": "UA Cast Player — Політика конфіденційності",
-      "intro": "Видавець: ROMAN DOVBNYAK (Dovbnyak28), індивідуальний розробник. Правові питання та конфіденційність: dovbnyak@gmail.com. UA-Cast відтворює вибрані вами джерела й файли. Документ описує локальну обробку та передачу даних, а не обіцяє відсутності телеметрії в кожному сторонньому SDK.",
+      "title": "Zorik Player — Політика конфіденційності",
+      "intro": "Видавець: ROMAN DOVBNYAK (Dovbnyak28), індивідуальний розробник. Правові питання та конфіденційність: dovbnyak@gmail.com. Zorik відтворює вибрані вами джерела й файли. Документ описує локальну обробку та передачу даних, а не обіцяє відсутності телеметрії в кожному сторонньому SDK.",
       "sections": [
         [
           "Локальні дані й доступ до документів",
@@ -89,8 +89,8 @@
     },
     "ru": {
       "name": "Русский",
-      "title": "UA Cast Player — Политика конфиденциальности",
-      "intro": "Издатель: ROMAN DOVBNYAK (Dovbnyak28), индивидуальный разработчик. Правовые вопросы и конфиденциальность: dovbnyak@gmail.com. UA-Cast воспроизводит выбранные вами источники и файлы. Документ описывает локальную обработку и передачу, а не обещает отсутствия телеметрии в каждом стороннем SDK.",
+      "title": "Zorik Player — Политика конфиденциальности",
+      "intro": "Издатель: ROMAN DOVBNYAK (Dovbnyak28), индивидуальный разработчик. Правовые вопросы и конфиденциальность: dovbnyak@gmail.com. Zorik воспроизводит выбранные вами источники и файлы. Документ описывает локальную обработку и передачу, а не обещает отсутствия телеметрии в каждом стороннем SDK.",
       "sections": [
         [
           "Локальные данные и документы",
@@ -132,8 +132,8 @@
     },
     "es": {
       "name": "Español",
-      "title": "UA Cast Player — Política de privacidad",
-      "intro": "Editor: ROMAN DOVBNYAK (Dovbnyak28), desarrollador individual. Contacto legal y de privacidad: dovbnyak@gmail.com. UA-Cast reproduce las fuentes y los archivos que elijas. Este documento describe el tratamiento local y las transferencias; no promete que todos los SDK de terceros carezcan de telemetría.",
+      "title": "Zorik Player — Política de privacidad",
+      "intro": "Editor: ROMAN DOVBNYAK (Dovbnyak28), desarrollador individual. Contacto legal y de privacidad: dovbnyak@gmail.com. Zorik reproduce las fuentes y los archivos que elijas. Este documento describe el tratamiento local y las transferencias; no promete que todos los SDK de terceros carezcan de telemetría.",
       "sections": [
         [
           "Datos locales y acceso a documentos",

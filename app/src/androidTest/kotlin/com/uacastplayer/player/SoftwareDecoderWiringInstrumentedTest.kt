@@ -21,10 +21,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SoftwareDecoderWiringInstrumentedTest {
     @Test fun productionPlayerFactoryContainsSoftwareAudioAndVideoExactlyOnce() {
-        assertTrue("Software libraries must load in the actual UA-Cast APK", FfmpegLibrary.isAvailable())
+        assertTrue("Software libraries must load in the actual Zorik Player APK", FfmpegLibrary.isAvailable())
         // The relink job runs this same test against a repacked APK signed by a new recipient key.
         val relinkProbe = InstrumentationRegistry.getArguments().getString("uacast.relinkProbe") == "true"
-        val expectedLicense = "LGPL version 2.1 or later" + if (relinkProbe) " (UA-Cast relink probe)" else ""
+        val expectedLicense = "LGPL version 2.1 or later" + if (relinkProbe) " (Zorik Player relink probe)" else ""
         assertEquals(expectedLicense, FfmpegLibrary.getNativeLicense())
         val context = ApplicationProvider.getApplicationContext<Context>()
         val renderers = PlayerRenderersFactoryProvider.create(context).createRenderers(

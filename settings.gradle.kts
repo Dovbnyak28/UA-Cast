@@ -26,7 +26,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "UA Cast Player"
+rootProject.name = "Zorik Player"
 include(":app")
 include(":core")
 include(":baselineprofile")

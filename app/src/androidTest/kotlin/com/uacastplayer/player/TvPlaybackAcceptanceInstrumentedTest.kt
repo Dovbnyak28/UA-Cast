@@ -93,8 +93,8 @@ class TvPlaybackAcceptanceInstrumentedTest {
 
     private fun importFixture(fixture: File) {
         // Public samples from AndroidX Media's demo media.exolist.json; no advertising URLs.
-        fixture.writeText("#EXTM3U\n#EXTINF:-1,UA-Cast TV acceptance MKV\n$MKV_URL\n" +
-            "#EXTINF:-1,UA-Cast TV acceptance MP4\n$MP4_URL\n")
+        fixture.writeText("#EXTM3U\n#EXTINF:-1,Zorik TV acceptance MKV\n$MKV_URL\n" +
+            "#EXTINF:-1,Zorik TV acceptance MP4\n$MP4_URL\n")
         rule.activityRule.scenario.onActivity { appViewModelOf(it).loadPlaylistFromFile(Uri.fromFile(fixture)) }
         rule.waitUntil(30_000) {
             val state = appViewModelOf(rule.activity).playlistState.value

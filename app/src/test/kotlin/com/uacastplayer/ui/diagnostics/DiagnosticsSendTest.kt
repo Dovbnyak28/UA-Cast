@@ -31,7 +31,7 @@ class DiagnosticsSendTest {
 
     @get:Rule val temporaryFolder = TemporaryFolder()
 
-    private val report = "UA Cast diagnostics report\nApp version: 0.9.0\n[DEBUG] Player: started"
+    private val report = "Zorik diagnostics report\nApp version: 0.9.0\n[DEBUG] Player: started"
 
     @Test
     fun deniedMailAppFallsBackToShareSheet() = runBlocking {
@@ -85,8 +85,8 @@ class DiagnosticsSendTest {
     fun theSubjectCarriesTheVersionAndTheDevice() {
         val subject = DiagnosticsEmail.subject(appVersionName = "0.9.0", deviceModel = "Mi A2")
 
-        assertEquals("UA Cast 0.9.0 - Mi A2", subject)
-        assertTrue(diagnosticsEmailIntent(report).getStringExtra(Intent.EXTRA_SUBJECT)!!.startsWith("UA Cast "))
+        assertEquals("Zorik 0.9.0 - Mi A2", subject)
+        assertTrue(diagnosticsEmailIntent(report).getStringExtra(Intent.EXTRA_SUBJECT)!!.startsWith("Zorik "))
     }
 
     /**

@@ -50,7 +50,10 @@
 - E: матриця 320dp / 200% / 48dp; виправлено обрізані заголовки налаштувань.
 - Логотип перероблено 2026-11-22: прибрано дуги в куті екрана (це значок Google Cast, який Google не дозволяє
   в чужих логотипах); `design/brand/mark.svg` → іконка, заставка, TV-банер. В умовах додано рядок про торговельні
-  марки Google Cast/Chromecast/Google TV та інших виробників. Пошук зареєстрованих знаків «UA Cast» не проводився.
+  марки Google Cast/Chromecast/Google TV та інших виробників.
+- Назву змінено на **Zorik Player** 2026-11-22: словесна марка ЄС «UA CAST» (EUTM 018773428, UAVIA) покриває
+  класи 9 і 38. «ZORIK» у WIPO Global Brand Database у класах 9/38/41/42 не знайдено (попередній пошук, не
+  юридичний висновок). Внутрішній `applicationId` `com.uacastplayer` лишився, щоб не зламати оновлення.
 - Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),
   `premium_lifetime` = 3,99 EUR (ціна — у Play Console).

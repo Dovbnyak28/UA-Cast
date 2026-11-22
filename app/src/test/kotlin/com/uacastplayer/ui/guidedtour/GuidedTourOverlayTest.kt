@@ -52,7 +52,7 @@ class GuidedTourOverlayTest {
     fun anIdleTourDrawsNothingOverTheApp() {
         setOverlay(GuidedTourState())
 
-        composeRule.onNodeWithText("Ласкаво просимо до UA Cast IPTV").assertDoesNotExist()
+        composeRule.onNodeWithText("Ласкаво просимо до Zorik Player").assertDoesNotExist()
         composeRule.onNodeWithText("Пропустити").assertDoesNotExist()
     }
 
@@ -60,7 +60,7 @@ class GuidedTourOverlayTest {
     fun theWelcomeCardOffersPlaylistSetupTourAndDismissal() {
         setOverlay(GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = steps))
 
-        composeRule.onNodeWithText("Ласкаво просимо до UA Cast IPTV").assertIsDisplayed()
+        composeRule.onNodeWithText("Ласкаво просимо до Zorik Player").assertIsDisplayed()
         val welcomeBody = ApplicationProvider.getApplicationContext<Context>()
             .getString(R.string.guided_tour_welcome_body)
         composeRule.onNodeWithText(welcomeBody).assertIsDisplayed()
@@ -151,7 +151,7 @@ class GuidedTourOverlayTest {
         )
 
         composeRule.onNodeWithText("Готово!").assertIsDisplayed()
-        composeRule.onNodeWithText("Тепер ви знаєте основні можливості UA Cast IPTV.").assertIsDisplayed()
+        composeRule.onNodeWithText("Тепер ви знаєте основні можливості Zorik Player.").assertIsDisplayed()
         composeRule.onNodeWithText("Далі").assertDoesNotExist()
 
         composeRule.onNodeWithText("Почати користуватися").performClick()

@@ -10,6 +10,11 @@ local build produces.
 
 `versionCode` 17. Release hardening, Google Play checkout and removal of the in-app updater.
 
+- **Renamed to Zorik Player.** "UA CAST" is a registered EU trade mark of another company
+  (classes 9 and 38). The name, TV banner wordmark, terms, privacy policy and diagnostics now say
+  Zorik; the internal `applicationId` stays `com.uacastplayer`, so updates install over 0.9.7.
+- New logo without the Google Cast motif (screen, centred play, blue/yellow stand); the TV banner
+  wordmark is drawn from original strokes instead of Roboto outlines.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the

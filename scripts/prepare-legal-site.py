@@ -10,9 +10,9 @@ DOCUMENTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DOCUMENTS)
 INDEX = """<!doctype html>
 <html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>UA-Cast — правова інформація</title>
+<title>Zorik — правова інформація</title>
 <style>body{font:18px/1.6 system-ui;max-width:700px;margin:auto;padding:32px}a{display:block;padding:12px}</style>
-</head><body><h1>UA-Cast</h1><p>Правова інформація / Legal information</p>
+</head><body><h1>Zorik</h1><p>Правова інформація / Legal information</p>
 <a href="legal/privacy-policy.html">Політика конфіденційності / Privacy policy</a>
 <a href="legal/terms-of-use.html">Умови використання / Terms of use</a>
 </body></html>

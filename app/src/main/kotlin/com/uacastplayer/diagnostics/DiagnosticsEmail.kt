@@ -27,5 +27,5 @@ object DiagnosticsEmail {
      * out, and it is paid every time rather than once.
      */
     fun subject(appVersionName: String, deviceModel: String): String =
-        "UA Cast $appVersionName - $deviceModel"
+        "Zorik $appVersionName - $deviceModel"
 }

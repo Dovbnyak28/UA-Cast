@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="backup_password_title">Protected backup</string>
-    <string name="backup_password_export_hint">Use a unique passphrase of 12–128 characters. Keep it safely: without it this file cannot be restored. The password is not saved by UA-Cast.</string>
+    <string name="backup_password_export_hint">Use a unique passphrase of 12–128 characters. Keep it safely: without it this file cannot be restored. The password is not saved by Zorik.</string>
     <string name="backup_password_import_hint">Enter the password used to protect this backup.</string>
     <string name="backup_password_label">Password</string>
     <string name="backup_password_repeat">Repeat password</string>

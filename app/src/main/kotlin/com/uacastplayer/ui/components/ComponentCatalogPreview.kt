@@ -34,7 +34,7 @@ internal fun ComponentCatalogPreview(modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().background(colors.background).verticalScroll(rememberScrollState())
         .padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
         Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xxs)) {
-            Text("UA CAST", style = MaterialTheme.typography.displaySmall, color = colors.onBackground)
+            Text("ZORIK", style = MaterialTheme.typography.displaySmall, color = colors.onBackground)
             Text("Cinema V2 · компоненти", style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant)
         }

@@ -125,7 +125,7 @@ class ModernShellScreenshotTest {
                 val icons = listOf(AppIcons.Home, AppIcons.Channels, AppIcons.Favorites, AppIcons.Settings)
                 Scaffold(Modifier.size(411.dp, 891.dp).appBackground(),
                     containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                    topBar = { ScreenHeader(if (page == 0) "UA-Cast" else names[page], labelRemote = page == 0) },
+                    topBar = { ScreenHeader(if (page == 0) "Zorik" else names[page], labelRemote = page == 0) },
                     bottomBar = { GlassTabBar(names.mapIndexed { index, name ->
                         TabBarItem(name, icons[index], page == index, { page = index })
                     }) }) { padding ->

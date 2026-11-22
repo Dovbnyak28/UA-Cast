@@ -24,7 +24,7 @@ import com.uacastplayer.ui.components.DownloadStatusBanner
  *
  * The banner belongs *here*, as part of the measured top bar, and not in an overlay Box stacked on
  * top of the whole scaffold, which is where it used to live. As an overlay it was simply drawn over
- * whatever was underneath: while a playlist was loading it cut the screen title in half ("UA Cast
+ * whatever was underneath: while a playlist was loading it cut the screen title in half ("Zorik
  * Player" on Home, the first section header in Settings), which is the exact moment the app most
  * needs to look like it is working rather than broken. As part of the top bar the Scaffold measures
  * it and hands the content the remaining height, so it pushes instead of covering.

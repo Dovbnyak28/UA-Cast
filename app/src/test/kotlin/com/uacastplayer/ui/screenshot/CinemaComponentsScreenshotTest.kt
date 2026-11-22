@@ -74,7 +74,7 @@ class CinemaComponentsScreenshotTest {
                 val colors = MaterialTheme.colorScheme
                 Column(Modifier.fillMaxSize().background(colors.background).padding(32.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Text("UA CAST · Android TV", style = MaterialTheme.typography.displaySmall,
+                    Text("ZORIK · Android TV", style = MaterialTheme.typography.displaySmall,
                         color = colors.onBackground)
                     Text("Видимий фокус · один target на дію · пульт і клавіатура",
                         style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant)

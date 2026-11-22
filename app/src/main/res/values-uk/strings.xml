@@ -3,7 +3,7 @@
     <string name="player_remote_controls_notice">Під час трансляції параметрами відтворення керує телевізор. Скористайтеся керуванням пристроєм.</string>
     <string name="playlist_error_storage">Не вдалося зберегти плейлист. Попередню копію збережено. Звільніть місце та повторіть спробу.</string>
     <string name="player_levels">Яскравість і гучність</string>
-    <string name="app_name">UA Cast Player</string>
+    <string name="app_name">Zorik Player</string>
 
     <!-- Language picker (first run) -->
     <string name="language_picker_title">Оберіть мову</string>
@@ -70,7 +70,7 @@
     <string name="add_playlist_save_button">Завантажити та зберегти</string>
     <string name="add_playlist_file_button">Завантажити з файлу</string>
     <string name="add_playlist_source_title">Каналів у застосунку немає</string>
-    <string name="add_playlist_tip">Візьміть посилання M3U/M3U8, файл плейлиста або дані Xtream у свого ТВ-провайдера. UA Cast — плеєр, а не ТВ-сервіс.</string>
+    <string name="add_playlist_tip">Візьміть посилання M3U/M3U8, файл плейлиста або дані Xtream у свого ТВ-провайдера. Zorik — плеєр, а не ТВ-сервіс.</string>
     <string name="add_playlist_type_url">Посилання</string>
     <string name="add_playlist_type_file">Файл</string>
     <string name="add_playlist_type_xtream">Xtream</string>
@@ -88,7 +88,7 @@
 
     <!-- Channels screen -->
     <string name="channels_empty_message">Поки що немає каналів</string>
-    <string name="channels_empty_subtitle">Додайте плейлист від свого ТВ-провайдера. UA Cast не містить каналів.</string>
+    <string name="channels_empty_subtitle">Додайте плейлист від свого ТВ-провайдера. Zorik не містить каналів.</string>
     <string name="channels_error_subtitle">Перевірте джерело та з’єднання, а потім повторіть</string>
     <string name="common_retry">Спробувати ще раз</string>
     <string name="channels_search_hint">Пошук каналів</string>
@@ -223,13 +223,13 @@
     <string name="settings_data_hint">Збережіть захищений паролем файл .uacast на телефоні або перенесіть його на комп’ютер. Містить джерела, локальні M3U-файли, улюблені та основні налаштування. Максимум даних — 8 МБ. Старі JSON-копії також можна відновити після перегляду.</string>
     <string name="settings_data_export">Зберегти у файл</string>
     <string name="settings_data_export_warning_title">Експортувати конфіденційні дані?</string>
-    <string name="settings_data_export_warning_message">Копія може містити паролі провайдера та приватні посилання. Файл буде зашифровано вашою парольною фразою. Збережіть її: UA-Cast не може відновити забутий пароль.</string>
+    <string name="settings_data_export_warning_message">Копія може містити паролі провайдера та приватні посилання. Файл буде зашифровано вашою парольною фразою. Збережіть її: Zorik не може відновити забутий пароль.</string>
     <string name="settings_data_export_confirm">Продовжити</string>
     <string name="settings_data_import">Відновити з файлу</string>
     <string name="settings_data_import_summary">Імпортовано: %1$d плейлисти, %2$d улюблених</string>
     <string name="settings_data_export_success">Резервну копію успішно експортовано</string>
     <string name="settings_data_export_failure">Не вдалося зберегти копію. Перевірте сховище, доступ до всіх локальних плейлистів та обмеження файлу 8 МБ. Не використовуйте незавершений файл.</string>
-    <string name="settings_data_import_failure">Не вдалося відновити файл. Перевірте, що це справна копія UA-Cast розміром до 8 МБ і що сховище доступне. Поточні плейлисти, улюблені канали та налаштування не змінено.</string>
+    <string name="settings_data_import_failure">Не вдалося відновити файл. Перевірте, що це справна копія Zorik розміром до 8 МБ і що сховище доступне. Поточні плейлисти, улюблені канали та налаштування не змінено.</string>
     <string name="settings_data_import_limit">Не додано: %1$d плейлистів — досягнуто ліміту 10 збережених джерел.</string>
     <string name="settings_data_picker_unavailable">На цьому пристрої системний вибір файлів відсутній або заблокований. Збережіть чи відновіть копію на телефоні з файловим менеджером.</string>
     <string name="cache_playlist_label">Кеш плейлиста</string>
@@ -244,7 +244,7 @@
     <string name="device_tier_high_end">Високопродуктивний</string>
     <string name="settings_app_version">Версія застосунку</string>
     <string name="settings_help">Довідка</string>
-    <string name="settings_help_body">UA Cast Player — це особистий IPTV-плеєр. Додайте плейлист на вкладці «Канали» (за посиланням або файлом), оберіть джерело телепрограми й торкніться будь-якого каналу. Кнопка Cast транслює на Chromecast або Google TV; сусідня кнопка дістається до телевізорів, які працюють через DLNA. Якщо потік не відтворюється на пристрої напряму, додаток повторює спробу через проміжний сервер на вашому телефоні.</string>
+    <string name="settings_help_body">Zorik Player — це особистий IPTV-плеєр. Додайте плейлист на вкладці «Канали» (за посиланням або файлом), оберіть джерело телепрограми й торкніться будь-якого каналу. Кнопка Cast транслює на Chromecast або Google TV; сусідня кнопка дістається до телевізорів, які працюють через DLNA. Якщо потік не відтворюється на пристрої напряму, додаток повторює спробу через проміжний сервер на вашому телефоні.</string>
     <string name="settings_open_help">Детальна довідка</string>
     <string name="settings_open_terms">Умови використання</string>
     <string name="settings_open_privacy_policy">Політика конфіденційності</string>
@@ -294,9 +294,9 @@
     <!-- Terms of Use screen -->
     <string name="terms_title">Умови використання</string>
     <string name="privacy_policy_title">Політика конфіденційності</string>
-    <string name="terms_intro">Встановлюючи або використовуючи UA Cast Player («застосунок»), ви погоджуєтеся з цими Умовами використання. Якщо ви не погоджуєтеся — не користуйтеся застосунком.</string>
+    <string name="terms_intro">Встановлюючи або використовуючи Zorik Player («застосунок»), ви погоджуєтеся з цими Умовами використання. Якщо ви не погоджуєтеся — не користуйтеся застосунком.</string>
     <string name="terms_s1_title">1. Що таке цей застосунок</string>
-    <string name="terms_s1_body">UA Cast Player — це універсальний плеєр для M3U/M3U8 плейлистів, які ви додаєте самостійно, та відправник для Google Cast. Застосунок не надає, не продає, не добирає і не перевіряє жодного власного каналу, фільму чи медіаконтенту — кожен потік походить із посилання або файлу, який ви вказали самі.</string>
+    <string name="terms_s1_body">Zorik Player — це універсальний плеєр для M3U/M3U8 плейлистів, які ви додаєте самостійно, та відправник для Google Cast. Застосунок не надає, не продає, не добирає і не перевіряє жодного власного каналу, фільму чи медіаконтенту — кожен потік походить із посилання або файлу, який ви вказали самі.</string>
     <string name="terms_s2_title">2. Ви відповідаєте за свій контент</string>
     <string name="terms_s2_body">Додавайте лише контент і джерела, які маєте право використовувати. Перегляд, копіювання й трансляція можуть вимагати різних дозволів за авторським правом і договором провайдера. Програма не надає прав на телеканали, логотипи чи дані телепрограми та не призначена для обходу обмежень доступу. Ваші обов’язки не скасовують обов’язків розробника щодо програми, безпеки й невідчужуваних прав споживача.</string>
     <string name="terms_s3_title">3. Сумісність і платний доступ</string>
@@ -387,7 +387,7 @@
 
     <!-- Battery optimization hint -->
     <string name="battery_hint_title">Не зупиняти трансляцію у фоні</string>
-    <string name="battery_hint_body">Деякі виробники телефонів (наприклад, Xiaomi) агресивно зупиняють застосунки у фоні, через що трансляція на TV може обірватися. Відкрийте налаштування батареї, знайдіть UA Cast Player у списку та вимкніть для нього оптимізацію батареї, щоб відтворення не переривалось.</string>
+    <string name="battery_hint_body">Деякі виробники телефонів (наприклад, Xiaomi) агресивно зупиняють застосунки у фоні, через що трансляція на TV може обірватися. Відкрийте налаштування батареї, знайдіть Zorik Player у списку та вимкніть для нього оптимізацію батареї, щоб відтворення не переривалось.</string>
     <string name="battery_hint_allow">Відкрити налаштування</string>
     <string name="battery_hint_later">Пізніше</string>
     <string name="settings_battery_optimization_label">Оптимізація батареї у фоні</string>
@@ -415,7 +415,7 @@
     <string name="dlna_stop_casting">Зупинити</string>
     <string name="dlna_status_unverified">Стан відтворення невідомий</string>
     <!-- Guided tour -->
-    <string name="guided_tour_welcome_title">Ласкаво просимо до UA Cast IPTV</string>
+    <string name="guided_tour_welcome_title">Ласкаво просимо до Zorik Player</string>
     <string name="guided_tour_welcome_body">Каналів у застосунку немає. Додайте плейлист або обліковий запис ТВ-провайдера.</string>
     <string name="guided_tour_add_playlist">Додати плейлист</string>
     <string name="guided_tour_start">Показати огляд</string>
@@ -425,7 +425,7 @@
     <string name="guided_tour_next">Далі</string>
     <string name="guided_tour_progress">%1$d / %2$d</string>
     <string name="guided_tour_done_title">Готово!</string>
-    <string name="guided_tour_done_body">Тепер ви знаєте основні можливості UA Cast IPTV.</string>
+    <string name="guided_tour_done_body">Тепер ви знаєте основні можливості Zorik Player.</string>
     <string name="guided_tour_finish">Почати користуватися</string>
     <string name="guided_tour_playlist_title">Додайте плейлист</string>
     <string name="guided_tour_playlist_body">Канали беруться з вашого плейлиста — файл M3U або посилання від провайдера. Тут його додають і тут перемикаються між кількома.</string>

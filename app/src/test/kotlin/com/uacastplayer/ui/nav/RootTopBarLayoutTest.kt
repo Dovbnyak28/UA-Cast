@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config
 /**
  * The download banner used to be an overlay aligned to the top of a Box that also held the whole
  * scaffold, so it was painted over the screen title rather than making room for it: on a device
- * with a playlist loading, "UA Cast Player" and Settings' first section header were visibly cut in
+ * with a playlist loading, "Zorik Player" and Settings' first section header were visibly cut in
  * half. Moving it into [RootTopBar] fixes that, and this is the assertion that keeps it fixed - the
  * bug is a pure layout fact (two sibling bounds overlapping), so it can be checked exactly rather
  * than left to whoever next looks at a screenshot.
@@ -107,7 +107,7 @@ class RootTopBarLayoutTest {
         composeRule.setContent {
             UaCastTheme(AppTheme.CINEMA) {
                 RootTopBar(
-                    title = "UA Cast Player",
+                    title = "Zorik Player",
                     iconPrefetchState = IconPrefetchUiState(
                         isRunning = state.value,
                         completed = 42,

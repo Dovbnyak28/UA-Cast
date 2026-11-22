@@ -90,7 +90,7 @@ object CrashLog {
         appVersionName: String,
         deviceDescription: String,
     ): String = buildString {
-        appendLine("UA Cast crash report")
+        appendLine("Zorik crash report")
         appendLine("App version: $appVersionName")
         appendLine("Device: $deviceDescription")
         appendLine("Thread: ${thread.name}")
