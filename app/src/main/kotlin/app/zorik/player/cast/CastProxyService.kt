@@ -194,7 +194,10 @@ class CastProxyService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification_cast)
+            // The Cast glyph only for Google Cast; a DLNA renderer is not a Cast device.
+            .setSmallIcon(
+                if (target == CastProxyTarget.DLNA) R.drawable.ic_notification_tv else R.drawable.ic_notification_cast,
+            )
             .setContentTitle(channelTitle.ifEmpty { localizedContext.getString(R.string.app_name) })
             .setContentText(localizedContext.getString(R.string.cast_session_notification_text, receiverName))
             .addAction(0, localizedContext.getString(R.string.cast_session_stop_action), stopPendingIntent)

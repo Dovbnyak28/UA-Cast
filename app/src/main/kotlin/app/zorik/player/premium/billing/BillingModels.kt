@@ -51,6 +51,14 @@ sealed interface PurchaseResult {
      */
     data object NothingToRestore : PurchaseResult
 
+    /**
+     * Play accepted the order but has not been paid yet: cash at a kiosk, a parent's approval.
+     *
+     * Not a failure, and saying "could not confirm the purchase" here sends people to pay twice.
+     * Ownership arrives later through the normal purchase refresh, when Play reports it PURCHASED.
+     */
+    data object Pending : PurchaseResult
+
     data object Unavailable : PurchaseResult
     data class Failed(val reason: String?) : PurchaseResult
 }

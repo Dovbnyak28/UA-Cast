@@ -476,6 +476,7 @@
     <string name="premium_already_owned">You already own this. Tap “Restore purchases”.</string>
     <string name="premium_store_unreachable">Could not reach Google Play. Check your connection and try again.</string>
     <string name="premium_purchase_failed">Could not confirm the purchase. Restore purchases and check Google Play before trying to pay again.</string>
+    <string name="premium_purchase_pending">Payment pending. Premium unlocks as soon as Google Play confirms it - there is no need to pay again.</string>
     <string name="premium_upgrade_lapsed">Previous Premium access has ended. Use Lite, restore a purchase or buy Premium once.</string>
     <string name="feature_dlna">Casting to a DLNA TV</string>
     <string name="feature_multi_playlist">More than one playlist</string>

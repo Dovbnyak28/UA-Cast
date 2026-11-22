@@ -14,6 +14,9 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -114,14 +117,23 @@ fun PremiumContent(
             enabled = !section.isPurchasing,
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
-        outcomeLine(section.lastOutcome)?.let { message ->
-            // The answer to a tap on Restore/Buy lands below that button - on a phone usually below
-            // the fold and under the navigation dock, where it was easy to miss entirely. Scroll it
-            // into view when it changes and let TalkBack announce it.
-            val bringIntoView = remember { BringIntoViewRequester() }
-            LaunchedEffect(message) { bringIntoView.bringIntoView() }
+        // The answer to a tap on Restore/Buy lands below that button - on a phone usually below the
+        // fold and under the navigation dock, where it was easy to miss entirely. Scroll it into view
+        // when it arrives while this screen is open. The outcome outlives the screen (it is kept until
+        // the next attempt), so one already present when the screen opens is not scrolled to: that
+        // made the page jump to the bottom on every later visit.
+        val message = outcomeLine(section.lastOutcome)
+        val bringIntoView = remember { BringIntoViewRequester() }
+        var staleAtEntry by remember { mutableStateOf(message != null) }
+        LaunchedEffect(message) {
+            when {
+                message == null || staleAtEntry -> staleAtEntry = false
+                else -> bringIntoView.bringIntoView()
+            }
+        }
+        message?.let {
             Text(
-                text = message,
+                text = it,
                 style = Caption,
                 color = UaTheme.palette.labelSecondary,
                 modifier = Modifier
@@ -146,6 +158,7 @@ private fun outcomeLine(outcome: PurchaseResult?): String? = when (outcome) {
     null, PurchaseResult.Cancelled, is PurchaseResult.Success -> null
     PurchaseResult.NothingToRestore -> stringResource(R.string.premium_restore_nothing)
     PurchaseResult.AlreadyOwned -> stringResource(R.string.premium_already_owned)
+    PurchaseResult.Pending -> stringResource(R.string.premium_purchase_pending)
     PurchaseResult.Unavailable -> stringResource(R.string.premium_store_unreachable)
     // Play's own debug message can name the account or the product, so it is not shown - it is
     // already in the log for a diagnostics report, and the user needs the next step, not the cause.

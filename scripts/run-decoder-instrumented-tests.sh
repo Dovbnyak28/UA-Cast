@@ -21,8 +21,9 @@ run
 status=$?
 if [ "$status" -ne 0 ] && grep -qE "Failed to install|InstallException" "$log"; then
   echo "run-decoder-instrumented-tests: test APK install failed; retrying once"
-  adb wait-for-device
-  adb shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
+  timeout 120 adb wait-for-device || { echo "run-decoder-instrumented-tests: device did not come back" >&2; exit "$status"; }
+  timeout 120 adb shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done' ||
+    { echo "run-decoder-instrumented-tests: device did not finish booting" >&2; exit "$status"; }
   run
   status=$?
 fi

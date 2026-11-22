@@ -276,7 +276,6 @@ class AppViewModel @JvmOverloads constructor(
         parentalControlController.loadInitial()
         // Starts in Lite or restores the stored paid licence, then listens for ownership changes.
         premiumRepository.loadInitial()
-        viewModelScope.launch(ioDispatcher) { AppCacheFiles.deleteRetiredUpdateDownloads(application.cacheDir) }
         viewModelScope.launch {
             activePlaylistSourceId.collect { groupVisibilityController.setActiveSource(it) }
         }

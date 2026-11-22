@@ -473,6 +473,7 @@
     <string name="premium_already_owned">Ya lo tienes. Toca «Restaurar compras».</string>
     <string name="premium_store_unreachable">No se pudo contactar con Google Play. Comprueba tu conexión e inténtalo de nuevo.</string>
     <string name="premium_purchase_failed">No se pudo confirmar la compra. Restaura las compras y consulta Google Play antes de volver a pagar.</string>
+    <string name="premium_purchase_pending">Pago pendiente. Premium se desbloqueará en cuanto Google Play lo confirme; no hace falta pagar de nuevo.</string>
     <string name="premium_upgrade_lapsed">El acceso Premium anterior ha terminado. Usa Lite, restaura una compra o compra Premium una sola vez.</string>
     <string name="feature_dlna">Enviar a un televisor por DLNA</string>
     <string name="feature_multi_playlist">Más de una lista</string>

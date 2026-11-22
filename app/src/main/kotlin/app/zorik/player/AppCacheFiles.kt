@@ -19,14 +19,6 @@ internal object AppCacheFiles {
         CacheKind.COIL -> listOf(File(filesDir, CachePaths.COIL_CACHE_DIR))
     }
 
-    /** The removed self-updater (up to 0.9.7) staged downloaded APKs in `cacheDir/updates`. Nothing
-     * writes there any more, so an upgraded install deletes what is left once. Off the main thread. */
-    fun deleteRetiredUpdateDownloads(cacheDir: File) {
-        File(cacheDir, RETIRED_UPDATE_DIR).takeIf(File::exists)?.deleteRecursively()
-    }
-
-    private const val RETIRED_UPDATE_DIR = "updates"
-
     /** Walks the disk - call off the main thread. */
     fun measure(filesDir: File): CacheSizes = CacheSizes(
         playlistBytes = CacheSizeUtils.sizeOf(CachePaths.playlistSnapshots(filesDir)),
