@@ -131,7 +131,7 @@ private fun LicenseSourcesButton() {
     SecondaryButton(stringResource(R.string.legal_sources), {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW,
-                "https://github.com/Dovbnyak28/UA-Cast/releases".toUri())
+                "https://github.com/Dovbnyak28/Zorik-Player/releases".toUri())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(context, R.string.legal_open_failed, Toast.LENGTH_LONG).show()

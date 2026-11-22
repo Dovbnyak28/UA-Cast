@@ -102,7 +102,7 @@ production release, make the requirement explicit:
 ./gradlew :app:bundlePlay -Pzorik.requireSigning=true
 ```
 
-With that flag the build fails before packaging when the `UACAST_*` signing properties are absent.
+With that flag the build fails before packaging when the `ZORIK_*` signing properties are absent.
 The ordinary `android-ci.yml` release job is deliberately an **unsigned packaging diagnostic** and
 names its artifacts accordingly. It is not a distribution source.
 
@@ -110,10 +110,14 @@ For a signed Play artifact, manually dispatch `.github/workflows/signed-release.
 explicit monotonically increasing `version_code` and the release `version_name`. Its `production`
 environment needs these protected secrets:
 
-- `UACAST_KEYSTORE_BASE64` - base64 of the PKCS#12 keystore;
-- `UACAST_STORE_PASSWORD`;
-- `UACAST_KEY_ALIAS`;
-- `UACAST_KEY_PASSWORD`.
+- `ZORIK_KEYSTORE_BASE64` - base64 of the PKCS#12 keystore;
+- `ZORIK_STORE_PASSWORD`;
+- `ZORIK_KEY_ALIAS`;
+- `ZORIK_KEY_PASSWORD`.
+
+Until these exist, the workflow falls back to the pre-rename `UACAST_*` secrets with the same
+values. Create the `ZORIK_*` secrets in the `production` environment, run one signed build, then
+delete the `UACAST_*` ones; after that the fallback can be removed from the workflow and Gradle.
 
 The workflow materializes the key only under the runner's temporary directory, passes
 `-Pzorik.requireSigning=true`, checks the merged Play permission surface and legal assets, verifies
@@ -150,7 +154,7 @@ The current version is 0.9.8 and deliberately not 1.0.0. The gap is not a featur
    report from a stranger's TV is worth more than another 100 tests.
 2. ~~**A signing key exists and is backed up.**~~ Done (2026-08-08). Release builds are signed from
    a PKCS#12 keystore held outside the repository, with its path, alias and passwords supplied by
-   four `UACAST_*` properties in `~/.gradle/gradle.properties` - never in the project. Losing that
+   four `ZORIK_*` properties in `~/.gradle/gradle.properties` - never in the project. Losing that
    file means the app can never be updated again, so its backup is the release process, not a step
    in it.
 3. ~~**The instrumented tests cover more than the launch path.**~~ Done (2026-08-16):

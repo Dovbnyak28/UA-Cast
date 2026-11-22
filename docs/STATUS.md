@@ -55,7 +55,11 @@
   класи 9 і 38. «ZORIK» у WIPO Global Brand Database у класах 9/38/41/42 не знайдено (попередній пошук, не
   юридичний висновок). `applicationId` і пакети коду — `app.zorik.player`: 0.9.8 ставиться як новий
   застосунок поруч зі старим, дані переносяться резервною копією (старі `.uacast` відновлюються).
-  Свідомо лишились: сигнатура формату копії `UACASTBK` (сумісність), секрети підпису `UACAST_*` у GitHub,
+  Репозиторій перейменовано на `Dovbnyak28/Zorik-Player` (2026-11-22): старі посилання на GitHub
+  переадресовуються, але сторінки Pages переїхали на `dovbnyak28.github.io/Zorik-Player/` без переадресації
+  (стара адреса — 404). У Play Console вказувати нову адресу політики; передеплоїти `legal/`.
+  Секрети підпису: `ZORIK_*`, з резервним читанням старих `UACAST_*`, поки нові не створено.
+  Свідомо лишились: сигнатура формату копії `UACASTBK` (сумісність), резервне читання `UACAST_*`,
   `CMakeLists.txt`/`ffmpeg_jni.cc`/`prepare-software-decoder.py` (хешовані входи native-збірки).
 - Self-updater (GitHub APK) прибрано з усіх збірок разом з `REQUEST_INSTALL_PACKAGES` (2026-11-21).
 - Білінг: [Google Play Billing увімкнено в play-збірці](archive/PLAY_BILLING_VERIFICATION_2026-11-21.md),

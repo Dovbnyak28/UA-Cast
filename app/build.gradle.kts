@@ -129,16 +129,17 @@ android {
 
     signingConfigs {
         create("release") {
-            val storeFilePath = System.getenv("UACAST_STORE_FILE")
-                ?: (project.findProperty("UACAST_STORE_FILE") as String?)
+            // ZORIK_* since the rename; the pre-rename UACAST_* names still work until the
+            // production secrets and local gradle.properties are moved over.
+            fun credential(name: String): String? = listOf("ZORIK_$name", "UACAST_$name").firstNotNullOfOrNull {
+                System.getenv(it)?.takeIf(String::isNotBlank) ?: (project.findProperty(it) as String?)?.takeIf(String::isNotBlank)
+            }
+            val storeFilePath = credential("STORE_FILE")
             if (!storeFilePath.isNullOrBlank()) {
                 storeFile = file(storeFilePath)
-                storePassword = System.getenv("UACAST_STORE_PASSWORD")
-                    ?: (project.findProperty("UACAST_STORE_PASSWORD") as String?)
-                keyAlias = System.getenv("UACAST_KEY_ALIAS")
-                    ?: (project.findProperty("UACAST_KEY_ALIAS") as String?)
-                keyPassword = System.getenv("UACAST_KEY_PASSWORD")
-                    ?: (project.findProperty("UACAST_KEY_PASSWORD") as String?)
+                storePassword = credential("STORE_PASSWORD")
+                keyAlias = credential("KEY_ALIAS")
+                keyPassword = credential("KEY_PASSWORD")
                 // v2 alone is what AGP defaults to here, and it is enough to install. v3 is what
                 // makes signing-key rotation possible at all on Android 9+ - without it the key
                 // created for the first release is the only key this app can ever be updated with,
@@ -171,7 +172,7 @@ android {
                     signingMissing
             ) {
                 throw GradleException(
-                    "Release signing is required but UACAST_STORE_FILE/UACAST_* credentials are missing",
+                    "Release signing is required but ZORIK_STORE_FILE/ZORIK_* credentials are missing",
                 )
             }
         }
