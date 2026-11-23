@@ -36,7 +36,8 @@ import app.zorik.player.ui.theme.raisedSurface
 import app.zorik.player.ui.tv.tvFocus
 import app.zorik.player.ui.tv.LocalTvMode
 
-private val RailWidth = 96.dp
+/** Phone/tablet rail width; the collapsed mini player starts after it. */
+internal val NavigationRailWidth = 96.dp
 private val TvRailWidth = 184.dp
 private val RailItemSpacing = 4.dp
 private val RailVerticalPadding = 4.dp
@@ -46,7 +47,7 @@ private val CompactRailHeight = 320.dp
 @Composable
 fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) {
     val television = LocalTvMode.current
-    BoxWithConstraints(modifier.width(if (television) TvRailWidth else RailWidth).fillMaxHeight()) {
+    BoxWithConstraints(modifier.width(if (television) TvRailWidth else NavigationRailWidth).fillMaxHeight()) {
         // A short landscape window can otherwise hide the lower destinations behind the mini player.
         val compact = !television && maxHeight < CompactRailHeight
         Column(

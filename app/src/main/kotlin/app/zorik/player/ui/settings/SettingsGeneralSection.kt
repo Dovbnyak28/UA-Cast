@@ -39,13 +39,13 @@ internal fun GeneralSettingsSection(
                 selectedIndex = themes.indexOf(selectedTheme),
                 onSelected = { index -> onAppThemeSelected(themes[index]) },
             )
-        SwitchRow(
-            label = stringResource(R.string.settings_reduced_effects),
+        SettingsSwitchCard(
+            title = stringResource(R.string.settings_reduced_effects),
+            description = stringResource(R.string.settings_reduced_effects_hint),
+            icon = AppIcons.Brightness,
             checked = app.zorik.player.ui.theme.LocalReducedEffects.current,
             onCheckedChange = app.zorik.player.ui.theme.LocalReducedEffectsChange.current,
         )
-        Text(stringResource(R.string.settings_reduced_effects_hint), style = Caption,
-            color = UaTheme.palette.labelSecondary, modifier = Modifier.padding(top = 4.dp))
         SettingsChoiceRow(
             label = stringResource(R.string.settings_language_label),
             icon = AppIcons.Globe,

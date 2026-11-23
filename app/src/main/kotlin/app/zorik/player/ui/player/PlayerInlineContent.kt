@@ -5,6 +5,7 @@ package app.zorik.player.ui.player
 import app.zorik.player.player.PlayerUiState
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -249,6 +250,9 @@ private fun InlineVideoPanel(
                 .aspectRatio(PLAYER_ASPECT_RATIO)
                 .clip(RoundedCornerShape(RadiusCard))
                 .background(Color.Black)
+                // On a true-black page (Daylight/Midnight player, landscape) the frame was invisible
+                // and the fullscreen button seemed to float; a hairline gives the video its edge.
+                .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusCard))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

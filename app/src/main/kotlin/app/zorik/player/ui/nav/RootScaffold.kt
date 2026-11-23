@@ -233,15 +233,15 @@ fun RootScaffold(
                 }
             },
         ) { innerPadding ->
-            Row(
-                modifier = Modifier.fillMaxSize().padding(innerPadding)
-                    .padding(bottom = miniPlayerContentPadding(miniPlayerVisible, LocalDensity.current.fontScale)),
-            ) {
+            Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 if (navigationMode == RootNavigationMode.NAVIGATION_RAIL) {
                     GlassNavigationRail(items = navigationItems)
                 }
+                // Only the content makes room for the mini player: beside a rail the bar now sits to
+                // the rail's right (see PlayerZone), so the rail keeps its full height.
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                        .padding(bottom = miniPlayerContentPadding(miniPlayerVisible, LocalDensity.current.fontScale)),
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     AnimatedContent(

@@ -46,6 +46,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.zorik.player.R
 import app.zorik.player.data.playlist.searchPlaylistChannels
@@ -301,6 +302,34 @@ private fun groupQualityBadge(label: String): String? {
     }
 }
 
+/**
+ * The category glyph on a tinted square, shared by the groups grid and the home shelf so a group
+ * looks the same wherever it appears. Sized for a card (a 19dp glyph read as a speck on a 104dp
+ * tile) and tinted per category so a grid scans by colour as well as by shape.
+ */
+@Composable
+internal fun GroupIconBadge(group: ChannelGroup, size: Dp = GroupBadgeSize) {
+    val tone = groupTone(group)
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(RadiusItem))
+            .background(tone.copy(alpha = GROUP_BADGE_TONE_ALPHA)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = groupIcon(group),
+            contentDescription = null,
+            tint = tone,
+            modifier = Modifier.size(size * GROUP_GLYPH_FRACTION),
+        )
+    }
+}
+
+private val GroupBadgeSize = 44.dp
+private const val GROUP_BADGE_TONE_ALPHA = 0.16f
+private const val GROUP_GLYPH_FRACTION = 0.6f
+
 /** Category hue for [groupIcon]; custom/provider groups keep the theme accent. */
 @Composable
 internal fun groupTone(group: ChannelGroup): Color {
@@ -376,23 +405,7 @@ private fun GroupCard(
         val label = groupLabel(grouped.group)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
-            // Sized for the card it sits in (a 19dp glyph read as a speck on a 104dp tile) and tinted
-            // per category so the grid scans by colour as well as by shape.
-            val tone = groupTone(grouped.group)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(RadiusItem))
-                    .background(tone.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = groupIcon(grouped.group),
-                    contentDescription = null,
-                    tint = tone,
-                    modifier = Modifier.size(26.dp),
-                )
-            }
+            GroupIconBadge(grouped.group)
             val quality = groupQualityBadge(label)
             if (quality != null) {
                 Text(

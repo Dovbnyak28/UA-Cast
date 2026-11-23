@@ -208,6 +208,60 @@ private fun RowLabel(label: String, icon: ImageVector) {
     }
 }
 
+/**
+ * A switch in the same card as [SettingsNavigationRow] (icon badge, title, description), for a
+ * toggle that sits among navigation cards: a bare [SwitchRow] there read as a stray line of text.
+ * The whole card is the toggle target, with one switch semantics for TalkBack.
+ */
+@Composable
+internal fun SettingsSwitchCard(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .settingsSearchTarget(title)
+            .panelSurface(RoundedCornerShape(20.dp))
+            .tvFocus()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(UaTheme.palette.azure.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(20.dp))
+        }
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(title, style = CardTitle, color = UaTheme.palette.labelPrimary,
+                maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(description, style = Caption, color = UaTheme.palette.labelSecondary,
+                modifier = Modifier.padding(top = 2.dp))
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = UaTheme.palette.accentOnFill,
+                checkedTrackColor = UaTheme.palette.azure,
+                checkedBorderColor = UaTheme.palette.azure,
+                uncheckedThumbColor = UaTheme.palette.labelSecondary,
+                uncheckedTrackColor = UaTheme.palette.surface2,
+                uncheckedBorderColor = UaTheme.palette.hairline,
+            ),
+        )
+    }
+}
+
 @Composable
 internal fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(

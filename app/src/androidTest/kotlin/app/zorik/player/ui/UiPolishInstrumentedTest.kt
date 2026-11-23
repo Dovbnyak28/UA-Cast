@@ -120,7 +120,8 @@ class UiPolishInstrumentedTest {
         if (rule.onAllNodesWithTag(UiTestTags.NAVIGATION_RAIL).fetchSemanticsNodes().isNotEmpty()) {
             val railBounds = rule.onNodeWithTag(UiTestTags.NAVIGATION_RAIL)
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            org.junit.Assert.assertTrue(railBounds.bottom <= miniBounds.top + 1f)
+            // Beside a rail the mini player starts after it (the rail keeps its full height).
+            org.junit.Assert.assertTrue(railBounds.right <= miniBounds.left + 1f)
         } else {
             val dockBounds = rule.onNodeWithTag(UiTestTags.NAVIGATION_DOCK)
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
@@ -132,7 +133,7 @@ class UiPolishInstrumentedTest {
         assertEquals(1, PlayerViewModel.liveInstanceCountForTest())
     }
 
-    @Test fun landscapeNavigationKeepsAllDestinationsReachableAboveTheMiniPlayer() {
+    @Test fun landscapeNavigationKeepsAllDestinationsReachableBesideTheMiniPlayer() {
         val originalOrientation = rule.activity.requestedOrientation
         try {
             // Collapse the player first. Leaving the expanded player releases its fullscreen
@@ -157,6 +158,10 @@ class UiPolishInstrumentedTest {
             // taller system bars) four 48dp targets do not fit between the top bar and the mini player,
             // so the rail scrolls (see GlassNavigationRail). What must hold is that every destination
             // can be reached and is never covered by the mini player - not that all four fit at once.
+            // The mini player sits to the right of the rail, so "not covered" means no overlap, not
+            // "above its top edge".
+            org.junit.Assert.assertTrue("Mini player overlaps the rail: $miniBounds vs $railBounds",
+                railBounds.right <= miniBounds.left + 1f)
             listOf(R.string.nav_home, R.string.nav_channels, R.string.nav_favorites, R.string.nav_settings)
                 .forEach { destination ->
                     val bounds = rule.onNodeWithContentDescription(label(destination))
@@ -164,7 +169,7 @@ class UiPolishInstrumentedTest {
                         .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
                     org.junit.Assert.assertTrue("Navigation destination is clipped or covered: $bounds",
                         bounds.top >= railBounds.top && bounds.bottom <= railBounds.bottom &&
-                            bounds.bottom <= miniBounds.top)
+                            !bounds.overlaps(miniBounds))
                 }
             rule.onNodeWithContentDescription(label(R.string.nav_settings)).performClick()
             rule.onNodeWithTag(UiTestTags.SETTINGS_SEARCH).assertIsDisplayed()

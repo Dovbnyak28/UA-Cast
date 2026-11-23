@@ -22,7 +22,8 @@ local build produces.
   quick actions are coloured tiles and its header buttons share one style, with "Other TVs" as a
   labelled pill. The language picker shows the Zorik mark and centres its choices. Fixed: the
   inline player's last button sat under the navigation bar, and the auto-skip indicator's Cancel
-  was covered by the Play/Pause button.
+  was covered by the Play/Pause button. In landscape the mini player sits beside the navigation
+  rail instead of over it, and the inline video frame has a visible edge on black pages.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the

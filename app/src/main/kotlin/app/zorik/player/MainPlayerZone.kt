@@ -27,6 +27,7 @@ import app.zorik.player.ui.player.PlayerHost
 import app.zorik.player.ui.theme.ScreenHPadding
 import app.zorik.player.ui.theme.GapM
 import app.zorik.player.ui.theme.navigationBarHeight
+import app.zorik.player.ui.components.NavigationRailWidth
 import app.zorik.player.ui.theme.GlassTabBarVerticalPadding
 
 /** The always-mounted player container - collects only what [PlayerHost] itself needs, so cast
@@ -93,7 +94,12 @@ internal fun BoxScope.PlayerZone(
             Modifier
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = if (usesNavigationRail) ScreenHPadding else 0.dp)
+                // Beside the rail, not over it: in landscape the bar used to start 16dp from the
+                // screen edge and cover the bottom of the navigation rail.
+                .padding(
+                    start = if (usesNavigationRail) NavigationRailWidth + ScreenHPadding else 0.dp,
+                    end = if (usesNavigationRail) ScreenHPadding else 0.dp,
+                )
                 // The rail does not consume bottom space. Keeping the old tab-bar offset on
                 // tablets made the mini player float unnecessarily high above the gesture bar.
                 .padding(
