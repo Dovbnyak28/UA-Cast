@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -83,7 +84,14 @@ class HlsFlattenedStreamTest {
                 while (!socket.isClosed) {
                     try {
                         val accepted = socket.accept()
-                        worker.execute { serve(accepted) }
+                        try {
+                            worker.execute { serve(accepted) }
+                        } catch (_: RejectedExecutionException) {
+                            // close() can win between accept() and this submit. The pool is gone, so release
+                            // the socket here; an uncaught rejection on this thread crashed the test process.
+                            runCatching { accepted.close() }
+                            return@execute
+                        }
                     } catch (_: IOException) {
                         return@execute
                     }
@@ -386,7 +394,14 @@ class HlsFlattenedStreamTest {
                 while (!socket.isClosed) {
                     try {
                         val accepted = socket.accept()
-                        worker.execute { serve(accepted) }
+                        try {
+                            worker.execute { serve(accepted) }
+                        } catch (_: RejectedExecutionException) {
+                            // close() can win between accept() and this submit. The pool is gone, so release
+                            // the socket here; an uncaught rejection on this thread crashed the test process.
+                            runCatching { accepted.close() }
+                            return@execute
+                        }
                     } catch (_: IOException) {
                         return@execute
                     }
