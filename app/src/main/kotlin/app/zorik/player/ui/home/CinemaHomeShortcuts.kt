@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import app.zorik.player.R
 import app.zorik.player.playlist.GroupedChannels
 import app.zorik.player.playlist.groupDisplayKey
+import app.zorik.player.ui.channels.groupIcon
 import app.zorik.player.ui.channels.groupLabel
+import app.zorik.player.ui.channels.groupTone
 import app.zorik.player.ui.components.UaCard
 import app.zorik.player.ui.media.LocalOpenVideo
 import app.zorik.player.ui.theme.AppIcons
@@ -77,7 +79,7 @@ internal fun HomeCategoryShelf(
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
             items(visible, key = { groupDisplayKey(it.group) }, contentType = { "category" }) { group ->
                 UaCard(Modifier.width(152.dp), onClick = { onOpen(groupDisplayKey(group.group)) }) {
-                    Icon(AppIcons.Channels, null, tint = UaTheme.colors.material.primary)
+                    Icon(groupIcon(group.group), null, tint = groupTone(group.group), modifier = Modifier.size(26.dp))
                     Text(groupLabel(group.group), style = BodyText, maxLines = 3, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 8.dp))
                     Text(pluralStringResource(R.plurals.channels_total_count, group.channels.size, group.channels.size),

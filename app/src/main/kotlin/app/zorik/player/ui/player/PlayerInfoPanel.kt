@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -46,6 +48,7 @@ import app.zorik.player.ui.components.GradientPlayButton
 import app.zorik.player.ui.components.SmallRoundIconButton
 import app.zorik.player.ui.theme.AppIcons
 import app.zorik.player.ui.theme.Caption
+import app.zorik.player.ui.theme.CaptionSemibold
 import app.zorik.player.ui.theme.CardPadding
 import app.zorik.player.ui.theme.DisplayName
 import app.zorik.player.ui.theme.GapM
@@ -55,6 +58,9 @@ import app.zorik.player.ui.theme.ScreenHPadding
 import app.zorik.player.ui.theme.Title
 import app.zorik.player.ui.theme.raisedSurface
 import java.io.File
+
+private const val QUICK_SETTING_TONE_ALPHA = 0.16f
+private val NEXT_CHANNEL_LOGO_SIZE = 96.dp
 
 /** The non-fullscreen player's "info & quick actions" furniture, below the inline video: the
  * previous/next pill row, current-channel card, quick-settings row and next-channels rail, plus
@@ -80,21 +86,23 @@ internal fun PillButton(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val tint = if (enabled) UaTheme.palette.labelPrimary else UaTheme.palette.labelTertiary
+        // The arrow carries the accent so the pair reads as transport controls, not plain labels.
+        val iconTint = if (enabled) UaTheme.palette.azure else UaTheme.palette.labelTertiary
         if (!iconTrailing) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(18.dp).padding(end = 8.dp),
+                tint = iconTint,
+                modifier = Modifier.size(22.dp).padding(end = 8.dp),
             )
         }
-        Text(text = label, style = Caption, color = tint)
+        Text(text = label, style = CaptionSemibold, color = tint)
         if (iconTrailing) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(18.dp).padding(start = 8.dp),
+                tint = iconTint,
+                modifier = Modifier.size(22.dp).padding(start = 8.dp),
             )
         }
     }
@@ -189,18 +197,21 @@ internal fun QuickSettingsRow(
                 AppIcons.AudioTrack,
                 stringResource(R.string.player_audio_track),
                 onAudioClick,
+                UaTheme.palette.routeGreen,
                 Modifier.weight(1f),
             )
         }
         if (showGuide) {
             QuickSettingItem(
-                AppIcons.Guide, stringResource(R.string.player_tv_guide), onGuideClick, Modifier.weight(1f),
+                AppIcons.Guide, stringResource(R.string.player_tv_guide), onGuideClick, UaTheme.palette.azure,
+                Modifier.weight(1f),
             )
         }
         QuickSettingItem(
             AppIcons.More,
             stringResource(R.string.player_more_controls),
             onMoreClick,
+            UaTheme.palette.routeAmber,
             Modifier.weight(1f),
         )
     }
@@ -211,19 +222,26 @@ private fun RowScope.QuickSettingItem(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
+    tone: Color,
     modifier: Modifier = Modifier,
 ) {
+    // A whole tile per action, each with its own colour, instead of a small grey icon over a caption:
+    // the three actions read as buttons at a glance and the whole tile is the touch target.
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+        modifier = modifier
+            .raisedSurface(RoundedCornerShape(RadiusCard), UaTheme.palette.surface1, shadow = false)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .raisedSurface(RoundedCornerShape(12.dp), UaTheme.palette.surface2, shadow = false),
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(tone.copy(alpha = QUICK_SETTING_TONE_ALPHA)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = UaTheme.palette.azure, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, tint = tone, modifier = Modifier.size(28.dp))
         }
         Box(
             // A *minimum*, not a fixed height. Fixed, this reserved 32dp less the 6dp of top
@@ -239,8 +257,8 @@ private fun RowScope.QuickSettingItem(
         ) {
             Text(
                 text = label,
-                style = Caption,
-                color = UaTheme.palette.labelSecondary,
+                style = CaptionSemibold,
+                color = UaTheme.palette.labelPrimary,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
             )
@@ -277,7 +295,10 @@ internal fun NextChannelsRail(
             }
         }
         LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(top = GapM, start = ScreenHPadding, end = ScreenHPadding),
+            // contentPadding, not padding: cards scroll out to the screen edge instead of being cut
+            // off 16dp short of it, while the first and last still line up with the page margin.
+            modifier = Modifier.fillMaxWidth().padding(top = GapM),
+            contentPadding = PaddingValues(horizontal = ScreenHPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(channels, key = { it.index }) { indexed ->
@@ -290,13 +311,14 @@ internal fun NextChannelsRail(
                             onClickLabel = indexed.channel.displayName,
                             onClick = { onSelect(indexed) },
                         )
-                        .padding(12.dp),
+                        // Thin margins: the logo fills the card instead of floating in its middle.
+                        .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     ChannelIcon(
                         channel = indexed.channel,
                         resolveIcon = resolveIcon,
-                        size = 64.dp,
+                        size = NEXT_CHANNEL_LOGO_SIZE,
                         refreshKey = iconRefreshKey,
                     )
                     Text(
@@ -306,7 +328,7 @@ internal fun NextChannelsRail(
                         minLines = 2,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 8.dp).width(96.dp),
+                        modifier = Modifier.padding(top = 6.dp).width(NEXT_CHANNEL_LOGO_SIZE),
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -343,9 +365,10 @@ internal fun InlineVideoControls(
     canControlPlayback: Boolean,
     onPlayPause: () -> Unit,
     onToggleFullscreen: () -> Unit,
+    showPlayPause: Boolean = true,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        if (canControlPlayback) GradientPlayButton(
+        if (canControlPlayback && showPlayPause) GradientPlayButton(
             icon = if (wantsToPlay) AppIcons.Pause else AppIcons.Play,
             onClick = onPlayPause,
             enabled = canControlPlayback,

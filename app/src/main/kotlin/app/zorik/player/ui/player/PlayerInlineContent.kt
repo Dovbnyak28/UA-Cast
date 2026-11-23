@@ -12,12 +12,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +50,7 @@ import app.zorik.player.ui.guidedtour.guidedTourTarget
 import app.zorik.player.player.PlayerCastStatusMessage
 import app.zorik.player.core.cast.CodecDisplayName
 import app.zorik.player.playlist.M3uChannel
+import app.zorik.player.ui.components.CastPeerIconGlyphSize
 import app.zorik.player.ui.components.SecondaryButton
 import app.zorik.player.ui.components.SmallRoundIconButton
 import app.zorik.player.ui.theme.AppIcons
@@ -137,6 +141,8 @@ internal fun InlinePlayerContent(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = GapL),
             )
         }
+        // Edge-to-edge: without this the last control scrolled to sit under the navigation bar.
+        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
@@ -172,12 +178,15 @@ private fun InlinePlayerHeaderButtons(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenHPadding, vertical = 12.dp),
+        // Same gap as the fullscreen header; without it Favourite and Cast touched edge to edge.
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SmallRoundIconButton(
             icon = AppIcons.ArrowBack,
             onClick = actions.onExit,
             contentDescription = stringResource(R.string.common_back),
+            iconSize = CastPeerIconGlyphSize,
         )
         if (title == null) Box(Modifier.weight(1f)) else InlinePlayerTitle(title, Modifier.weight(1f))
         currentChannel?.takeIf { it.localVideo == null }?.let { channel ->
@@ -193,12 +202,15 @@ private fun InlinePlayerHeaderButtons(
                 } else {
                     UaTheme.palette.labelPrimary
                 },
+                iconSize = CastPeerIconGlyphSize,
             )
         }
         val dlnaConnected = content.dlnaState.connectedDevice != null
-        PlayerCastButton(isCasting = isCasting,
+        // On the page, not over video: the same surface as Back and Favourite, so the four header
+        // controls share one look (the scrim fill is for the fullscreen overlay).
+        PlayerCastButton(isCasting = isCasting, background = UaTheme.palette.surface1,
             modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON))
-        OtherTvButton(dlnaConnected) { transientState.showDlnaSheet = true }
+        OtherTvButton(dlnaConnected, { transientState.showDlnaSheet = true }, background = UaTheme.palette.surface1)
     }
 }
 
@@ -278,6 +290,9 @@ private fun InlineVideoPanel(
                     canControlPlayback = uiState.canControlPlayback,
                     onPlayPause = actions.viewModel::togglePlayback,
                     onToggleFullscreen = { actions.onFullscreenChanged(true) },
+                    // The recovery indicators sit in the centre too, with their own Cancel / pick
+                    // another channel action; the big Play/Pause covered that action.
+                    showPlayPause = uiState.autoSkipRecovery == null && !uiState.isRecoveringPlayback,
                 )
             }
         }

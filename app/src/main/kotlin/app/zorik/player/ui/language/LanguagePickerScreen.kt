@@ -1,5 +1,6 @@
 package app.zorik.player.ui.language
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +62,12 @@ private val AppLanguageSaver = Saver<AppLanguage?, String>(
 /** Keeps the block from stretching edge to edge on a tablet or in landscape, where a
  * full-width column of four short words reads as scattered rather than as a list. */
 private val ContentMaxWidth = 640.dp
+
+/** The vector's 108dp viewport keeps the mark in its centre ~55%, so this shows it at ~60dp. */
+private val BrandMarkSize = 112.dp
+
+/** Below this viewport height the mark would push a language below the fold. */
+private val BrandMinHeight = 560.dp
 
 @Composable
 fun LanguagePickerScreen(
@@ -93,9 +102,13 @@ fun LanguagePickerScreen(
             // Box does not clip children by default, which let the last language card paint under
             // the pinned Continue button even though the list itself remained scrollable.
             modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds(),
-            contentAlignment = Alignment.TopCenter,
+            // Centred, so on a tall phone the spare height splits above and below the choices
+            // instead of pooling as an empty half-screen between the last language and Continue.
+            contentAlignment = Alignment.Center,
         ) {
             val wideLayout = maxWidth >= 600.dp
+            // Only where it fits: on a short landscape or TV viewport the four choices come first.
+            val showBrand = maxHeight >= BrandMinHeight
             Column(
                 modifier = Modifier
                     .widthIn(max = ContentMaxWidth)
@@ -103,6 +116,22 @@ fun LanguagePickerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (showBrand) {
+                    // The splash mark again, so the first screen after the splash reads as the same
+                    // app. Decorative: the app name below carries the meaning for TalkBack.
+                    Image(
+                        painter = painterResource(R.drawable.splash_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(BrandMarkSize),
+                    )
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = BodyText,
+                        color = UaTheme.palette.labelSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = GapM),
+                    )
+                }
                 Text(
                     text = stringResource(R.string.language_picker_title),
                     style = DisplayTitle,

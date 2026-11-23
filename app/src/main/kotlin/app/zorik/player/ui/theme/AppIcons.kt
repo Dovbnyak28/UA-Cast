@@ -69,4 +69,9 @@ object AppIcons {
     val Quality: ImageVector get() = PlayerAppIcons.Quality
     val AspectRatio: ImageVector get() = PlayerAppIcons.AspectRatio
     val Guide: ImageVector get() = PlayerAppIcons.Guide
+
+    val Movie: ImageVector get() = CategoryAppIcons.Movie
+    val News: ImageVector get() = CategoryAppIcons.News
+    val Sports: ImageVector get() = CategoryAppIcons.Sports
+    val Music: ImageVector get() = CategoryAppIcons.Music
 }

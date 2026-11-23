@@ -2,8 +2,9 @@ package app.zorik.player.ui.media
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,7 +24,7 @@ import app.zorik.player.media.LocalVideoOpenViewModel
 import app.zorik.player.ui.components.SecondaryButton
 import app.zorik.player.ui.platform.launchDocumentPickerIfSupported
 import app.zorik.player.ui.theme.AppIcons
-import app.zorik.player.ui.theme.GapM
+import app.zorik.player.ui.theme.GapS
 import app.zorik.player.ui.theme.Caption
 import app.zorik.player.ui.theme.UaTheme
 import app.zorik.player.ui.tv.TvDialogInputRegistration
@@ -75,11 +76,15 @@ fun LocalVideoDocumentHost(
 @Composable
 fun OpenLocalVideoButton() {
     val open = LocalOpenVideo.current ?: return
-    SecondaryButton(
-        text = stringResource(R.string.local_video_open),
-        onClick = open,
-        leadingIcon = AppIcons.Play,
-        modifier = Modifier.fillMaxWidth().padding(top = GapM),
-    )
-    Text(stringResource(R.string.local_video_formats_hint), style = Caption, color = UaTheme.palette.labelSecondary)
+    // One block: the hint belongs to the button, and the caller's list spacing separates the block
+    // from what is above it (an extra top padding here made that gap uneven on the empty home).
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(GapS)) {
+        SecondaryButton(
+            text = stringResource(R.string.local_video_open),
+            onClick = open,
+            leadingIcon = AppIcons.Play,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(stringResource(R.string.local_video_formats_hint), style = Caption, color = UaTheme.palette.labelSecondary)
+    }
 }

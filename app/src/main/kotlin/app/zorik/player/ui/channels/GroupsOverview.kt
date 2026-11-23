@@ -1,4 +1,5 @@
 package app.zorik.player.ui.channels
+import app.zorik.player.ui.theme.CategoryTones
 import app.zorik.player.ui.theme.UaTheme
 import app.zorik.player.ui.theme.panelSurface
 import app.zorik.player.ui.theme.CardTitle
@@ -32,6 +33,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Alignment
@@ -299,18 +301,37 @@ private fun groupQualityBadge(label: String): String? {
     }
 }
 
+/** Category hue for [groupIcon]; custom/provider groups keep the theme accent. */
+@Composable
+internal fun groupTone(group: ChannelGroup): Color {
+    val hue = (group as? ChannelGroup.Known)?.let {
+        when (it.key) {
+            ChannelGroup.KEY_MOVIES -> CategoryTones.Hue.Rose
+            ChannelGroup.KEY_NEWS -> CategoryTones.Hue.Sky
+            ChannelGroup.KEY_SPORTS -> CategoryTones.Hue.Emerald
+            ChannelGroup.KEY_KIDS -> CategoryTones.Hue.Amber
+            ChannelGroup.KEY_MUSIC -> CategoryTones.Hue.Violet
+            ChannelGroup.KEY_SERIES -> CategoryTones.Hue.Indigo
+            ChannelGroup.KEY_DOCUMENTARY, ChannelGroup.KEY_SCIENCE -> CategoryTones.Hue.Teal
+            ChannelGroup.KEY_ENTERTAINMENT -> CategoryTones.Hue.Fuchsia
+            else -> null
+        }
+    } ?: return UaTheme.palette.azure
+    return CategoryTones.color(hue, UaTheme.palette.isDark)
+}
+
 /** Presentation-only category cue; custom/provider groups keep a neutral channels glyph. */
-private fun groupIcon(group: ChannelGroup): ImageVector = when (group) {
+internal fun groupIcon(group: ChannelGroup): ImageVector = when (group) {
     is ChannelGroup.Known -> when (group.key) {
-        ChannelGroup.KEY_MOVIES,
+        ChannelGroup.KEY_MOVIES -> AppIcons.Movie
+        ChannelGroup.KEY_NEWS -> AppIcons.News
+        ChannelGroup.KEY_SPORTS -> AppIcons.Sports
         ChannelGroup.KEY_SERIES,
-        ChannelGroup.KEY_NEWS,
         ChannelGroup.KEY_DOCUMENTARY,
         ChannelGroup.KEY_ENTERTAINMENT,
         -> AppIcons.Tv
-        ChannelGroup.KEY_SPORTS -> AppIcons.Play
         ChannelGroup.KEY_KIDS -> AppIcons.Kids
-        ChannelGroup.KEY_MUSIC -> AppIcons.AudioTrack
+        ChannelGroup.KEY_MUSIC -> AppIcons.Music
         ChannelGroup.KEY_SCIENCE,
         ChannelGroup.KEY_RELIGION,
         ChannelGroup.KEY_REGIONAL,
@@ -355,18 +376,21 @@ private fun GroupCard(
         val label = groupLabel(grouped.group)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
+            // Sized for the card it sits in (a 19dp glyph read as a speck on a 104dp tile) and tinted
+            // per category so the grid scans by colour as well as by shape.
+            val tone = groupTone(grouped.group)
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(RadiusItem))
-                    .background(UaTheme.palette.azure.copy(alpha = 0.12f)),
+                    .background(tone.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = groupIcon(grouped.group),
                     contentDescription = null,
-                    tint = UaTheme.palette.azure,
-                    modifier = Modifier.size(19.dp),
+                    tint = tone,
+                    modifier = Modifier.size(26.dp),
                 )
             }
             val quality = groupQualityBadge(label)
