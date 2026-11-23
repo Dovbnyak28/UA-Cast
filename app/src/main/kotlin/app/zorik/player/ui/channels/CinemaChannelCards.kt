@@ -170,7 +170,9 @@ internal fun ChannelTile(
             onClick = onClick, onLongClick = onLongClick)
         .padding(horizontal = 10.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
-            ChannelIcon(channel, resolveIcon, size = if (large) 64.dp else 44.dp, refreshKey = iconRefreshKey)
+            // The logo is the tile's subject: 44dp read as a small badge lost in a ~160dp card.
+            ChannelIcon(channel, resolveIcon, size = if (large) GRID_LOGO_LARGE else GRID_LOGO,
+                refreshKey = iconRefreshKey)
             if (isLocked) Icon(AppIcons.Lock, stringResource(R.string.channels_channel_locked),
                 tint = UaTheme.palette.labelSecondary, modifier = Modifier.size(16.dp).align(Alignment.TopStart))
         }
@@ -182,3 +184,6 @@ internal fun ChannelTile(
         ChannelQuickActions(channel, isFavorite, onToggleFavorite, onGuide)
     }
 }
+
+private val GRID_LOGO = 72.dp
+private val GRID_LOGO_LARGE = 96.dp
