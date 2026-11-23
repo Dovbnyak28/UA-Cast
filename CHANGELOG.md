@@ -17,6 +17,12 @@ local build produces.
   backups restore as before; new ones are saved as `.zorik`).
 - New logo without the Google Cast motif (screen, centred play, blue/yellow stand); the TV banner
   wordmark is drawn from original strokes instead of Roboto outlines.
+- Visual pass: channels without a logo get a coloured tile with their initials instead of a grey
+  box; channel groups have their own glyphs and colours (news, movies, sports, music); the player's
+  quick actions are coloured tiles and its header buttons share one style, with "Other TVs" as a
+  labelled pill. The language picker shows the Zorik mark and centres its choices. Fixed: the
+  inline player's last button sat under the navigation bar, and the auto-skip indicator's Cancel
+  was covered by the Play/Pause button.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the

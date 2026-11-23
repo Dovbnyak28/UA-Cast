@@ -1,6 +1,7 @@
 package app.zorik.player.ui.components
 import app.zorik.player.ui.theme.UaTheme
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,8 +17,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
@@ -26,6 +29,7 @@ import app.zorik.player.ui.theme.AppTheme
 import app.zorik.player.ui.theme.AppIcons
 import app.zorik.player.ui.theme.AppThemePreviewParameter
 import app.zorik.player.ui.theme.Caption
+import app.zorik.player.ui.theme.ChannelAvatarColors
 import app.zorik.player.ui.theme.ChannelLogoRadius
 import app.zorik.player.ui.theme.ChannelLogoSize
 import app.zorik.player.ui.theme.ZorikTheme
@@ -33,6 +37,9 @@ import app.zorik.player.ui.theme.raisedSurface
 import java.io.File
 
 private const val MAX_INITIALS = 2
+
+/** Initials at about a third of the tile: legible on a 40dp row icon, bold on a 96dp card. */
+private const val INITIALS_SCALE = 0.34f
 
 /**
  * A channel's resolved logo, falling back to its initials in a plain box while resolving, if none
@@ -87,13 +94,22 @@ private fun ChannelIconContent(
             modifier = modifier.size(size).clip(RoundedCornerShape(ChannelLogoRadius)),
         )
     } else {
+        // A coloured tile, stable per channel name, so logo-less playlists still scan by colour.
+        // Initials are sized from the tile, not the font scale, so they never outgrow it.
+        val initialsSize = with(LocalDensity.current) { (size * INITIALS_SCALE).toSp() }
         Box(
             modifier = modifier
                 .size(size)
-                .raisedSurface(RoundedCornerShape(ChannelLogoRadius), UaTheme.palette.surface2, shadow = false),
+                .clip(RoundedCornerShape(ChannelLogoRadius))
+                .background(ChannelAvatarColors.brushFor(channel.displayName)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = initialsFor(channel.displayName), style = Caption, color = UaTheme.palette.labelSecondary)
+            Text(
+                text = initialsFor(channel.displayName),
+                style = Caption.copy(fontWeight = FontWeight.Bold, fontSize = initialsSize),
+                color = ChannelAvatarColors.initials,
+                maxLines = 1,
+            )
         }
     }
 }
