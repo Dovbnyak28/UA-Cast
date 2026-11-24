@@ -66,6 +66,52 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
 
+    /**
+     * Turns the open player to landscape before a fullscreen measurement, so the measured journey
+     * is the switch into the fullscreen overlay alone. Entering fullscreen from portrait also
+     * rotates the display, and those rotation frames - about 5% of the window, i.e. exactly the
+     * p95 - swung `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI emulator
+     * for the same code.
+     *
+     * The rotation is done with the player already open because navigating in landscape does not
+     * work on the CI emulator's 320dp-tall window: the group and channel names sit below the fold.
+     * The controls can auto-hide during the re-layout; a tap on the left part of the picture brings
+     * them back (the centre is Play/Pause and the corner is Fullscreen, so a centre tap would pause
+     * instead), and the button is looked for again after each tap.
+     */
+    fun rotateOpenPlayerToLandscape() {
+        device.setOrientationLandscape()
+        check(pollUntil(ROTATION_TIMEOUT_MILLIS) { device.displayWidth > device.displayHeight }) {
+            "Device did not rotate to landscape"
+        }
+        device.waitForIdle()
+        repeat(CONTROLS_REVEAL_ATTEMPTS) {
+            if (device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) return
+            val video = device.findObject(By.desc(VIDEO_FRAME_DESCRIPTION))
+                ?: device.findObject(By.desc(VIDEO_SURFACE_DESCRIPTION))
+            video?.visibleBounds?.let { device.click(it.left + it.width() / VIDEO_TAP_FRACTION, it.centerY()) }
+        }
+        check(device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) {
+            "Fullscreen button not shown after rotating to landscape; on screen: " +
+                device.findObjects(By.pkg(PACKAGE_NAME)).mapNotNull { it.contentDescription }.distinct()
+        }
+    }
+
+    /** Undoes [rotateOpenPlayerToLandscape]: natural orientation, then the user's rotation setting. */
+    fun restoreNaturalOrientation() {
+        device.setOrientationNatural()
+        device.unfreezeRotation()
+    }
+
+    private fun pollUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(POLL_MILLIS)
+        }
+        return condition()
+    }
+
     fun switchChannel() {
         clickText("Next channel")
         waitForDescription("Now playing: Benchmark Channel 00002")
@@ -183,6 +229,14 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
+        private const val ROTATION_TIMEOUT_MILLIS = 10_000L
+        private const val VIDEO_FRAME_DESCRIPTION = "Video frame displayed"
+        private const val VIDEO_SURFACE_DESCRIPTION = "Video surface"
+        private const val CONTROLS_SETTLE_MILLIS = 2_000L
+        private const val CONTROLS_REVEAL_ATTEMPTS = 4
+        /** Tap at a fifth of the picture's width: clear of Play/Pause and Fullscreen. */
+        private const val VIDEO_TAP_FRACTION = 5
+        private const val POLL_MILLIS = 100L
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
         const val EPG_PARSE_TIMEOUT_MILLIS = 180_000L
