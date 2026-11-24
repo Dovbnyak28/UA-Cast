@@ -24,6 +24,9 @@ local build produces.
   inline player's last button sat under the navigation bar, and the auto-skip indicator's Cancel
   was covered by the Play/Pause button. In landscape the mini player sits beside the navigation
   rail instead of over it, and the inline video frame has a visible edge on black pages.
+- Fullscreen on a phone in landscape uses the compact controls: time, -10 s, seek bar, +10 s and
+  duration share one row and the channel chips are hidden, so the panel covers about a third of
+  the picture instead of half.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the
