@@ -26,6 +26,9 @@ local build produces.
   rail instead of over it, and the inline video frame has a visible edge on black pages.
 - Picture-in-picture: pressing Home during fullscreen playback now enters PiP on Android 8-11 too
   (it only did so automatically from Android 12; older releases paused the video instead).
+- Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
+  it), Kotlin 2.4.21. Cast framework 23, Core 1.19, Lifecycle 2.11 and OkHttp 5.5 wait for the
+  AGP 9 / compileSdk 37 migration they require.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the
