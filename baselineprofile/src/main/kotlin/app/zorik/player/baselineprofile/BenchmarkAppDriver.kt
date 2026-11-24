@@ -67,32 +67,23 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
     fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
 
     /**
-     * Turns the open inline player to landscape before a fullscreen measurement, so the measured
-     * journey is the switch into the fullscreen overlay alone. Entering fullscreen from portrait
-     * also rotates the display, and those rotation frames - about 5% of the window, i.e. exactly
-     * the p95 - swung `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI
-     * emulator for the same code. The rotation still happens; it is just not inside the measurement.
+     * Turns the device to landscape before the player opens, so a fullscreen measurement covers the
+     * switch into the fullscreen overlay alone. Entering fullscreen from portrait also rotates the
+     * display, and those rotation frames - about 5% of the window, i.e. exactly the p95 - swung
+     * `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI emulator for the
+     * same code. Rotating here, on the app's home screen, keeps the player's controls in their
+     * just-opened, visible state: a player rotated while open had already hidden them, and taps on
+     * the video did not bring them back reliably for UiAutomator.
      */
-    fun rotateOpenPlayerToLandscape() {
+    fun rotateToLandscape() {
         device.setOrientationLandscape()
         check(pollUntil(ROTATION_TIMEOUT_MILLIS) { device.displayWidth > device.displayHeight }) {
             "Device did not rotate to landscape"
         }
         device.waitForIdle()
-        // The controls auto-hide while the player re-lays out. A tap on the video toggles them, so
-        // a single tap can land just as they reappear and hide them again: tap only while the
-        // button is absent, and look again after each tap.
-        repeat(CONTROLS_REVEAL_ATTEMPTS) {
-            if (device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) return
-            device.findObject(By.descStartsWith(VIDEO_DESCRIPTION_PREFIX))?.click()
-        }
-        check(device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) {
-            "Fullscreen button not shown after rotating to landscape; on screen: " +
-                device.findObjects(By.pkg(PACKAGE_NAME)).mapNotNull { it.contentDescription }.distinct()
-        }
     }
 
-    /** Undoes [rotateOpenPlayerToLandscape]: natural orientation, then the user's rotation setting. */
+    /** Undoes [rotateToLandscape]: natural orientation, then the user's rotation setting. */
     fun restoreNaturalOrientation() {
         device.setOrientationNatural()
         device.unfreezeRotation()
@@ -224,11 +215,7 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
-        /** "Video" until the first frame, then "Video frame displayed" (see VideoSurface). */
-        private const val VIDEO_DESCRIPTION_PREFIX = "Video"
         private const val ROTATION_TIMEOUT_MILLIS = 10_000L
-        private const val CONTROLS_SETTLE_MILLIS = 2_000L
-        private const val CONTROLS_REVEAL_ATTEMPTS = 4
         private const val POLL_MILLIS = 100L
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
