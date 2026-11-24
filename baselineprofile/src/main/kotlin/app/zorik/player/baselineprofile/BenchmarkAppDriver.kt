@@ -66,38 +66,6 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
 
-    /**
-     * Turns the device to landscape before the player opens, so a fullscreen measurement covers the
-     * switch into the fullscreen overlay alone. Entering fullscreen from portrait also rotates the
-     * display, and those rotation frames - about 5% of the window, i.e. exactly the p95 - swung
-     * `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI emulator for the
-     * same code. Rotating here, on the app's home screen, keeps the player's controls in their
-     * just-opened, visible state: a player rotated while open had already hidden them, and taps on
-     * the video did not bring them back reliably for UiAutomator.
-     */
-    fun rotateToLandscape() {
-        device.setOrientationLandscape()
-        check(pollUntil(ROTATION_TIMEOUT_MILLIS) { device.displayWidth > device.displayHeight }) {
-            "Device did not rotate to landscape"
-        }
-        device.waitForIdle()
-    }
-
-    /** Undoes [rotateToLandscape]: natural orientation, then the user's rotation setting. */
-    fun restoreNaturalOrientation() {
-        device.setOrientationNatural()
-        device.unfreezeRotation()
-    }
-
-    private fun pollUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMillis
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return true
-            Thread.sleep(POLL_MILLIS)
-        }
-        return condition()
-    }
-
     fun switchChannel() {
         clickText("Next channel")
         waitForDescription("Now playing: Benchmark Channel 00002")
@@ -215,8 +183,6 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
-        private const val ROTATION_TIMEOUT_MILLIS = 10_000L
-        private const val POLL_MILLIS = 100L
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
         const val EPG_PARSE_TIMEOUT_MILLIS = 180_000L

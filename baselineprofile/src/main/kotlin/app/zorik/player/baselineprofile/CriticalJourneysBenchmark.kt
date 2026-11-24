@@ -83,8 +83,6 @@ class CriticalJourneysBenchmark {
     fun enterFullscreen() = measureUiJourney(
         setup = { driver ->
             driver.startMain(this)
-            // Rotation is setup, not journey: see BenchmarkAppDriver.rotateToLandscape.
-            driver.rotateToLandscape()
             driver.openChannels()
             driver.openFirstGroup()
             driver.openFirstPlayer()
@@ -117,22 +115,6 @@ class CriticalJourneysBenchmark {
         observeFullscreen: Boolean = false,
     ) {
         val driver = prepareStressFixture()
-        try {
-            measureJourney(driver, setup, journey, firstFrame, observeFullscreen)
-        } finally {
-            // A fullscreen journey leaves the display frozen in landscape; never leak that into the
-            // next benchmark or back to the device.
-            if (observeFullscreen) driver.restoreNaturalOrientation()
-        }
-    }
-
-    private fun measureJourney(
-        driver: BenchmarkAppDriver,
-        setup: androidx.benchmark.macro.MacrobenchmarkScope.(BenchmarkAppDriver) -> Unit,
-        journey: (BenchmarkAppDriver) -> Unit,
-        firstFrame: Boolean,
-        observeFullscreen: Boolean,
-    ) {
         benchmarkRule.measureRepeated(
             packageName = BenchmarkAppDriver.PACKAGE_NAME,
             metrics = buildList {
@@ -144,8 +126,6 @@ class CriticalJourneysBenchmark {
             setupBlock = {
                 pressHome()
                 killProcess()
-                // Each iteration starts upright, as a user opening the app would.
-                if (observeFullscreen) driver.restoreNaturalOrientation()
                 setup(driver)
             },
         ) {
