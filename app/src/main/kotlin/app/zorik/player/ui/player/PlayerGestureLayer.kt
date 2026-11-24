@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.util.Rational
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import java.lang.ref.WeakReference
 import app.zorik.player.core.concurrent.runCatchingNonFatal
 import androidx.media3.common.VideoSize
 import androidx.compose.foundation.background
@@ -259,7 +260,21 @@ internal object PipController {
      * gestures home, using whatever params were last set. Set only while video is actually playing
      * - auto-entering PiP for a paused or errored channel would put an empty window on screen.
      */
-    fun syncParams(activity: Activity, videoSize: VideoSize, sourceRectHint: Rect?, autoEnter: Boolean) {
+    fun syncParams(
+        activity: Activity,
+        videoSize: VideoSize,
+        sourceRectHint: Rect?,
+        autoEnter: Boolean,
+        legacyApi: Boolean = isLegacyPipApi(),
+    ) {
+        if (legacyApi) {
+            legacyAutoEnter = if (autoEnter) {
+                LegacyAutoEnter(WeakReference(activity), videoSize, sourceRectHint?.let(::Rect))
+            } else {
+                null
+            }
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         runCatchingNonFatal {
             activity.setPictureInPictureParams(buildParams(videoSize, sourceRectHint, autoEnter))
@@ -267,12 +282,47 @@ internal object PipController {
     }
 
     /** Auto-enter belongs to the expanded video surface, not to the surviving Activity. */
-    fun disableAutoEnter(activity: Activity) {
+    fun disableAutoEnter(activity: Activity, legacyApi: Boolean = isLegacyPipApi()) {
+        if (legacyApi) {
+            if (legacyAutoEnter?.activity?.get() === activity) legacyAutoEnter = null
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         runCatchingNonFatal {
             activity.setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
         }
     }
+
+    /**
+     * The API 26-30 stand-in for `setAutoEnterEnabled`, called from the activity's
+     * `onUserLeaveHint`. Those releases have picture-in-picture but no auto-enter, so without this
+     * pressing Home during fullscreen playback just paused the video (seen on a Mi A2, Android 11).
+     * It uses exactly what [syncParams] last recorded, so the rule is the same as on API 31+:
+     * fullscreen, playing, not casting, no fatal error. Returns whether PiP was entered.
+     */
+    fun enterOnUserLeave(activity: Activity, legacyApi: Boolean = isLegacyPipApi()): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !legacyApi) return false
+        val pending = legacyAutoEnter?.takeIf { it.activity.get() === activity }
+        return pending != null && runCatchingNonFatal {
+            activity.enterPictureInPictureMode(buildParams(pending.videoSize, pending.sourceRectHint))
+        }.getOrDefault(false)
+    }
+
+    /** API 26-30: picture-in-picture exists, `setAutoEnterEnabled` does not. A parameter on the
+     * calls above (defaulting to this) so the legacy path is testable on the one Robolectric SDK. */
+    private fun isLegacyPipApi(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+
+    /** What [syncParams] last asked for below API 31, held for [enterOnUserLeave]. The activity is
+     * weak so a player torn down without [disableAutoEnter] cannot keep it alive. */
+    private class LegacyAutoEnter(
+        val activity: WeakReference<Activity>,
+        val videoSize: VideoSize,
+        val sourceRectHint: Rect?,
+    )
+
+    @Volatile
+    private var legacyAutoEnter: LegacyAutoEnter? = null
 
     /** Both callers gate on the SDK level themselves, but lint cannot see through the call - and a
      * silent `@Suppress` here would also hide a genuinely unguarded future caller. */

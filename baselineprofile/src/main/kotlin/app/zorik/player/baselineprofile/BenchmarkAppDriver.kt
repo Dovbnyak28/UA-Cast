@@ -66,6 +66,44 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
 
+    /**
+     * Turns the open inline player to landscape before a fullscreen measurement, so the measured
+     * journey is the switch into the fullscreen overlay alone. Entering fullscreen from portrait
+     * also rotates the display, and those rotation frames - about 5% of the window, i.e. exactly
+     * the p95 - swung `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI
+     * emulator for the same code. The rotation still happens; it is just not inside the measurement.
+     */
+    fun rotateOpenPlayerToLandscape() {
+        device.setOrientationLandscape()
+        check(pollUntil(ROTATION_TIMEOUT_MILLIS) { device.displayWidth > device.displayHeight }) {
+            "Device did not rotate to landscape"
+        }
+        device.waitForIdle()
+        // The controls auto-hide while the player re-lays out; one tap on the video brings them
+        // back so the measured click finds the Fullscreen button at once.
+        if (!device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) {
+            requireNotNull(device.wait(Until.findObject(By.descStartsWith(VIDEO_DESCRIPTION_PREFIX)), UI_TIMEOUT_MILLIS)) {
+                "Timed out waiting for the video surface"
+            }.click()
+        }
+        waitForDescription(FULLSCREEN_DESCRIPTION)
+    }
+
+    /** Undoes [rotateOpenPlayerToLandscape]: natural orientation, then the user's rotation setting. */
+    fun restoreNaturalOrientation() {
+        device.setOrientationNatural()
+        device.unfreezeRotation()
+    }
+
+    private fun pollUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(POLL_MILLIS)
+        }
+        return condition()
+    }
+
     fun switchChannel() {
         clickText("Next channel")
         waitForDescription("Now playing: Benchmark Channel 00002")
@@ -183,6 +221,11 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
+        /** "Video" until the first frame, then "Video frame displayed" (see VideoSurface). */
+        private const val VIDEO_DESCRIPTION_PREFIX = "Video"
+        private const val ROTATION_TIMEOUT_MILLIS = 10_000L
+        private const val CONTROLS_SETTLE_MILLIS = 1_000L
+        private const val POLL_MILLIS = 100L
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
         const val EPG_PARSE_TIMEOUT_MILLIS = 180_000L
