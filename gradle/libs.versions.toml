@@ -10,7 +10,7 @@ activityCompose = "1.13.0"
 composeBom = "2026.06.01"
 # The independently built software wrapper is verified against this Media3 API.
 # :ffmpegdecoder checks its source lock before packaging; upgrade and native regressions together.
-media3 = "1.10.1"
+media3 = "1.11.1"
 # 23.0 pulls androidx.mediarouter 1.9 (beta), which requires compileSdk 37 and AGP 9.1: part of the
 # coordinated AGP 9/API 37 migration, like Core 1.19, Lifecycle 2.11 and OkHttp 5.5.
 castFramework = "22.3.1"
