@@ -2,6 +2,7 @@ package app.zorik.player.data.cast
 
 import java.io.IOException
 import java.net.ServerSocket
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -71,7 +72,14 @@ class ProxyRendererProfileTest {
                 while (!socket.isClosed) {
                     try {
                         val client = socket.accept()
-                        worker.execute { serve(client) }
+                        try {
+                            worker.execute { serve(client) }
+                        } catch (_: RejectedExecutionException) {
+                            // close() can win between accept() and this submit. The pool is gone, so release
+                            // the socket here; an uncaught rejection on this thread crashed the test process.
+                            runCatching { client.close() }
+                            return@execute
+                        }
                     } catch (_: IOException) {
                         return@execute
                     }
