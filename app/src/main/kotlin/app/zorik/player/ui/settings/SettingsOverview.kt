@@ -145,11 +145,7 @@ internal fun SettingsOverview(
             )
         }
     }
-    val remoteTitle = stringResource(R.string.remote_title)
-    val remoteSummary = stringResource(R.string.settings_remote_summary)
-    val remoteMatches = !app.zorik.player.ui.tv.LocalTvMode.current && (normalizedQuery.isEmpty() ||
-        remoteTitle.contains(normalizedQuery, ignoreCase = true) ||
-        remoteSummary.contains(normalizedQuery, ignoreCase = true))
+    val remoteMatches = remoteEntryMatches(normalizedQuery)
     if (filteredItems.isEmpty() && matchingSettings.isEmpty() && !remoteMatches) {
         IconHeader(
             icon = AppIcons.Search,
@@ -167,4 +163,13 @@ internal fun SettingsOverview(
         }
         if (remoteMatches) app.zorik.player.ui.remote.RemoteSettingsEntry()
     }
+}
+
+/** Whether the phone-only TV remote card belongs in the list for [query] (all of it when empty). */
+@Composable
+private fun remoteEntryMatches(query: String): Boolean {
+    val title = stringResource(R.string.remote_title)
+    val summary = stringResource(R.string.settings_remote_summary)
+    val textMatches = title.contains(query, ignoreCase = true) || summary.contains(query, ignoreCase = true)
+    return !app.zorik.player.ui.tv.LocalTvMode.current && (query.isEmpty() || textMatches)
 }

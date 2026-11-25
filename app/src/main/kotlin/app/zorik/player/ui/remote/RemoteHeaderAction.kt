@@ -37,7 +37,7 @@ internal fun RemoteHeaderAction(labelled: Boolean) {
     // confused people who had never paired a TV. It is started from Settings now
     // (RemoteSettingsEntry) and appears here only while a session is live, to show its status and
     // reopen it. On a TV this is "Pair phone", the receiver's own entry point, and always shows.
-    if (!LocalTvMode.current && !state.connected && !state.connecting && !state.failed) return
+    if (!LocalTvMode.current && !state.active) return
     val label = stringResource(if (LocalTvMode.current) R.string.tv_pair_phone else R.string.remote_title)
     val status = when {
         state.connected -> stringResource(R.string.remote_connected)
