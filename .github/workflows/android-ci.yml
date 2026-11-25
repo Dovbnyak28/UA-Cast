@@ -47,7 +47,7 @@ jobs:
           # PR branches read only from the stale default-branch cache by default, so ~10 parallel jobs re-downloaded every dependency and Maven Central answered HTTP 429. Let this branch's runs write their own cache.
           cache-read-only: false
 
-      - name: Assemble debug
+      - name: Download verified native libraries
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
@@ -144,7 +144,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Android lint
+      - name: Download verified native libraries
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
@@ -229,7 +229,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Assemble release
+      - name: Download verified native libraries
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native
@@ -357,7 +357,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Enable KVM
+      - name: Download verified native libraries
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
           name: software-decoder-native

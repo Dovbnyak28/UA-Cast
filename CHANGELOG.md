@@ -27,6 +27,9 @@ local build produces.
 - Fullscreen on a phone in landscape uses the compact controls: time, -10 s, seek bar, +10 s and
   duration share one row and the channel chips are hidden, so the panel covers about a third of
   the picture instead of half.
+- Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
+  it), Kotlin 2.4.21. Cast framework 23, Core 1.19, Lifecycle 2.11 and OkHttp 5.5 wait for the
+  AGP 9 / compileSdk 37 migration they require.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the
