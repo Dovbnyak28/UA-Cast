@@ -77,7 +77,15 @@ class ProxyServerInstrumentedTest {
                     try {
                         val accepted = socket.accept()
                         try {
-                            worker.execute { serve(accepted) }
+                            worker.execute {
+                                // A client that hangs up mid-response throws here; uncaught on a pool thread
+                                // that would end the whole instrumentation process, not just this request.
+                                try {
+                                    serve(accepted)
+                                } catch (_: IOException) {
+                                    // The client went away; nothing to answer.
+                                }
+                            }
                         } catch (_: RejectedExecutionException) {
                             // close() can win between accept() and this submit. The pool is gone, so release
                             // the socket here; an uncaught rejection on this thread crashed the test process.

@@ -24,6 +24,8 @@ local build produces.
   inline player's last button sat under the navigation bar, and the auto-skip indicator's Cancel
   was covered by the Play/Pause button. In landscape the mini player sits beside the navigation
   rail instead of over it, and the inline video frame has a visible edge on black pages.
+- Picture-in-picture: pressing Home during fullscreen playback now enters PiP on Android 8-11 too
+  (it only did so automatically from Android 12; older releases paused the video instead).
 - Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
   it), Kotlin 2.4.21. Cast framework 23, Core 1.19, Lifecycle 2.11 and OkHttp 5.5 wait for the
   AGP 9 / compileSdk 37 migration they require.
