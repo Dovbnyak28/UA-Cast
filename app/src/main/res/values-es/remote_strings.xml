@@ -5,6 +5,7 @@
     <string name="tv_add_favorite">Añadir a favoritos</string>
     <string name="tv_remove_favorite">Quitar de favoritos</string>
     <string name="remote_title">Mando para TV</string>
+    <string name="settings_remote_summary">Controla Zorik en tu TV desde este teléfono</string>
     <string name="remote_scope_help">Controla Zorik en Android TV, no otras aplicaciones del televisor. Elige cómo navegar.</string>
     <string name="remote_mode_buttons">Mando</string>
     <string name="remote_mode_touchpad">Panel táctil</string>

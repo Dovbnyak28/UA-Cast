@@ -33,6 +33,11 @@ import app.zorik.player.ui.tv.tvFocus
 @Composable
 internal fun RemoteHeaderAction(labelled: Boolean) {
     val state = LocalRemoteHeaderState.current
+    // On a phone the remote icon sat in every screen's header from the first launch, where it only
+    // confused people who had never paired a TV. It is started from Settings now
+    // (RemoteSettingsEntry) and appears here only while a session is live, to show its status and
+    // reopen it. On a TV this is "Pair phone", the receiver's own entry point, and always shows.
+    if (!LocalTvMode.current && !state.connected && !state.connecting && !state.failed) return
     val label = stringResource(if (LocalTvMode.current) R.string.tv_pair_phone else R.string.remote_title)
     val status = when {
         state.connected -> stringResource(R.string.remote_connected)
@@ -63,4 +68,16 @@ private fun RemoteStatusIcon(state: RemoteHeaderState) {
         if (state.connected || state.failed) Box(Modifier.align(Alignment.TopEnd).size(7.dp)
             .background(if (state.connected) UaTheme.palette.routeGreen else UaTheme.palette.routeAmber, CircleShape))
     }
+}
+
+/** The phone's way into the TV remote: a Settings card, since the header no longer carries it. */
+@Composable
+internal fun RemoteSettingsEntry() {
+    if (LocalTvMode.current) return
+    app.zorik.player.ui.settings.SettingsNavigationRow(
+        title = stringResource(R.string.remote_title),
+        subtitle = stringResource(R.string.settings_remote_summary),
+        icon = AppIcons.Remote,
+        onClick = LocalOpenRemote.current,
+    )
 }

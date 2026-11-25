@@ -145,7 +145,12 @@ internal fun SettingsOverview(
             )
         }
     }
-    if (filteredItems.isEmpty() && matchingSettings.isEmpty()) {
+    val remoteTitle = stringResource(R.string.remote_title)
+    val remoteSummary = stringResource(R.string.settings_remote_summary)
+    val remoteMatches = !app.zorik.player.ui.tv.LocalTvMode.current && (normalizedQuery.isEmpty() ||
+        remoteTitle.contains(normalizedQuery, ignoreCase = true) ||
+        remoteSummary.contains(normalizedQuery, ignoreCase = true))
+    if (filteredItems.isEmpty() && matchingSettings.isEmpty() && !remoteMatches) {
         IconHeader(
             icon = AppIcons.Search,
             title = stringResource(R.string.settings_search_no_results, normalizedQuery),
@@ -160,5 +165,6 @@ internal fun SettingsOverview(
                 onClick = item.onClick,
             )
         }
+        if (remoteMatches) app.zorik.player.ui.remote.RemoteSettingsEntry()
     }
 }

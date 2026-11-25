@@ -45,10 +45,16 @@ class RemoteHeaderFlowInstrumentedTest {
         val tv = TvRemoteReceiverViewModel(app)
         store.put("phone", phone); store.put("tv", tv)
         rule.setContent { ZorikTheme(AppTheme.DAYLIGHT) {
-            RemoteControlHost(false, phone, tv) { ScreenHeader("Home", labelRemote = true) }
+            RemoteControlHost(false, phone, tv) {
+                androidx.compose.foundation.layout.Column {
+                    ScreenHeader("Home", labelRemote = true)
+                    RemoteSettingsEntry()
+                }
+            }
         } }
-        rule.onNodeWithText(app.getString(R.string.remote_short_title)).assertIsDisplayed()
-        rule.onNodeWithContentDescription(app.getString(R.string.remote_title)).performClick()
+        // Idle on a phone: no remote icon in the header; the session starts from the Settings card.
+        rule.onNodeWithContentDescription(app.getString(R.string.remote_title)).assertDoesNotExist()
+        rule.onNodeWithText(app.getString(R.string.remote_title)).performClick()
         rule.onNode(hasText(app.getString(R.string.remote_mode_buttons)) and hasAnyAncestor(isDialog())).performClick()
         rule.onNodeWithTag("remote_address").performTextInput(receiver.endpoint.toString())
         rule.onNodeWithTag("remote_code").performTextInput(receiver.pairingCode)
@@ -65,5 +71,7 @@ class RemoteHeaderFlowInstrumentedTest {
         rule.onNodeWithTag("phone_remote_dialog").assertIsDisplayed()
         rule.onNodeWithText(app.getString(R.string.remote_disconnect)).performScrollTo().performClick()
         assertFalse(phone.state.value.connected)
+        // The header shows the remote only while a session is live.
+        rule.onNodeWithContentDescription(app.getString(R.string.remote_title)).assertDoesNotExist()
     }
 }
