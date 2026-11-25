@@ -83,11 +83,8 @@ class CriticalJourneysBenchmark {
     fun enterFullscreen() = measureUiJourney(
         setup = { driver ->
             driver.startMain(this)
-            driver.openChannels()
-            driver.openFirstGroup()
-            driver.openFirstPlayer()
-            // Rotation is setup, not journey: see BenchmarkAppDriver.rotateOpenPlayerToLandscape.
-            driver.rotateOpenPlayerToLandscape()
+            // Rotation is setup, not journey: see BenchmarkAppDriver.openFirstPlayerInLandscape.
+            driver.openFirstPlayerInLandscape()
         },
         journey = { driver ->
             driver.clickDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)

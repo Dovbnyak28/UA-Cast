@@ -67,37 +67,35 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
     fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
 
     /**
-     * Turns the open player to landscape before a fullscreen measurement, so the measured journey
-     * is the switch into the fullscreen overlay alone. Entering fullscreen from portrait also
-     * rotates the display, and those rotation frames - about 5% of the window, i.e. exactly the
-     * p95 - swung `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI emulator
-     * for the same code.
+     * Opens the first channel's player in landscape, so a fullscreen measurement covers the switch
+     * into the fullscreen overlay alone. Entering fullscreen from portrait also rotates the display,
+     * and those rotation frames - about 5% of the window, i.e. exactly the p95 - swung
+     * `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI emulator for the same
+     * code.
      *
-     * The rotation is done with the player already open because navigating in landscape does not
-     * work on the CI emulator's 320dp-tall window: the group and channel names sit below the fold.
-     * The controls can auto-hide during the re-layout; a tap on the left part of the picture brings
-     * them back (the centre is Play/Pause and the corner is Fullscreen, so a centre tap would pause
-     * instead), and the button is looked for again after each tap.
+     * Rotated before the player opens, because rotating an open player hid its controls and
+     * UiAutomator taps on the video did not bring them back on API 30. And reached through the
+     * global search, because on the CI emulator's 320dp-tall landscape window the group and channel
+     * names sit below the fold, while the search field stays at the top. The query is set without the
+     * keyboard (a landscape IME would cover the screen) and is not the full name, so the result row
+     * is the only node with that text. A freshly opened player shows its controls, as in portrait.
      */
-    fun rotateOpenPlayerToLandscape() {
+    fun openFirstPlayerInLandscape() {
         device.setOrientationLandscape()
         check(pollUntil(ROTATION_TIMEOUT_MILLIS) { device.displayWidth > device.displayHeight }) {
             "Device did not rotate to landscape"
         }
         device.waitForIdle()
-        repeat(CONTROLS_REVEAL_ATTEMPTS) {
-            if (device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) return
-            val video = device.findObject(By.desc(VIDEO_FRAME_DESCRIPTION))
-                ?: device.findObject(By.desc(VIDEO_SURFACE_DESCRIPTION))
-            video?.visibleBounds?.let { device.click(it.left + it.width() / VIDEO_TAP_FRACTION, it.centerY()) }
+        clickDescription(CHANNELS_LABEL)
+        val input = requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.EditText")), UI_TIMEOUT_MILLIS)) {
+            "Global channel search field was not found"
         }
-        check(device.wait(Until.hasObject(By.desc(FULLSCREEN_DESCRIPTION)), CONTROLS_SETTLE_MILLIS)) {
-            "Fullscreen button not shown after rotating to landscape; on screen: " +
-                device.findObjects(By.pkg(PACKAGE_NAME)).mapNotNull { it.contentDescription }.distinct()
-        }
+        input.text = FIRST_CHANNEL_QUERY
+        clickText(FIRST_CHANNEL)
+        waitForDescription(FULLSCREEN_DESCRIPTION)
     }
 
-    /** Undoes [rotateOpenPlayerToLandscape]: natural orientation, then the user's rotation setting. */
+    /** Undoes [openFirstPlayerInLandscape]: natural orientation, then the user's rotation setting. */
     fun restoreNaturalOrientation() {
         device.setOrientationNatural()
         device.unfreezeRotation()
@@ -230,12 +228,8 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
         private const val ROTATION_TIMEOUT_MILLIS = 10_000L
-        private const val VIDEO_FRAME_DESCRIPTION = "Video frame displayed"
-        private const val VIDEO_SURFACE_DESCRIPTION = "Video surface"
-        private const val CONTROLS_SETTLE_MILLIS = 2_000L
-        private const val CONTROLS_REVEAL_ATTEMPTS = 4
-        /** Tap at a fifth of the picture's width: clear of Play/Pause and Fullscreen. */
-        private const val VIDEO_TAP_FRACTION = 5
+        /** A distinct part of [FIRST_CHANNEL]: matches it, but is not equal to it in the search field. */
+        private const val FIRST_CHANNEL_QUERY = "Channel 00001"
         private const val POLL_MILLIS = 100L
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
