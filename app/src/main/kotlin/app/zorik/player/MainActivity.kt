@@ -146,6 +146,13 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // API 26-30 only (a no-op elsewhere): those releases have no setAutoEnterEnabled, so Home
+        // during fullscreen playback enters picture-in-picture from here instead of pausing.
+        app.zorik.player.ui.player.PipController.enterOnUserLeave(this)
+    }
+
     override fun onStop() {
         // Also covers language/Activity recreation; no listener or socket survives an invisible owner.
         phoneRemote.disconnect()
