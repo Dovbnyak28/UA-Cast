@@ -66,6 +66,50 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
 
     fun waitForVideoFrame() { waitForDescription("Video frame displayed") }
 
+    /**
+     * Opens the first channel's player in landscape, so a fullscreen measurement covers the switch
+     * into the fullscreen overlay alone. Entering fullscreen from portrait also rotates the display,
+     * and those rotation frames - about 5% of the window, i.e. exactly the p95 - swung
+     * `enterFullscreen frameDurationCpuMs/p95` between 60 and 120 ms on the CI emulator for the same
+     * code.
+     *
+     * Rotated before the player opens, because rotating an open player hid its controls and
+     * UiAutomator taps on the video did not bring them back on API 30. And reached through the
+     * global search, because on the CI emulator's 320dp-tall landscape window the group and channel
+     * names sit below the fold, while the search field stays at the top. The query is set without the
+     * keyboard (a landscape IME would cover the screen) and is not the full name, so the result row
+     * is the only node with that text. A freshly opened player shows its controls, as in portrait.
+     */
+    fun openFirstPlayerInLandscape() {
+        device.setOrientationLandscape()
+        check(pollUntil(ROTATION_TIMEOUT_MILLIS) { device.displayWidth > device.displayHeight }) {
+            "Device did not rotate to landscape"
+        }
+        device.waitForIdle()
+        clickDescription(CHANNELS_LABEL)
+        val input = requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.EditText")), UI_TIMEOUT_MILLIS)) {
+            "Global channel search field was not found"
+        }
+        input.text = FIRST_CHANNEL_QUERY
+        clickText(FIRST_CHANNEL)
+        waitForDescription(FULLSCREEN_DESCRIPTION)
+    }
+
+    /** Undoes [openFirstPlayerInLandscape]: natural orientation, then the user's rotation setting. */
+    fun restoreNaturalOrientation() {
+        device.setOrientationNatural()
+        device.unfreezeRotation()
+    }
+
+    private fun pollUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(POLL_MILLIS)
+        }
+        return condition()
+    }
+
     fun switchChannel() {
         clickText("Next channel")
         waitForDescription("Now playing: Benchmark Channel 00002")
@@ -183,6 +227,10 @@ internal class BenchmarkAppDriver(private val device: UiDevice) {
         const val GUIDE_LABEL = "Guide"
         const val FULLSCREEN_DESCRIPTION = "Fullscreen"
         const val EXIT_FULLSCREEN_DESCRIPTION = "Exit fullscreen"
+        private const val ROTATION_TIMEOUT_MILLIS = 10_000L
+        /** A distinct part of [FIRST_CHANNEL]: matches it, but is not equal to it in the search field. */
+        private const val FIRST_CHANNEL_QUERY = "Channel 00001"
+        private const val POLL_MILLIS = 100L
         const val BACK_DESCRIPTION = "Back"
         const val UI_TIMEOUT_MILLIS = 30_000L
         const val EPG_PARSE_TIMEOUT_MILLIS = 180_000L
