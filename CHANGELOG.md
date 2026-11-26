@@ -24,6 +24,9 @@ local build produces.
   inline player's last button sat under the navigation bar, and the auto-skip indicator's Cancel
   was covered by the Play/Pause button. In landscape the mini player sits beside the navigation
   rail instead of over it, and the inline video frame has a visible edge on black pages.
+- Fullscreen on a phone in landscape uses the compact controls: time, -10 s, seek bar, +10 s and
+  duration share one row and the channel chips are hidden, so the panel covers about a third of
+  the picture instead of half.
 - First launch: the seven-step guided tour is replaced by a three-slide illustrated intro (add a
   playlist, watch, cast to a TV) that ends on "Add playlist", plus one-time tips that appear over
   the real screen the first time it matters - channel search when the channel list first shows up,
@@ -35,6 +38,9 @@ local build produces.
 - Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
   it), Kotlin 2.4.21. Cast framework 23, Core 1.19, Lifecycle 2.11 and OkHttp 5.5 wait for the
   AGP 9 / compileSdk 37 migration they require.
+- The TV remote is started from Settings -> TV remote instead of an icon in every screen's
+  header, which confused first-time users; the header shows it only while a remote session is
+  live. On a TV, "Pair phone" stays in the header.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the
