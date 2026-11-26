@@ -61,7 +61,13 @@ import app.zorik.player.ui.theme.UaTheme
 private const val LIVE_LABEL_MIN_ALPHA = 0.6f
 private const val TOP_SCRIM_END = 0.22f
 private const val BOTTOM_SCRIM_START = 0.70f
-private val SHORT_PLAYER_HEIGHT = 320.dp
+/**
+ * At or below this height a wide player uses the compact controls (inline +/-10 s, no channel chip
+ * row, tighter header). 320dp only caught the smallest windows; phones in landscape are 360-430dp
+ * tall, and the full panel covered about half the video there (seen on a Mi A2, 392dp). Tablets in
+ * landscape (600dp and up) keep the full panel.
+ */
+private val SHORT_PLAYER_HEIGHT = 480.dp
 
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable

@@ -75,12 +75,21 @@ class PlayerShortWindowTest(private val locale: String) {
     }
 
     @Test fun shortChannelNamesHaveSeparateTouchTargets() {
-        render(liveState(), "chips", height = 360)
+        // The chip row belongs to the full panel; phone landscape heights get the compact one.
+        render(liveState(), "chips", height = 520)
         val first = rule.onNodeWithText("1").assertIsDisplayed().fetchSemanticsNode().touchBoundsInRoot
         val second = rule.onNodeWithText("2").assertIsDisplayed().fetchSemanticsNode().touchBoundsInRoot
         assertTrue("Adjacent channel touch targets overlap: $first and $second", first.right <= second.left)
         rule.onNodeWithText("2").performClick()
         assertEquals(2, previewIndex)
+    }
+
+    @Test fun phoneLandscapeUsesCompactControlsSoTheVideoStaysVisible() {
+        // A Mi A2 in landscape is 392dp tall; the full panel with its chip row covered about half
+        // the video there. The compact panel drops the chips and keeps the transport.
+        render(liveState(), "phone_landscape", height = 392)
+        rule.onNodeWithText("1").assertDoesNotExist()
+        rule.onNodeWithContentDescription(context.getString(R.string.player_next)).assertIsDisplayed()
     }
 
     private fun liveState() = PlayerUiState(

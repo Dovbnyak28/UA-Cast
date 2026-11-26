@@ -72,37 +72,73 @@ internal fun FilePlaybackProgress(
     val position = dragged?.let(timeline::positionAt) ?: timeline.position
     val seekLabel = stringResource(R.string.local_video_seek)
     val compact = LocalCompactPlayerControls.current
+    val durationText = if (timeline.duration > 0) filePlaybackTime(timeline.duration) else "--:--"
+    if (compact && available) {
+        // Phone landscape: one 48dp row instead of three, so the panel leaves most of the video
+        // visible. Same controls, same order a viewer reads them in.
+        Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(filePlaybackTime(position), style = CaptionSemibold, color = UaTheme.palette.labelPrimary)
+            FileSeekButton(stringResource(R.string.local_video_rewind_ten), true) {
+                onRelativeSeek(-FILE_SEEK_STEP_MILLIS)
+            }
+            FileSeekSlider(shown, available, seekLabel, position, timeline, onSeek,
+                onDrag = { dragged = it }, onDragEnd = { dragged = null }, dragged = { dragged },
+                modifier = Modifier.weight(1f))
+            FileSeekButton(stringResource(R.string.local_video_forward_ten), true) {
+                onRelativeSeek(FILE_SEEK_STEP_MILLIS)
+            }
+            Text(durationText, style = CaptionSemibold, color = UaTheme.palette.labelSecondary)
+        }
+        return
+    }
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically) {
             Text(filePlaybackTime(position), style = CaptionSemibold, color = UaTheme.palette.labelPrimary)
-            if (compact && available) FileRelativeSeekControls(true, onRelativeSeek)
-            Text(if (timeline.duration > 0) filePlaybackTime(timeline.duration) else "--:--",
-                style = CaptionSemibold, color = UaTheme.palette.labelSecondary)
+            Text(durationText, style = CaptionSemibold, color = UaTheme.palette.labelSecondary)
         }
-        if (available) Slider(
-            value = shown, onValueChange = { dragged = it }, enabled = available,
-            onValueChangeFinished = { dragged?.let { if (available) onSeek(timeline.positionAt(it)) }; dragged = null },
-            colors = SliderDefaults.colors(thumbColor = UaTheme.palette.azure, activeTrackColor = UaTheme.palette.azure,
-                inactiveTrackColor = UaTheme.palette.overlayHighlight),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
-                contentDescription = seekLabel
-                stateDescription = "${filePlaybackTime(position)} / ${filePlaybackTime(timeline.duration)}"
-                setProgress { requested ->
-                    if (available && requested.isFinite()) {
-                        dragged = null
-                        onSeek(timeline.positionAt(requested))
-                        true
-                    } else false
-                }
-            },
-        )
-        if (!compact && available) {
+        if (available) FileSeekSlider(shown, available, seekLabel, position, timeline, onSeek,
+            onDrag = { dragged = it }, onDragEnd = { dragged = null }, dragged = { dragged },
+            modifier = Modifier.fillMaxWidth())
+        if (available) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 FileRelativeSeekControls(available, onRelativeSeek)
             }
         }
     }
+}
+
+@Composable
+@Suppress("LongParameterList") // One slider shared by the stacked and the single-row layout.
+private fun FileSeekSlider(
+    shown: Float,
+    available: Boolean,
+    seekLabel: String,
+    position: Long,
+    timeline: FilePlaybackTimeline,
+    onSeek: (Long) -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    dragged: () -> Float?,
+    modifier: Modifier,
+) {
+    Slider(
+        value = shown, onValueChange = onDrag, enabled = available,
+        onValueChangeFinished = { dragged()?.let { if (available) onSeek(timeline.positionAt(it)) }; onDragEnd() },
+        colors = SliderDefaults.colors(thumbColor = UaTheme.palette.azure, activeTrackColor = UaTheme.palette.azure,
+            inactiveTrackColor = UaTheme.palette.overlayHighlight),
+        modifier = modifier.heightIn(min = 48.dp).semantics {
+            contentDescription = seekLabel
+            stateDescription = "${filePlaybackTime(position)} / ${filePlaybackTime(timeline.duration)}"
+            setProgress { requested ->
+                if (available && requested.isFinite()) {
+                    onDragEnd()
+                    onSeek(timeline.positionAt(requested))
+                    true
+                } else false
+            }
+        },
+    )
 }
 
 @Composable
