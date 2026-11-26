@@ -429,7 +429,7 @@
     <string name="guided_tip_player_swipe">In full screen, swipe sideways to switch channels.</string>
     <string name="guided_tip_player_levels">There, swipe up or down: on the left for brightness, on the right for volume.</string>
     <string name="guided_tip_cast_title">Watch on your TV</string>
-    <string name="guided_tip_cast_chromecast">The Cast button appears when a Chromecast or Android TV is on your network.</string>
+    <string name="guided_tip_cast_chromecast">This button casts the channel to a Chromecast or Android TV on your network.</string>
     <string name="guided_tip_cast_other">“Other TVs” is for Samsung, LG, Sony and other DLNA TVs.</string>
 
     <string name="settings_section_tutorial">Tutorial</string>

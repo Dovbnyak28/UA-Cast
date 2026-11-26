@@ -428,7 +428,7 @@
     <string name="guided_tip_player_swipe">En pantalla completa, desliza a los lados para cambiar de canal.</string>
     <string name="guided_tip_player_levels">Ahí mismo, desliza arriba o abajo: a la izquierda, brillo; a la derecha, volumen.</string>
     <string name="guided_tip_cast_title">Míralo en la tele</string>
-    <string name="guided_tip_cast_chromecast">El botón de enviar aparece cuando hay un Chromecast o un Android TV en tu red.</string>
+    <string name="guided_tip_cast_chromecast">Este botón envía el canal a un Chromecast o Android TV de tu red.</string>
     <string name="guided_tip_cast_other">«Otros TV» sirve para Samsung, LG, Sony y otros televisores con DLNA.</string>
 
     <string name="settings_section_tutorial">Tutorial</string>

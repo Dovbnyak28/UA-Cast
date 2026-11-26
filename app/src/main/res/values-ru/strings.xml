@@ -435,7 +435,7 @@
     <string name="guided_tip_player_swipe">В полноэкранном режиме проведите в сторону, чтобы переключить канал.</string>
     <string name="guided_tip_player_levels">Там же проведите вверх или вниз: слева — яркость, справа — громкость.</string>
     <string name="guided_tip_cast_title">Смотрите на телевизоре</string>
-    <string name="guided_tip_cast_chromecast">Кнопка трансляции появляется, когда в сети есть Chromecast или Android TV.</string>
+    <string name="guided_tip_cast_chromecast">Эта кнопка передаёт канал на Chromecast или Android TV в вашей сети.</string>
     <string name="guided_tip_cast_other">«Другие ТВ» — для Samsung, LG, Sony и других телевизоров с DLNA.</string>
 
     <string name="settings_section_tutorial">Обучение</string>
