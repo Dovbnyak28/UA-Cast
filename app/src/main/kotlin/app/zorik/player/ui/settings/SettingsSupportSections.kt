@@ -219,7 +219,7 @@ internal fun PremiumSettingsSection(premiumSection: PremiumSectionState) {
 
 @Composable
 internal fun TutorialSettingsSection(guidedTourSection: GuidedTourSectionState) {
-    // The phone tour targets touch-only cards that do not exist in the TV grid.
+    // The intro and the tips are for touch screens; the TV grid has none of the tips' targets.
     if (LocalTvMode.current) return
     SettingsSection(title = stringResource(R.string.settings_section_tutorial), icon = AppIcons.HelpCircle) {
         Text(

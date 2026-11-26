@@ -250,8 +250,8 @@ adb pull "/storage/emulated/0/Android/media/app.zorik.player.baselineprofile/Bas
 
 Running the instrumentation directly like this skips Gradle's uninstall-on-completion behavior, so
 the output file is still on the device afterward to pull. The scripted flow now covers the language
-picker, Terms, guided tour, Home, a synthetic playlist restore, Channels, player, fullscreen and
-EPG. The synthetic state is prepared by activities compiled only into `benchmarkRelease` and
+picker, Terms, the intro, Home, a synthetic playlist restore, Channels, player, fullscreen, EPG,
+Favorites and Settings. The synthetic state is prepared by activities compiled only into `benchmarkRelease` and
 `nonMinifiedRelease`; `debug` and shipping `release` do not contain them. Append the previous
 wildcard block (`HSPLapp/zorik/player/**->**(**)**` +
 `HSPLandroidx/media3/exoplayer/**->**(**)**`/`common/**`) to the end rather than replacing it

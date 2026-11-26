@@ -14,7 +14,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import app.zorik.player.R
 import app.zorik.player.core.nav.BottomDestination
-import app.zorik.player.guidedtour.GuidedTourKeys
 import app.zorik.player.ui.components.animationsAllowed
 import app.zorik.player.ui.theme.DUR_NAV
 import app.zorik.player.ui.theme.EaseSpring
@@ -25,14 +24,6 @@ internal fun BottomDestination.labelRes(): Int = when (this) {
     BottomDestination.CHANNELS -> R.string.nav_channels
     BottomDestination.FAVORITES -> R.string.nav_favorites
     BottomDestination.SETTINGS -> R.string.nav_settings
-}
-
-/** Two tabs are tour targets; the other steps point at things inside a screen rather than at the
- * tab that reaches it. Null elsewhere rather than a key nothing uses. */
-internal fun BottomDestination.tourKey(): String? = when (this) {
-    BottomDestination.FAVORITES -> GuidedTourKeys.FAVORITE_BUTTON
-    BottomDestination.SETTINGS -> GuidedTourKeys.SETTINGS_BUTTON
-    else -> null
 }
 
 internal fun BottomDestination.icon() = when (this) {

@@ -209,9 +209,15 @@ private fun InlinePlayerHeaderButtons(
         val dlnaConnected = content.dlnaState.connectedDevice != null
         // On the page, not over video: the same surface as Back and Favourite, so the four header
         // controls share one look (the scrim fill is for the fullscreen overlay).
-        PlayerCastButton(isCasting = isCasting, background = UaTheme.palette.surface1,
-            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON))
-        OtherTvButton(dlnaConnected, { transientState.showDlnaSheet = true }, background = UaTheme.palette.surface1)
+        // One row for both, so the Cast tip can spotlight the pair it explains.
+        Row(
+            modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlayerCastButton(isCasting = isCasting, background = UaTheme.palette.surface1)
+            OtherTvButton(dlnaConnected, { transientState.showDlnaSheet = true }, background = UaTheme.palette.surface1)
+        }
     }
 }
 
@@ -253,6 +259,7 @@ private fun InlineVideoPanel(
                 // On a true-black page (Daylight/Midnight player, landscape) the frame was invisible
                 // and the fullscreen button seemed to float; a hairline gives the video its edge.
                 .border(1.dp, UaTheme.palette.hairline, RoundedCornerShape(RadiusCard))
+                .guidedTourTarget(GuidedTourKeys.PLAYER_VIDEO)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

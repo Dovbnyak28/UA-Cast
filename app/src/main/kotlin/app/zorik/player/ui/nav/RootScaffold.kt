@@ -146,7 +146,6 @@ fun RootScaffold(
     premiumSection: PremiumSectionState,
     guidedTourSection: GuidedTourSectionState,
     modifier: Modifier = Modifier,
-    guidedTourDestination: BottomDestination? = null,
     miniPlayerVisible: Boolean = false,
 ) {
     var navState by rememberSaveable(stateSaver = BottomNavStateSaver) { mutableStateOf(BottomNavState()) }
@@ -157,16 +156,6 @@ fun RootScaffold(
     LaunchedEffect(focusChannelsToken) {
         if (focusChannelsToken > 0) {
             navState = NavBackStackReducer.reduce(navState, BottomNavEvent.Select(BottomDestination.CHANNELS)).state
-        }
-    }
-
-    // The guided tour asking to be on a particular tab, through the same reducer a tap goes through
-    // rather than a second way of changing tabs - so the back stack the user is left with when the
-    // tour ends is one this app could have produced on its own. Null for a step that does not care
-    // where it is shown, and for all of ordinary use.
-    LaunchedEffect(guidedTourDestination) {
-        if (guidedTourDestination != null && guidedTourDestination != navState.current) {
-            navState = NavBackStackReducer.reduce(navState, BottomNavEvent.Select(guidedTourDestination)).state
         }
     }
 
@@ -181,7 +170,6 @@ fun RootScaffold(
             largeTextLabel = stringResource(destination.largeTextLabelRes()),
             icon = destination.icon(),
             selected = destination == navState.current,
-            tourKey = destination.tourKey(),
             contentDescription = stringResource(destination.labelRes()),
             onClick = {
                 navState = NavBackStackReducer.reduce(

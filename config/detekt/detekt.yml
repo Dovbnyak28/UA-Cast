@@ -83,3 +83,6 @@ style:
       # which are fixed specifications rather than theme values (see the file's own doc). 0xFF0057B7
       # is the most readable form Ukraine's blue has, and the property name carries the meaning.
       - '**/ui/theme/FlagColors.kt'
+      # Same reasoning as AppIcons.kt: the intro's pictures are drawn in code, and every number in
+      # them is a fraction of the canvas that only means anything as part of the shape it sits in.
+      - '**/ui/guidedtour/IntroIllustration.kt'

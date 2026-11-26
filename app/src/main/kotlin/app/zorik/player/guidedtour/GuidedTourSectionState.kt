@@ -1,7 +1,7 @@
 package app.zorik.player.guidedtour
 
 /**
- * What Settings needs to offer the tour again, bundled the way
+ * What Settings needs to offer the intro and tips again, bundled the way
  * [app.zorik.player.premium.PremiumSectionState] is - one parameter through `RootScaffold` rather
  * than two, on a signature that is already long enough.
  */

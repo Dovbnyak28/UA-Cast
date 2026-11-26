@@ -27,6 +27,12 @@ local build produces.
 - Fullscreen on a phone in landscape uses the compact controls: time, -10 s, seek bar, +10 s and
   duration share one row and the channel chips are hidden, so the panel covers about a third of
   the picture instead of half.
+- First launch: the seven-step guided tour is replaced by a three-slide illustrated intro (add a
+  playlist, watch, cast to a TV) that ends on "Add playlist", plus one-time tips that appear over
+  the real screen the first time it matters - channel search when the channel list first shows up,
+  the player's gestures on the first playback, Cast and "Other TVs" on the next one. Each tip shows
+  once; Settings → Tutorial → "Intro and tips" brings both back. Users of the old tour see the new
+  intro once.
 - Picture-in-picture: pressing Home during fullscreen playback now enters PiP on Android 8-11 too
   (it only did so automatically from Android 12; older releases paused the video instead).
 - Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against

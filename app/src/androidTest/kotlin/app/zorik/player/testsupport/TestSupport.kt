@@ -21,7 +21,7 @@ import app.zorik.player.AppViewModel
 import app.zorik.player.MainActivity
 import app.zorik.player.R
 import app.zorik.player.acceptTerms
-import app.zorik.player.guidedTourSkip
+import app.zorik.player.dismissAllGuidance
 import app.zorik.player.loadPlaylistFromUrl
 import app.zorik.player.removePlaylistSource
 import app.zorik.player.selectLanguage
@@ -54,9 +54,10 @@ fun appViewModelOf(activity: MainActivity): AppViewModel = ViewModelProvider(act
  * one) avoids MainActivity's language-change `recreate()`.
  *
  * Both of MainActivity's gates are cleared here, in the order it checks them: language picker, then
- * [app.zorik.player.ui.legal.TermsScreen]. The guided tour is not a gate - it draws *over* the app
- * rather than in front of it - but it is dismissed anyway, because an overlay that consumes every
- * touch would make every later `performClick` in these tests hit a scrim.
+ * [app.zorik.player.ui.legal.TermsScreen]. The intro and the tips are not gates - they draw *over*
+ * the app rather than in front of it - but all of them are marked seen anyway, because an overlay
+ * that consumes every touch would make every later `performClick` in these tests hit a scrim, and a
+ * tip appears by itself the first time a channel list or the player is on screen.
  *
  * The name is kept from when there was a third gate (a three-card onboarding pager, since removed).
  * Missing that one did not fail loudly - the app simply sat on the pager and every later
@@ -67,7 +68,7 @@ fun skipOnboarding(activity: MainActivity) {
     val viewModel = appViewModelOf(activity)
     viewModel.selectLanguage(viewModel.uiState.value.language)
     viewModel.acceptTerms()
-    viewModel.guidedTourSkip()
+    viewModel.dismissAllGuidance()
 }
 
 /**

@@ -28,7 +28,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
-import app.zorik.player.ui.guidedtour.guidedTourTarget
 import app.zorik.player.ui.UiTestTags
 import app.zorik.player.ui.theme.AppIcons
 import app.zorik.player.ui.theme.AppTheme
@@ -66,7 +65,7 @@ private fun TabBarButton(item: TabBarItem, largeText: Boolean, modifier: Modifie
     val selectedColor = if (item.selected) UaTheme.palette.azure else UaTheme.palette.labelSecondary
     val shape = RoundedCornerShape(12.dp)
     Row(
-        modifier.then(item.tourKey?.let { Modifier.guidedTourTarget(it) } ?: Modifier)
+        modifier
             .selectable(selected = item.selected, role = Role.Tab, onClick = item.onClick)
             .semantics(mergeDescendants = true) { contentDescription = item.contentDescription }
             .padding(horizontal = 4.dp, vertical = 4.dp),

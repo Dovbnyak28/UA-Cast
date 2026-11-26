@@ -1,37 +1,26 @@
 package app.zorik.player.guidedtour
 
 /**
- * Where the tour is.
+ * What the guidance layer is showing: nothing, the intro, or one tip.
  *
- * [WELCOME] and [DONE] are phases rather than two more entries in [GuidedTourSteps.DEFAULT]: they
- * have no target, no progress position and different buttons, so folding them into the step list
- * would mean every step carrying fields only those two ever use - and the progress indicator would
- * have to subtract them back out to say "3 / 7".
+ * Never both at once - a tip waits until the intro is closed, and only one tip is ever up.
  */
-enum class GuidedTourPhase { IDLE, WELCOME, STEPS, DONE }
+enum class GuidedTourPhase { IDLE, INTRO, TIP }
 
 /**
- * The whole of the tour's state, and the only thing the UI reads.
+ * The whole of the guidance state, and the only thing the UI reads.
  *
- * [stepIndex] is always a valid index into [steps] while [phase] is [GuidedTourPhase.STEPS] -
- * [app.zorik.player.app.GuidedTourController] is what guarantees that, by moving to
- * [GuidedTourPhase.DONE] instead of walking off the end. [currentStep] returning null rather than
- * throwing is the second half of that guarantee: a state that somehow did go out of range renders
- * as no tour at all, not a crash on a screen the user was only being shown how to use.
+ * [introPage] is always a valid index into [pages] while [phase] is [GuidedTourPhase.INTRO], and
+ * [tip] is non-null exactly while it is [GuidedTourPhase.TIP] -
+ * [app.zorik.player.app.GuidedTourController] is what guarantees both.
  */
 data class GuidedTourState(
     val phase: GuidedTourPhase = GuidedTourPhase.IDLE,
-    val stepIndex: Int = 0,
-    val steps: List<GuidedTourStep> = emptyList(),
+    val introPage: Int = 0,
+    val tip: GuidedTip? = null,
+    val pages: List<IntroPage> = IntroPage.entries,
 ) {
     val isVisible: Boolean get() = phase != GuidedTourPhase.IDLE
 
-    val currentStep: GuidedTourStep?
-        get() = if (phase == GuidedTourPhase.STEPS) steps.getOrNull(stepIndex) else null
-
-    /** 1-based, for "3 / 7". Meaningless outside [GuidedTourPhase.STEPS], where the indicator is
-     * not drawn at all. */
-    val stepNumber: Int get() = stepIndex + 1
-
-    val stepCount: Int get() = steps.size
+    val isLastIntroPage: Boolean get() = introPage >= pages.lastIndex
 }

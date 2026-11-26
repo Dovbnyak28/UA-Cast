@@ -1,48 +1,33 @@
 package app.zorik.player.app
 
-import app.zorik.player.core.nav.BottomDestination
+import app.zorik.player.guidedtour.GuidedTip
 import app.zorik.player.guidedtour.GuidedTourPhase
-import app.zorik.player.guidedtour.GuidedTourStep
 import app.zorik.player.guidedtour.GuidedTourStorage
-import app.zorik.player.guidedtour.GuidedTourTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** In-memory stand-in for the two SharedPreferences values. */
+/** In-memory stand-in for the SharedPreferences values. */
 private class FakeTourStorage(
     override var guidedTourCompleted: Boolean = false,
     override var guidedTourVersion: Int = 0,
+    override var guidedTipsSeen: Set<String> = emptySet(),
 ) : GuidedTourStorage
 
 /**
- * The tour's whole decision surface: where Next and Back go, what Skip and Done record, and when the
- * tour offers itself unasked.
+ * The intro's and the tips' whole decision surface: where Next and Back go, what closing records,
+ * when the intro offers itself unasked, and which tips may still show.
  *
- * Two of these are about not annoying someone. A tour that reappeared after being skipped, or after
- * being finished, is a feature that has stopped asking and started nagging - and the only thing
- * standing between the app and that is the pair of values written here.
+ * Most of these are about not annoying someone. An intro that reappeared after being skipped, or a
+ * tip that came back after "Got it", is a feature that has stopped helping and started nagging - and
+ * the only thing standing between the app and that is the values written here.
  */
 class GuidedTourControllerTest {
 
-    private val steps = listOf(
-        step("first", BottomDestination.HOME),
-        step("second", BottomDestination.CHANNELS),
-        step("third", BottomDestination.SETTINGS),
-    )
-
-    private fun step(id: String, destination: BottomDestination) = GuidedTourStep(
-        id = id,
-        titleRes = 1,
-        descriptionRes = 2,
-        target = GuidedTourTarget.Element("key_$id"),
-        destination = destination,
-    )
-
-    private fun controller(storage: GuidedTourStorage, version: Int = 1) =
-        GuidedTourController(storage = storage, steps = steps, version = version)
+    private fun controller(storage: GuidedTourStorage, version: Int = 2) =
+        GuidedTourController(storage = storage, version = version)
 
     @Test
     fun nothingIsShowingUntilSomethingAsksForIt() {
@@ -50,196 +35,196 @@ class GuidedTourControllerTest {
 
         assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
         assertFalse(controller.state.value.isVisible)
-        assertNull(controller.state.value.currentStep)
+        assertNull(controller.state.value.tip)
     }
 
     @Test
-    fun aFirstLaunchOpensOnTheWelcomeCardRatherThanTheFirstStep() {
+    fun aFirstLaunchOpensTheIntroOnItsFirstPage() {
         val controller = controller(FakeTourStorage())
 
         controller.offerOnLaunch()
 
-        assertEquals(GuidedTourPhase.WELCOME, controller.state.value.phase)
-        // The welcome card has no step, so nothing is highlighted behind it.
-        assertNull(controller.state.value.currentStep)
+        assertEquals(GuidedTourPhase.INTRO, controller.state.value.phase)
+        assertEquals(0, controller.state.value.introPage)
     }
 
     @Test
-    fun nextWalksWelcomeThroughEveryStepAndStopsOnTheDoneCard() {
-        val controller = controller(FakeTourStorage())
-        controller.offerOnLaunch()
-
-        controller.next()
-        assertEquals(GuidedTourPhase.STEPS, controller.state.value.phase)
-        assertEquals("first", controller.state.value.currentStep?.id)
-        assertEquals(1, controller.state.value.stepNumber)
-
-        controller.next()
-        assertEquals("second", controller.state.value.currentStep?.id)
-        controller.next()
-        assertEquals("third", controller.state.value.currentStep?.id)
-
-        controller.next()
-        assertEquals(GuidedTourPhase.DONE, controller.state.value.phase)
-    }
-
-    /** The end of the list is where an off-by-one would show up as a crash on the user's screen. */
-    @Test
-    fun nextOnTheDoneCardDoesNothingRatherThanRunningOffTheEnd() {
-        val controller = controller(FakeTourStorage())
-        controller.offerOnLaunch()
-        repeat(steps.size + 1) { controller.next() }
-        assertEquals(GuidedTourPhase.DONE, controller.state.value.phase)
-
-        controller.next()
-        controller.next()
-
-        assertEquals(GuidedTourPhase.DONE, controller.state.value.phase)
-    }
-
-    @Test
-    fun backStepsBackwardsAndThenReturnsToTheWelcomeCard() {
-        val controller = controller(FakeTourStorage())
-        controller.offerOnLaunch()
-        controller.next()
-        controller.next()
-        assertEquals("second", controller.state.value.currentStep?.id)
-
-        controller.back()
-        assertEquals("first", controller.state.value.currentStep?.id)
-
-        // Back off the first step goes somewhere rather than being an inert visible control.
-        controller.back()
-        assertEquals(GuidedTourPhase.WELCOME, controller.state.value.phase)
-    }
-
-    @Test
-    fun backFromTheDoneCardReturnsToTheLastStep() {
-        val controller = controller(FakeTourStorage())
-        controller.offerOnLaunch()
-        repeat(steps.size + 1) { controller.next() }
-        assertEquals(GuidedTourPhase.DONE, controller.state.value.phase)
-
-        controller.back()
-
-        assertEquals(GuidedTourPhase.STEPS, controller.state.value.phase)
-        assertEquals("third", controller.state.value.currentStep?.id)
-    }
-
-    @Test
-    fun skippingClosesTheTourAndIsRememberedTheSameWayFinishingIs() {
+    fun nextWalksThePagesAndTheLastOneFinishesTheIntro() {
         val storage = FakeTourStorage()
         val controller = controller(storage)
         controller.offerOnLaunch()
-        controller.next()
 
-        controller.skip()
+        controller.introNext()
+        assertEquals(1, controller.state.value.introPage)
+        controller.introNext()
+        assertEquals(2, controller.state.value.introPage)
+        assertTrue(controller.state.value.isLastIntroPage)
+
+        controller.introNext()
 
         assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
         assertTrue(storage.guidedTourCompleted)
-        assertEquals(1, storage.guidedTourVersion)
-        assertTrue(controller.hasSeenTour.value)
+        assertEquals(2, storage.guidedTourVersion)
     }
 
     @Test
-    fun completingClosesTheTourAndRecordsIt() {
-        val storage = FakeTourStorage()
-        val controller = controller(storage)
+    fun backStepsAPageAndDoesNothingOnTheFirst() {
+        val controller = controller(FakeTourStorage())
         controller.offerOnLaunch()
-        repeat(steps.size + 1) { controller.next() }
+        controller.introNext()
 
-        controller.complete()
+        controller.introBack()
+        assertEquals(0, controller.state.value.introPage)
+        controller.introBack()
 
-        assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
-        assertTrue(storage.guidedTourCompleted)
-        assertEquals(1, storage.guidedTourVersion)
+        assertEquals(0, controller.state.value.introPage)
+        assertEquals(GuidedTourPhase.INTRO, controller.state.value.phase)
     }
 
-    /** The whole point of recording it: the next launch must not open it again. */
     @Test
-    fun aTourThatWasSkippedDoesNotOfferItselfOnTheNextLaunch() {
+    fun aSwipeReportedPastTheEndIsCoercedToTheLastPage() {
+        val controller = controller(FakeTourStorage())
+        controller.offerOnLaunch()
+
+        controller.goToIntroPage(9)
+
+        assertEquals(2, controller.state.value.introPage)
+    }
+
+    @Test
+    fun skippingIsRememberedExactlyLikeFinishing() {
         val storage = FakeTourStorage()
         controller(storage).apply {
             offerOnLaunch()
-            skip()
+            finishIntro()
         }
 
         val nextLaunch = controller(storage)
         nextLaunch.offerOnLaunch()
 
         assertEquals(GuidedTourPhase.IDLE, nextLaunch.state.value.phase)
+        assertTrue(nextLaunch.hasSeenTour.value)
     }
 
     @Test
-    fun settingsCanStartItAgainAfterItHasBeenSeen() {
+    fun someoneWhoSawTheOldSevenStepTourIsShownTheNewIntroOnce() {
         val storage = FakeTourStorage(guidedTourCompleted = true, guidedTourVersion = 1)
         val controller = controller(storage)
 
+        assertFalse(controller.hasSeenTour.value)
         controller.offerOnLaunch()
+
+        assertEquals(GuidedTourPhase.INTRO, controller.state.value.phase)
+    }
+
+    @Test
+    fun everyTipIsPendingOnAFreshInstallInPriorityOrder() {
+        val controller = controller(FakeTourStorage())
+
+        assertEquals(listOf(GuidedTip.SEARCH, GuidedTip.PLAYER, GuidedTip.CAST), controller.pendingTips.value)
+    }
+
+    @Test
+    fun aTipWaitsForTheIntroToClose() {
+        val controller = controller(FakeTourStorage())
+        controller.offerOnLaunch()
+
+        assertFalse(controller.showTip(GuidedTip.SEARCH))
+        assertEquals(GuidedTourPhase.INTRO, controller.state.value.phase)
+
+        controller.finishIntro()
+
+        assertTrue(controller.showTip(GuidedTip.SEARCH))
+        assertEquals(GuidedTip.SEARCH, controller.state.value.tip)
+    }
+
+    @Test
+    fun onlyOneTipIsEverUp() {
+        val controller = controller(FakeTourStorage(guidedTourCompleted = true, guidedTourVersion = 2))
+        controller.showTip(GuidedTip.PLAYER)
+
+        assertFalse(controller.showTip(GuidedTip.CAST))
+        assertEquals(GuidedTip.PLAYER, controller.state.value.tip)
+    }
+
+    @Test
+    fun aDismissedTipIsNeverOfferedAgain() {
+        val storage = FakeTourStorage(guidedTourCompleted = true, guidedTourVersion = 2)
+        val controller = controller(storage)
+        controller.showTip(GuidedTip.PLAYER)
+
+        controller.dismissTip()
+
         assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
+        assertEquals(setOf("player"), storage.guidedTipsSeen)
+        assertEquals(listOf(GuidedTip.SEARCH, GuidedTip.CAST), controller.pendingTips.value)
+        assertFalse(controller.showTip(GuidedTip.PLAYER))
+        assertEquals(listOf(GuidedTip.SEARCH, GuidedTip.CAST), controller(storage).pendingTips.value)
+    }
+
+    @Test
+    fun settingsBringsBackTheIntroAndEveryTip() {
+        val storage = FakeTourStorage(
+            guidedTourCompleted = true,
+            guidedTourVersion = 2,
+            guidedTipsSeen = setOf("search", "player", "cast"),
+        )
+        val controller = controller(storage)
+        assertTrue(controller.pendingTips.value.isEmpty())
 
         controller.startFromSettings()
 
-        assertEquals(GuidedTourPhase.WELCOME, controller.state.value.phase)
-        assertEquals(3, controller.state.value.stepCount)
+        assertEquals(GuidedTourPhase.INTRO, controller.state.value.phase)
+        assertEquals(GuidedTip.entries, controller.pendingTips.value)
+        assertTrue(storage.guidedTipsSeen.isEmpty())
     }
 
-    /** A restart begins at the beginning, not wherever the last run was abandoned. */
     @Test
-    fun restartingStartsFromTheTop() {
-        val controller = controller(FakeTourStorage())
-        controller.offerOnLaunch()
-        controller.next()
-        controller.next()
-        controller.skip()
+    fun aTipInterruptedByAnOpenedFileComesBackLater() {
+        val storage = FakeTourStorage(guidedTourCompleted = true, guidedTourVersion = 2)
+        val controller = controller(storage)
+        controller.showTip(GuidedTip.SEARCH)
 
-        controller.startFromSettings()
+        controller.interrupt()
 
-        assertEquals(GuidedTourPhase.WELCOME, controller.state.value.phase)
-        assertEquals(0, controller.state.value.stepIndex)
+        assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
+        assertTrue(storage.guidedTipsSeen.isEmpty())
+        assertTrue(GuidedTip.SEARCH in controller.pendingTips.value)
     }
 
-    /**
-     * A build that ships a newer edition offers it once to someone who finished the old one - which
-     * is the only reason the version is stored beside the flag at all.
-     */
     @Test
-    fun aNewerEditionIsOfferedAgainToSomeoneWhoFinishedTheOldOne() {
-        val storage = FakeTourStorage(guidedTourCompleted = true, guidedTourVersion = 1)
-
-        val controller = controller(storage, version = 2)
+    fun anIntroInterruptedByAnOpenedFileCountsAsSkipped() {
+        val storage = FakeTourStorage()
+        val controller = controller(storage)
         controller.offerOnLaunch()
 
-        assertEquals(GuidedTourPhase.WELCOME, controller.state.value.phase)
-        assertFalse("the row must not claim the new edition was seen", controller.hasSeenTour.value)
+        controller.interrupt()
 
-        controller.skip()
-        assertEquals(2, storage.guidedTourVersion)
+        assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
+        assertTrue(storage.guidedTourCompleted)
     }
 
-    /** Calling it twice - from a recomposed effect, say - must not restart a tour in progress. */
     @Test
-    fun offeringItWhileItIsAlreadyOpenLeavesTheUserWhereTheyWere() {
-        val controller = controller(FakeTourStorage())
-        controller.offerOnLaunch()
-        controller.next()
-        controller.next()
-
+    fun dismissAllLeavesNothingToShow() {
+        val storage = FakeTourStorage()
+        val controller = controller(storage)
         controller.offerOnLaunch()
 
-        assertEquals("second", controller.state.value.currentStep?.id)
+        controller.dismissAll()
+
+        assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
+        assertTrue(controller.pendingTips.value.isEmpty())
+        assertTrue(storage.guidedTourCompleted)
+        assertEquals(GuidedTip.entries.map(GuidedTip::id).toSet(), storage.guidedTipsSeen)
     }
 
-    /** A tour with no steps at all - a catalogue emptied by a bad edit - must close cleanly rather
-     * than showing a card with nothing on it. */
     @Test
-    fun anEmptyStepListEndsAtTheDoneCardInsteadOfShowingABlankStep() {
-        val controller = GuidedTourController(storage = FakeTourStorage(), steps = emptyList(), version = 1)
-        controller.offerOnLaunch()
+    fun dismissingWithNoTipUpRecordsNothing() {
+        val storage = FakeTourStorage()
+        val controller = controller(storage)
 
-        controller.next()
+        controller.dismissTip()
 
-        assertEquals(GuidedTourPhase.DONE, controller.state.value.phase)
-        assertNull(controller.state.value.currentStep)
+        assertTrue(storage.guidedTipsSeen.isEmpty())
     }
 }

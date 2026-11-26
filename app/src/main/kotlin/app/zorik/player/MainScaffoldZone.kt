@@ -9,7 +9,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.zorik.player.core.i18n.AppLanguage
-import app.zorik.player.core.nav.BottomDestination
 import app.zorik.player.favorites.FavoriteKey
 import app.zorik.player.guidedtour.GuidedTourSectionState
 import app.zorik.player.playlist.M3uChannel
@@ -57,7 +56,6 @@ internal fun ScaffoldZone(
     importBackupFile: () -> Unit,
     requireParentalControlUnlock: (() -> Unit) -> Unit,
     premiumSection: PremiumSectionState,
-    guidedTourDestination: BottomDestination?,
 ) {
     val playlistSources by viewModel.playlistSources.collectAsStateWithLifecycle()
     val activePlaylistSourceId by viewModel.activePlaylistSourceId.collectAsStateWithLifecycle()
@@ -232,7 +230,6 @@ internal fun ScaffoldZone(
                     remuxEffectiveness = remuxEffectiveness,
                     premiumSection = premiumSection,
                     guidedTourSection = guidedTourSection,
-                    guidedTourDestination = guidedTourDestination,
                 )
             }
         }

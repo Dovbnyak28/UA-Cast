@@ -1,24 +1,28 @@
 package app.zorik.player.guidedtour
 
 /**
- * The two values the tour remembers, as an interface so
+ * What the intro and the tips remember, as an interface so
  * [app.zorik.player.app.GuidedTourController] can be tested without Android's SharedPreferences.
  * Implemented by [app.zorik.player.data.prefs.AppPreferences], the same way
  * [app.zorik.player.premium.LicenseStorage] is.
  */
 interface GuidedTourStorage {
 
-    /** Set when the user finishes *or* skips. Skipping is a decision, and asking again on the next
-     * launch would be ignoring it. */
+    /** Set when the user finishes *or* skips the intro. Skipping is a decision, and asking again on
+     * the next launch would be ignoring it. */
     var guidedTourCompleted: Boolean
 
-    /** Which edition of the tour the flag above refers to. 0 means "no tour has ever been seen",
-     * which is also what a device that predates this feature reads. */
+    /** Which edition of the intro the flag above refers to. 0 means "never seen", which is also what
+     * a device that predates this feature reads. */
     var guidedTourVersion: Int
+
+    /** The [GuidedTip.id]s already dismissed. A tip in here never shows again until Settings'
+     * "show again" clears the set. */
+    var guidedTipsSeen: Set<String>
 }
 
 /**
- * Whether the tour should open by itself.
+ * Whether the intro should open by itself.
  *
  * Two rules, and the second is the reason the version is stored at all:
  *
