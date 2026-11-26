@@ -178,8 +178,9 @@ internal fun MainAppContent(
     }
     val tipConditions = GuidedTipConditions(
         pending = pendingGuidedTips,
-        enabled = !television && noScreenOverApp(showHelp, showTerms, showPrivacyPolicy, showAddPlaylist),
+        enabled = noScreenOverApp(showHelp, showTerms, showPrivacyPolicy, showAddPlaylist),
         playerExpanded = playerRequest != null && playerContainerState == PlayerContainerStateMachine.State.EXPANDED,
+        supported = !television,
     )
 
     // Wraps everything, including the player and the dialogs: the intro and the tips are drawn over
