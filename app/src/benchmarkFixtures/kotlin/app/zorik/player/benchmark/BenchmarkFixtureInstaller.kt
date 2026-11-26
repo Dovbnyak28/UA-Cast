@@ -12,6 +12,7 @@ import app.zorik.player.epg.EpgIndex
 import app.zorik.player.epg.EpgProgramme
 import app.zorik.player.epg.EpgSnapshotCodec
 import app.zorik.player.epg.EpgSnapshotHeader
+import app.zorik.player.guidedtour.GuidedTip
 import app.zorik.player.guidedtour.GuidedTourVersion
 import app.zorik.player.playlist.M3uChannel
 import app.zorik.player.playlist.PlaylistSnapshot
@@ -149,6 +150,9 @@ internal object BenchmarkFixtureInstaller {
             hasAcceptedTerms = true
             guidedTourCompleted = true
             guidedTourVersion = GuidedTourVersion.CURRENT
+            // Every tip seen too: one would otherwise appear over the first channel list or player
+            // a journey opens, and both swallow taps and add frames the budgets do not expect.
+            guidedTipsSeen = GuidedTip.entries.map(GuidedTip::id).toSet()
             activePlaylistSourceId = SOURCE_ID
             customEpgUrl = EPG_URL
             hasChosenEpgSource = true

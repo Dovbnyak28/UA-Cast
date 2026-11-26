@@ -22,7 +22,9 @@ import app.zorik.player.testing.RequiresComposeTestManifest
 import app.zorik.player.ui.language.LanguagePickerScreen
 import app.zorik.player.guidedtour.GuidedTourPhase
 import app.zorik.player.guidedtour.GuidedTourState
-import app.zorik.player.guidedtour.GuidedTourSteps
+import app.zorik.player.guidedtour.GuidedTip
+import app.zorik.player.ui.guidedtour.GuidedTipCard
+import app.zorik.player.ui.guidedtour.GuidedTourCallbacks
 import app.zorik.player.ui.guidedtour.GuidedTourOverlay
 import app.zorik.player.ui.theme.AppTheme
 import app.zorik.player.ui.theme.ZorikTheme
@@ -111,40 +113,36 @@ class FontScaleLayoutTest(private val fontScale: Float) {
     }
 
     /**
-     * The guided tour's step card is the densest row of controls in the app - Skip, Back and Next
-     * side by side - and it replaced the onboarding walkthrough this test used to cover. At 2.0x on
-     * a 4.5" viewport that row is the first thing that would push its primary action off the edge.
+     * The intro's buttons sit under a pager whose text grows with the font. At 2.0x on a 4.5"
+     * viewport that text is the first thing that would push Next off the bottom edge - the pages
+     * scroll instead, and the buttons stay put.
      */
     @Test
-    fun guidedTour_nextButtonStaysOnScreen() {
+    fun intro_nextButtonStaysOnScreen() {
         setContentAtScale {
-            GuidedTourOverlay(
-                state = GuidedTourState(
-                    phase = GuidedTourPhase.STEPS,
-                    stepIndex = 0,
-                    steps = GuidedTourSteps.DEFAULT,
-                ),
-                onNext = {},
-                onBack = {},
-                onSkip = {},
-                onComplete = {},
-            )
+            GuidedTourOverlay(state = GuidedTourState(phase = GuidedTourPhase.INTRO), callbacks = GuidedTourCallbacks())
         }
         assertFullyOnScreen("Далі")
     }
 
     @Test
-    fun guidedTour_welcomeStartButtonStaysOnScreen() {
+    fun intro_addPlaylistAndLaterStayOnScreen() {
         setContentAtScale {
             GuidedTourOverlay(
-                state = GuidedTourState(phase = GuidedTourPhase.WELCOME, steps = GuidedTourSteps.DEFAULT),
-                onNext = {},
-                onBack = {},
-                onSkip = {},
-                onComplete = {},
+                state = GuidedTourState(phase = GuidedTourPhase.INTRO, introPage = 2),
+                callbacks = GuidedTourCallbacks(),
             )
         }
         assertFullyOnScreen("Додати плейлист")
+        assertFullyOnScreen("Пізніше")
+    }
+
+    @Test
+    fun guidedTip_gotItStaysOnScreen() {
+        setContentAtScale {
+            GuidedTipCard(tip = GuidedTip.PLAYER, onDismiss = {})
+        }
+        assertFullyOnScreen("Зрозуміло")
     }
 
     @Test

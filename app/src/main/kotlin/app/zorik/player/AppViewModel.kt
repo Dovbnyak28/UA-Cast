@@ -14,6 +14,7 @@ import app.zorik.player.app.ParentalControlController
 import app.zorik.player.app.PlaylistController
 import app.zorik.player.app.SettingsController
 import app.zorik.player.app.GuidedTourController
+import app.zorik.player.guidedtour.GuidedTip
 import app.zorik.player.guidedtour.GuidedTourState
 import app.zorik.player.data.premium.FakeBillingProvider
 import app.zorik.player.data.premium.PremiumRepository
@@ -135,6 +136,7 @@ class AppViewModel @JvmOverloads constructor(
     internal val guidedTourController = GuidedTourController(storage = preferences)
     val guidedTourState: StateFlow<GuidedTourState> = guidedTourController.state
     val hasSeenGuidedTour: StateFlow<Boolean> = guidedTourController.hasSeenTour
+    val pendingGuidedTips: StateFlow<List<GuidedTip>> = guidedTourController.pendingTips
 
     /**
      * Premium access. There is no `PremiumController` beside the other controllers on purpose:

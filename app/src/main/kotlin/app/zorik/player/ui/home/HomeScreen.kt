@@ -37,8 +37,6 @@ import app.zorik.player.R
 import app.zorik.player.ads.AdPlacement
 import app.zorik.player.ui.ads.BannerAdSlot
 import app.zorik.player.data.playlist.resolveHomeContent
-import app.zorik.player.guidedtour.GuidedTourKeys
-import app.zorik.player.ui.guidedtour.guidedTourTarget
 import app.zorik.player.epg.EpgLookup
 import app.zorik.player.epg.EpgUiState
 import app.zorik.player.epg.ProgrammeProgress
@@ -161,7 +159,7 @@ fun HomeScreen(
             item(key = "source") {
                 HomePlaylistCard(playlistState, epgState, totalChannels, favorites.size, onRefreshPlaylist,
                     onChangeSource = { showSourceSheet = true }, onOpenEpgSettings = source.onOpenEpgSettings,
-                    modifier = Modifier.guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD), onRetryEpg = source.onRetryEpg)
+                    onRetryEpg = source.onRetryEpg)
             }
             homeContent.continueWatching?.let { channel ->
                 item(key = "continue") {
@@ -286,8 +284,7 @@ private fun HomeNoChannelsState(
             leadingIcon = if (retryExisting) AppIcons.Refresh else AppIcons.Upload,
             modifier = Modifier
                 .padding(top = GapM)
-                .fillMaxWidth()
-                .guidedTourTarget(GuidedTourKeys.PLAYLIST_ADD),
+                .fillMaxWidth(),
         )
     }
 }

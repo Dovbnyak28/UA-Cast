@@ -213,6 +213,12 @@ class AppPreferences(
         get() = prefs.getInt(KEY_GUIDED_TOUR_VERSION, 0)
         set(value) = prefs.edit { putInt(KEY_GUIDED_TOUR_VERSION, value) }
 
+    /** Copied out, never handed back as the set SharedPreferences returns: that instance must not be
+     * modified, and a caller adding to it would corrupt the stored value without saving it. */
+    override var guidedTipsSeen: Set<String>
+        get() = prefs.getStringSet(KEY_GUIDED_TIPS_SEEN, null)?.toSet().orEmpty()
+        set(value) = prefs.edit { putStringSet(KEY_GUIDED_TIPS_SEEN, value.toSet()) }
+
     /** Legacy single-playlist label, only still read once during
      * `PlaylistRepository.migrateLegacySnapshotIfNeeded` - display names now live per-source in
      * `app.zorik.player.playlist.PlaylistSource`. */
@@ -391,6 +397,7 @@ class AppPreferences(
         // the tour, and offering it to them once is the point of removing them.
         const val KEY_GUIDED_TOUR_COMPLETED = "guided_tour_completed"
         const val KEY_GUIDED_TOUR_VERSION = "guided_tour_version"
+        const val KEY_GUIDED_TIPS_SEEN = "guided_tips_seen"
         const val KEY_PLAYLIST_DISPLAY_NAME = "playlist_display_name"
         const val KEY_ACTIVE_PLAYLIST_SOURCE_ID = "active_playlist_source_id"
         const val KEY_LAST_WATCHED_CHANNEL = "last_watched_channel_key"

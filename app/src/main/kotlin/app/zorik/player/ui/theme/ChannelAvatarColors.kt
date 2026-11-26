@@ -28,6 +28,12 @@ internal object ChannelAvatarColors {
         val (top, bottom) = pairs[Math.floorMod(name.hashCode(), pairs.size)]
         return Brush.linearGradient(listOf(top, bottom))
     }
+
+    /** The [index]th pair, wrapping - for drawings that want several distinct tiles in a row. */
+    fun brushAt(index: Int): Brush {
+        val (top, bottom) = pairs[Math.floorMod(index, pairs.size)]
+        return Brush.linearGradient(listOf(top, bottom))
+    }
 }
 
 private val RoseOnDark = Color(0xFFFB7185)

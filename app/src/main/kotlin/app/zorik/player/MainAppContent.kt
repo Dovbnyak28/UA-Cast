@@ -28,6 +28,8 @@ import app.zorik.player.player.PlayerRequest
 import app.zorik.player.parentalcontrol.PlayerChannelAccess
 import app.zorik.player.playlist.M3uChannel
 import app.zorik.player.premium.PremiumSectionState
+import app.zorik.player.ui.guidedtour.GuidedTipConditions
+import app.zorik.player.ui.guidedtour.GuidedTourCallbacks
 import app.zorik.player.ui.guidedtour.GuidedTourHost
 import app.zorik.player.ui.nav.AdaptiveRootLayout
 import app.zorik.player.ui.tv.LocalTvMode
@@ -130,7 +132,7 @@ internal fun MainAppContent(
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showAddPlaylist by remember { mutableStateOf(false) }
     val guidedTourState by viewModel.guidedTourState.collectAsStateWithLifecycle()
-    val hasSeenGuidedTour by viewModel.hasSeenGuidedTour.collectAsStateWithLifecycle()
+    val pendingGuidedTips by viewModel.pendingGuidedTips.collectAsStateWithLifecycle()
 
     // Offered here rather than from AppViewModel's init, so it happens *after* the language and
     // terms gates rather than behind them.
@@ -160,12 +162,32 @@ internal fun MainAppContent(
         onMissing = { savedPlayerRequest = null },
     )
 
-    // Wraps everything, including the player and the dialogs: the tour is drawn over the app, and
-    // the app is what it is pointing at. Placed here rather than inside ScaffoldZone so a target
-    // registered anywhere - the player Cast button, a channel row's star - reaches the same
-    // registry.
+    val guidedTourCallbacks = remember(viewModel) {
+        GuidedTourCallbacks(
+            onIntroNext = viewModel::introNext,
+            onIntroBack = viewModel::introBack,
+            onIntroPageSettled = viewModel::goToIntroPage,
+            onFinishIntro = viewModel::finishIntro,
+            onAddPlaylist = {
+                viewModel.finishIntro()
+                showAddPlaylist = true
+            },
+            onShowTip = { tip -> viewModel.showGuidedTip(tip) },
+            onDismissTip = viewModel::dismissGuidedTip,
+        )
+    }
+    val tipConditions = GuidedTipConditions(
+        pending = pendingGuidedTips,
+        enabled = !television && noScreenOverApp(showHelp, showTerms, showPrivacyPolicy, showAddPlaylist),
+        playerExpanded = playerRequest != null && playerContainerState == PlayerContainerStateMachine.State.EXPANDED,
+    )
+
+    // Wraps everything, including the player and the dialogs: the intro and the tips are drawn over
+    // the app, and the app is what the tips point at. Placed here rather than inside ScaffoldZone so
+    // a target registered anywhere - the player's video and Cast buttons, the channel search -
+    // reaches the same registry.
     app.zorik.player.ui.media.LocalVideoDocumentHost(onVideo = { video ->
-        viewModel.guidedTourSkip()
+        viewModel.interruptGuidedTour()
         showHelp = false
         showTerms = false
         showPrivacyPolicy = false
@@ -175,14 +197,9 @@ internal fun MainAppContent(
     }) {
     GuidedTourHost(
         state = guidedTourState,
-        onNext = viewModel::guidedTourNext,
-        onBack = viewModel::guidedTourBack,
-        onSkip = viewModel::guidedTourSkip,
-        onAddPlaylist = {
-            viewModel.guidedTourSkip()
-            showAddPlaylist = true
-        },
-        onComplete = viewModel::guidedTourComplete,
+        callbacks = guidedTourCallbacks,
+        tips = tipConditions,
+        hasChannels = playlistState.channels.isNotEmpty(),
     ) {
         val entitlements by viewModel.entitlements.collectAsStateWithLifecycle()
         val premiumProducts by viewModel.premiumProducts.collectAsStateWithLifecycle()
@@ -267,7 +284,6 @@ internal fun MainAppContent(
                                 playerContainerState, hasRequest = playerRequest != null,
                             ),
                             playlistState = playlistState,
-                            guidedTourDestination = guidedTourState.currentStep?.destination,
                             currentLanguage = currentLanguage,
                             currentAppTheme = currentAppTheme,
                             onExitApp = onFinish,
@@ -334,3 +350,7 @@ internal fun MainAppContent(
     }
     }
 }
+
+/** True while none of the full-screen pages that sit over the app is open - the tips' "nobody is in
+ * the middle of something" rule. */
+private fun noScreenOverApp(vararg screensOpen: Boolean): Boolean = screensOpen.none { it }

@@ -22,12 +22,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import app.zorik.player.R
-import app.zorik.player.guidedtour.GuidedTourKeys
 import app.zorik.player.player.PlayerUiState
 import app.zorik.player.ui.components.GradientPlayButton
 import app.zorik.player.ui.components.RoundIconButton
 import app.zorik.player.ui.components.SmallRoundIconButton
-import app.zorik.player.ui.guidedtour.guidedTourTarget
 import app.zorik.player.ui.theme.AppIcons
 import app.zorik.player.ui.theme.DisplayName
 import app.zorik.player.ui.theme.Caption
@@ -56,8 +54,7 @@ internal fun PlayerOverlayHeader(
                     background = UaTheme.palette.scrimBackground)
                 if (stacked) Box(Modifier.weight(1f)) else OverlayMediaName(state, Modifier.weight(1f))
                 if (!stacked && showsBroadcastBadge(state)) LiveIndicator()
-                PlayerCastButton(isCasting = state.isCasting,
-                    modifier = Modifier.guidedTourTarget(GuidedTourKeys.CAST_BUTTON))
+                PlayerCastButton(isCasting = state.isCasting)
                 OtherTvButton(isDlnaCasting, onDevices)
                 SmallRoundIconButton(AppIcons.More, onActions,
                     contentDescription = stringResource(R.string.player_more_controls),

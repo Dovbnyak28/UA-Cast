@@ -28,7 +28,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.zorik.player.ui.UiTestTags
-import app.zorik.player.ui.guidedtour.guidedTourTarget
 import app.zorik.player.ui.theme.CaptionSemibold
 import app.zorik.player.ui.theme.RadiusItem
 import app.zorik.player.ui.theme.UaTheme
@@ -65,7 +64,6 @@ fun GlassNavigationRail(items: List<TabBarItem>, modifier: Modifier = Modifier) 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(item.tourKey?.let { Modifier.guidedTourTarget(it) } ?: Modifier)
                         .clip(RoundedCornerShape(RadiusItem))
                         .then(
                             if (item.selected) {
