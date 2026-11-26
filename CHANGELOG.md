@@ -24,6 +24,9 @@ local build produces.
   inline player's last button sat under the navigation bar, and the auto-skip indicator's Cancel
   was covered by the Play/Pause button. In landscape the mini player sits beside the navigation
   rail instead of over it, and the inline video frame has a visible edge on black pages.
+- Fullscreen on a phone in landscape uses the compact controls: time, -10 s, seek bar, +10 s and
+  duration share one row and the channel chips are hidden, so the panel covers about a third of
+  the picture instead of half.
 - Picture-in-picture: pressing Home during fullscreen playback now enters PiP on Android 8-11 too
   (it only did so automatically from Android 12; older releases paused the video instead).
 - Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
