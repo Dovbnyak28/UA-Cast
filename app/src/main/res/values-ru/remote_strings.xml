@@ -5,6 +5,7 @@
     <string name="tv_add_favorite">В избранное</string>
     <string name="tv_remove_favorite">Убрать из избранного</string>
     <string name="remote_title">Пульт для TV</string>
+    <string name="settings_remote_summary">Управляйте Zorik на телевизоре с этого телефона</string>
     <string name="remote_scope_help">Управляйте Zorik на Android TV, а не другими приложениями телевизора. Выберите способ навигации.</string>
     <string name="remote_mode_buttons">Пульт</string>
     <string name="remote_mode_touchpad">Тачпад</string>

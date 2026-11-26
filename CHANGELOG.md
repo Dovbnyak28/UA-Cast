@@ -32,6 +32,9 @@ local build produces.
 - Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
   it), Kotlin 2.4.21. Cast framework 23, Core 1.19, Lifecycle 2.11 and OkHttp 5.5 wait for the
   AGP 9 / compileSdk 37 migration they require.
+- The TV remote is started from Settings -> TV remote instead of an icon in every screen's
+  header, which confused first-time users; the header shows it only while a remote session is
+  live. On a TV, "Pair phone" stays in the header.
 - Removed the in-app GitHub updater from every build: the app no longer checks GitHub, downloads or
   installs APKs, and no longer declares `REQUEST_INSTALL_PACKAGES` or
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. GitHub users update by installing the next release over the

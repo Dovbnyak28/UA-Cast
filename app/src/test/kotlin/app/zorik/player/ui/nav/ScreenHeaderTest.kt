@@ -51,7 +51,13 @@ class ScreenHeaderTest {
         rule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                 ZorikTheme(AppTheme.DAYLIGHT) {
-                    ScreenHeader("Джерела каналів і телегід", onBack = {})
+                    // The header carries the remote only during a live session on a phone.
+                    CompositionLocalProvider(
+                        app.zorik.player.ui.remote.LocalRemoteHeaderState provides
+                            app.zorik.player.ui.remote.RemoteHeaderState(connected = true),
+                    ) {
+                        ScreenHeader("Джерела каналів і телегід", onBack = {})
+                    }
                 }
             }
         }
