@@ -30,10 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -118,9 +117,11 @@ fun GuidedTourOverlay(
 /**
  * The dimmed screen with a hole over the tip's element, and the tip's card in the other half.
  *
- * The hole is one even-odd path rather than a layer cleared with `BlendMode.Clear`, which needs its
- * own offscreen compositing layer - a cost paid on every frame, on the low-end devices this app
- * explicitly supports.
+ * The dim with its hole is one very wide stroke around a rounded rectangle - see [drawScrimAround].
+ * Not an even-odd path and not a layer cleared with `BlendMode.Clear`: both cost real time on every
+ * frame, and the player page under the player tips redraws every frame while video plays. Measured
+ * on a Mi A2 (Snapdragon 660, minified build): the path version took the page from a median 11 ms
+ * frame to 29 ms, every frame janky, for as long as a tip was up.
  *
  * A tap anywhere dismisses, like "Got it": a tip is a hint, not a gate, and making someone find the
  * one button that closes it would turn it into one.
@@ -161,12 +162,7 @@ private fun TipOverlay(tip: GuidedTip, onDismiss: () -> Unit) {
                 return@Canvas
             }
             val inflated = hole.inflate(padPx)
-            val path = Path().apply {
-                fillType = PathFillType.EvenOdd
-                addRect(Rect(Offset.Zero, size))
-                addRoundRect(RoundRect(inflated, CornerRadius(cornerPx, cornerPx)))
-            }
-            drawPath(path = path, color = scrimColor)
+            drawScrimAround(inflated, cornerPx, scrimColor)
             val reach = ringReachPx * pulse.value
             val ring = inflated.inflate(reach)
             drawRoundRect(
@@ -181,6 +177,29 @@ private fun TipOverlay(tip: GuidedTip, onDismiss: () -> Unit) {
             GuidedTipCard(tip = tip, onDismiss = onDismiss)
         }
     }
+}
+
+/**
+ * Dims everything outside [hole], leaving it clear with corners of [cornerPx].
+ *
+ * Drawn as a single stroke of a rounded rectangle, centred half a stroke outside the hole: the
+ * stroke's inner edge is then exactly the hole (a rounded rectangle shrunk by half the stroke keeps
+ * radius [cornerPx]) and its outer edge lies beyond every corner of the screen. A stroked rounded
+ * rectangle is one of the shapes the GPU renderer draws analytically, where an arbitrary path has to
+ * be tessellated again each frame.
+ */
+private fun DrawScope.drawScrimAround(hole: Rect, cornerPx: Float, color: Color) {
+    // Twice the longer side always exceeds the screen diagonal, so the outer edge covers every pixel
+    // whichever corner of the screen the hole sits in.
+    val stroke = 2f * maxOf(size.width, size.height)
+    val half = stroke / 2f
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(hole.left - half, hole.top - half),
+        size = Size(hole.width + stroke, hole.height + stroke),
+        cornerRadius = CornerRadius(cornerPx + half, cornerPx + half),
+        style = Stroke(width = stroke),
+    )
 }
 
 /** 0 -> 1 on a loop, or a fixed 0 with reduced effects: the ring then sits still on the hole's

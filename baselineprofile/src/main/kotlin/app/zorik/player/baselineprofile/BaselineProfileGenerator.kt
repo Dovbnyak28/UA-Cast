@@ -1,5 +1,6 @@
 package app.zorik.player.baselineprofile
 
+import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
@@ -55,11 +56,47 @@ class BaselineProfileGenerator {
         pressHome()
         startActivityAndWait()
 
+        // Only the first iteration starts from a fresh install. The fixture below writes a chosen
+        // language and accepted terms, so every later iteration opens straight on Home - and
+        // waiting for a language picker there used to fail the whole run on iteration 2. The first
+        // iteration's first-run code stays in the collected profile, which accumulates.
+        if (device.wait(Until.hasObject(By.clazz("android.widget.RadioButton")), GATE_TIMEOUT_MILLIS) == true) {
+            walkFirstRun()
+        }
+
+        // Home, past every gate and with the intro closed.
+        check(
+            device.wait(Until.hasObject(By.pkg(packageName).depth(0)), GATE_TIMEOUT_MILLIS),
+        ) { "Timed out waiting for Home after completing the intro" }
+        device.waitForIdle()
+
+        val driver = BenchmarkAppDriver(device)
+        driver.prepareFixture(BenchmarkAppDriver.MODE_PROFILE, clearPackage = false)
+        startActivityAndWait()
+        driver.openChannels()
+        driver.openFirstGroup()
+        driver.openFirstPlayer()
+        driver.clickDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
+        driver.waitForDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
+        driver.clickDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
+        driver.waitForDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
+        driver.exitPlayerToChannelList()
+        driver.openFirstChannelActions()
+        driver.clickText(BenchmarkAppDriver.GUIDE_LABEL)
+        driver.waitForGuideProgramme()
+        device.waitForIdle()
+        // The two tabs the old tour used to walk through; nothing else in this journey reaches them.
+        device.pressBack()
+        driver.clickDescription(FAVORITES_LABEL)
+        device.waitForIdle()
+        driver.clickDescription(SETTINGS_LABEL)
+        device.waitForIdle()
+    }
+
+    /** Language picker, Terms and the three intro pages - what a fresh install walks through. */
+    private fun MacrobenchmarkScope.walkFirstRun() {
         // Language picker: pick whichever language sorts first (AppLanguage.entries order) - which
         // one doesn't matter for what gets profiled, every language renders through the same code.
-        check(
-            device.wait(Until.hasObject(By.clazz("android.widget.RadioButton")), GATE_TIMEOUT_MILLIS),
-        ) { "Timed out waiting for the language picker" }
         requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.RadioButton")), GATE_TIMEOUT_MILLIS)) {
             "Language picker reported ready but exposed no RadioButton"
         }.click()
@@ -95,33 +132,5 @@ class BaselineProfileGenerator {
             // The pager animates to the next page, so its buttons are not settled until this does.
             device.waitForIdle()
         }
-
-        // Home, past every gate and with the intro closed.
-        check(
-            device.wait(Until.hasObject(By.pkg(packageName).depth(0)), GATE_TIMEOUT_MILLIS),
-        ) { "Timed out waiting for Home after completing the intro" }
-        device.waitForIdle()
-
-        val driver = BenchmarkAppDriver(device)
-        driver.prepareFixture(BenchmarkAppDriver.MODE_PROFILE, clearPackage = false)
-        startActivityAndWait()
-        driver.openChannels()
-        driver.openFirstGroup()
-        driver.openFirstPlayer()
-        driver.clickDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
-        driver.waitForDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
-        driver.clickDescription(BenchmarkAppDriver.EXIT_FULLSCREEN_DESCRIPTION)
-        driver.waitForDescription(BenchmarkAppDriver.FULLSCREEN_DESCRIPTION)
-        driver.exitPlayerToChannelList()
-        driver.openFirstChannelActions()
-        driver.clickText(BenchmarkAppDriver.GUIDE_LABEL)
-        driver.waitForGuideProgramme()
-        device.waitForIdle()
-        // The two tabs the old tour used to walk through; nothing else in this journey reaches them.
-        device.pressBack()
-        driver.clickDescription(FAVORITES_LABEL)
-        device.waitForIdle()
-        driver.clickDescription(SETTINGS_LABEL)
-        device.waitForIdle()
     }
 }
