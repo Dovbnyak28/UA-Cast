@@ -151,7 +151,15 @@ class PlayerVideoFitInstrumentedTest {
 
         // Closed outright, not collapsed: this has to survive the player being torn down, which is
         // the only version of it a user would ever notice.
+        //
+        // Scrolled to first: tapAspectRatio() scrolls the page down to "More controls", and on a
+        // landscape screen the page is short enough that this pushes the header, Back included,
+        // above the viewport. A click on a node scrolled out of view is injected outside the page,
+        // so nothing collapsed and the mini bar's Close never appeared. The phone's auto-rotate
+        // left the display landscape after an earlier fullscreen test, which is why this failed in
+        // a package run and passed on its own.
         composeTestRule.onNodeWithContentDescription(composeTestRule.activity.getString(R.string.common_back))
+            .performScrollTo()
             .performClick()
         composeTestRule.onNodeWithContentDescription(composeTestRule.activity.getString(R.string.player_mini_close))
             .performClick()

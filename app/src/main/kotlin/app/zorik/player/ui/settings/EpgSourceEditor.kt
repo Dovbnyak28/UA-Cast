@@ -28,7 +28,10 @@ internal fun EpgSourceEditor(currentUrl: String?, hasError: Boolean, onApply: (S
     val changed = draft.trim() != currentUrl.orEmpty()
     val retry = hasError && !changed && !currentUrl.isNullOrBlank()
     val gate = LocalFeatureGate.current
-    Column {
+    // Its own search target: Settings search lists this field as "TV guide source" (XMLTV, EPG),
+    // and only the section title around it was marked, so a search opened the page without
+    // scrolling to or highlighting the field - below the fold on a landscape phone.
+    Column(Modifier.settingsSearchTarget(stringResource(R.string.settings_epg_source_label))) {
         OutlinedTextField(
             value = draft,
             onValueChange = { if (it.length <= EpgUrlPolicy.MAX_URL_LENGTH) draft = it },
