@@ -47,10 +47,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
+      # Default caching (master writes, branches read) - see android-ci.yml's unit job for why.
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0, Node 24
-        with:
-          # PR branches read only from the stale default-branch cache by default, so ~10 parallel jobs re-downloaded every dependency and Maven Central answered HTTP 429. Let this branch's runs write their own cache.
-          cache-read-only: false
       - name: Download verified native inputs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node 24
         with:
