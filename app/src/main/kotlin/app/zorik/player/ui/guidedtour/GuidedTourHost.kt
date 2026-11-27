@@ -41,16 +41,21 @@ data class GuidedTourCallbacks(
  * When a tip may appear.
  *
  * @param pending the tips not seen yet, in priority order.
- * @param enabled false while something else owns the screen - a dialog, the add-playlist screen, a
- *   television - so a tip never lands on top of a decision the user is in the middle of.
+ * @param enabled false while something else owns the screen - a dialog, the add-playlist screen -
+ *   so a tip never lands on top of a decision the user is in the middle of. Temporary: elements
+ *   keep being tracked meanwhile.
  * @param playerExpanded whether the player page is what the user is looking at. Tips are matched to
  *   it by [GuidedTip.inPlayer].
+ * @param supported false where tips can never show at all - a television. Unlike [enabled] this
+ *   also stops tracking their elements, which would otherwise run a layout callback on every
+ *   scroll frame for the life of the app, for tips nobody will ever see.
  */
 @Immutable
 data class GuidedTipConditions(
     val pending: List<GuidedTip> = emptyList(),
     val enabled: Boolean = false,
     val playerExpanded: Boolean = false,
+    val supported: Boolean = true,
 )
 
 /**
@@ -73,7 +78,7 @@ fun GuidedTourHost(
     // Measuring stays on while any tip is still to come - including while tips are blocked by a
     // dialog, so an element that arrived behind it still counts as new once the dialog closes - and
     // goes off for good once the last one has been seen.
-    val collecting = state.isVisible || tips.pending.isNotEmpty()
+    val collecting = state.isVisible || (tips.supported && tips.pending.isNotEmpty())
     LaunchedEffect(collecting) { registry.isCollecting = collecting }
 
     // How far along the arrivals the user has already been shown something. A tip only shows for an
@@ -127,7 +132,7 @@ internal fun nextTip(
     registry: GuidedTourTargetRegistry,
     shownThrough: Int,
 ): GuidedTip? {
-    if (state.isVisible || !tips.enabled) return null
+    if (state.isVisible || !tips.enabled || !tips.supported) return null
     return tips.pending.firstOrNull { tip ->
         val arrived = registry.appearanceOf(tip.targetKey) ?: return@firstOrNull false
         val bounds = registry.boundsOf(tip.targetKey) ?: return@firstOrNull false

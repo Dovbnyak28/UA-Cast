@@ -217,6 +217,25 @@ class GuidedTourOverlayTest {
         composeRule.onNodeWithText("Дивіться на телевізорі").assertIsDisplayed()
     }
 
+    /** A television: no tip will ever show, so nothing should be measuring their elements either. */
+    @Test
+    fun whereTipsAreUnsupportedNothingIsTrackedOrShown() {
+        val controller = GuidedTourController(InMemoryTourStorage())
+        var registry: GuidedTourTargetRegistry? = null
+        setTips(
+            controller,
+            keys = listOf(GuidedTourKeys.CHANNEL_SEARCH),
+            supported = { false },
+            onRegistry = { registry = it },
+        )
+
+        composeRule.mainClock.advanceTimeBy(PAST_SETTLE_MILLIS)
+
+        assertEquals(GuidedTourPhase.IDLE, controller.state.value.phase)
+        assertEquals(false, registry?.isCollecting)
+        assertEquals(null, registry?.boundsOf(GuidedTourKeys.CHANNEL_SEARCH))
+    }
+
     @Test
     fun anElementThatOnlyPassesThroughRaisesNoTip() {
         val controller = GuidedTourController(InMemoryTourStorage())
@@ -259,6 +278,8 @@ class GuidedTourOverlayTest {
         enabled: () -> Boolean = { true },
         playerExpanded: () -> Boolean = { false },
         present: () -> Boolean = { true },
+        supported: () -> Boolean = { true },
+        onRegistry: (GuidedTourTargetRegistry) -> Unit = {},
     ) {
         val callbacks = GuidedTourCallbacks(
             onShowTip = { controller.showTip(it) },
@@ -271,8 +292,9 @@ class GuidedTourOverlayTest {
                 GuidedTourHost(
                     state = state,
                     callbacks = callbacks,
-                    tips = GuidedTipConditions(pending, enabled(), playerExpanded()),
+                    tips = GuidedTipConditions(pending, enabled(), playerExpanded(), supported()),
                 ) {
+                    onRegistry(LocalGuidedTourTargets.current)
                     Column {
                         if (present()) {
                             keys.forEach { key -> Box(Modifier.size(64.dp).guidedTourTarget(key)) }

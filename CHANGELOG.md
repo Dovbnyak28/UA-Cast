@@ -33,6 +33,9 @@ local build produces.
   the player's gestures on the first playback, Cast and "Other TVs" on the next one. Each tip shows
   once; Settings → Tutorial → "Intro and tips" brings both back. Users of the old tour see the new
   intro once.
+- Startup profile regenerated for the new first launch, now also covering Favorites and Settings:
+  cold start to the first screen on a Mi A2 went from about 470 ms to 415 ms. A tip over playing
+  video no longer makes the player page drop frames (29 ms -> 13 ms median frame).
 - Picture-in-picture: pressing Home during fullscreen playback now enters PiP on Android 8-11 too
   (it only did so automatically from Android 12; older releases paused the video instead).
 - Dependencies: Google Play Billing 9.1, Media3 1.11.1 (software decoder rebuilt and re-verified against
