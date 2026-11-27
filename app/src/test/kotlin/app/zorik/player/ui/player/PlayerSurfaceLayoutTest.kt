@@ -2,7 +2,7 @@ package app.zorik.player.ui.player
 
 import android.content.Context
 import android.view.LayoutInflater
-import android.view.TextureView
+import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import androidx.media3.common.util.UnstableApi
@@ -41,7 +41,8 @@ class PlayerSurfaceLayoutTest {
 
     @Test fun videoSubtitlesArtworkAndOverlayContractsRemainAvailable() {
         val view = inflate()
-        assertTrue(view.videoSurfaceView is TextureView)
+        // SurfaceFlinger composites a SurfaceView's frames; a TextureView redraws the window per frame.
+        assertTrue(view.videoSurfaceView is SurfaceView)
         assertNotNull(view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame))
         assertNotNull(view.findViewById<View>(androidx.media3.ui.R.id.exo_shutter))
         assertNotNull(view.findViewById<View>(androidx.media3.ui.R.id.exo_artwork))

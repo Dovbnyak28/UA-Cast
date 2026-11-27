@@ -2,7 +2,6 @@ package app.zorik.player.ui.player
 
 import android.view.LayoutInflater
 import android.view.SurfaceView
-import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import androidx.media3.common.util.UnstableApi
@@ -28,9 +27,10 @@ class PlayerSurfaceInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
 
-    @Test fun inlineTextureKeepsVisualBindingsWithoutDuplicateControls() = onMain {
+    @Test fun inlineSurfaceViewKeepsVisualBindingsWithoutDuplicateControls() = onMain {
         val view = inflate(R.layout.player_view)
-        assertTrue(view.videoSurfaceView is TextureView)
+        // Not a TextureView: that redraws the whole window for every decoded frame.
+        assertTrue(view.videoSurfaceView is SurfaceView)
         assertVisualBindings(view)
     }
 

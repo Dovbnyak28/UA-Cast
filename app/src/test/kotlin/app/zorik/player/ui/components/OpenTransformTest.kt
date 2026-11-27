@@ -7,6 +7,8 @@ import android.provider.Settings
 import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -17,6 +19,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.zorik.player.testing.RequiresComposeTestManifest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -134,6 +137,64 @@ class OpenTransformTest {
         rule.runOnIdle { assertSame(Modifier, actual) }
         changeMotionScale(1f)
         rule.runOnIdle { assertSame(Modifier, actual) }
+    }
+
+    @Test fun surfaceStaysCoveredUntilTheOpeningLayerIsGone() {
+        lateinit var opening: Opening
+        var modifier: Modifier? = null
+        rule.setContent {
+            opening = rememberOpening("player")
+            modifier = opening.modifier
+            Box(opening.modifier)
+        }
+        rule.runOnIdle {
+            assertNotSame("Precondition: the opening is animating", Modifier, modifier)
+            assertTrue("A SurfaceView cannot follow the layer; it must stay covered", opening.inProgress())
+        }
+        rule.mainClock.advanceTimeBy(5_000)
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertSame(Modifier, modifier)
+            assertFalse("The video must show once the layer is gone", opening.inProgress())
+        }
+    }
+
+    @Test fun openingWithoutMotionNeverCoversTheSurface() {
+        Settings.Global.putFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        val seen = mutableListOf<Boolean>()
+        rule.setContent {
+            val opening = rememberOpening("player")
+            Box(opening.modifier)
+            LaunchedEffect(opening) { snapshotFlow { opening.inProgress() }.collect { seen += it } }
+        }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertTrue("Precondition: the value was observed", seen.isNotEmpty())
+            assertFalse("A static opening must never hide the video: $seen", seen.any { it })
+        }
+    }
+
+    @Test fun aNewRequestCoversTheSurfaceAgain() {
+        val key = mutableStateOf("first")
+        val seen = mutableListOf<Pair<String, Boolean>>()
+        lateinit var opening: Opening
+        rule.setContent {
+            opening = rememberOpening(key.value)
+            Box(opening.modifier)
+            LaunchedEffect(Unit) { snapshotFlow { opening.inProgress() }.collect { seen += key.value to it } }
+        }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertFalse(opening.inProgress())
+            key.value = "second"
+        }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertTrue("A new channel opening replays its cover: $seen", "second" to true in seen)
+            assertFalse("...and drops it once that opening is done: $seen", opening.inProgress())
+        }
     }
 
     @Test fun completingOpeningDoesNotRecreateOrReleaseTheNativeChild() = assertNativeChildRetained(false)

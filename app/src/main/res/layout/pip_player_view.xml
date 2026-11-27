@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PiP retains its existing SurfaceView path: no Compose controls sit above it. -->
+<!-- PiP's own PlayerView: always RESIZE_MODE_FIT, no Compose controls above it. Same surface type as
+     player_view.xml. -->
 <androidx.media3.ui.PlayerView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"

@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Inflated by ui/player/PlayerScreen.kt's VideoSurface instead of constructing PlayerView(ctx)
-     directly to select the video-only content and surface_type=texture_view - no programmatic setter for
-     it, only this XML attribute. SurfaceView (the default) is a separate hardware-composited
-     layer that SurfaceFlinger punches a hole for; Compose's own click-consuming Play/Pause button
-     drawn on top of it in the same Box was found to never receive the tap (it fell through to the
-     Box's own "toggle controls" click instead, field-confirmed via a tap that always logged the
-     wrong handler) - a known category of Compose+SurfaceView touch-dispatch interop issue.
-     TextureView is a normal View that participates in the ordinary view/touch hierarchy, at the
-     cost of composition within the app window. Keep this path until surface/overlay interaction is
-     independently verified; removing the unused native controller does not change surface ownership. -->
+<!-- Inflated by ui/player/VideoSurface.kt instead of constructing PlayerView(ctx) directly, to
+     select the video-only content layout - no programmatic setter for it, only this XML attribute.
+
+     surface_view (also Media3's default): SurfaceFlinger composites the decoded frames as their own
+     layer behind the window, usually on a hardware overlay. A texture_view, used here before, is
+     drawn by the app's RenderThread, so every decoded frame redrew the whole window - measured on a
+     Mi A2 while a 720p channel just played inline: about 85 window frames a second, the RenderThread
+     at 60% of a core and the app at 1.3 cores, against 0-3 frames, almost no RenderThread time and
+     less than half the app CPU with this one (fullscreen and the mini bar alike).
+
+     Two limits of a SurfaceView the UI has to respect:
+     - It cannot follow a graphics layer above it (alpha, scale). The player's opening transform
+       covers it meanwhile; see ui/components/OpenTransform.kt.
+     - Window content around it must stay opaque: wherever the window is translucent, the video
+       layer behind it shows through. Content drawn over it (controls, scrims, the tips spotlight)
+       composites over the video normally.
+
+     It was once switched to texture_view because Compose's Play/Pause button over the video seemed
+     to lose its tap to the enclosing "toggle controls" click. Touch dispatch does not depend on the
+     surface type: Compose hit-tests its own nodes before the AndroidView, and the button was
+     re-verified on a Mi A2 with this surface (tap pauses, controls stay). -->
 <androidx.media3.ui.PlayerView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -16,5 +27,5 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     app:player_layout_id="@layout/player_surface_content"
-    app:surface_type="texture_view"
+    app:surface_type="surface_view"
     app:use_controller="false" />

@@ -7,10 +7,12 @@ import android.os.Build
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import app.zorik.player.ui.components.openTransform
+import app.zorik.player.ui.components.LocalOpeningInProgress
+import app.zorik.player.ui.components.rememberOpening
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -131,7 +133,8 @@ fun PlayerHost(
 
     // Keep entrance state in the host: the expanded child leaves composition when collapsed,
     // so remembering the same key inside that branch would still replay on every expansion.
-    val openingModifier = Modifier.openTransform(key = channels to startIndex, onOpacityChanged = onOpacityChanged)
+    // The video's SurfaceView cannot follow this layer; VideoSurface covers it until the layer is gone.
+    val opening = rememberOpening(key = channels to startIndex, onOpacityChanged = onOpacityChanged)
     Box(modifier = modifier) {
         if (collapsed && !LocalTvMode.current) {
             val iconRefreshKey: Any = iconPrefetchState.refreshKey
@@ -144,17 +147,19 @@ fun PlayerHost(
                 onClose = onExit,
             )
         } else {
-            PlayerScreen(
-                viewModel = viewModel,
-                channels = channels,
-                onExit = if (LocalTvMode.current) onExit else onCollapse,
-                isFavorite = isFavorite,
-                onToggleFavorite = onToggleFavorite,
-                resolveIcon = resolveIcon,
-                epgState = epgState,
-                iconPrefetchState = iconPrefetchState,
-                modifier = openingModifier,
-            )
+            CompositionLocalProvider(LocalOpeningInProgress provides opening.inProgress) {
+                PlayerScreen(
+                    viewModel = viewModel,
+                    channels = channels,
+                    onExit = if (LocalTvMode.current) onExit else onCollapse,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    resolveIcon = resolveIcon,
+                    epgState = epgState,
+                    iconPrefetchState = iconPrefetchState,
+                    modifier = opening.modifier,
+                )
+            }
         }
     }
 }

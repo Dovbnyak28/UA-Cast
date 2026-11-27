@@ -2,7 +2,8 @@
 
 package app.zorik.player.player
 
-import android.view.TextureView
+import android.view.PixelCopy
+import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -423,10 +424,10 @@ class PlayerLifecycleInstrumentedTest {
             composeTestRule.waitUntil(5_000) { !model.uiState.value.isPlaying }
             composeTestRule.waitForIdle()
             lateinit var original: androidx.media3.ui.PlayerView
-            lateinit var textureView: TextureView
+            lateinit var surfaceView: SurfaceView
             composeTestRule.activityRule.scenario.onActivity { activity ->
                 original = nativePlayerViews(activity.window.decorView).single()
-                textureView = original.videoSurfaceView as TextureView
+                surfaceView = original.videoSurfaceView as SurfaceView
             }
             repeat(3) { round ->
                 println("fullscreen-repro: round=$round entering")
@@ -437,7 +438,7 @@ class PlayerLifecycleInstrumentedTest {
                 println("fullscreen-repro: round=$round entered")
                 composeTestRule.activityRule.scenario.onActivity { activity ->
                     assertSame(original, nativePlayerViews(activity.window.decorView).single())
-                    assertSame(textureView, original.videoSurfaceView)
+                    assertSame(surfaceView, original.videoSurfaceView)
                     assertSame(model.player, original.player)
                 }
                 try {
@@ -473,25 +474,18 @@ class PlayerLifecycleInstrumentedTest {
                 composeTestRule.waitForIdle()
                 composeTestRule.activityRule.scenario.onActivity { activity ->
                     assertSame(original, nativePlayerViews(activity.window.decorView).single())
-                    assertSame(textureView, original.videoSurfaceView)
+                    assertSame(surfaceView, original.videoSurfaceView)
                 }
             }
-            // Android can replace SurfaceTexture when a retained native view is detached/moved.
+            // Android can replace the Surface when a retained native view is detached/moved.
             // The contract is continued rendering, not identity of that platform-owned resource.
             val beforeResume = frames.get()
             composeTestRule.activityRule.scenario.onActivity { model.togglePlayback() }
             composeTestRule.waitUntil(5_000) { frames.get() >= beforeResume + 2 && model.uiState.value.isPlaying }
             composeTestRule.waitUntil(5_000) {
-                var decodedPixels = false
-                composeTestRule.activityRule.scenario.onActivity {
-                    val bitmap = textureView.getBitmap(16, 16)
-                    try {
-                        val pixel = bitmap?.getPixel(8, 8) ?: 0
-                        decodedPixels = android.graphics.Color.red(pixel) > 24 &&
-                            android.graphics.Color.green(pixel) > 24 && android.graphics.Color.blue(pixel) > 24
-                    } finally { bitmap?.recycle() }
-                }
-                decodedPixels
+                val pixel = surfaceCentrePixel(surfaceView) ?: 0
+                android.graphics.Color.red(pixel) > 24 &&
+                    android.graphics.Color.green(pixel) > 24 && android.graphics.Color.blue(pixel) > 24
             }
             closePlayerFromScreen()
             composeTestRule.activityRule.scenario.onActivity {
@@ -504,6 +498,26 @@ class PlayerLifecycleInstrumentedTest {
                 renderingPlayer?.clearVideoFrameMetadataListener(frameListener)
             }
             clip.delete()
+        }
+    }
+
+    /** The decoded picture's centre, read back from the SurfaceView's own buffer: the window's
+     * pixels there are only the transparent hole the view punches, never the video. Null while the
+     * surface has no buffer to copy yet. */
+    private fun surfaceCentrePixel(surface: SurfaceView): Int? {
+        val bitmap = android.graphics.Bitmap.createBitmap(16, 16, android.graphics.Bitmap.Config.ARGB_8888)
+        val copied = java.util.concurrent.CountDownLatch(1)
+        var result = PixelCopy.ERROR_UNKNOWN
+        val thread = android.os.HandlerThread("surface-pixel-copy").apply { start() }
+        return try {
+            PixelCopy.request(surface, bitmap, { result = it; copied.countDown() }, android.os.Handler(thread.looper))
+            val done = copied.await(2, java.util.concurrent.TimeUnit.SECONDS)
+            if (done && result == PixelCopy.SUCCESS) bitmap.getPixel(8, 8) else null
+        } catch (_: IllegalArgumentException) {
+            null // The surface is not valid (yet); the caller polls.
+        } finally {
+            thread.quitSafely()
+            bitmap.recycle()
         }
     }
 
