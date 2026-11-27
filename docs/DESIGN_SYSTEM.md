@@ -118,9 +118,11 @@ it appears:
   circular button while something is genuinely live. Draws and animates nothing when `active` is
   false.
 - **`ui/components/OpenTransform.kt`** - `Modifier.openTransform(key)`. Scales and fades a screen in
-  as it opens over what the user was looking at, once per `key`. Safe on the player specifically
-  because the video renders into a `texture_view`; a `SurfaceView` would tear away from a scaling
-  parent.
+  as it opens over what the user was looking at, once per `key`. The player's video is a
+  `SurfaceView`, which cannot follow that layer, so the player uses `rememberOpening(key)` and
+  provides `LocalOpeningInProgress`; `Modifier.coverWhileOpening()` on the video paints it black
+  until the layer is gone. Anything else that puts a translucent or scaled layer over the video
+  needs the same treatment.
 - **`ui/components/ArtworkTone.kt`** - `rememberArtworkTone` + `Modifier.artworkWash`. Borrows only
   the *hue* of a channel logo to wash the surface it sits on (`icons/ArtworkTonePolicy.kt` does the
   pixel maths). Skipped where `UaTheme.palette.wallpaperTexture` is false - Midnight is true black on

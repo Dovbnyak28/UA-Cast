@@ -11,7 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import app.zorik.player.ui.theme.DUR_ENTER
@@ -36,9 +39,9 @@ private const val OPEN_ORIGIN_Y = 0.28f
  * follows the one moving thing and reads everything around it as a jump.
  *
  * Growing the whole surface instead gives the same "I opened *this*" reading with one animated
- * property and no lifecycle change. It is safe here specifically because the video renders into a
- * `texture_view` (see res/layout/player_view.xml) - a `SurfaceView` is composited by separate
- * hardware and would tear away from a scaling parent.
+ * property and no lifecycle change. The player's video is a `SurfaceView` (see
+ * res/layout/player_view.xml), which cannot follow this layer: use [rememberOpening] there, so the
+ * surface is covered by [coverWhileOpening] until the layer is gone.
  *
  * Runs once, keyed on [key]: switching channels inside an already-open player must not replay it.
  * Disabled/completed motion returns the caller's modifier without a graphics layer. Turning
@@ -58,6 +61,51 @@ fun Modifier.openTransform(key: Any?, onOpacityChanged: (Boolean) -> Unit = {}):
     }
     if (!enabled || complete) return this
     return animatedOpenTransform(key) { complete = true }
+}
+
+/**
+ * Read at draw time: true while an enclosing [openTransform] still scales and fades its screen.
+ *
+ * A `SurfaceView` is not drawn into that graphics layer. SurfaceFlinger composites it as its own
+ * layer behind the window, seen through a transparent hole the view punches into the window. While
+ * the opening's layer is translucent the hole shows whatever lies under the player instead of the
+ * video, and the surface follows the scale a frame behind the page around it. Nothing reads the
+ * value during composition, so the end of an opening redraws only the covered surfaces.
+ */
+val LocalOpeningInProgress = staticCompositionLocalOf<() -> Boolean> { { false } }
+
+/** [openTransform]'s modifier plus the [LocalOpeningInProgress] value for the screen it opens. */
+class Opening internal constructor(val modifier: Modifier, val inProgress: () -> Boolean)
+
+/**
+ * [openTransform] for a screen that hosts a `SurfaceView`: provide [Opening.inProgress] as
+ * [LocalOpeningInProgress] around the screen [Opening.modifier] is applied to.
+ */
+@Composable
+fun rememberOpening(key: Any?, onOpacityChanged: (Boolean) -> Unit = {}): Opening {
+    val opaque = remember { mutableStateOf(false) }
+    val inProgress = remember(opaque) { { !opaque.value } }
+    val modifier = Modifier.openTransform(key) { isOpaque ->
+        // Written in openTransform's SideEffect, before this frame draws: an opening with motion
+        // disabled never paints its cover, not even for one frame.
+        opaque.value = isOpaque
+        onOpacityChanged(isOpaque)
+    }
+    return Opening(modifier, inProgress)
+}
+
+/**
+ * Paints [color] over this node's content - a native video surface - while an opening is in
+ * progress (see [LocalOpeningInProgress]). A channel's first frame almost never arrives within
+ * [DUR_ENTER], so the box looks exactly like the black shutter the player would show anyway.
+ */
+@Composable
+fun Modifier.coverWhileOpening(color: Color = Color.Black): Modifier {
+    val inProgress = LocalOpeningInProgress.current
+    return drawWithContent {
+        drawContent()
+        if (inProgress()) drawRect(color)
+    }
 }
 
 @Composable
